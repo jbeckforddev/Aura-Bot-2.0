@@ -77,7 +77,7 @@ export default {
   name: Object.keys(DATA),
   description: Object.values(DATA).map((entry) => entry.descripcion),
   category: "interaction",
-  groupOnly: true,
+  groupOnly: false,
   showAllNames: true,
 
   async run(ctx: CommandContext) {
