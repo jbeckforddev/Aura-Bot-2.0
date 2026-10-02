@@ -5,6 +5,7 @@ import {
   saveEconomy,
   formatMoney,
 } from "../../core/economyRuntime.ts";
+import { cooldownText } from "../../core/economyConfig.ts";
 
 export default {
   name: ["ruleta", "roulette", "rt"],
@@ -20,10 +21,17 @@ export default {
       return ctx.reply(
         `❌ No tienes suficientes monedas. Tienes *${formatMoney(user.bolsillo, ctx)}*.`,
       );
+    const now = Date.now();
+    const cooldown = 60 * 1000;
+    if (user.lastRoulete && now - user.lastRoulete < cooldown)
+      return ctx.reply(
+        `⏳ Espera *${cooldownText(cooldown - (now - user.lastRoulete))}* para volver a jugar.`,
+      );
     const roll = Math.random() * 100;
     const result = roll < 40 ? "red" : roll < 80 ? "black" : "green";
     const winnings =
       result === color ? amount * (color === "green" ? 20 : 2) : 0;
+    user.lastRoulete = now;
     user.bolsillo += winnings - amount;
     saveEconomy(ctx, ctx.sender, user);
     const labels: Record<string, string> = {

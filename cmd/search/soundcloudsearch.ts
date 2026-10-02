@@ -4,6 +4,8 @@ import type {
 } from "../../types/index.d.ts";
 import { request } from "undici";
 import { fytBold } from "../../core/socketText.ts";
+import { formatDuration } from "../../utils/formatter.ts";
+import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 
 let cachedClientId: string | null = null;
 let cachedAt = 0;
@@ -39,11 +41,6 @@ async function getClientId(): Promise<string> {
   throw new Error("No se pudo obtener el client_id de SoundCloud.");
 }
 
-function duration(milliseconds: unknown): string {
-  const seconds = Math.floor(Number(milliseconds || 0) / 1000);
-  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-
 export default {
   name: ["scsearch", "scbuscar", "scb", "scs"],
   category: "search",
@@ -63,10 +60,19 @@ export default {
       );
       if (!response.collection?.length)
         throw new Error("No se encontraron resultados.");
-      let text = `╭━━〔 ${fytBold("SOUNDCLOUD SEARCH")} 〕━━⬣\n┃ 🔍 ${fytBold("Búsqueda")} › ${query}\n┃ ⚙️ ${fytBold("Motor")} › Api Interna\n╰━━━━━━━━━━━━━━━━⬣\n\n`;
-      for (const [index, track] of response.collection.entries())
-        text += `┃ ${index + 1}. ${fytBold(track.title)}\n┃ ├ 👤 ${fytBold("Artista")} › ${track.user?.username || "Desconocido"}\n┃ ├ ⏱️ ${fytBold("Duración")} › ${duration(track.duration)}\n┃ └ 🔗 ${fytBold("Url")} › ${track.permalink_url || "No disponible"}\n\n`;
-      text += `╰〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕⬣`;
+      const text = SEARCH_RESULTS_TEMPLATE({
+        bold: fytBold,
+        label: "SOUNDCLOUD SEARCH",
+        icon: "🎵",
+        query,
+        engine: "Api Interna",
+        results: response.collection.slice(0, 10).map((track) => ({
+          title: track.title,
+          artist: track.user?.username || "Desconocido",
+          duration: formatDuration(Math.floor(Number(track.duration || 0) / 1000)),
+          url: track.permalink_url || "No disponible",
+        })),
+      });
       await reply({ text });
       await react("✅");
     } catch (error: unknown) {

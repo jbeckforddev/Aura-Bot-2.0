@@ -1,4 +1,5 @@
-import { db } from "./AuraDB.ts";
+import { db } from "../database/AuraDB.ts";
+import { formatMoney as formatNumberMoney, formatDuration } from "../utils/formatter.ts";
 import { getFileBytes } from "./downloadUtils.ts";
 import { NOT_HAVE_COINS } from "./socketText.ts";
 import type {
@@ -35,13 +36,8 @@ const COOLDOWNS: CooldownRows = {
 };
 
 export function formTime(ms: number): string {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  return formatDuration(totalSeconds);
 }
 
 function parseJidAndDefaults(
@@ -277,7 +273,7 @@ export function getGroupEconomyUsers(
 }
 
 export function formatCoins(value: number): string {
-  return Math.max(0, Math.floor(Number(value) || 0)).toLocaleString("es-EN");
+  return formatNumberMoney(Math.max(0, Math.floor(Number(value) || 0)));
 }
 
 export const DEFAULT_BOT_CURRENCY: BotCurrency = {

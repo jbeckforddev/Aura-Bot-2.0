@@ -12,6 +12,7 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import type { CommandContext, SpotifyResponse } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 export default {
   name: ["spotifydoc", "docsplay", "dsp", "dspdl"],
@@ -44,7 +45,21 @@ export default {
           : `https://open.spotify.com/search/${encodeURIComponent(title)}`);
       const file = await downloadToCache(download);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🎵 ${fytBold("SPOTIFY DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Artista")} › ${song.artist || "Desconocido"}\n┃ > ${fytBold("Álbum")} › ${song.album || "Desconocido"}\n┃ > ${fytBold("Tipo")} › Documento MP3\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${originalUrl}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando documento...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "SPOTIFY DOCUMENT",
+        icon: "🎵",
+        title,
+        artist: globalThis.DEFAULT_BOT_AUTHOR,
+        album: song.album,
+        type: "Documento MP3",
+        cost: formatMoney(cost, ctx),
+        url: originalUrl,
+        showArtist: Boolean(song.artist),
+        showAlbum: Boolean(song.album),
+        showType: true,
+        loadingText: "Descargando documento...",
+      });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover
         ? await sendDownloadPreview({

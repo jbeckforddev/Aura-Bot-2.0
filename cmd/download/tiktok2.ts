@@ -1,4 +1,4 @@
-import { fytBold } from "../../core/socketText.ts";
+import { rm } from "node:fs/promises";
 import {
   downloadToCache,
   requestJson,
@@ -16,6 +16,9 @@ import type {
   TikTokSearchResponse,
   TikTokDownloadData,
 } from "../../types/index.d.ts";
+import { fytBold } from "../../core/socketText.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
+import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -31,6 +34,7 @@ export default {
     if (!query)
       return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
     await react("⏳");
+    let convertedFile = "";
     try {
       let url = query;
       if (!TIKTOK_URL.test(query)) {
@@ -52,10 +56,37 @@ export default {
         data.author?.nickname || data.author?.fullname || "Desconocido";
       const title = data.title || "Video de TikTok";
       const file = await downloadToCache(videoUrl, 180000);
-      const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🎥 ${fytBold("TIKTOK DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Autor")} › ${author}\n┃ > ${fytBold("Vistas")} › ${formatCount(data.stats?.views || data.play_count)}\n┃ > ${fytBold("Likes")} › ${formatCount(data.stats?.likes || data.digg_count)}\n┃ > ${fytBold("Comentarios")} › ${formatCount(data.stats?.comment || data.comment_count)}\n┃ > ${fytBold("Compartidos")} › ${formatCount(data.stats?.share || data.share_count)}\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando video...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      convertedFile = await CONVERT_TO_AVC(file);
+      const { cost } = await prepareDownloadCharge(
+        ctx,
+        "document",
+        convertedFile,
+      );
+      const views = data.stats?.views ?? data.play_count;
+      const likes = data.stats?.likes ?? data.digg_count;
+      const comments = data.stats?.comment ?? data.comment_count;
+      const shares = data.stats?.share ?? data.share_count;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "TIKTOK DOCUMENT",
+        icon: "🎥",
+        title,
+        author,
+        views: formatCount(views),
+        likes: formatCount(likes),
+        comments: formatCount(comments),
+        shares: formatCount(shares),
+        cost: formatMoney(cost, ctx),
+        url,
+        showAuthor: true,
+        showViews: views !== undefined && views !== null,
+        showLikes: likes !== undefined && likes !== null,
+        showComments: comments !== undefined && comments !== null,
+        showShares: shares !== undefined && shares !== null,
+        loadingText: "Descargando video...",
+      });
       await reply({
-        document: { url: file },
+        document: { url: convertedFile },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "tiktok")}.mp4`,
         caption,
@@ -71,6 +102,9 @@ export default {
       return reply({
         text: `${message}`,
       });
+    } finally {
+      if (convertedFile)
+        await rm(convertedFile, { force: true }).catch(() => undefined);
     }
   },
 };

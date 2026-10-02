@@ -1,4 +1,4 @@
-import { db } from "./AuraDB.ts";
+import { db } from "../database/AuraDB.ts";
 import { fytBold } from "./socketText.ts";
 import { getAuraLevel, getBotCurrency, formatMoney } from "./economyConfig.ts";
 import { economyUser } from "./economyRuntime.ts";

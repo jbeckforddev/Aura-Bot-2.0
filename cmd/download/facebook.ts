@@ -11,6 +11,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 
 export default {
@@ -61,7 +62,19 @@ export default {
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       });
       const { cost } = await prepareDownloadCharge(ctx, "video", file);
-      const caption = `╭〔 🎥 ${fytBold("FACEBOOK VIDEO")} 〕━⬣\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Calidad")} › ${quality}\n┃ > ${fytBold("Tipo")} › Video MP4\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando video...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "FACEBOOK VIDEO",
+        icon: "🎥",
+        showTitle: false,
+        quality,
+        type: "Video MP4",
+        cost: formatMoney(cost, ctx),
+        url,
+        showQuality: true,
+        showType: true,
+        loadingText: "Descargando video...",
+      });
       await reply({
         video: { url: file },
         mimetype: "video/mp4",

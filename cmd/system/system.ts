@@ -4,18 +4,7 @@ import os from "node:os";
 import process from "node:process";
 import fs from "node:fs";
 import { fytBold } from "../../core/socketText.ts";
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "0.00";
-  return (bytes / 1024 / 1024 / 1024).toFixed(2);
-}
-
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainder = Math.floor(seconds % 60);
-  return `${hours}h ${minutes}m ${remainder}s`;
-}
+import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
 
 function readNumber(filePath: string): number | null {
   try {
@@ -100,13 +89,13 @@ export default {
     text += `┃ > ${fytBold("Núcleos:")} ${cpuCores}\n`;
     text += `┃ > ${fytBold("Plataforma:")} ${platform}\n\n`;
     text += `┏━━━━〔 ${fytBold("RAM")} 〕━━⬣\n`;
-    text += `┃ > ${fytBold("Total:")} ${formatBytes(memory.total)} GB\n`;
-    text += `┃ > ${fytBold("Usada:")} ${formatBytes(memory.used)} GB (${ramPercent}%)\n`;
-    text += `┃ > ${fytBold("Libre:")} ${formatBytes(ramFree)} GB\n`;
-    text += `┃ > ${fytBold("Bot usa:")} ${formatBytes(ramBot)} GB\n\n`;
+    text += `┃ > ${fytBold("Total:")} ${formatFileSize(memory.total)}\n`;
+    text += `┃ > ${fytBold("Usada:")} ${formatFileSize(memory.used)} (${ramPercent}%)\n`;
+    text += `┃ > ${fytBold("Libre:")} ${formatFileSize(ramFree)}\n`;
+    text += `┃ > ${fytBold("Bot usa:")} ${formatFileSize(ramBot)}\n\n`;
     text += `┏━━━〔 ${fytBold("UPTIME")} 〕━━⬣\n`;
-    text += `┃ > ${fytBold("Bot activo:")} ${formatTime(process.uptime())}\n`;
-    text += `┃ > ${fytBold("Host encendido:")} ${formatTime(os.uptime())}\n\n`;
+    text += `┃ > ${fytBold("Bot activo:")} ${formatDuration(process.uptime())}\n`;
+    text += `┃ > ${fytBold("Host encendido:")} ${formatDuration(os.uptime())}\n\n`;
     text += `┏━━〔 ${fytBold("ENTORNO")} 〕━━⬣\n`;
     text += `┃ > ${fytBold("Node.js:")} ${process.version}\n`;
     text += `┃ > ${fytBold("PID:")} ${process.pid}\n\n`;

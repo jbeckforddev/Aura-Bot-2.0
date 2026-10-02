@@ -3,6 +3,7 @@ import { fytBold } from "../../core/socketText.ts";
 import { formatCount, requestJson } from "../../core/downloadUtils.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
+import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 
 export default {
   name: ["ttsearch", "tiktoksearch", "tts"],
@@ -12,7 +13,7 @@ export default {
     const query = args.join(" ").trim();
     if (!query)
       return reply("⚠️ Proporciona un término de búsqueda para TikTok.");
-    await react("⏳");
+    await react("🔍");
     try {
       const api = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
       const response = await requestJson(
@@ -23,11 +24,19 @@ export default {
         : [];
       if (!response?.status || !results.length)
         throw new Error("No se encontraron resultados en TikTok.");
-      let text = `╭━━〔 ${fytBold("TIKTOK SEARCH")} 〕━━⬣\n┃ 🔍 ${fytBold("Búsqueda")} › ${query}\n╰━━━━━━━━━━━━━━━━⬣\n\n`;
-      for (const [index, video] of results.entries()) {
-        text += `┃ ${index + 1}. ${fytBold(video.title || "Sin título")}\n┃ ├ 👤 @${video.author?.unique_id || "desconocido"} (${video.author?.nickname || "Sin nombre"})\n┃ ├ 👁️ ${formatCount(video.stats?.plays)}\n┃ ├ ❤️ ${formatCount(video.stats?.likes)}\n┃ ├ 🎵 ${String(video.music?.title || "Desconocido").slice(0, 40)}\n┃ └ 🎥 ${video.url || "No disponible"}\n\n`;
-      }
-      text += `╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const text = SEARCH_RESULTS_TEMPLATE({
+        bold: fytBold,
+        label: "TIKTOK SEARCH",
+        icon: "🎵",
+        query,
+        engine: "Alya Core",
+        results: results.map((video) => ({
+          title: video.title || "Sin título",
+          artist: `@${video.author?.unique_id || "desconocido"} (${video.author?.nickname || "Sin nombre"})`,
+          duration: `${formatCount(video.stats?.plays)} / ${formatCount(video.stats?.likes)}`,
+          url: video.url || "No disponible",
+        })),
+      });
       const firstVideo = results[0];
       const title = firstVideo.title || "Resultado de TikTok";
       const link =

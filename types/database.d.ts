@@ -14,13 +14,19 @@ export interface DatabaseUserData {
   lastDaily?: number;
   lastWeekly?: number;
   lastMonthly?: number;
+  lastFortnightly?: number;
   lastWork?: number;
+  lastPpt?: number;
   lastCrime?: number;
   lastRob?: number;
   lastSlut?: number;
   lastMine?: number;
   lastHunt?: number;
   lastAdventure?: number;
+  lastCf?: number;
+  lastRoulete?: number;
+  lastAura?: number;
+  lastSteal?: number;
   inventory?: Record<string, number>;
   [key: string]: unknown;
 }
@@ -108,10 +114,23 @@ export interface DatabaseBotData {
   createdAt?: number | string;
   ownerJid?: string;
   customPrefix?: string;
+  customBotName?: boolean;
+  customBanner?: BotMediaSetting | null;
+  customAudio?: BotMediaSetting | null;
+  currentBanner?: string | null;
+  currentAudio?: string | null;
   sessionName?: string;
   currency?: string;
   currencySymbol?: string;
   [key: string]: unknown;
+}
+
+export interface BotMediaSetting {
+  path?: string;
+  base64?: string;
+  mimetype?: string;
+  ptt?: boolean;
+  seconds?: number;
 }
 
 export interface DatabaseBot {
@@ -127,6 +146,8 @@ export interface DatabaseBot {
   modSelf: number;
   currency?: string | null;
   currencySymbol?: string | null;
+  currentBanner?: string | null;
+  currentAudio?: string | null;
   data?: DatabaseBotData;
   [key: string]: unknown;
 }
@@ -141,6 +162,22 @@ export interface UserDbRow {
   self: number | null;
   coins?: number | null;
   bank?: number | null;
+  LastEconomyDaily?: number | null;
+  LastEconomyWeekly?: number | null;
+  LastEconomyMonthly?: number | null;
+  LastEconomyFortnightly?: number | null;
+  LastEconomyWork?: number | null;
+  LastEconomyPpt?: number | null;
+  LastEconomyMine?: number | null;
+  LastEconomyHunt?: number | null;
+  LastEconomyCrime?: number | null;
+  LastEconomySlut?: number | null;
+  LastEconomySteal?: number | null;
+  LastEconomyAdventure?: number | null;
+  LastEconomyCf?: number | null;
+  LastEconomyRoulete?: number | null;
+  LastEconomyAura?: number | null;
+  LastEconomyRob?: number | null;
   data: string | null;
 }
 
@@ -183,6 +220,8 @@ export interface BotDbRow {
   modSelf: number | null;
   currency?: string | null;
   currencySymbol?: string | null;
+  currentBanner?: string | null;
+  currentAudio?: string | null;
   data: string | null;
 }
 

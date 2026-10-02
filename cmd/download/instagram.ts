@@ -10,6 +10,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 const INSTAGRAM_URL =
   /(?:instagram\.com|instagr\.am)\/(?:reels?|p|tv|stories)\//i;
 
@@ -42,7 +43,19 @@ export default {
       if (video) {
         const file = await downloadToCache(video.url, 180000);
         const { cost } = await prepareDownloadCharge(ctx, mediaType, file);
-        const caption = `╭〔 📸 ${fytBold("INSTAGRAM VIDEO")} 〕━⬣\n\n┃ ➥ ${fytBold(data?.caption || "Sin título")}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Total")} › 1 video\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+        const caption = DL_TEMPLATE({
+          bold: fytBold,
+          label: "INSTAGRAM VIDEO",
+          icon: "📸",
+          title: data?.caption || "Sin título",
+          total: "1 video",
+          type: "Video MP4",
+          cost: formatMoney(cost, ctx),
+          url,
+          showTotal: true,
+          showType: true,
+          showLoading: false,
+        });
         await reply({
           video: { url: file },
           mimetype: "video/mp4",
@@ -57,7 +70,19 @@ export default {
           cost = (await prepareDownloadCharge(ctx, mediaType, file)).cost;
           files.push(file);
         }
-        const caption = `╭〔 📸 ${fytBold("INSTAGRAM POST")} 〕━⬣\n\n┃ ➥ ${fytBold(data?.caption || "Sin título")}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Total")} › ${images.length} imágenes\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+        const caption = DL_TEMPLATE({
+          bold: fytBold,
+          label: "INSTAGRAM POST",
+          icon: "📸",
+          title: data?.caption || "Sin título",
+          total: `${images.length} imágenes`,
+          type: "Imágenes",
+          cost: formatMoney(cost, ctx),
+          url,
+          showTotal: true,
+          showType: true,
+          showLoading: false,
+        });
         for (const [index, file] of files.entries()) {
           await reply({
             image: { url: file },

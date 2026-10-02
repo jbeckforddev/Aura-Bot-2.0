@@ -12,6 +12,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -89,9 +90,17 @@ export default {
         isVideo ? "video" : "image",
         file,
       );
-      let caption = `⬣〔 ${fytBold("TWITTER DOWNLOAD")} 〕⬣`;
-      caption += `\n\n${fytBold("Costo")} › ${formatMoney(cost, ctx)}`;
-      caption += `\n\n╰━━〔 ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "TWITTER DOWNLOAD",
+        icon: "𝕏",
+        showTitle: false,
+        type: isVideo ? "Video MP4" : "Imagen",
+        cost: formatMoney(cost, ctx),
+        url,
+        showType: true,
+        showLoading: false,
+      });
       if (isVideo) {
         await reply({
           video: { url: file },

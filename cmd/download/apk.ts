@@ -15,6 +15,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 
 export default {
@@ -36,7 +37,22 @@ export default {
       const name = String(data.name || "Aplicación Android");
       const file = await downloadToCache(data.dl);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🤖 ${fytBold("APK DOWNLOADER")} 〕━⬣\n\n┃ ➥ ${fytBold(name)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("ID App")} › ${data.package || "N/A"}\n┃ > ${fytBold("Tamaño")} › ${data.size || "N/A"}\n┃ > ${fytBold("Versión")} › ${data.lastUpdated || "N/A"}\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Tipo")} › Aplicación (APK)\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando APK...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "APK DOWNLOADER",
+        icon: "🤖",
+        title: name,
+        packageName: data.package,
+        size: data.size,
+        version: data.lastUpdated,
+        type: "Aplicación (APK)",
+        cost: formatMoney(cost, ctx),
+        showPackage: Boolean(data.package),
+        showSize: Boolean(data.size),
+        showVersion: Boolean(data.lastUpdated),
+        showType: true,
+        loadingText: "Descargando APK...",
+      });
       const hasPreview = data.banner
         ? await sendDownloadPreview({
             sock,
@@ -46,7 +62,7 @@ export default {
             caption,
             link: data.dl,
             title: name,
-            author: data.package || "Android APK",
+            author: globalThis.DEFAULT_BOT_AUTHOR,
             sender,
           })
         : false;

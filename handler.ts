@@ -20,8 +20,12 @@ import {
   NOT_PREMIUM,
   NOT_HAVE_COINS
 } from "./core/socketText.ts";
-import { db } from "./core/AuraDB.ts";
-import { handleGroupStatus, handleGroupToxic } from "./core/groupModeration.ts";
+import { db } from "./database/AuraDB.ts";
+import {
+  handleGroupStatus,
+  handleGroupToxic,
+  isPrimaryBotForGroup,
+} from "./core/groupModeration.ts";
 import {
   checkDownloadCoins,
   chargeDownloadCost,
@@ -130,24 +134,6 @@ function createNativeFlowNode() {
       },
     ],
   };
-}
-
-function botIdentityMatches(
-  primaryBot: string,
-  botJid: string,
-  botId?: string | null,
-) {
-  const configured = cleanJid(primaryBot);
-  if (!configured) return false;
-
-  return [botJid, botId]
-    .map((value) => cleanJid(String(value || "")))
-    .filter(Boolean)
-    .some(
-      (candidate) =>
-        candidate === configured ||
-        candidate.split("@")[0] === configured.split("@")[0],
-    );
 }
 
 function getPhoneNumberFromJid(jid?: string | null): string | null {
@@ -498,9 +484,7 @@ export async function handleMessage(
       const primaryBot = runtimeDb.getPrimary(from);
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         const storedBot = runtimeDb.getBot?.(botJid);
-        const botId = sock.subBotId || storedBot?.bot_id || null;
-        const isPrimary = botIdentityMatches(primaryBot, botJid, botId);
-        if (!isPrimary && isCmd) return;
+        if (!isPrimaryBotForGroup(sock, from, runtimeDb) && isCmd) return;
         if (storedBot?.status !== "active") return;
       }
     }
@@ -666,6 +650,7 @@ export async function handleMessage(
       //    restricción de acceso (self, modSelf, chatBanned, etc.) para que
       //    funcionen incluso cuando el grupo está en modo self o modself. ──
       if (
+        isPrimaryBotForGroup(sock, from, runtimeDb) &&
         groupData?.antilink &&
         body &&
         !isAdmin &&
@@ -725,7 +710,14 @@ export async function handleMessage(
       }
       
       // Verificar si el usuario está silenciado y eliminar su mensaje
-      if (isGroup && !isCmd && !isBotUser && !isMod && !isAdmin) {
+      if (
+        isGroup &&
+        isPrimaryBotForGroup(sock, from, runtimeDb) &&
+        !isCmd &&
+        !isBotUser &&
+        !isMod &&
+        !isAdmin
+      ) {
         const mutedUsers = groupData?.mutedUsers;
 
         if (Array.isArray(mutedUsers) && mutedUsers.length > 0) {

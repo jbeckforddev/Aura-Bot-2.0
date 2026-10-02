@@ -3,6 +3,8 @@ import { fytBold } from "../../core/socketText.ts";
 import { requestJson } from "../../core/downloadUtils.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
+import { formatDuration } from "../../utils/formatter.ts";
+import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 
 export default {
   name: ["spsearch", "spotifysearch", "sps"],
@@ -25,10 +27,19 @@ export default {
           : [];
       if (!tracks.length)
         throw new Error("No se encontraron resultados en Spotify.");
-      let text = `╭━━〔 ${fytBold("SPOTIFY SEARCH")} 〕━━⬣\n┃ 🔍 ${fytBold("Búsqueda")} › ${query}\n┃ ⚙️ ${fytBold("Motor")} › Alya Core\n╰━━━━━━━━━━━━━━━━⬣\n\n`;
-      for (const [index, track] of tracks.entries())
-        text += `┃ ${index + 1}. ${fytBold(track.title || "Sin título")}\n┃ ├ 👤 Artista › ${track.artist || "Desconocido"}\n┃ ├ 💿 Álbum › ${track.album || "Desconocido"}\n┃ ├ ⏱️ Duración › ${track.duration || "N/A"}\n┃ └ 🔗 Enlace › ${track.url || "No disponible"}\n\n`;
-      text += `╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`;
+      const text = SEARCH_RESULTS_TEMPLATE({
+        bold: fytBold,
+        label: "SPOTIFY SEARCH",
+        icon: "🎵",
+        query,
+        engine: "Alya Core",
+        results: tracks.map((track) => ({
+          title: track.title || "Sin título",
+          artist: track.artist || "Desconocido",
+          duration: formatDuration(track.duration) || "N/A",
+          url: track.url || "No disponible",
+        })),
+      });
       const cover = tracks[0].image || tracks[0].cover || tracks[0].coverHd;
       const firstTrack = tracks[0];
       const title = firstTrack.title || "Resultado de Spotify";

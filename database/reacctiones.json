@@ -1,0 +1,1142 @@
+{
+  "angry": {
+    "descripcion": "Expresa enojo intenso hacia alguien o ante una situación.",
+    "react": "🤬",
+    "self": "está furioso/a",
+    "target": "está furioso/a con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/unsSlt3Z.mp4",
+      "https://cloud.stellarwa.xyz/LA8Twjmd.mp4",
+      "https://cloud.stellarwa.xyz/W0VluFDZ.mp4",
+      "https://cloud.stellarwa.xyz/vo3kIg0f.mp4"
+    ]
+  },
+  "bath": {
+    "descripcion": "Comparte un momento de baño y relajación con alguien.",
+    "self": "se está bañando",
+    "target": "se baña junto a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/vPdQZkNv.mp4",
+      "https://cloud.stellarwa.xyz/WRsOBNRX.mp4",
+      "https://cloud.stellarwa.xyz/9hQIPWzF.mp4",
+      "https://cloud.stellarwa.xyz/ctUZ1umF.mp4"
+    ],
+    "react": "🛁"
+  },
+  "bite": {
+    "descripcion": "Da un mordisco juguetón a otra persona.",
+    "self": "se muerde a sí mismo",
+    "target": "muerde a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/m5fHtNav.mp4",
+      "https://cloud.stellarwa.xyz/144ROQzZ.mp4",
+      "https://cloud.stellarwa.xyz/ufqIy2D2.mp4",
+      "https://cloud.stellarwa.xyz/5Zup9xUy.mp4"
+    ],
+    "react": "😬"
+  },
+  "bleh": {
+    "descripcion": "Saca la lengua para burlarse de forma divertida.",
+    "self": "se saca la lengua",
+    "target": "le saca la lengua a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/34kq74n6.mp4",
+      "https://cloud.stellarwa.xyz/wP4e9Xb6.mp4",
+      "https://cloud.stellarwa.xyz/166uFH2q.mp4",
+      "https://cloud.stellarwa.xyz/eXNmbEFp.mp4"
+    ],
+    "react": "😛"
+  },
+  "blush": {
+    "descripcion": "Se sonroja por timidez, vergüenza o un cumplido.",
+    "self": "se sonroja",
+    "target": "se sonroja por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/0rxqJiut.mp4",
+      "https://cloud.stellarwa.xyz/yMs4h5uA.mp4",
+      "https://cloud.stellarwa.xyz/Q0K0ToOo.mp4",
+      "https://cloud.stellarwa.xyz/TMfMwURl.mp4"
+    ],
+    "react": "😊"
+  },
+  "bored": {
+    "descripcion": "Deja claro que algo le resulta aburrido.",
+    "self": "está aburrido/a",
+    "target": "está aburrido/a de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/y3dBgYFC.mp4",
+      "https://cloud.stellarwa.xyz/swbPQzDa.mp4",
+      "https://cloud.stellarwa.xyz/fcvIa55e.mp4",
+      "https://cloud.stellarwa.xyz/GA9gTOp4.mp4"
+    ],
+    "react": "🥱"
+  },
+  "clap": {
+    "descripcion": "Aplaude para reconocer o celebrar a alguien.",
+    "self": "se aplaude a sí mismo",
+    "target": "le aplaude a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/z9w1I55h.mp4",
+      "https://cloud.stellarwa.xyz/pPs4t0YK.mp4",
+      "https://cloud.stellarwa.xyz/ZFZGT2GW.mp4",
+      "https://cloud.stellarwa.xyz/PjgzD58Y.mp4"
+    ],
+    "react": "👏"
+  },
+  "coffee": {
+    "descripcion": "Se toma un café con calma mientras piensa en alguien.",
+    "self": "toma café tranquilo/a",
+    "target": "toma café pensando en",
+    "videos": [
+      "https://cloud.stellarwa.xyz/Y4Q76U9o.mp4",
+      "https://cloud.stellarwa.xyz/z6sPYQEt.mp4",
+      "https://cloud.stellarwa.xyz/8D8m1pC9.mp4",
+      "https://cloud.stellarwa.xyz/cWXVIHaa.mp4"
+    ],
+    "react": "☕"
+  },
+  "cry": {
+    "descripcion": "Llora para expresar tristeza o emoción.",
+    "self": "llora",
+    "target": "llora por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/dMRBZJpB.mp4",
+      "https://cloud.stellarwa.xyz/XDRNgcnV.mp4",
+      "https://cloud.stellarwa.xyz/unW6k7qC.mp4",
+      "https://cloud.stellarwa.xyz/03gw51AC.mp4"
+    ],
+    "react": "😭"
+  },
+  "cuddle": {
+    "descripcion": "Busca un abrazo cálido para acurrucarse con alguien.",
+    "self": "se acurruca solo/a",
+    "target": "se acurruca con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/4fiECNpX.mp4",
+      "https://cloud.stellarwa.xyz/SJr6DGXH.mp4",
+      "https://cloud.stellarwa.xyz/wECXGyVg.mp4",
+      "https://cloud.stellarwa.xyz/xMXEs1N0.mp4"
+    ],
+    "react": "🥰"
+  },
+  "dance": {
+    "descripcion": "Se pone a bailar a solas o en compañía.",
+    "self": "baila solo/a",
+    "target": "baila con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/elfr3eTC.mp4",
+      "https://cloud.stellarwa.xyz/B0VzF0x2.mp4",
+      "https://cloud.stellarwa.xyz/4NA3WgNF.mp4",
+      "https://cloud.stellarwa.xyz/aNTlCGZW.mp4"
+    ],
+    "react": "💃"
+  },
+  "drunk": {
+    "descripcion": "Actúa como si estuviera alegre y algo pasado de copas.",
+    "self": "está borracho/a",
+    "target": "está borracho/a por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/Yd8vKX9v.mp4",
+      "https://cloud.stellarwa.xyz/XQHFW1Uw.mp4",
+      "https://cloud.stellarwa.xyz/0UqjqHyp.mp4",
+      "https://cloud.stellarwa.xyz/cdKdPu6Y.mp4"
+    ],
+    "react": "🍻"
+  },
+  "eat": {
+    "descripcion": "Disfruta de una comida, a solas o junto a alguien.",
+    "self": "está comiendo",
+    "target": "come frente a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/mJmUFyR9.mp4",
+      "https://cloud.stellarwa.xyz/ieeIN5gX.mp4",
+      "https://cloud.stellarwa.xyz/pSF1mIeH.mp4",
+      "https://cloud.stellarwa.xyz/EoBRPHQK.mp4"
+    ],
+    "react": "🍽️"
+  },
+  "facepalm": {
+    "descripcion": "Se lleva la mano a la cara ante algo vergonzoso o absurdo.",
+    "self": "se da un facepalm",
+    "target": "se da un facepalm por",
+    "videos": [
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/51bb8762ac.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/1c49c203b9.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/0906825871.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/1a6c762666.mp4"
+    ],
+    "react": "🤦"
+  },
+  "happy": {
+    "descripcion": "Comparte su alegría con alguien o por una buena noticia.",
+    "self": "está feliz",
+    "target": "está feliz con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/TXW84l9Y.mp4",
+      "https://cloud.stellarwa.xyz/GwDNupG6.mp4",
+      "https://cloud.stellarwa.xyz/z57flnW5.mp4",
+      "https://cloud.stellarwa.xyz/nmv7u4Vu.mp4"
+    ],
+    "react": "😄"
+  },
+  "hug": {
+    "descripcion": "Da un abrazo afectuoso para demostrar cariño.",
+    "self": "se abraza a sí mismo",
+    "target": "abraza a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/flPbYpwX.mp4",
+      "https://cloud.stellarwa.xyz/IXxidoz7.mp4",
+      "https://cloud.stellarwa.xyz/oTKY9fRw.mp4",
+      "https://cloud.stellarwa.xyz/SsM1LtSo.mp4"
+    ],
+    "react": "🤗"
+  },
+  "kill": {
+    "descripcion": "Hace una amenaza exagerada en tono de broma.",
+    "self": "quiere autodestruirse",
+    "target": "quiere matar a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/RoewrO7T.mp4",
+      "https://cloud.stellarwa.xyz/V9uYdVO6.mp4",
+      "https://cloud.stellarwa.xyz/Hem3D5R7.mp4",
+      "https://cloud.stellarwa.xyz/yc8zZzVv.mp4"
+    ],
+    "react": "🔪"
+  },
+  "kiss": {
+    "descripcion": "Llena de besos a alguien para mostrarle cariño.",
+    "self": "se tira un beso al espejo",
+    "target": "le llena la carita de besitos a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/8z4MVoF7.mp4",
+      "https://cloud.stellarwa.xyz/ntIIeL4R.mp4",
+      "https://cloud.stellarwa.xyz/nuR9FIJn.mp4",
+      "https://cloud.stellarwa.xyz/2xFtEfqm.mp4"
+    ],
+    "react": "😘"
+  },
+  "laugh": {
+    "descripcion": "Se ríe a carcajadas, quizá por lo que hizo otra persona.",
+    "self": "se ríe solo/a",
+    "target": "se ríe de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/08iTPkUR.mp4",
+      "https://cloud.stellarwa.xyz/WC1uejmT.mp4",
+      "https://cloud.stellarwa.xyz/GhtN51rN.mp4",
+      "https://cloud.stellarwa.xyz/ry4xCD9O.mp4"
+    ],
+    "react": "😂"
+  },
+  "lick": {
+    "descripcion": "Lame a alguien en un gesto travieso y juguetón.",
+    "self": "se lame el labio",
+    "target": "lame a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/F3I9qpAh.mp4",
+      "https://cloud.stellarwa.xyz/D2J5P3Gr.mp4",
+      "https://cloud.stellarwa.xyz/pHzyTQ0Y.mp4",
+      "https://cloud.stellarwa.xyz/sKzY0PLU.mp4"
+    ],
+    "react": "😋"
+  },
+  "love": {
+    "descripcion": "Declara su amor o demuestra cuánto quiere a alguien.",
+    "self": "se ama a sí mismo",
+    "target": "ama a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/178WYsMU.mp4",
+      "https://cloud.stellarwa.xyz/gKTsFxyC.mp4",
+      "https://cloud.stellarwa.xyz/vLa86tf1.mp4",
+      "https://cloud.stellarwa.xyz/zlxo8Jwn.mp4"
+    ],
+    "react": "❤️"
+  },
+  "pat": {
+    "descripcion": "Acaricia suavemente la cabeza de alguien para darle ánimo.",
+    "self": "se acaricia la cabeza",
+    "target": "acaricia la cabeza de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/b2gao6eB.mp4",
+      "https://cloud.stellarwa.xyz/eCMVZrDB.mp4",
+      "https://cloud.stellarwa.xyz/g5j1SrU1.mp4",
+      "https://cloud.stellarwa.xyz/ikMlk8we.mp4"
+    ],
+    "react": "🫳"
+  },
+  "poke": {
+    "descripcion": "Pincha o molesta a alguien para llamar su atención.",
+    "self": "se pica a sí mismo",
+    "target": "molesta (poke) a",
+    "videos": [
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/263affc4c2.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/cf47db1dce.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/76f2bcce0c.mp4",
+      "https://raw.githubusercontent.com/Kone457/Nexus/refs/heads/main/Anime/93b5135827.mp4"
+    ],
+    "react": "👉"
+  },
+  "pout": {
+    "descripcion": "Hace pucheros para expresar disgusto o pedir atención.",
+    "self": "hace pucheros",
+    "target": "hace pucheros por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/EIx3wRU4.mp4",
+      "https://cloud.stellarwa.xyz/OJmt51KD.mp4",
+      "https://cloud.stellarwa.xyz/bqDizIYa.mp4",
+      "https://cloud.stellarwa.xyz/atUrtju4.mp4"
+    ],
+    "react": "😗"
+  },
+  "punch": {
+    "descripcion": "Lanza un golpe en una escena de acción ficticia.",
+    "self": "se golpea solo/a",
+    "target": "golpea a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/INuDEpLh.mp4",
+      "https://cloud.stellarwa.xyz/MztVLyKI.mp4",
+      "https://cloud.stellarwa.xyz/zEVpizb7.mp4",
+      "https://cloud.stellarwa.xyz/NBEQQSGl.mp4"
+    ],
+    "react": "👊"
+  },
+  "run": {
+    "descripcion": "Sale corriendo para escapar de alguien o de algo.",
+    "self": "sale corriendo",
+    "target": "huye de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/AcEWpbw4.mp4",
+      "https://cloud.stellarwa.xyz/FnJfh4Rp.mp4",
+      "https://cloud.stellarwa.xyz/8XW91Zrs.mp4",
+      "https://cloud.stellarwa.xyz/0d5T69m1.mp4"
+    ],
+    "react": "🏃"
+  },
+  "sad": {
+    "descripcion": "Muestra tristeza por una situación o por alguien.",
+    "self": "está triste",
+    "target": "está triste por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/k9SFugH1.mp4",
+      "https://cloud.stellarwa.xyz/buPXhEM6.mp4",
+      "https://cloud.stellarwa.xyz/cinB2Sja.mp4",
+      "https://cloud.stellarwa.xyz/DVzx4Xyh.mp4"
+    ],
+    "react": "😢"
+  },
+  "scared": {
+    "descripcion": "Se asusta ante algo inesperado o intimidante.",
+    "self": "se asusta solo/a",
+    "target": "se asusta de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/op2ylCoA.mp4",
+      "https://cloud.stellarwa.xyz/fZkjgsxX.mp4",
+      "https://cloud.stellarwa.xyz/oFYhIDPF.mp4",
+      "https://cloud.stellarwa.xyz/YxUN8C9J.mp4"
+    ],
+    "react": "😨"
+  },
+  "shy": {
+    "descripcion": "Se pone tímido al interactuar con alguien.",
+    "self": "se pone tímido/a",
+    "target": "se pone tímido/a con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/KhxPHxCH.mp4",
+      "https://cloud.stellarwa.xyz/ZW2j2VvF.mp4",
+      "https://cloud.stellarwa.xyz/JvahOjKK.mp4",
+      "https://cloud.stellarwa.xyz/ln95Qaf2.mp4"
+    ],
+    "react": "😳"
+  },
+  "slap": {
+    "descripcion": "Da una bofetada en una escena exagerada de ficción.",
+    "self": "se abofetea a sí mismo",
+    "target": "abofetea a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/8MmqhSko.mp4",
+      "https://cloud.stellarwa.xyz/Pe92W3RN.mp4",
+      "https://cloud.stellarwa.xyz/45qH2e1v.mp4",
+      "https://cloud.stellarwa.xyz/praXATiC.mp4"
+    ],
+    "react": "✋"
+  },
+  "sleep": {
+    "descripcion": "Se queda dormido tranquilamente junto a alguien.",
+    "self": "se queda dormido/a",
+    "target": "se queda dormido/a cerca de",
+    "videos": [
+      "https://cloud.stellarwa.xyz/8HYs6aKd.mp4",
+      "https://cloud.stellarwa.xyz/7KMWZ94I.mp4",
+      "https://cloud.stellarwa.xyz/OnaStQJI.mp4",
+      "https://cloud.stellarwa.xyz/8HcE65Qf.mp4"
+    ],
+    "react": "😴"
+  },
+  "smoke": {
+    "descripcion": "Se toma una pausa para fumar y pensar.",
+    "self": "fuma tranquilo/a",
+    "target": "fuma pensando en",
+    "videos": [
+      "https://cloud.stellarwa.xyz/pxAdNqwy.mp4",
+      "https://cloud.stellarwa.xyz/k0snnW1r.mp4",
+      "https://cloud.stellarwa.xyz/yTuEkvkm.mp4",
+      "https://cloud.stellarwa.xyz/ttEtP9vY.mp4"
+    ],
+    "react": "🚬"
+  },
+  "think": {
+    "descripcion": "Se queda pensando en alguien o en sus propios asuntos.",
+    "self": "piensa en sus cosas",
+    "target": "piensa en",
+    "videos": [
+      "https://cloud.stellarwa.xyz/ZJXVxfas.mp4",
+      "https://cloud.stellarwa.xyz/6kbmkTdJ.mp4",
+      "https://cloud.stellarwa.xyz/ExCIeYRC.mp4",
+      "https://cloud.stellarwa.xyz/aPbKm4hG.mp4"
+    ],
+    "react": "🤔"
+  },
+  "peek": {
+    "descripcion": "Echa un vistazo a escondidas para descubrir qué ocurre.",
+    "self": "espía",
+    "target": "espía a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/xSzGaddI.mp4",
+      "https://cloud.stellarwa.xyz/QSF0v5hc.mp4",
+      "https://cloud.stellarwa.xyz/MtvcyTRf.mp4",
+      "https://cloud.stellarwa.xyz/czaakIdZ.mp4"
+    ],
+    "react": "👀"
+  },
+  "comfort": {
+    "descripcion": "Consuela a alguien y le ofrece apoyo cuando lo necesita.",
+    "self": "consuela",
+    "target": "consuela a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/2c0Sle3H.mp4",
+      "https://cloud.stellarwa.xyz/qEptaVNU.mp4",
+      "https://cloud.stellarwa.xyz/c0i4EySp.mp4",
+      "https://cloud.stellarwa.xyz/duENut9t.mp4"
+    ],
+    "react": "🫂"
+  },
+  "thinkhard": {
+    "descripcion": "Se concentra profundamente para resolver algo complicado.",
+    "self": "piensa intensamente",
+    "target": "piensa intensamente en",
+    "videos": [
+      "https://cloud.stellarwa.xyz/GKe4wSCV.mp4",
+      "https://cloud.stellarwa.xyz/pJpzGmOX.mp4",
+      "https://cloud.stellarwa.xyz/vLV2JzkV.mp4",
+      "https://cloud.stellarwa.xyz/Q55GcWj7.mp4"
+    ],
+    "react": "🧠"
+  },
+  "curious": {
+    "descripcion": "Muestra interés por descubrir algo sobre alguien o algo.",
+    "self": "siente curiosidad",
+    "target": "siente curiosidad por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/2GTwn10g.mp4",
+      "https://cloud.stellarwa.xyz/EsufhRMg.mp4",
+      "https://cloud.stellarwa.xyz/lUwO9b0t.mp4",
+      "https://cloud.stellarwa.xyz/UsRy5xDs.mp4"
+    ],
+    "react": "🧐"
+  },
+  "sniff": {
+    "descripcion": "Olfatea con curiosidad a alguien o algo cercano.",
+    "self": "olfatea",
+    "target": "olfatea a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/wCgWm6jw.mp4",
+      "https://cloud.stellarwa.xyz/LhIWLZW7.mp4",
+      "https://cloud.stellarwa.xyz/WCNr5WK4.mp4",
+      "https://cloud.stellarwa.xyz/BGUjWJiy.mp4"
+    ],
+    "react": "👃"
+  },
+  "stare": {
+    "descripcion": "Mantiene la mirada fija en alguien de forma intensa.",
+    "self": "mira fijamente",
+    "target": "mira fijamente a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/d4YVF9RJ.mp4",
+      "https://cloud.stellarwa.xyz/ZxagtBs0.mp4",
+      "https://cloud.stellarwa.xyz/4UgJzROu.mp4",
+      "https://cloud.stellarwa.xyz/oKC7Ld41.mp4"
+    ],
+    "react": "👁️"
+  },
+  "trip": {
+    "descripcion": "Tropieza o provoca un tropiezo en una escena cómica.",
+    "self": "tropieza",
+    "target": "hace tropezar a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/44SxIpJ1.mp4",
+      "https://cloud.stellarwa.xyz/gxDt4JQm.mp4",
+      "https://cloud.stellarwa.xyz/22YQC6tu.mp4",
+      "https://cloud.stellarwa.xyz/V0twcbbs.mp4"
+    ],
+    "react": "🤕"
+  },
+  "blowkiss": {
+    "descripcion": "Envía un beso al aire como saludo cariñoso.",
+    "self": "lanza un beso",
+    "target": "le lanza un beso a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/Awke4gSF.mp4",
+      "https://cloud.stellarwa.xyz/cm2dx1Dm.mp4",
+      "https://cloud.stellarwa.xyz/dsMYcbKi.mp4",
+      "https://cloud.stellarwa.xyz/DSaaztCa.mp4"
+    ],
+    "react": "💋"
+  },
+  "snuggle": {
+    "descripcion": "Se acomoda cerca de alguien para compartir calor y cariño.",
+    "self": "se acurruca",
+    "target": "se acurruca con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/tvBj2OK4.mp4",
+      "https://cloud.stellarwa.xyz/N6t66PYj.mp4",
+      "https://cloud.stellarwa.xyz/YGLp8Jtj.mp4",
+      "https://cloud.stellarwa.xyz/nJ6P84pt.mp4"
+    ],
+    "react": "🧸"
+  },
+  "dramatic": {
+    "descripcion": "Reacciona con exageración teatral ante una situación.",
+    "self": "actúa con dramatismo",
+    "target": "actúa con dramatismo por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/dE4qqyJf.mp4",
+      "https://cloud.stellarwa.xyz/WUHVy0OB.mp4",
+      "https://cloud.stellarwa.xyz/MOib8i5H.mp4",
+      "https://cloud.stellarwa.xyz/imqWj8ck.mp4"
+    ],
+    "react": "🎭"
+  },
+  "cold": {
+    "descripcion": "Tirita de frío y busca compañía para entrar en calor.",
+    "self": "siente frío",
+    "target": "siente frío junto a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/7pCK50tc.mp4",
+      "https://cloud.stellarwa.xyz/9TxObaO0.mp4",
+      "https://cloud.stellarwa.xyz/Vcu5U35r.mp4",
+      "https://cloud.stellarwa.xyz/QWJWMFyY.mp4"
+    ],
+    "react": "🥶"
+  },
+  "preg": {
+    "descripcion": "Bromea sobre formar una familia o tener un bebé con alguien.",
+    "self": "quiere tener un bebé",
+    "target": "quiere dejar embarazada a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/0Lqk5Esz.mp4",
+      "https://cloud.stellarwa.xyz/XDLsFIEN.mp4",
+      "https://cloud.stellarwa.xyz/Qlv72Qsg.mp4",
+      "https://cloud.stellarwa.xyz/kRANFPSm.mp4"
+    ],
+    "react": "👶"
+  },
+  "kisscheek": {
+    "descripcion": "Da un beso tierno en la mejilla de alguien.",
+    "self": "se besa la mejilla",
+    "target": "besa en la mejilla a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/k8Uq1mUI.mp4",
+      "https://cloud.stellarwa.xyz/XE2jOtD0.mp4",
+      "https://cloud.stellarwa.xyz/g3QWt16W.mp4",
+      "https://cloud.stellarwa.xyz/LQYUND4b.mp4"
+    ],
+    "react": "😚"
+  },
+  "sing": {
+    "descripcion": "Dedica una canción a alguien o canta por diversión.",
+    "self": "canta",
+    "target": "le canta a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/pPDOztK2.mp4",
+      "https://cloud.stellarwa.xyz/TLbo018o.mp4",
+      "https://cloud.stellarwa.xyz/upKSB7Lm.mp4",
+      "https://cloud.stellarwa.xyz/Eu8arUPk.mp4"
+    ],
+    "react": "🎤"
+  },
+  "tickle": {
+    "descripcion": "Hace cosquillas para provocar risas y un momento divertido.",
+    "self": "se hace cosquillas",
+    "target": "hace cosquillas a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/FPFfecr1.mp4",
+      "https://cloud.stellarwa.xyz/TOoDkkK2.mp4",
+      "https://cloud.stellarwa.xyz/k26AoBpM.mp4",
+      "https://cloud.stellarwa.xyz/7KH46e23.mp4"
+    ],
+    "react": "🤭"
+  },
+  "scream": {
+    "descripcion": "Grita para liberar emoción, sorpresa o frustración.",
+    "self": "esta gritando",
+    "target": "le grita a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/M7GC5eMS.mp4",
+      "https://cloud.stellarwa.xyz/uifR4jbc.mp4",
+      "https://cloud.stellarwa.xyz/Bztu8yG8.mp4",
+      "https://cloud.stellarwa.xyz/uhuYmqh3.mp4"
+    ],
+    "react": "😱"
+  },
+  "push": {
+    "descripcion": "Empuja a alguien en una interacción exagerada y ficticia.",
+    "self": "se empuja a sí mismo",
+    "target": "empuja a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/yb2tVTYK.mp4",
+      "https://cloud.stellarwa.xyz/BLWvfu6m.mp4",
+      "https://cloud.stellarwa.xyz/RQNwVAUR.mp4",
+      "https://cloud.stellarwa.xyz/VvIFKRe2.mp4"
+    ],
+    "react": "🫸"
+  },
+  "nope": {
+    "descripcion": "Rechaza una propuesta con un gesto firme y claro.",
+    "self": "niega con firmeza",
+    "target": "le niega algo a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/rn4RcOce.mp4",
+      "https://cloud.stellarwa.xyz/Wm7tkpE5.mp4",
+      "https://cloud.stellarwa.xyz/kLdgGpDU.mp4",
+      "https://cloud.stellarwa.xyz/n4KfYiDT.mp4"
+    ],
+    "react": "🙅"
+  },
+  "jump": {
+    "descripcion": "Da un salto para superar un obstáculo o sorprender a alguien.",
+    "self": "salta",
+    "target": "salta sobre",
+    "videos": [
+      "https://cloud.stellarwa.xyz/ls6JWam3.mp4",
+      "https://cloud.stellarwa.xyz/QMRZBdqx.mp4",
+      "https://cloud.stellarwa.xyz/omeahNjq.mp4",
+      "https://cloud.stellarwa.xyz/AgDpujbC.mp4"
+    ],
+    "react": "🦘"
+  },
+  "heat": {
+    "descripcion": "Se abanica porque siente demasiado calor.",
+    "self": "siente calor",
+    "target": "siente calor por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/AosgrxVO.mp4",
+      "https://cloud.stellarwa.xyz/qkZkl1S1.mp4",
+      "https://cloud.stellarwa.xyz/2pKdkYoA.mp4",
+      "https://cloud.stellarwa.xyz/FV4mF1hC.mp4"
+    ],
+    "react": "🥵"
+  },
+  "gaming": {
+    "descripcion": "Comparte una partida de videojuegos con alguien.",
+    "self": "juega videojuegos",
+    "target": "juega videojuegos con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/TLUPevgP.mp4",
+      "https://cloud.stellarwa.xyz/uFlqF6rt.mp4",
+      "https://cloud.stellarwa.xyz/QnLb1rYC.mp4",
+      "https://cloud.stellarwa.xyz/0clQfdgv.mp4"
+    ],
+    "react": "🎮"
+  },
+  "draw": {
+    "descripcion": "Hace un dibujo de alguien o crea algo con imaginación.",
+    "self": "dibuja",
+    "target": "dibuja a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/6mr8y8Yy.mp4",
+      "https://cloud.stellarwa.xyz/hkOsEwuI.mp4",
+      "https://cloud.stellarwa.xyz/e9jNYSyu.mp4",
+      "https://cloud.stellarwa.xyz/96vf9kzj.mp4"
+    ],
+    "react": "🎨"
+  },
+  "call": {
+    "descripcion": "Inicia una llamada para ponerse en contacto con alguien.",
+    "self": "hace una llamada",
+    "target": "llama a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/vjpwrYBn.mp4",
+      "https://cloud.stellarwa.xyz/OL49TU3M.mp4",
+      "https://cloud.stellarwa.xyz/3ZrLydWe.mp4",
+      "https://cloud.stellarwa.xyz/4TWKqgaI.mp4"
+    ],
+    "react": "📞"
+  },
+  "seduce": {
+    "descripcion": "Intenta conquistar a alguien con una actitud coqueta.",
+    "self": "intenta seducir",
+    "target": "intenta seducir a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/4lm94dju.mp4",
+      "https://cloud.stellarwa.xyz/MLWBbbCO.mp4",
+      "https://cloud.stellarwa.xyz/dYfjbnQU.mp4",
+      "https://cloud.stellarwa.xyz/KEun76mb.mp4"
+    ],
+    "react": "😏"
+  },
+  "spit": {
+    "descripcion": "Escupe como reacción de asco o en una escena cómica.",
+    "self": "escupe",
+    "target": "escupe a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/fLInuCod.mp4",
+      "https://cloud.stellarwa.xyz/gnVhJ7YN.mp4",
+      "https://cloud.stellarwa.xyz/agqu6DG1.mp4",
+      "https://cloud.stellarwa.xyz/FbxjYvCf.mp4"
+    ],
+    "react": "🤮"
+  },
+  "step": {
+    "descripcion": "Da un paso torpe que termina pisando a alguien.",
+    "self": "da un paso",
+    "target": "pisa a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/Rov3fZBf.mp4",
+      "https://cloud.stellarwa.xyz/g6Jsjt0y.mp4",
+      "https://cloud.stellarwa.xyz/iZxNxdL4.mp4",
+      "https://cloud.stellarwa.xyz/4XO222fu.mp4"
+    ],
+    "react": "👣"
+  },
+  "walk": {
+    "descripcion": "Da un paseo tranquilo junto a alguien.",
+    "self": "camina",
+    "target": "camina junto a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/uRXteUFB.mp4",
+      "https://cloud.stellarwa.xyz/QzU17y4k.mp4",
+      "https://cloud.stellarwa.xyz/xAbJJtdu.mp4",
+      "https://cloud.stellarwa.xyz/K1E76Y1o.mp4"
+    ],
+    "react": "🚶"
+  },
+  "wink": {
+    "descripcion": "Guiña un ojo para compartir una complicidad o coquetear.",
+    "self": "guiña el ojo",
+    "target": "le guiña el ojo a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/npHrSOqR.mp4",
+      "https://cloud.stellarwa.xyz/AYxeLPTz.mp4",
+      "https://cloud.stellarwa.xyz/eFk0zwM9.mp4",
+      "https://cloud.stellarwa.xyz/JdhP7Nu3.mp4"
+    ],
+    "react": "😉"
+  },
+  "bully": {
+    "descripcion": "Molesta a alguien en tono juguetón y sin mala intención.",
+    "self": "molesta en tono juguetón",
+    "target": "molesta en tono juguetón a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/17IlJ47v.mp4",
+      "https://cloud.stellarwa.xyz/5O8YmuDr.mp4",
+      "https://cloud.stellarwa.xyz/dtxEmjvS.mp4",
+      "https://cloud.stellarwa.xyz/1W695otN.mp4"
+    ],
+    "react": "😈"
+  },
+  "wave": {
+    "descripcion": "Saluda a alguien con un gesto amistoso de la mano.",
+    "self": "saluda con la mano",
+    "target": "saluda con la mano a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/2XLjQwtN.mp4",
+      "https://cloud.stellarwa.xyz/ONKRvdi5.mp4",
+      "https://cloud.stellarwa.xyz/6pZdxuqe.mp4",
+      "https://cloud.stellarwa.xyz/UrDGO8cO.mp4"
+    ],
+    "react": "👋"
+  },
+  "smug": {
+    "descripcion": "Presume con satisfacción delante de alguien.",
+    "self": "se muestra presumido/a",
+    "target": "se muestra presumido/a frente a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/6LtH79XT.mp4",
+      "https://cloud.stellarwa.xyz/ozn8jl0r.mp4",
+      "https://cloud.stellarwa.xyz/n6DQAc14.mp4",
+      "https://cloud.stellarwa.xyz/jbe7rICK.mp4"
+    ],
+    "react": "😏"
+  },
+  "smile": {
+    "descripcion": "Sonríe a alguien para transmitir simpatía o alegría.",
+    "self": "sonríe",
+    "target": "sonríe a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/LlGMQhtD.mp4",
+      "https://cloud.stellarwa.xyz/WC50nG0m.mp4",
+      "https://cloud.stellarwa.xyz/U51wdWMc.mp4",
+      "https://cloud.stellarwa.xyz/n0Wicxvz.mp4"
+    ],
+    "react": "🙂"
+  },
+  "highfive": {
+    "descripcion": "Choca los cinco para celebrar algo en equipo.",
+    "self": "choca los cinco consigo mismo/a",
+    "target": "choca los cinco con",
+    "videos": [
+      "https://cloud.stellarwa.xyz/SgQjNkr7.mp4",
+      "https://cloud.stellarwa.xyz/jp5Zj6DO.mp4",
+      "https://cloud.stellarwa.xyz/3bVUI47J.mp4",
+      "https://cloud.stellarwa.xyz/2G7V5AZM.mp4"
+    ],
+    "react": "🙌"
+  },
+  "handhold": {
+    "descripcion": "Toma la mano de alguien para mostrar cercanía.",
+    "self": "se toma de las manos",
+    "target": "toma de las manos a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/G0BgjbgH.mp4",
+      "https://cloud.stellarwa.xyz/Jgwo0Q5k.mp4",
+      "https://cloud.stellarwa.xyz/NshNSxXV.mp4",
+      "https://cloud.stellarwa.xyz/wGfca0es.mp4"
+    ],
+    "react": "🤝"
+  },
+  "cringe": {
+    "descripcion": "Reacciona con incomodidad ante una situación embarazosa.",
+    "self": "siente vergüenza ajena",
+    "target": "siente vergüenza ajena por",
+    "videos": [
+      "https://cloud.stellarwa.xyz/RGATg5oh.mp4",
+      "https://cloud.stellarwa.xyz/ZATsIAW8.mp4",
+      "https://cloud.stellarwa.xyz/Bowe5Kc0.mp4",
+      "https://cloud.stellarwa.xyz/i5E4eAxZ.mp4"
+    ],
+    "react": "😬"
+  },
+  "bonk": {
+    "descripcion": "Da un golpecito en la cabeza como reprimenda cómica.",
+    "self": "se golpea en la cabeza por travesura",
+    "target": "golpea en la cabeza por travesura a",
+    "videos": [
+      "https://cloud.stellarwa.xyz/vsgelgrA.mp4",
+      "https://cloud.stellarwa.xyz/xPFEm19Y.mp4",
+      "https://cloud.stellarwa.xyz/9NSRFhYU.mp4",
+      "https://cloud.stellarwa.xyz/ZnZTvKU8.mp4"
+    ],
+    "react": "💫"
+  },
+  "tonto": {
+    "descripcion": "Llama tonto a alguien en una broma entre amigos.",
+    "self": "dice tonto",
+    "target": "le dice tonto a",
+    "videos": [
+      "https://nekos.best/api/v2/baka/9f5d995a-78b2-4106-8a5b-77eb6c03b11f.gif",
+      "https://nekos.best/api/v2/baka/f2fc9d14-aa66-4404-a222-7c93321b5ad6.gif",
+      "https://nekos.best/api/v2/baka/489c4f2b-297c-4d12-8b64-bebe4d556bbb.gif",
+      "https://nekos.best/api/v2/baka/cea9bc28-b8fc-43f7-9e7e-a3654236a935.gif"
+    ],
+    "react": "🤪"
+  },
+  "carry": {
+    "descripcion": "Carga a alguien para ayudarle o llevarlo en brazos.",
+    "self": "carga consigo mismo/a",
+    "target": "carga a",
+    "videos": [
+      "https://nekos.best/api/v2/carry/a5c05cd6-99bb-46f7-8037-bb801dd77f48.gif",
+      "https://nekos.best/api/v2/carry/bc38515e-0422-4108-8f0d-a18d7fff36b1.gif",
+      "https://nekos.best/api/v2/carry/a88edc98-5109-4df9-b692-b78106faa830.gif",
+      "https://nekos.best/api/v2/carry/51dd419a-8bf2-47b9-9e58-8b32fe697b6b.gif"
+    ],
+    "react": "🧳"
+  },
+  "confused": {
+    "descripcion": "Se queda confundido porque no entiende lo que sucede.",
+    "self": "está confundido/a",
+    "target": "está confundido/a por",
+    "videos": [
+      "https://nekos.best/api/v2/confused/e0169deb-3e6d-4fe9-b32e-a6fc18607639.gif",
+      "https://nekos.best/api/v2/confused/9b523336-f1fe-4ee0-8ffe-5327f1af697a.gif",
+      "https://nekos.best/api/v2/confused/57d05aa8-86ba-4382-8eb1-41712b655f4b.gif",
+      "https://nekos.best/api/v2/confused/bbe4d534-e9d5-49a2-848c-a7eb491b9c17.gif"
+    ],
+    "react": "😕"
+  },
+  "feed": {
+    "descripcion": "Le ofrece comida a alguien con un gesto atento.",
+    "self": "se alimenta",
+    "target": "da de comer a",
+    "videos": [
+      "https://nekos.best/api/v2/feed/70c47b1c-4cc1-4811-8cc5-977b2156852c.gif",
+      "https://nekos.best/api/v2/feed/ec289626-f33e-4915-9a9b-fedd21c7df2a.gif",
+      "https://nekos.best/api/v2/feed/2caf2120-df1e-4844-be1a-16bde6ac8b3e.gif",
+      "https://nekos.best/api/v2/feed/c55219a3-eea0-46e1-9812-c2d6cb5b9ad4.gif"
+    ],
+    "react": "🥄"
+  },
+  "handshake": {
+    "descripcion": "Saluda a alguien con un apretón de manos.",
+    "self": "estrecha su propia mano",
+    "target": "estrecha la mano de",
+    "videos": [
+      "https://nekos.best/api/v2/handshake/fd59247b-fbe3-4bfa-adfb-745dc48140f2.gif",
+      "https://nekos.best/api/v2/handshake/4f559911-7c5d-4909-bba6-671ece98b485.gif",
+      "https://nekos.best/api/v2/handshake/ff6bf8e2-a566-4683-b2d3-a8aeeed218d2.gif",
+      "https://nekos.best/api/v2/handshake/f8c1922d-1a45-4bc8-af75-42e9d3e6a0fc.gif"
+    ],
+    "react": "🤝"
+  },
+  "kabedon": {
+    "descripcion": "Se acerca de forma dramática y romántica a alguien.",
+    "self": "hace un kabedon",
+    "target": "hace un kabedon a",
+    "videos": [
+      "https://nekos.best/api/v2/kabedon/1b42f078-a094-4933-bcc8-9307ba451366.gif",
+      "https://nekos.best/api/v2/kabedon/c05a7450-c349-42a2-b477-b91f13d8ba7f.gif",
+      "https://nekos.best/api/v2/kabedon/44534fdd-0568-40d5-b005-83e7316468d8.gif",
+      "https://nekos.best/api/v2/kabedon/2d9f7106-b6d3-4395-80b3-a5d518ed9785.gif"
+    ],
+    "react": "💘"
+  },
+  "patear": {
+    "descripcion": "Lanza una patada exagerada en una escena ficticia.",
+    "self": "se patea a sí mismo/a",
+    "target": "patea a",
+    "videos": [
+      "https://nekos.best/api/v2/kick/27f557bc-2eac-4890-aca2-0e3686234bfc.gif",
+      "https://nekos.best/api/v2/kick/ba84b1f6-71ce-4ed5-934c-42dc265d7a34.gif",
+      "https://nekos.best/api/v2/kick/51a46440-fff7-40e5-b70e-ca8645061497.gif",
+      "https://nekos.best/api/v2/kick/b8aa6a8d-777d-412d-84df-0e43f56f3d74.gif"
+    ],
+    "react": "🦵"
+  },
+  "lappillow": {
+    "descripcion": "Ofrece su regazo a alguien como lugar cómodo para descansar.",
+    "self": "descansa sobre una almohada",
+    "target": "ofrece su regazo como almohada a",
+    "videos": [
+      "https://nekos.best/api/v2/lappillow/905b4d24-56fb-46da-bce8-a9992aff4933.gif",
+      "https://nekos.best/api/v2/lappillow/25e25781-63b2-487f-a462-a14841cd1841.gif",
+      "https://nekos.best/api/v2/lappillow/af34d7c0-18aa-4928-9cb1-d3552531475d.gif",
+      "https://nekos.best/api/v2/lappillow/d8753cf0-94f4-4484-b4d8-95bd860b6b05.gif"
+    ],
+    "react": "🛏️"
+  },
+  "lurk": {
+    "descripcion": "Observa en silencio desde las sombras, sin hacerse notar.",
+    "self": "acecha en silencio",
+    "target": "acecha a",
+    "videos": [
+      "https://nekos.best/api/v2/lurk/ffcf1f81-147f-4ece-a02f-e8219ab67aff.gif",
+      "https://nekos.best/api/v2/lurk/6ccf8ab3-862d-4def-88cd-d47476e99ab0.gif",
+      "https://nekos.best/api/v2/lurk/1f152bc7-0d9a-43b2-9f8b-094a1609f36c.gif",
+      "https://nekos.best/api/v2/lurk/efa2115c-e3c2-44b3-acd1-4ecdf774061c.gif"
+    ],
+    "react": "🕵️"
+  },
+  "nod": {
+    "descripcion": "Asiente para mostrar acuerdo o confirmar algo.",
+    "self": "asiente con la cabeza",
+    "target": "asiente ante",
+    "videos": [
+      "https://nekos.best/api/v2/nod/2ce46f2a-3e4b-4568-99be-1bbe21083a44.gif",
+      "https://nekos.best/api/v2/nod/c0d72412-c930-49f8-a801-7dd71c93ff75.gif",
+      "https://nekos.best/api/v2/nod/636f8af5-335a-4e31-b27f-e013e3932949.gif",
+      "https://nekos.best/api/v2/nod/6ae98f09-e618-49c0-9717-15cc99d0a5a3.gif"
+    ],
+    "react": "✅"
+  },
+  "nom": {
+    "descripcion": "Le da un mordisco juguetón a algo o a alguien.",
+    "self": "come algo",
+    "target": "le da un mordisco a",
+    "videos": [
+      "https://nekos.best/api/v2/nom/c41c120c-7723-4fc3-a594-6aec39457fc8.gif",
+      "https://nekos.best/api/v2/nom/a0a64e36-0319-43a9-b69b-898fff26085d.gif",
+      "https://nekos.best/api/v2/nom/3a06aa30-26b4-4303-9414-cd39831b9006.gif",
+      "https://nekos.best/api/v2/nom/98556f76-dfef-4807-b3d2-1fee30704e6c.gif"
+    ],
+    "react": "😋"
+  },
+  "nya": {
+    "descripcion": "Dice «nya» con un tono felino y juguetón.",
+    "self": "dice nya",
+    "target": "le dice nya a",
+    "videos": [
+      "https://nekos.best/api/v2/nya/8d324e63-6790-4788-89e8-e4ea4d298560.gif",
+      "https://nekos.best/api/v2/nya/668a15eb-26e3-4225-9f42-e594ec9949e9.gif",
+      "https://nekos.best/api/v2/nya/7c6e4efc-e4f9-40ec-97ed-0d6e757cf9c0.gif",
+      "https://nekos.best/api/v2/nya/768bb0ad-3ddf-41f4-97b5-1b2108a6d1e7.gif"
+    ],
+    "react": "😺"
+  },
+  "peck": {
+    "descripcion": "Da un beso breve y dulce a alguien.",
+    "self": "da un beso corto",
+    "target": "da un beso corto a",
+    "videos": [
+      "https://nekos.best/api/v2/peck/726edf5f-4a8c-403f-9d41-06c9cedfba9b.gif",
+      "https://nekos.best/api/v2/peck/0485d1e3-9d02-40ba-8013-a08f5797e722.gif",
+      "https://nekos.best/api/v2/peck/4df36ebd-8c63-47c7-afc7-a6669fd4ccdc.gif",
+      "https://nekos.best/api/v2/peck/40d9a9b9-a160-45f1-b060-7b75c62e0d1b.gif"
+    ],
+    "react": "💋"
+  },
+  "salute": {
+    "descripcion": "Hace un saludo militar para mostrar respeto o humor.",
+    "self": "hace un saludo militar",
+    "target": "hace un saludo militar a",
+    "videos": [
+      "https://nekos.best/api/v2/salute/3256b463-d199-4dad-82f0-b8ea2d2ee1a9.gif",
+      "https://nekos.best/api/v2/salute/f880d418-2a64-4fba-926c-0d5e177529da.gif",
+      "https://nekos.best/api/v2/salute/3d7395f7-6aa9-4208-ac79-7b69bae23369.gif",
+      "https://nekos.best/api/v2/salute/337e8acf-7005-4012-b8e1-f7737d845d73.gif"
+    ],
+    "react": "🫡"
+  },
+  "shake": {
+    "descripcion": "Tiembla de emoción, miedo o frío junto a alguien.",
+    "self": "tiembla",
+    "target": "hace temblar a",
+    "videos": [
+      "https://nekos.best/api/v2/shake/98425963-511a-4c1e-af77-a5a8757378d2.gif",
+      "https://nekos.best/api/v2/shake/f9707232-311c-4523-8e2c-9dde623a2e95.gif",
+      "https://nekos.best/api/v2/shake/bb4b54ad-794e-4f77-b5ec-14b52d050690.gif",
+      "https://nekos.best/api/v2/shake/7a716e67-85e6-409d-96f1-56c0b406310e.gif"
+    ],
+    "react": "🫨"
+  },
+  "shoot": {
+    "descripcion": "Dispara en una escena ficticia de acción o aventura.",
+    "self": "dispara al aire",
+    "target": "dispara a",
+    "videos": [
+      "https://nekos.best/api/v2/shoot/6777253e-360d-48b2-84b4-4d6bfa13fe20.gif",
+      "https://nekos.best/api/v2/shoot/d47abf0c-9e65-46d9-abc0-a6da826b0d9b.gif",
+      "https://nekos.best/api/v2/shoot/7c146ee7-c949-434d-990d-07fda3e3f5fc.gif",
+      "https://nekos.best/api/v2/shoot/82af1bc8-23cd-409d-a6e4-1526790c0408.gif"
+    ],
+    "react": "🎯"
+  },
+  "shocked": {
+    "descripcion": "Se queda en shock ante una noticia o situación inesperada.",
+    "self": "se queda en shock",
+    "target": "se queda en shock por",
+    "videos": [
+      "https://nekos.best/api/v2/shocked/373248bf-eab6-466b-ab68-425b0879aa49.gif",
+      "https://nekos.best/api/v2/shocked/37d06bab-c3bd-4769-988c-50a89eb0f9c7.gif",
+      "https://nekos.best/api/v2/shocked/d87ca126-dc95-4f74-b88a-82b74f168a34.gif",
+      "https://nekos.best/api/v2/shocked/03f4901b-35d1-45bd-87b1-6e83e5a63890.gif"
+    ],
+    "react": "😲"
+  },
+  "shrug": {
+    "descripcion": "Se encoge de hombros para expresar duda o indiferencia.",
+    "self": "se encoge de hombros",
+    "target": "se encoge de hombros ante",
+    "videos": [
+      "https://nekos.best/api/v2/shrug/45aece33-8b20-4576-8764-5d12be41858d.gif",
+      "https://nekos.best/api/v2/shrug/d6ac4c43-5077-4efc-92e2-9fb4caf61a26.gif",
+      "https://nekos.best/api/v2/shrug/71a182c2-c0dc-4932-b51e-c0bd9d1d6bc0.gif",
+      "https://nekos.best/api/v2/shrug/ef7b3513-5b78-462e-bdfc-905bccd4b924.gif"
+    ],
+    "react": "🤷"
+  },
+  "sip": {
+    "descripcion": "Da un sorbo a su bebida mientras comparte el momento.",
+    "self": "da un sorbo",
+    "target": "da un sorbo junto a",
+    "videos": [
+      "https://nekos.best/api/v2/sip/5cb374fb-02b0-421e-b0eb-563aaa3f5d86.gif",
+      "https://nekos.best/api/v2/sip/58be3f87-a2cf-4098-bac7-ebd844ea5ebe.gif",
+      "https://nekos.best/api/v2/sip/bb51f25d-f6fb-4e0f-9fe5-63471995ef5c.gif",
+      "https://nekos.best/api/v2/sip/93874a5a-34a6-4644-975f-682937f09710.gif"
+    ],
+    "react": "🥤"
+  },
+  "spin": {
+    "descripcion": "Da vueltas o hace girar a alguien en un gesto divertido.",
+    "self": "da vueltas",
+    "target": "hace girar a",
+    "videos": [
+      "https://nekos.best/api/v2/spin/4a45e7ae-1628-469b-b0c4-3abf95fe36f7.gif",
+      "https://nekos.best/api/v2/spin/ce45e558-27cf-49aa-861e-c2d3c5d48668.gif",
+      "https://nekos.best/api/v2/spin/09a909d2-a07b-47bf-b2e2-d1cdedf7318d.gif",
+      "https://nekos.best/api/v2/spin/547d1157-d3da-4008-b658-18a281224c83.gif"
+    ],
+    "react": "🌀"
+  },
+  "tableflip": {
+    "descripcion": "Vuelca una mesa para expresar frustración de forma dramática.",
+    "self": "vuelca una mesa",
+    "target": "le vuelca la mesa a",
+    "videos": [
+      "https://nekos.best/api/v2/tableflip/79f2a230-d3ff-420b-be45-5567811097b9.gif",
+      "https://nekos.best/api/v2/tableflip/7d619f8f-c581-4a23-a35b-849779e54420.gif",
+      "https://nekos.best/api/v2/tableflip/72a323de-7bec-4ddb-9bd4-067add332bed.gif",
+      "https://nekos.best/api/v2/tableflip/7db820e0-125b-4331-ade7-238d1afc6f7e.gif"
+    ],
+    "react": "💢"
+  },
+  "teehee": {
+    "descripcion": "Suelta una risita tímida ante algo divertido o coqueto.",
+    "self": "se ríe tímidamente",
+    "target": "se ríe tímidamente de",
+    "videos": [
+      "https://nekos.best/api/v2/teehee/937e6926-2ca7-4b9b-a8ee-b294abe9e64f.gif",
+      "https://nekos.best/api/v2/teehee/2503c7ce-c051-43f7-8a3c-b243940ecdd4.gif",
+      "https://nekos.best/api/v2/teehee/2543c233-009b-4fe2-a274-c1d3a839c4a8.gif",
+      "https://nekos.best/api/v2/teehee/4734560b-a748-4bb7-a1e1-4e989e7b3d32.gif"
+    ],
+    "react": "🤭"
+  },
+  "thumbsup": {
+    "descripcion": "Da su aprobación con un pulgar levantado.",
+    "self": "levanta el pulgar",
+    "target": "le da el visto bueno a",
+    "videos": [
+      "https://nekos.best/api/v2/thumbsup/2226e003-32f6-4069-b873-88861a39b76c.gif",
+      "https://nekos.best/api/v2/thumbsup/9ae4b7fc-54ad-4a71-9d01-e6f228f34d74.gif",
+      "https://nekos.best/api/v2/thumbsup/7eb4d444-b5f1-49a9-9e4a-703857008f8e.gif",
+      "https://nekos.best/api/v2/thumbsup/116c2adc-7dd9-4734-9350-ab356ba6aca8.gif"
+    ],
+    "react": "👍"
+  },
+  "wag": {
+    "descripcion": "Mueve la cola con entusiasmo como una mascota contenta.",
+    "self": "mueve la cola",
+    "target": "mueve la cola frente a",
+    "videos": [
+      "https://nekos.best/api/v2/wag/1b677b62-a007-492b-8022-970e362c5cd3.gif",
+      "https://nekos.best/api/v2/wag/6ad32d30-07f1-446e-b83e-4010bbd26df9.gif",
+      "https://nekos.best/api/v2/wag/b0088ee4-ee47-4a42-a7b0-545078b6fd42.gif",
+      "https://nekos.best/api/v2/wag/d96faba6-cafb-474e-a647-079bffaca9ca.gif"
+    ],
+    "react": "🐕"
+  },
+  "yawn": {
+    "descripcion": "Bosteza porque tiene sueño o porque el momento es tranquilo.",
+    "self": "bosteza",
+    "target": "bosteza junto a",
+    "videos": [
+      "https://nekos.best/api/v2/yawn/eed475e4-57d6-4eaa-a15c-de213ec345cb.gif",
+      "https://nekos.best/api/v2/yawn/139a06bb-83d1-4c21-8215-7dca8890754f.gif",
+      "https://nekos.best/api/v2/yawn/0e32b709-9edf-4915-946d-799e58aa244d.gif",
+      "https://nekos.best/api/v2/yawn/4d688948-3ec5-403f-b6d2-2947440dfccd.gif"
+    ],
+    "react": "🥱"
+  },
+  "yeet": {
+    "descripcion": "Lanza algo —o a alguien en tono cómico— lo más lejos posible.",
+    "self": "lanza algo lejos",
+    "target": "lanza lejos a",
+    "videos": [
+      "https://nekos.best/api/v2/yeet/445b37a1-f5d8-4489-b285-8bb44cc9a0f1.gif",
+      "https://nekos.best/api/v2/yeet/a7884aab-df95-4b18-8247-604b5dc27309.gif",
+      "https://nekos.best/api/v2/yeet/bd0af6f9-aabe-4d69-a467-4727ee6ebee0.gif",
+      "https://nekos.best/api/v2/yeet/a16bf60c-7600-4302-8ac3-a59714fdbd05.gif"
+    ],
+    "react": "🚀"
+  }
+}

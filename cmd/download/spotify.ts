@@ -12,6 +12,7 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import type { CommandContext, SpotifyResponse } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -50,7 +51,23 @@ export default {
           : `https://open.spotify.com/search/${encodeURIComponent(title)}`);
       const file = await downloadToCache(downloadUrl);
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
-      let caption = `╭〔 🎵 ${fytBold("SPOTIFY PLAY")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Artista")} › ${song.artist || "Desconocido"}\n┃ > ${fytBold("Álbum")} › ${song.album || "Desconocido"}\n┃ > ${fytBold("Duración")} › ${song.duration || "N/A"}\n┃ > ${fytBold("Tipo")} › Audio (MP3)\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("URL")} › ${originalUrl}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando audio...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "SPOTIFY PLAY",
+        icon: "🎵",
+        title,
+        artist: song.artist,
+        album: song.album,
+        duration: song.duration,
+        type: "Audio (MP3)",
+        cost: formatMoney(cost, ctx),
+        url: originalUrl,
+        showArtist: Boolean(song.artist),
+        showAlbum: Boolean(song.album),
+        showDuration: Boolean(song.duration),
+        showType: true,
+        loadingText: "Descargando audio...",
+      });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover
         ? await sendDownloadPreview({
@@ -61,7 +78,7 @@ export default {
             caption,
             link: originalUrl,
             title,
-            author: song.artist || "Spotify",
+            author: globalThis.DEFAULT_BOT_AUTHOR,
             sender,
           })
         : false;

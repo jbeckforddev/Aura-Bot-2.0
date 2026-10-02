@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { getProfile } from "../../core/profileConfig.ts";
-import { db } from "../../core/AuraDB.ts";
+import { db } from "../../database/AuraDB.ts";
 
 export default {
   name: ["eboard", "auratop"],

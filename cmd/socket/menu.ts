@@ -78,7 +78,7 @@ export default {
     let textoMenu = `╭━━〔 ${tituloEstilizado} 〕━━⬣\n`;
     textoMenu += `┃ > ${fytBold("Usuario:")} ${pushName}\n`;
     textoMenu += `┃ > ${fytBold("Bot:")} ${botType}\n`;
-    textoMenu += `┃ > ${fytBold("Version:")} 2.2.3\n`;
+    textoMenu += `┃ > ${fytBold("Version:")} 2.5\n`;
     textoMenu += `┃ > ${fytBold("Owner:")} Jeriel B.\n`;
     textoMenu += `┃ > ${fytBold("Prefix:")} [ ${activePrefix} ]\n`;
     textoMenu += `┃ > ${fytBold("Fecha:")} ${new Date().toLocaleDateString("es-CR")}\n`;
@@ -126,12 +126,18 @@ export default {
         String(a.name?.[0] ?? "").localeCompare(String(b.name?.[0] ?? "")),
       )) {
         const names = Array.isArray(cmd.name) ? cmd.name : [cmd.name];
+        const visibleNames = cmd.showAllNames ? names : names.slice(0, 1);
 
-        for (const alias of names.slice(0, 1)) {
+        for (const alias of visibleNames) {
           textoMenu += `┃ ➪ ${fytBold(`${activePrefix}${String(alias)}`)}\n`;
+
+          if (Array.isArray(cmd.description)) {
+            const description = cmd.description[names.indexOf(alias)];
+            if (description) textoMenu += `┃ ✦ ${description}\n\n`;
+          }
         }
 
-        if (cmd.description) {
+        if (typeof cmd.description === "string" && cmd.description) {
           textoMenu += `┃ ✦ ${cmd.description}\n\n`;
         }
       }
@@ -149,12 +155,31 @@ export default {
     let isGif = false;
 
     const botRecord = runtimeDb?.getBot?.(sock.user?.id);
+    const dataDir = path.resolve(globalThis.DATA_BASE_DIR || "./data");
+    const bannerFileName = String(
+      botRecord?.currentBanner || botRecord?.data?.currentBanner || "",
+    ).trim();
+    const audioFileName = String(
+      botRecord?.currentAudio || botRecord?.data?.currentAudio || "",
+    ).trim();
+    const storedBannerPath = bannerFileName
+      ? path.join(dataDir, path.basename(bannerFileName))
+      : "";
+    const storedAudioPath = audioFileName
+      ? path.join(dataDir, path.basename(audioFileName))
+      : "";
     const customBanner =
+      (storedBannerPath && existsSync(storedBannerPath)
+        ? { path: storedBannerPath }
+        : null) ??
       botRecord?.data?.customBanner ??
       botRecord?.customBanner ??
       runtimeDb?.customBanner ??
       null;
     const customAudio =
+      (storedAudioPath && existsSync(storedAudioPath)
+        ? { path: storedAudioPath }
+        : null) ??
       botRecord?.data?.customAudio ??
       botRecord?.customAudio ??
       runtimeDb?.customAudio ??

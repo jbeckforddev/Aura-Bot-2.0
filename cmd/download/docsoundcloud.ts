@@ -13,6 +13,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 let cachedClientId = "";
 let cachedAt = 0;
@@ -94,7 +95,19 @@ export default {
       const title = track.title || "SoundCloud";
       const file = await downloadToCache(stream.url);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🎵 ${fytBold("SOUNDCLOUD DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Artista")} › ${track.user?.username || "N/A"}\n┃ > ${fytBold("Tipo")} › Documento MP3\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando documento...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "SOUNDCLOUD DOCUMENT",
+        icon: "🎵",
+        title,
+        artist: track.user?.username,
+        type: "Documento MP3",
+        cost: formatMoney(cost, ctx),
+        url,
+        showArtist: Boolean(track.user?.username),
+        showType: true,
+        loadingText: "Descargando documento...",
+      });
       const thumbnail = track.artwork_url?.replace("large", "t500x500");
       const hasPreview = thumbnail
         ? await sendDownloadPreview({
@@ -105,7 +118,7 @@ export default {
             caption,
             link: url,
             title,
-            author: track.user?.username || "SoundCloud",
+            author: globalThis.DEFAULT_BOT_AUTHOR,
             sender,
           })
         : false;

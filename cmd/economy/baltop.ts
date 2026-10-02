@@ -3,7 +3,7 @@ import {
   getEconomyUser,
   formatMoney,
 } from "../../core/economyConfig.ts";
-import { db } from "../../core/AuraDB.ts";
+import { db } from "../../database/AuraDB.ts";
 
 export default {
   name: ["baltop", "topbal", "topcoins"],
@@ -24,47 +24,54 @@ export default {
     const botNumber = botJid.split("@")[0];
     const botId = String(ctx.sock?.subBotId || "").split("@")[0];
     const users = db.getAllUsers();
-    const usersByIdentity = new Map<
-      string,
-      { jid: string; username: string }
-    >();
-    for (const user of users) {
-      const jid = String(user.jid || "").trim();
-      const storedUser = {
-        jid,
-        username:
-          user.username ||
-          (user as { pushName?: string }).pushName ||
-          "Usuario",
-      };
-      if (jid) usersByIdentity.set(jid.split("@")[0].split(":")[0], storedUser);
-      if (user.lid)
-        usersByIdentity.set(
-          String(user.lid).split("@")[0].split(":")[0],
-          storedUser,
-        );
-      if (user.phone_number)
-        usersByIdentity.set(
-          String(user.phone_number).replace(/\D/g, ""),
-          storedUser,
-        );
-    }
+    const normalizeIdentity = (value: unknown) =>
+      String(value || "")
+        .trim()
+        .split("@")[0]
+        .split(":")[0]
+        .replace(/\D/g, "");
     const participants = Array.isArray(ctx.groupMeta.participants)
       ? ctx.groupMeta.participants.filter((participant) => Boolean(participant?.id))
       : [];
     const rows = participants
       .flatMap((participant) => {
-        const number = participant.id.split("@")[0].split(":")[0];
-        const storedUser = usersByIdentity.get(number);
-        if (!storedUser || number === botNumber || number === botId) {
+        const participantId = String(participant.id).trim();
+        const number = normalizeIdentity(participantId);
+        const storedUser =
+          users.find(
+            (user) =>
+              String(user.jid || "").trim() === participantId ||
+              String(user.lid || "").trim() === participantId,
+          ) ||
+          users.find(
+            (user) => normalizeIdentity(user.phone_number) === number,
+          ) ||
+          users.find((user) =>
+            [user.jid, user.lid].some(
+              (identity) => normalizeIdentity(identity) === number,
+            ),
+          );
+        const jid = String(storedUser?.jid || storedUser?.lid || "").trim();
+        const storedNumber = normalizeIdentity(jid);
+        if (
+          !storedUser ||
+          !jid ||
+          number === botNumber ||
+          number === botId ||
+          storedNumber === botNumber ||
+          storedNumber === botId
+        ) {
           return [];
         }
-        const user = getEconomyUser(ctx.from, storedUser.jid);
+        const user = getEconomyUser(ctx.from, jid);
         const total = Number(user.bolsillo ?? 0) + Number(user.banco ?? 0);
         return total > 0
           ? [{
-              jid: storedUser.jid,
-              username: storedUser.username,
+              jid,
+              username:
+                storedUser.username ||
+                (storedUser as { pushName?: string }).pushName ||
+                "Usuario",
               number,
               total,
             }]

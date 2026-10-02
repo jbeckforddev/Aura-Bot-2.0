@@ -7,6 +7,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AuraReedBot/2.0",
@@ -57,7 +58,21 @@ export default {
         extension === "apk"
           ? "application/vnd.android.package-archive"
           : "application/octet-stream";
-      const caption = `╭〔 📦 ${fytBold("MEDIAFIRE DL")} 〕━⬣\n\n┃ ➥ ${fytBold(name)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Tamaño")} › ${data.size}\n┃ > ${fytBold("Extensión")} › .${extension.toUpperCase()}\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Link")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando archivo...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "MEDIAFIRE DL",
+        icon: "📦",
+        title: name,
+        size: data.size,
+        extension,
+        type: "Archivo",
+        cost: formatMoney(cost, ctx),
+        url,
+        showSize: Boolean(data.size && data.size !== "N/A"),
+        showExtension: true,
+        showType: true,
+        loadingText: "Descargando archivo...",
+      });
       await reply({ text: caption });
       await reply({ document: { url: file }, mimetype: mime, fileName: name });
       confirmDownloadCharge(ctx);

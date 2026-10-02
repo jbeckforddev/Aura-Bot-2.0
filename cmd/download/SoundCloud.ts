@@ -11,8 +11,10 @@ import {
   prepareWAMessageMedia,
   type WAMessage,
 } from "@whiskeysockets/baileys";
-import { fytBold } from "../../core/socketText.ts";
 import { downloadToCache } from "../../core/downloadUtils.ts";
+import { formatCount, formatDuration } from "../../utils/formatter.ts";
+import { fytBold } from "../../core/socketText.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import {
   prepareDownloadCharge,
@@ -136,18 +138,6 @@ async function resolveTrack(
   return track;
 }
 
-function formatDuration(milliseconds: number): string {
-  const seconds = Math.floor(Number(milliseconds || 0) / 1000);
-  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-
-function formatNumber(value: unknown): string {
-  return Number(value || 0).toLocaleString("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  });
-}
-
 export default {
   name: ["scplay", "scdl", "sc", "soundcloud"],
   description: "Descarga canciones de SoundCloud.",
@@ -196,17 +186,25 @@ export default {
 
       const file = await downloadToCache(audioUrl);
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
-      let caption = `╭〔 ${fytBold("SOUNDCLOUD PLAY")} 〕━⬣\n\n`;
-      caption += `┃ ➥ ${fytBold(track.title || "Sin título")}\n\n`;
-      caption += `┣━━━━━━━━━━━━⬣\n`;
-      caption += `┃ > ${fytBold("Artista")} › ${track.user?.username || "N/A"}\n`;
-      caption += `┃ > ${fytBold("Duración")} › ${formatDuration(track.duration)}\n`;
-      caption += `┃ > ${fytBold("Vistas")} › ${formatNumber(track.playback_count)}\n`;
-      caption += `┃ > ${fytBold("Likes")} › ${formatNumber(track.likes_count)}\n`;
-      caption += `┃ > ${fytBold("Tipo")} › Audio MP3\n`;
-      caption += `┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n`;
-      caption += `┃ > ${fytBold("URL")} › ${track.permalink_url || query}\n`;
-      caption += `┣━━━━━━━━━━━━⬣\n┃ ⏳️ Descargando Audio...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "SOUNDCLOUD PLAY",
+        icon: "🎵",
+        title: track.title || "Sin título",
+        artist: track.user?.username,
+        duration: formatDuration(Math.floor(Number(track.duration || 0) / 1000)),
+        views: formatCount(track.playback_count),
+        likes: formatCount(track.likes_count),
+        type: "Audio MP3",
+        cost: formatMoney(cost, ctx),
+        url: track.permalink_url || query,
+        showArtist: Boolean(track.user?.username),
+        showDuration: Boolean(track.duration),
+        showViews: track.playback_count !== undefined && track.playback_count !== null,
+        showLikes: track.likes_count !== undefined && track.likes_count !== null,
+        showType: true,
+        loadingText: "Descargando audio...",
+      });
 
       const thumbnail = track.artwork_url?.replace("large", "t500x500");
       if (thumbnail) {
@@ -223,7 +221,7 @@ export default {
         const preview = createLinkPreviewWithoutChannel({
           textOriginal: caption,
           link: track.permalink_url || query,
-          author: track.user?.username || "SoundCloud",
+          author: globalThis.DEFAULT_BOT_AUTHOR,
           title: track.title || "SoundCloud",
           banner: prepared.imageMessage,
           mentionedJid: sender ? [sender] : [],

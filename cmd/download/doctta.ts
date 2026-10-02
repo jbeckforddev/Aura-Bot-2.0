@@ -24,6 +24,7 @@ import type {
   TikTokSearchResponse,
   TikTokMediaItem,
 } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const execFileAsync = promisify(execFile);
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -88,7 +89,28 @@ export default {
         searchResult?.author?.nickname ||
         "Desconocido";
       const { cost } = await prepareDownloadCharge(ctx, "document", output);
-      const caption = `╭〔 🎵 ${fytBold("TIKTOK DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Autor")} › ${author}\n┃ > ${fytBold("Vistas")} › ${formatCount(data.stats?.views || data.play_count || searchResult?.views)}\n┃ > ${fytBold("Likes")} › ${formatCount(data.stats?.likes || data.digg_count || searchResult?.likes)}\n┃ > ${fytBold("Comentarios")} › ${formatCount(data.stats?.comment || data.comment_count || searchResult?.comments)}\n┃ > ${fytBold("Tipo")} › Documento MP3\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando documento...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const views = data.stats?.views ?? data.play_count ?? searchResult?.views;
+      const likes = data.stats?.likes ?? data.digg_count ?? searchResult?.likes;
+      const comments = data.stats?.comment ?? data.comment_count ?? searchResult?.comments;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "TIKTOK DOCUMENT",
+        icon: "🎵",
+        title,
+        author,
+        views: formatCount(views),
+        likes: formatCount(likes),
+        comments: formatCount(comments),
+        type: "Documento MP3",
+        cost: formatMoney(cost, ctx),
+        url,
+        showAuthor: true,
+        showViews: views !== undefined && views !== null,
+        showLikes: likes !== undefined && likes !== null,
+        showComments: comments !== undefined && comments !== null,
+        showType: true,
+        loadingText: "Descargando documento...",
+      });
       await reply({ text: caption });
       await reply({
         document: await readFile(output),

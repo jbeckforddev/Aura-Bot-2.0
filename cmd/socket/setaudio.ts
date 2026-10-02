@@ -37,9 +37,22 @@ export default {
     const target = unwrapAudio(quotedMessage) || unwrapAudio(ctx.msg?.message);
     if (!target)
       return ctx.reply("⚠️ Responde a un audio para establecerlo en el menú.");
+    let input = "";
+    let output = "";
+    let outputStored = false;
     try {
+      const downloadTarget = quotedMessage
+        ? {
+            key: {
+              remoteJid: context?.remoteJid || ctx.from,
+              id: context?.stanzaId,
+              participant: context?.participant,
+            },
+            message: target,
+          }
+        : { key: ctx.msg.key, message: target };
       const buffer = await downloadMediaMessage(
-        { key: ctx.msg.key, message: target },
+        downloadTarget as import("@whiskeysockets/baileys").WAMessage,
         "buffer",
         {},
         {
@@ -54,11 +67,12 @@ export default {
       if (!buffer?.length) throw new Error("No se pudo descargar el audio.");
 
       await ctx.react("⏳");
-      const dir = path.resolve("./database");
+      const dir = path.resolve(globalThis.DATA_BASE_DIR || "./data");
       await mkdir(dir, { recursive: true });
       const id = randomUUID();
-      const input = path.join(dir, `audio-${id}.input`);
-      const output = path.join(dir, `audio-${id}.ogg`);
+      const botKey = String(ctx.botJid || "main").replace(/[^a-zA-Z0-9]/g, "_");
+      input = path.join(dir, `menu-audio-${botKey}-${id}.input`);
+      output = path.join(dir, `menu-audio-${botKey}-${id}.ogg`);
       await writeFile(input, buffer);
       await execFileAsync(
         ffmpegPath,
@@ -77,25 +91,32 @@ export default {
         ],
         { timeout: 120000 },
       );
-      await unlink(input).catch(() => undefined);
 
       const bot = ctx.db.getBot(ctx.botJid);
       const previousPath = (
         bot?.data?.customAudio as { path?: string } | undefined
-      )?.path;
+      )?.path || (bot?.currentAudio
+        ? path.join(dir, path.basename(bot.currentAudio))
+        : undefined);
       if (previousPath && previousPath !== output)
         await unlink(previousPath).catch(() => undefined);
+      const fileName = path.basename(output);
+      const customAudio = {
+        path: output,
+        mimetype: "audio/ogg; codecs=opus",
+        ptt: true,
+        seconds: 99999,
+      };
       ctx.db.setBot(ctx.botJid, {
+        currentAudio: fileName,
+        customAudio,
         data: {
           ...(bot?.data || {}),
-          customAudio: {
-            path: output,
-            mimetype: "audio/ogg; codecs=opus",
-            ptt: true,
-            seconds: 99999,
-          },
+          currentAudio: fileName,
+          customAudio,
         },
       });
+      outputStored = true;
       await ctx.react("✅");
       return ctx.reply(
         "✅ Audio del menú actualizado como nota de voz OGG/Opus.",
@@ -104,6 +125,9 @@ export default {
       return ctx.reply({
         text: `❌ No se pudo guardar el audio: ${error instanceof Error ? error.message : String(error) || "error desconocido"}`,
       });
+    } finally {
+      if (input) await unlink(input).catch(() => undefined);
+      if (output && !outputStored) await unlink(output).catch(() => undefined);
     }
   },
 };

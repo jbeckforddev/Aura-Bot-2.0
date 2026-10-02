@@ -3,6 +3,7 @@ import { LRUCache } from "lru-cache";
 import { DL_CONFIG } from "../../config.ts";
 import { safeFileName, requestJson } from "../../core/downloadUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { formatDuration } from "../../utils/formatter.ts";
 import type { CommandContext, OptionRow, LyricResult } from "../../types/index.d.ts";
 
 type SearchSession = {
@@ -61,7 +62,7 @@ export default {
         preview += `┣━━━━━━━━━━━━⬣\n`;
         preview += `┃ > 👤 ${result.artist || "Desconocido"}\n`;
         preview += `┃ > 💽 ${result.album || "Desconocido"}\n`;
-        preview += `┃ > ⏳️ ${result.duration || "0:00"}\n`;
+        preview += `┃ > ⏳️ ${formatDuration(result.duration) || "0:00"}\n`;
         preview += `┣━━━━━━━━━━━━⬣\n`;
         preview += `┃ > Elija el formato de letra\n`;
         preview += `╰〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕⬣`;

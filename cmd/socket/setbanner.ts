@@ -3,7 +3,6 @@ import type { proto } from "@whiskeysockets/baileys";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { clearMenuMediaCache } from "./menu.ts";
 
 function unwrapMedia(
@@ -71,7 +70,7 @@ export default {
         target.videoMessage?.mimetype ||
         target.documentMessage?.mimetype ||
         "image/jpeg";
-      const databaseDir = path.resolve("./database");
+      const databaseDir = path.resolve(globalThis.DATA_BASE_DIR || "./data");
       await mkdir(databaseDir, { recursive: true });
       const extension = mimetype.includes("gif")
         ? "gif"
@@ -81,23 +80,30 @@ export default {
             ? "png"
             : "jpg";
       const botKey = String(ctx.botJid || "main").replace(/[^a-zA-Z0-9]/g, "_");
-      const filePath = path.join(
-        databaseDir,
-        `banner-${botKey}.${extension}`,
-      );
+      const fileName = `menu-banner-${botKey}.${extension}`;
+      const filePath = path.join(databaseDir, fileName);
       await writeFile(filePath, buffer);
 
       const bot = ctx.db.getBot(ctx.botJid);
       const previousPath = (
         (bot?.data?.customBanner as { path?: string } | undefined)?.path ||
-        (bot?.customBanner as { path?: string } | undefined)?.path
+        (bot?.customBanner as { path?: string } | undefined)?.path ||
+        (bot?.currentBanner
+          ? path.join(databaseDir, path.basename(bot.currentBanner))
+          : undefined)
       );
       if (previousPath && previousPath !== filePath) {
         await unlink(previousPath).catch(() => undefined);
       }
+      const customBanner = { path: filePath, mimetype };
       ctx.db.setBot(ctx.botJid, {
-        customBanner: { path: filePath, mimetype },
-        data: { customBanner: { path: filePath, mimetype } },
+        currentBanner: fileName,
+        customBanner,
+        data: {
+          ...(bot?.data || {}),
+          currentBanner: fileName,
+          customBanner,
+        },
       });
       clearMenuMediaCache();
       return ctx.reply("✅ Banner del menú actualizado.");

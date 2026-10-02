@@ -44,6 +44,27 @@ function cleanJid(value: unknown): string {
     .replace(/:\d+(?=@)/, "");
 }
 
+export function isPrimaryBotForGroup(
+  sock: ExtendedWASocket,
+  groupJid: string,
+  db: IDatabase,
+): boolean {
+  const primaryBot = cleanJid(db.getPrimary(groupJid));
+  if (!primaryBot) return true;
+
+  const botJid = cleanJid(sock.user?.id);
+  const storedBot = db.getBot(botJid);
+  const identities = [botJid, sock.subBotId, storedBot?.bot_id]
+    .map(cleanJid)
+    .filter(Boolean);
+
+  return identities.some(
+    (identity) =>
+      identity === primaryBot ||
+      identity.split("@")[0] === primaryBot.split("@")[0],
+  );
+}
+
 async function getAdminSocket(
   current: ExtendedWASocket,
   groupJid: string,
@@ -169,7 +190,13 @@ export async function handleGroupToxic(
 ): Promise<boolean> {
   const groupJid = message?.key?.remoteJid;
   const userJid = message?.key?.participant;
-  if (!groupJid?.endsWith("@g.us") || !userJid || message.key.fromMe || isAdmin)
+  if (
+    !groupJid?.endsWith("@g.us") ||
+    !isPrimaryBotForGroup(sock, groupJid, db) ||
+    !userJid ||
+    message.key.fromMe ||
+    isAdmin
+  )
     return false;
   const group = db.getGroup(groupJid);
   if (!group.antiToxic || !text || text.startsWith(".")) return false;
@@ -223,6 +250,7 @@ export async function handleGroupCall(
     (call.status && call.status !== "offer")
   )
     return;
+  if (!isPrimaryBotForGroup(sock, groupJid, db)) return;
 
   const group = db.getGroup(groupJid);
   if (!group.antiCalls) return;
@@ -291,6 +319,7 @@ export async function handleGroupStatus(
   const groupJid =
     statusMessage.statusKey?.remoteJid || message?.key?.remoteJid || "";
   if (!groupJid.endsWith("@g.us")) return false;
+  if (!isPrimaryBotForGroup(sock, groupJid, db)) return false;
 
   const group = db.getGroup(groupJid);
   if (!group.antiStatus) return false;

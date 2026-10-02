@@ -44,6 +44,13 @@ export const DL_CONFIG = {
     API_KEY: null,
   },
 };
+export const GAMES_CONFIG = {
+  pokeApi:{
+    BASE_URL: "https://pokeapi.co/api/v2",
+    API_KEY: null,
+  }
+}
+
 
 // Configuracion de fabrica de los bots
 globalThis.DEFAULT_PREFIXES = [".", "#", "/", "!", "-", "%", "$"];
@@ -64,6 +71,6 @@ globalThis.DEFAULT_USER_ROLES = [
 // Directorio de sesiones de bots
 globalThis.mainBotSession = "./sessions";
 globalThis.subBotSession = "./sessions/subs";
-globalThis.DATA_BASE_DIR = "./database";
+globalThis.DATA_BASE_DIR = "./data";
 
 globalThis.mainSocket = null;

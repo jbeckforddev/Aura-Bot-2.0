@@ -50,6 +50,7 @@ async function loadDir(dir: string) {
   }
 
   const tasks: Promise<void>[] = [];
+  const prioritizedPlugins: string[] = [];
 
   for (const entry of entries) {
     const entryName = toFileName(entry.name);
@@ -58,11 +59,16 @@ async function loadDir(dir: string) {
     if (entry.isDirectory()) {
       tasks.push(loadDir(fullPath));
     } else if (entry.isFile() && entryName.endsWith(".ts")) {
-      tasks.push(loadPlugin(fullPath));
+      if (entryName === "interacciónSFW.ts") {
+        prioritizedPlugins.push(fullPath);
+      } else {
+        tasks.push(loadPlugin(fullPath));
+      }
     }
   }
 
   await Promise.all(tasks);
+  for (const pluginPath of prioritizedPlugins) await loadPlugin(pluginPath);
 }
 
 async function loadPlugin(filePath: string) {

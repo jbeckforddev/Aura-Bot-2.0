@@ -86,7 +86,7 @@ export interface ReplyContext {
 export interface CommandPlugin {
   name: string | string[];
   category?: string;
-  description?: string;
+  description?: string | string[];
   usage?: string;
   tags?: string[];
   cooldown?: number;

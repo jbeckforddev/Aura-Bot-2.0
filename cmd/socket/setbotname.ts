@@ -10,7 +10,11 @@ export default {
       return ctx.reply(`⚠️ Uso: ${ctx.usedPrefix ?? "."}setbotname <nombre>`);
     }
 
-    ctx.db.setBot(ctx.botJid, { bot_name: name });
+    const bot = ctx.db.getBot(ctx.botJid);
+    ctx.db.setBot(ctx.botJid, {
+      bot_name: name,
+      data: { ...(bot.data || {}), customBotName: true },
+    });
     return ctx.reply(`✅ Nombre del bot actualizado a: ${name}`);
   },
 };

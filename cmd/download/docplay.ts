@@ -16,6 +16,7 @@ import type {
   YouTubeSearchResponse,
   YouTubeMp3Response,
 } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const YT_ID =
@@ -57,7 +58,23 @@ export default {
       const title = info.title || "Audio de YouTube";
       const file = await downloadToCache(info.dl);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🎵 ${fytBold("YOUTUBE DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Canal")} › ${info.author || "Desconocido"}\n┃ > ${fytBold("Duración")} › ${info.duration || "??"}\n┃ > ${fytBold("Calidad")} › ${info.quality || "128k"}\n┃ > ${fytBold("Tipo")} › Documento MP3\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando documento...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "YOUTUBE DOCUMENT",
+        icon: "🎵",
+        title,
+        channel: info.author,
+        duration: info.duration,
+        quality: info.quality,
+        type: "Documento MP3",
+        cost: formatMoney(cost, ctx),
+        url,
+        showChannel: Boolean(info.author),
+        showDuration: Boolean(info.duration),
+        showQuality: Boolean(info.quality),
+        showType: true,
+        loadingText: "Descargando documento...",
+      });
       const videoId = url.match(YT_ID)?.[1];
       const thumbnail = videoId
         ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
@@ -71,7 +88,7 @@ export default {
             caption,
             link: url,
             title,
-            author: info.author || "YouTube",
+            author: globalThis.DEFAULT_BOT_AUTHOR,
             sender,
           })
         : false;

@@ -6,6 +6,7 @@ import {
   getEconomyUser,
 } from "../../core/economyConfig.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { formatDuration } from "../../utils/formatter.ts";
 
 export default {
   name: ["einfo", "economia"],
@@ -18,20 +19,7 @@ export default {
       const remaining = duration - (now - Number(user[key] ?? 0));
       if (remaining <= 0) return "✅ Disponible";
 
-      const totalSeconds = Math.floor(remaining / 1000);
-      const days = Math.floor(totalSeconds / 86400);
-      const hours = Math.floor((totalSeconds % 86400) / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      const time = [
-        days > 0 ? `${days}d` : "",
-        hours > 0 ? `${hours}h` : "",
-        minutes > 0 ? `${minutes}m` : "",
-        `${seconds}s`,
-      ]
-        .filter(Boolean)
-        .join(" ");
-
+      const time = formatDuration(Math.max(0, Math.floor(remaining / 1000)));
       return `⏳ _${time || cooldownText(remaining)}_`;
     };
     const prefix = ctx.usedPrefix ?? ".";
@@ -51,6 +39,7 @@ export default {
     text += `┃ ➪ *${prefix}steal:* ${getRemaining("lastSteal", 60 * 60 * 1000)}\n`;
     text += `┃ ➪ *${prefix}adventure:* ${getRemaining("lastAdventure", 2 * 60 * 60 * 1000)}\n`;
     text += `┃ ➪ *${prefix}cf:* ${getRemaining("lastCf", 60 * 1000)}\n`;
+    text += `┃ ➪ *${prefix}ruleta:* ${getRemaining("lastRoulete", 60 * 1000)}\n`;
     text += `┃ ➪ *${prefix}daily:* ${getRemaining("lastDaily", 24 * 60 * 60 * 1000)}\n`;
     text += `┃ ➪ *${prefix}semanal:* ${getRemaining("lastWeekly", 7 * 24 * 60 * 60 * 1000)}\n`;
     text += `┃ ➪ *${prefix}quincenal:* ${getRemaining("lastFortnightly", 15 * 24 * 60 * 60 * 1000)}\n`;

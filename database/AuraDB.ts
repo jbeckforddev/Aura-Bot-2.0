@@ -13,6 +13,25 @@ import type {
   BotDbRow,
 } from "../types/index";
 
+const ECONOMY_LAST_COLUMNS = {
+  lastDaily: "LastEconomyDaily",
+  lastWeekly: "LastEconomyWeekly",
+  lastMonthly: "LastEconomyMonthly",
+  lastFortnightly: "LastEconomyFortnightly",
+  lastWork: "LastEconomyWork",
+  lastPpt: "LastEconomyPpt",
+  lastMine: "LastEconomyMine",
+  lastHunt: "LastEconomyHunt",
+  lastCrime: "LastEconomyCrime",
+  lastSlut: "LastEconomySlut",
+  lastSteal: "LastEconomySteal",
+  lastAdventure: "LastEconomyAdventure",
+  lastCf: "LastEconomyCf",
+  lastRoulete: "LastEconomyRoulete",
+  lastAura: "LastEconomyAura",
+  lastRob: "LastEconomyRob",
+} as const;
+
 export type {
   DatabaseUser,
   DatabaseGroup,
@@ -58,6 +77,22 @@ db_instance.exec(`
     stickerPackAuthor TEXT DEFAULT NULL,
     stickerPackName TEXT DEFAULT NULL,
     cmdsUsedCount INTEGER DEFAULT 0,
+    LastEconomyDaily INTEGER DEFAULT 0,
+    LastEconomyWeekly INTEGER DEFAULT 0,
+    LastEconomyMonthly INTEGER DEFAULT 0,
+    LastEconomyFortnightly INTEGER DEFAULT 0,
+    LastEconomyWork INTEGER DEFAULT 0,
+    LastEconomyPpt INTEGER DEFAULT 0,
+    LastEconomyMine INTEGER DEFAULT 0,
+    LastEconomyHunt INTEGER DEFAULT 0,
+    LastEconomyCrime INTEGER DEFAULT 0,
+    LastEconomySlut INTEGER DEFAULT 0,
+    LastEconomySteal INTEGER DEFAULT 0,
+    LastEconomyAdventure INTEGER DEFAULT 0,
+    LastEconomyCf INTEGER DEFAULT 0,
+    LastEconomyRoulete INTEGER DEFAULT 0,
+    LastEconomyAura INTEGER DEFAULT 0,
+    LastEconomyRob INTEGER DEFAULT 0,
     data TEXT DEFAULT '{}'
   );
 
@@ -95,6 +130,8 @@ db_instance.exec(`
     modSelf INTEGER DEFAULT 0,
     currency TEXT DEFAULT 'AuraCoins',
     currencySymbol TEXT DEFAULT '₡',
+    currentBanner TEXT DEFAULT NULL,
+    currentAudio TEXT DEFAULT NULL,
     data TEXT DEFAULT '{}'
   );
 `);
@@ -139,6 +176,8 @@ for (const [table, column, definition] of [
   ["bots", "modSelf", "INTEGER DEFAULT 0"],
   ["bots", "currency", "TEXT DEFAULT 'AuraCoins'"],
   ["bots", "currencySymbol", "TEXT DEFAULT '₡'"],
+  ["bots", "currentBanner", "TEXT DEFAULT NULL"],
+  ["bots", "currentAudio", "TEXT DEFAULT NULL"],
   ["bots", "data", "TEXT DEFAULT '{}'"],
   ["users", "data", "TEXT DEFAULT '{}'"],
 ] as const) {
@@ -149,12 +188,26 @@ for (const [table, column, definition] of [
     db_instance.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
+  const exists = db_instance
+    .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?")
+    .get(column);
+  if (!exists)
+    db_instance.exec(`ALTER TABLE users ADD COLUMN ${column} INTEGER DEFAULT 0`);
+}
+
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
 const stmts = {
   getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
   insertUser: db_instance.prepare(
     "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ),
+  updateEconomyLastByJid: db_instance.prepare(
+    `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE jid = ?`,
+  ),
+  updateEconomyLastByLid: db_instance.prepare(
+    `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE lid = ?`,
   ),
   updateUser: db_instance.prepare(
     "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ? WHERE jid = ?",
@@ -163,7 +216,7 @@ const stmts = {
     "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ? WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
-    "SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, data FROM users",
+    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
 
   getGroup: db_instance.prepare("SELECT * FROM groups WHERE jid = ?"),
@@ -179,13 +232,13 @@ const stmts = {
 
   getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
   insertBot: db_instance.prepare(
-    "INSERT INTO bots (jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, currency, currencySymbol, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO bots (jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateBot: db_instance.prepare(
-    "UPDATE bots SET bot_id = ?, bot_name = ?, phone_number = ?, lid = ?, groups = ?, isMain = ?, status = ?, modPrefix = ?, modSelf = ?, currency = ?, currencySymbol = ?, data = ? WHERE jid = ?",
+    "UPDATE bots SET bot_id = ?, bot_name = ?, phone_number = ?, lid = ?, groups = ?, isMain = ?, status = ?, modPrefix = ?, modSelf = ?, currency = ?, currencySymbol = ?, currentBanner = ?, currentAudio = ?, data = ? WHERE jid = ?",
   ),
   getAllBots: db_instance.prepare(
-    "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, data FROM bots",
+    "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
   ),
   deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?"),
   resetGroupTopMsgUsers: db_instance.prepare(
@@ -218,6 +271,54 @@ function safeJsonArray(value: string | null | undefined): string[] {
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
     return [];
+  }
+}
+
+function maxTimestamp(...values: unknown[]): number {
+  const timestamps = values.map(Number).filter(Number.isFinite);
+  return Math.max(0, ...timestamps);
+}
+
+function hydrateEconomyLasts(
+  data: Record<string, unknown>,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const economy =
+    data.economy && typeof data.economy === "object"
+      ? { ...(data.economy as Record<string, unknown>) }
+      : {};
+  const hydrated = { ...data };
+
+  for (const [key, column] of Object.entries(ECONOMY_LAST_COLUMNS)) {
+    const timestamp = maxTimestamp(data[key], economy[key], row[column]);
+    hydrated[key] = timestamp;
+    economy[key] = timestamp;
+  }
+
+  hydrated.economy = economy;
+  return hydrated;
+}
+
+function persistEconomyLasts(
+  jid: string,
+  lid: string | null,
+  data: Record<string, unknown>,
+): void {
+  const row = getUserRow(jid, lid);
+  if (!row) return;
+
+  const economy =
+    data.economy && typeof data.economy === "object"
+      ? (data.economy as Record<string, unknown>)
+      : {};
+  const values = Object.entries(ECONOMY_LAST_COLUMNS).map(([key, column]) =>
+    maxTimestamp(data[key], economy[key], row[column]),
+  );
+
+  if (row.jid === null && row.lid) {
+    stmts.updateEconomyLastByLid.run(...values, row.lid);
+  } else if (row.jid) {
+    stmts.updateEconomyLastByJid.run(...values, row.jid);
   }
 }
 
@@ -298,8 +399,9 @@ function getUser(input: string): DatabaseUser {
     return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
   }
 
-  const jsonData = safeJson<Record<string, unknown>>(
-    row.data as string | undefined,
+  const jsonData = hydrateEconomyLasts(
+    safeJson<Record<string, unknown>>(row.data as string | undefined),
+    row as unknown as Record<string, unknown>,
   );
   const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
   const bank = Number(row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000);
@@ -444,6 +546,8 @@ function getBot(jid: string): DatabaseBot {
       modSelf: 0,
       currency: "AuraCoins",
       currencySymbol: "₡",
+      currentBanner: null,
+      currentAudio: null,
       data: {},
     };
 
@@ -460,6 +564,8 @@ function getBot(jid: string): DatabaseBot {
       defaultBot.modSelf,
       "AuraCoins",
       "₡",
+      defaultBot.currentBanner,
+      defaultBot.currentAudio,
       JSON.stringify(defaultBot.data),
     );
 
@@ -488,6 +594,12 @@ function getBot(jid: string): DatabaseBot {
     currencySymbol: (row.currencySymbol ??
       jsonData.currencySymbol ??
       "₡") as string,
+    currentBanner: (row.currentBanner ?? jsonData.currentBanner ?? null) as
+      | string
+      | null,
+    currentAudio: (row.currentAudio ?? jsonData.currentAudio ?? null) as
+      | string
+      | null,
     data: jsonData,
   };
 }
@@ -542,6 +654,7 @@ export const db: IDatabase = {
           bank,
           JSON.stringify(payload),
         );
+        persistEconomyLasts(rawJid ?? key, rawLid, payload);
         return;
       } catch {
         // Si ya existía, continuará al flujo de actualización más abajo
@@ -576,6 +689,7 @@ export const db: IDatabase = {
         row.jid ?? key,
       );
     }
+    persistEconomyLasts(rawJid ?? key, rawLid, payload);
   },
 
   setGroup(
@@ -661,15 +775,21 @@ export const db: IDatabase = {
   ) {
     const key = normalizeJid(jid);
     const currentData = getBot(key);
+    const row = stmts.getBot.get(key) as BotDbRow | undefined;
     const merged = { ...currentData, ...dataObject };
+    const currentBanner =
+      dataObject.currentBanner ?? currentData.currentBanner ?? row?.currentBanner ?? null;
+    const currentAudio =
+      dataObject.currentAudio ?? currentData.currentAudio ?? row?.currentAudio ?? null;
     const payload = {
       ...merged.data,
       ...merged,
+      currentBanner,
+      currentAudio,
     };
 
     delete payload.data;
 
-    const row = stmts.getBot.get(key) as BotDbRow | undefined;
     const currency =
       String(merged.currency ?? row?.currency ?? "AuraCoins").trim() ||
       "AuraCoins";
@@ -691,6 +811,8 @@ export const db: IDatabase = {
         Number(Boolean(merged.modSelf ?? 0)),
         currency,
         currencySymbol,
+        currentBanner,
+        currentAudio,
         JSON.stringify(payload),
       );
       return;
@@ -714,6 +836,8 @@ export const db: IDatabase = {
       Number(Boolean(merged.modSelf ?? row.modSelf ?? 0)),
       currency,
       currencySymbol,
+      currentBanner,
+      currentAudio,
       JSON.stringify(payload),
       key,
     );
@@ -773,8 +897,9 @@ export const db: IDatabase = {
   getAllUsers(): DatabaseUser[] {
     const rows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
     return rows.map((row) => {
-      const jsonData = safeJson<Record<string, unknown>>(
-        row.data as string | undefined,
+      const jsonData = hydrateEconomyLasts(
+        safeJson<Record<string, unknown>>(row.data as string | undefined),
+        row,
       );
       const coins = Number(
         row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000,
@@ -795,6 +920,7 @@ export const db: IDatabase = {
         bank,
         bolsillo: coins,
         banco: bank,
+        data: jsonData,
       };
     });
   },
@@ -826,6 +952,12 @@ export const db: IDatabase = {
         currencySymbol: (row.currencySymbol ??
           jsonData.currencySymbol ??
           "₡") as string,
+        currentBanner: (row.currentBanner ?? jsonData.currentBanner ?? null) as
+          | string
+          | null,
+        currentAudio: (row.currentAudio ?? jsonData.currentAudio ?? null) as
+          | string
+          | null,
       };
     });
   },

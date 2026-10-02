@@ -21,6 +21,8 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { formatCount, formatDuration } from "../../utils/formatter.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API_KEY = DL_CONFIG.alya.API_KEY;
 const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -110,33 +112,6 @@ async function downloadYouTubeAudio(url: string): Promise<YouTubeMp3Data> {
   return data.data;
 }
 
-function fomatViewers(valor: unknown): string {
-  if (valor === null || valor === undefined) return "0";
-
-  const raw = String(valor).trim();
-  const normalized = raw.replace(/[,.]/g, "");
-  const numero = Number(normalized);
-
-  if (!raw) return "0";
-  if (/^[\d,.]+[kKmMbBtT]$/.test(raw)) {
-    return raw.replace(/[,.]/g, "").toUpperCase();
-  }
-  if (!Number.isFinite(numero)) return raw;
-  if (numero >= 1e12) {
-    return `${(numero / 1e12).toFixed(1)}T`;
-  }
-  if (numero >= 1e9) {
-    return `${(numero / 1e9).toFixed(1)}B`;
-  }
-  if (numero >= 1e6) {
-    return `${(numero / 1e6).toFixed(1)}M`;
-  }
-  if (numero >= 1e3) {
-    return `${(numero / 1e3).toFixed(1)}K`;
-  }
-  return numero.toString();
-}
-
 export default {
   name: ["play", "ytmp3", "ytaudio", "playaudio", "playmp3", "ytmusic", "yta"],
   description: "Busca y descarga audio de YouTube.",
@@ -178,17 +153,23 @@ export default {
       if (!audio.dl) throw new Error("No se pudo obtener el audio.");
       const file = await downloadToCache(audio.dl);
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
-      let caption = `╭〔 🎵 ${fytBold("YOUTUBE PLAY")} 〕━⬣\n\n`;
-      caption += `┃ ➥ ${fytBold(title)}\n\n`;
-      caption += `┣━━━━━━━━━━━━⬣\n`;
-      caption += `┃ > ${fytBold("Canal")} › ${author}\n`;
-      caption += `┃ > ${fytBold("Duración")} › ${duration}\n`;
-      caption += `┃ > ${fytBold("Vistas")} › ${fomatViewers(views)}\n`;
-      caption += `┃ > ${fytBold("Calidad")} › ${quality}\n`;
-      caption += `┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n`;
-      caption += `┃ > ${fytBold("Url")} › ${youtubeUrl}\n`;
-      caption += `┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando audio...\n`;
-      caption += `╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "YOUTUBE PLAY",
+        icon: "🎵",
+        title,
+        channel: author,
+        duration: formatDuration(duration),
+        views: formatCount(views),
+        quality,
+        cost: formatMoney(cost, ctx),
+        url: youtubeUrl,
+        showChannel: true,
+        showDuration: Boolean(duration && duration !== "??"),
+        showViews: Boolean(result.views),
+        showQuality: Boolean(quality),
+        loadingText: "Descargando audio...",
+      });
 
       const thumbnail = String(
         videoId
@@ -209,7 +190,7 @@ export default {
         const preview = createLinkPreviewWithoutChannel({
           textOriginal: caption,
           link: youtubeUrl,
-          author,
+          author: globalThis.DEFAULT_BOT_AUTHOR,
           title,
           banner: prepared.imageMessage,
           mentionedJid: [sender],

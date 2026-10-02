@@ -5,6 +5,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { fetch } from "undici";
+import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
 
 const HEADERS = {
@@ -147,37 +148,6 @@ export function pickSearchResult<T extends SearchItem = SearchItem>(
   );
 }
 
-export function FormatTimeContent(time: number): string[] {
-  const h = Math.floor(time / 3600);
-  const m = Math.floor((time % 3600) / 60);
-  const s = time % 60;
-
-  return [h, m, s].map((v) => v.toString().padStart(2, "0"));
-}
-
 export function formatCount(value: unknown): string {
-  if (value === null || value === undefined) return "0";
-
-  const raw = String(value).trim();
-  const normalized = raw.replace(/[,.]/g, "");
-  const numero = Number(normalized);
-
-  if (!raw) return "0";
-  if (/^[\d,.]+[kKmMbBtT]$/.test(raw)) {
-    return raw.replace(/[,.]/g, "").toUpperCase();
-  }
-  if (!Number.isFinite(numero)) return raw;
-  if (numero >= 1e12) {
-    return `${(numero / 1e12).toFixed(1)}T`;
-  }
-  if (numero >= 1e9) {
-    return `${(numero / 1e9).toFixed(1)}B`;
-  }
-  if (numero >= 1e6) {
-    return `${(numero / 1e6).toFixed(1)}M`;
-  }
-  if (numero >= 1e4) {
-    return `${(numero / 1e3).toFixed(1)}K`;
-  }
-  return numero.toString();
+  return baseFormatCount(value);
 }

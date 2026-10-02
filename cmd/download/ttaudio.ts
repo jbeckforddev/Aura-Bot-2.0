@@ -23,6 +23,7 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const execFileAsync = promisify(execFile);
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -85,7 +86,31 @@ export default {
         searchResult?.author?.nickname ||
         "Desconocido";
       const { cost } = await prepareDownloadCharge(ctx, "audio", output);
-      const caption = `╭〔 🎵 ${fytBold("TIKTOK AUDIO")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Autor")} › ${author}\n┃ > ${fytBold("Vistas")} › ${formatCount(data.stats?.views || data.play_count || searchResult?.stats?.views)}\n┃ > ${fytBold("Likes")} › ${formatCount(data.stats?.likes || data.digg_count || searchResult?.stats?.likes)}\n┃ > ${fytBold("Comentarios")} › ${formatCount(data.stats?.comment || data.comment_count || searchResult?.stats?.comment)}\n┃ > ${fytBold("Compartidos")} › ${formatCount(data.stats?.share || data.share_count || searchResult?.stats?.share)}\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Tipo")} › Audio MP3\n┃ > ${fytBold("Url")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando audio...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const views = data.stats?.views ?? data.play_count ?? searchResult?.stats?.views;
+      const likes = data.stats?.likes ?? data.digg_count ?? searchResult?.stats?.likes;
+      const comments = data.stats?.comment ?? data.comment_count ?? searchResult?.stats?.comment;
+      const shares = data.stats?.share ?? data.share_count ?? searchResult?.stats?.share;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "TIKTOK AUDIO",
+        icon: "🎵",
+        title,
+        author,
+        views: formatCount(views),
+        likes: formatCount(likes),
+        comments: formatCount(comments),
+        shares: formatCount(shares),
+        type: "Audio MP3",
+        cost: formatMoney(cost, ctx),
+        url,
+        showAuthor: true,
+        showViews: views !== undefined && views !== null,
+        showLikes: likes !== undefined && likes !== null,
+        showComments: comments !== undefined && comments !== null,
+        showShares: shares !== undefined && shares !== null,
+        showType: true,
+        loadingText: "Descargando audio...",
+      });
       await reply({ text: caption });
       await reply({
         audio: await readFile(output),

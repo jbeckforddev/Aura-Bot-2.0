@@ -15,6 +15,7 @@ import type {
   YouTubeVideoData,
   YouTubeSearchResponse,
 } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API = "https://api.lempi.lat";
 const ID =
@@ -47,7 +48,21 @@ export default {
       const title = data.titulo || "Video de YouTube";
       const file = await downloadToCache(data.datos.url);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
-      const caption = `╭〔 🎬 ${fytBold("YOUTUBE DOCUMENT")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Canal")} › ${data.canal || "Desconocido"}\n┃ > ${fytBold("Duración")} › ${data.duracion || "??"}\n┃ > ${fytBold("Tipo")} › Documento MP4\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Descargando documento...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "YOUTUBE DOCUMENT",
+        icon: "🎬",
+        title,
+        channel: globalThis.DEFAULT_BOT_AUTHOR,
+        duration: data.duracion,
+        type: "Documento MP4",
+        cost: formatMoney(cost, ctx),
+        url,
+        showChannel: Boolean(data.canal),
+        showDuration: Boolean(data.duracion),
+        showType: true,
+        loadingText: "Descargando documento...",
+      });
       await reply({ text: caption });
       await reply({
         document: { url: file },

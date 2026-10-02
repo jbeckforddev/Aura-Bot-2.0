@@ -16,6 +16,7 @@ import type {
   YouTubeVideoData,
   YouTubeSearchResponse,
 } from "../../types/index.d.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const API = "https://api.lempi.lat";
 const KEY = "OBOE-AERETHIX";
@@ -56,7 +57,23 @@ export default {
       const title = data.titulo || "Video de YouTube";
       const file = await downloadToCache(data.datos.url);
       const { cost } = await prepareDownloadCharge(ctx, "video", file);
-      const caption = `╭〔 🎬 ${fytBold("YOUTUBE VIDEO")} 〕━⬣\n\n┃ ➥ ${fytBold(title)}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Canal")} › ${data.canal || "Desconocido"}\n┃ > ${fytBold("Duración")} › ${data.duracion || "??"}\n┃ > ${fytBold("Tamaño")} › ${data.datos.tamaño || "??"}\n┃ > ${fytBold("Tipo")} › Video MP4\n┃ > ${fytBold("Costo")} › ${formatMoney(cost, ctx)}\n┃ > ${fytBold("Url")} › ${url}\n┣━━━━━━━━━━━━⬣\n┃ ⏳ Enviando video...\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      const caption = DL_TEMPLATE({
+        bold: fytBold,
+        label: "YOUTUBE VIDEO",
+        icon: "🎬",
+        title,
+        channel: globalThis.DEFAULT_BOT_AUTHOR,
+        duration: data.duracion,
+        size: data.datos.tamaño,
+        type: "Video MP4",
+        cost: formatMoney(cost, ctx),
+        url,
+        showChannel: Boolean(data.canal),
+        showDuration: Boolean(data.duracion),
+        showSize: Boolean(data.datos.tamaño),
+        showType: true,
+        loadingText: "Enviando video...",
+      });
       const hasPreview = data.miniatura
         ? await sendDownloadPreview({
             sock,

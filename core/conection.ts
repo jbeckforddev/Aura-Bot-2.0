@@ -14,9 +14,13 @@ import { Boom } from "@hapi/boom";
 import { handleMessage } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
 import { connectionLog, pairingLog } from "./logger.ts";
-import { db } from "./AuraDB.ts";
+import { db } from "../database/AuraDB.ts";
 import { jidNormalizedUser } from "@whiskeysockets/baileys";
-import { handleAntilink, handleGroupCall } from "./groupModeration.ts";
+import {
+  handleAntilink,
+  handleGroupCall,
+  isPrimaryBotForGroup,
+} from "./groupModeration.ts";
 
 import type {
   ExtendedWASocket,
@@ -360,7 +364,10 @@ export async function connectToWhatsApp(
       const botLid = cleanLid(botId);
       const botGroups = await getBotGroups(extendedSock);
       const previousBot = db.getBot(botJid);
-      const botName = getBotDisplayName(extendedSock, previousBot?.bot_name);
+      const botName =
+        previousBot?.data?.customBotName && previousBot.bot_name
+          ? previousBot.bot_name
+          : getBotDisplayName(extendedSock, previousBot?.bot_name);
       extendedSock.subBotId = botId;
       db.setBot(botJid, {
         bot_id: botId,
@@ -685,6 +692,7 @@ export async function connectToWhatsApp(
         !["add", "remove"].includes(action)
       )
         return;
+      if (!isPrimaryBotForGroup(sock, id, db)) return;
 
       try {
         const metadata = await sock.groupMetadata(id);
