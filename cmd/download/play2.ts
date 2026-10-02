@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { fytBold } from "../../core/socketText.ts";
 import {
   downloadToCache,
@@ -17,10 +18,11 @@ import type {
   YouTubeSearchResponse,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 
 const API = "https://api.delirius.online/download/ytmp4";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-const ql = "360p";
+const ql = "720p";
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
 }
@@ -43,6 +45,7 @@ export default {
     const query = args.join(" ").trim();
     if (!query) return reply("⚠️ Proporciona el nombre o enlace de un video.");
     await react("⏳");
+    let convertedFile = "";
     try {
       const id = videoId(query);
       const url = id ? `https://youtu.be/${id}` : await searchVideo(query);
@@ -60,7 +63,8 @@ export default {
       const size = video.size || video.tamaño;
       const duration = data.duracion;
       const file = await downloadToCache(downloadUrl);
-      const { cost } = await prepareDownloadCharge(ctx, "video", file);
+      convertedFile = await CONVERT_TO_AVC(file, { reencodeAudio: true });
+      const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE VIDEO",
@@ -93,7 +97,7 @@ export default {
         : false;
       if (!hasPreview) await reply({ text: caption });
       await reply({
-        video: { url: file },
+        video: { url: convertedFile },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "youtube")}.mp4`,
       });
@@ -104,6 +108,9 @@ export default {
       return reply({
         text: `${error instanceof Error ? error.message : "No se pudo descargar el video."}`,
       });
+    } finally {
+      if (convertedFile)
+        await rm(convertedFile, { force: true }).catch(() => undefined);
     }
   },
 };

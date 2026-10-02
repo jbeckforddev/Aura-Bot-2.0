@@ -12,6 +12,7 @@ const execFileAsync = promisify(execFile);
 const FFMPEG_MAX_BUFFER = 32 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const TARGET_VIDEO_SIZE = 94 * 1024 * 1024;
+const AUDIO_BITRATE = 128000;
 
 export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
@@ -66,7 +67,10 @@ export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
   }
 }
 
-export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
+export async function CONVERT_TO_AVC(
+  inputPath: string,
+  options: { reencodeAudio?: boolean } = {},
+): Promise<string> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
 
   const cacheDir =
@@ -125,8 +129,11 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
             "0:v:0",
             "-map",
             "0:a?",
-            "-c",
+            "-c:v",
             "copy",
+            ...(options.reencodeAudio
+              ? ["-c:a", "aac", "-b:a", String(AUDIO_BITRATE)]
+              : ["-c:a", "copy"]),
             "-movflags",
             "+faststart",
             outputPath,
@@ -142,14 +149,13 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       shouldLimitSize = inputSize > MAX_VIDEO_SIZE;
     }
 
-    const audioBitrate = 64000;
     const sizeLimitedBitrate = Math.floor(
-      (TARGET_VIDEO_SIZE * 8) / duration - audioBitrate,
+      (TARGET_VIDEO_SIZE * 8) / duration - AUDIO_BITRATE,
     );
     const sourceBitrate = Math.floor((inputSize * 8) / duration);
     let videoBitrate = Math.max(
       50000,
-      Math.min(sizeLimitedBitrate, sourceBitrate - audioBitrate),
+      Math.min(sizeLimitedBitrate, sourceBitrate - AUDIO_BITRATE),
     );
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -189,7 +195,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
         "-c:a",
         "aac",
         "-b:a",
-        String(audioBitrate),
+        String(AUDIO_BITRATE),
         "-movflags",
         "+faststart",
         outputPath,
