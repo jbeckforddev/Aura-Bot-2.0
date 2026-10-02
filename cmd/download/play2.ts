@@ -63,7 +63,7 @@ export default {
       const size = video.size || video.tamaño;
       const duration = data.duracion;
       const file = await downloadToCache(downloadUrl);
-      convertedFile = await CONVERT_TO_AVC(file, { reencodeAudio: true });
+      convertedFile = await CONVERT_TO_AVC(file);
       const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
       const caption = DL_TEMPLATE({
         bold: fytBold,
