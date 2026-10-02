@@ -179,7 +179,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
               "-bufsize",
               String(videoBitrate * 2),
             ]
-          : ["-crf", "10"]),
+          : ["-crf", "23"]),
         "-preset",
         "ultrafast",
         "-pix_fmt",
