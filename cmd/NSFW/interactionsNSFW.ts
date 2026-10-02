@@ -76,7 +76,7 @@ function resolveDisplayName(
 export default {
   name: Object.keys(DATA),
   description: Object.values(DATA).map((entry) => entry.descripcion),
-  category: "interaction",
+  category: "nsfw",
   groupOnly: false,
   showAllNames: true,
 
