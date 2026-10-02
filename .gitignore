@@ -7,3 +7,6 @@ data
 sessions
 .vscode
 dist
+test.endpoint.*
+test.*
+test/*

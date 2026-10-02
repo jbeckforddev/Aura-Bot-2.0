@@ -81,6 +81,12 @@ export interface YouTubeMp3Response {
 
 export interface YouTubeVideoDataDetails {
   url?: string;
+  download?: string;
+  title?: string;
+  author?: string;
+  channel?: string;
+  image?: string;
+  format?: string;
   tamaño?: string;
   size?: string;
   quality?: string;

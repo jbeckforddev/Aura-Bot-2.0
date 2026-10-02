@@ -18,11 +18,9 @@ import type {
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 
-const API = "https://api.lempi.lat";
-const KEY = "OBOE-AERETHIX";
-const YOUTUBE_ID =
-  /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-
+const API = "https://api.delirius.online/download/ytmp4";
+const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+const ql = "720p";
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
 }
@@ -49,37 +47,43 @@ export default {
       const id = videoId(query);
       const url = id ? `https://youtu.be/${id}` : await searchVideo(query);
       const data = await requestJson<YouTubeVideoData>(
-        `${API}/dl/ytv?url=${encodeURIComponent(url)}&quality=1080&apikey=${KEY}`,
+        `${API}?url=${encodeURIComponent(url)}&format=${ql}`,
         60000,
       );
-      if (!data?.status || !data?.datos?.url)
+      const video = data?.data;
+      const downloadUrl = video?.download || video?.url;
+      if (!data?.status || !downloadUrl)
         throw new Error("La API no pudo procesar el video.");
-      const title = data.titulo || "Video de YouTube";
-      const file = await downloadToCache(data.datos.url);
+      const title = video.title || data.titulo || "Video de YouTube";
+      const channel = video.author || video.channel || data.canal || "YouTube";
+      const thumbnail = video.image || data.miniatura;
+      const size = video.size || video.tamaño;
+      const duration = data.duracion;
+      const file = await downloadToCache(downloadUrl);
       const { cost } = await prepareDownloadCharge(ctx, "video", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE VIDEO",
         icon: "🎬",
         title,
-        channel: data.canal || "YouTube",
-        duration: data.duracion,
-        size: data.datos.tamaño,
-        type: "Video MP4",
+        channel,
+        duration,
+        size,
+        type: `Video MP4${video.format ? ` (${video.format})` : ""}`,
         cost: formatMoney(cost, ctx),
         url,
-        showChannel: Boolean(data.canal),
-        showDuration: Boolean(data.duracion),
-        showSize: Boolean(data.datos.tamaño),
+        showChannel: Boolean(channel),
+        showDuration: Boolean(duration),
+        showSize: Boolean(size),
         showType: true,
         loadingText: "Enviando video...",
       });
-      const hasPreview = data.miniatura
+      const hasPreview = thumbnail
         ? await sendDownloadPreview({
             sock,
             from,
             msg,
-            thumbnail: data.miniatura,
+            thumbnail,
             caption,
             link: url,
             title,

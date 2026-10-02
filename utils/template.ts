@@ -62,7 +62,7 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
   const bold = (value: unknown): string =>
     boldFormatter ? boldFormatter(String(value ?? "")) : String(value ?? "");
   const lines: string[] = [];
-  lines.push(`╭〔 ${icon} ${bold(label)} 〕━⬣`);
+  lines.push(`╭〔 ${icon} ${bold(label)} 〕━⬣\n`);
   if (showTitle && title) {lines.push(`┃ ➥ ${bold(title)}`)}
   lines.push("");
   lines.push("┣━━━━━━━━━━━━⬣");
