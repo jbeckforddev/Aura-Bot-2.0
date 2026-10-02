@@ -62,7 +62,7 @@ export default {
         label: "YOUTUBE VIDEO",
         icon: "🎬",
         title,
-        channel: globalThis.DEFAULT_BOT_AUTHOR,
+        channel: data.canal || "YouTube",
         duration: data.duracion,
         size: data.datos.tamaño,
         type: "Video MP4",
@@ -83,7 +83,7 @@ export default {
             caption,
             link: url,
             title,
-            author: data.canal || "YouTube",
+            author: globalThis.DEFAULT_BOT_AUTHOR,
             sender,
           })
         : false;
