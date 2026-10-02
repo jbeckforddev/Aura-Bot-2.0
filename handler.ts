@@ -459,6 +459,16 @@ export async function handleMessage(
       : [];
     const text = args.join(" ");
 
+    if (
+      isGroup &&
+      cmdName !== "delprimary" &&
+      cmdName !== "setprimary" &&
+      runtimeDb.getPrimary(from) &&
+      !isPrimaryBotForGroup(sock, from, runtimeDb)
+    ) {
+      return;
+    }
+
     let groupName = "";
     let groupMeta: GroupMetadata | null = null;
 

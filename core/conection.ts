@@ -32,9 +32,27 @@ export type { ConnectionOptions };
 export const logger = pino({ level: "silent" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 2;
+const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
 const connectionsInProgress = new Set<string>();
+let waWebVersionPromise: Promise<[number, number, number]> | undefined;
+let waWebVersionExpiresAt = 0;
+
+function getWaWebVersion(): Promise<[number, number, number]> {
+  if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
+    waWebVersionExpiresAt = Date.now() + WA_WEB_VERSION_CACHE_TTL_MS;
+    waWebVersionPromise = fetchLatestWaWebVersion()
+      .then(({ version }) => version as [number, number, number])
+      .catch((error) => {
+        waWebVersionPromise = undefined;
+        waWebVersionExpiresAt = 0;
+        throw error;
+      });
+  }
+
+  return waWebVersionPromise;
+}
 
 function resetReconnectAttempts(sessionName: string) {
   reconnectAttempts.delete(sessionName);
@@ -204,8 +222,7 @@ export async function connectToWhatsApp(
 
   let version: [number, number, number] | undefined;
   try {
-    const fetched = await fetchLatestWaWebVersion();
-    version = fetched.version as [number, number, number];
+    version = await getWaWebVersion();
   } catch {
     connectionLog(
       "No se pudo obtener la versión de WhatsApp Web; usando la interna de Baileys.",
