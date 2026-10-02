@@ -40,7 +40,7 @@ export default {
       );
       const response = await fetch(
         "https://api.alyacore.xyz/tools/upscale?key=oboe",
-        { method: "POST", body: form, signal: AbortSignal.timeout(90000) },
+        { method: "POST", body: form, signal: AbortSignal.timeout(120000) },
       );
       if (!response.ok) {
         const details = (await response.text()).slice(0, 300);
