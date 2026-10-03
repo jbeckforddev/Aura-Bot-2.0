@@ -204,6 +204,7 @@ export default {
         showLikes: track.likes_count !== undefined && track.likes_count !== null,
         showType: true,
         loadingText: "Descargando audio...",
+        loadingIcon: "⏳",
       });
 
       const thumbnail = track.artwork_url?.replace("large", "t500x500");

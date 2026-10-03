@@ -20,6 +20,7 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
     label = "DOWNLOAD",
     icon = "🎵",
     loadingText = "Descargando archivo...",
+    loadingIcon = "",
     showTitle = true,
     showLoading = true,
     showCost = true,
@@ -84,7 +85,7 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
   if (showExtension && extension) {lines.push(`┃ > ${bold("Extensión")} › .${String(extension).toUpperCase()}`)}
   if (showCost && cost !== undefined && cost !== null && cost !== "") {lines.push(`┃ > ${bold("Costo")} › ${cost}`)}
   if (showUrl && url) {lines.push(`┃ > ${bold("Url")} › ${url}`)}
-  if (showLoading) {lines.push("┣━━━━━━━━━━━━⬣");lines.push(`┃ ⏳ ${loadingText}`)}
+  if (showLoading && loadingText) {lines.push("┣━━━━━━━━━━━━⬣"); const loadingPrefix = loadingIcon ? `${loadingIcon} ` : ""; lines.push(`┃ ${loadingPrefix}${loadingText}`)}
   lines.push(`╰━━〔 ⚡ ${bold("SYSTEM ACTIVE")} 〕━━⬣`);
   return lines.join("\n");
 }

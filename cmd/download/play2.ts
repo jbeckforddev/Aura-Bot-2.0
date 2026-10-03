@@ -81,6 +81,7 @@ export default {
         showSize: Boolean(size),
         showType: true,
         loadingText: "Enviando video...",
+        loadingIcon: "⏳",
       });
       const hasPreview = thumbnail
         ? await sendDownloadPreview({

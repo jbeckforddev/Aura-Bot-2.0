@@ -25,7 +25,7 @@ const KEY = DL_CONFIG.alya.API_KEY;
 const TIKTOK_URL = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
 
 export default {
-  name: ["dtk", "dtt", "dttv", "doctiktok", "dtkmp4"],
+  name: ["dtk", "dtt", "dttv", "doctiktok", "dtkmp4", "tt2"],
   category: "download",
   description: "Busca y descarga videos de TikTok como documento.",
   async run(ctx: CommandContext) {
@@ -84,6 +84,7 @@ export default {
         showComments: comments !== undefined && comments !== null,
         showShares: shares !== undefined && shares !== null,
         loadingText: "Descargando video...",
+        loadingIcon: "⏳",
       });
       await reply({
         document: { url: convertedFile },

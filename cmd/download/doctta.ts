@@ -110,6 +110,7 @@ export default {
         showComments: comments !== undefined && comments !== null,
         showType: true,
         loadingText: "Descargando documento...",
+        loadingIcon: "⏳",
       });
       await reply({ text: caption });
       await reply({

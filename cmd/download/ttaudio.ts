@@ -110,6 +110,7 @@ export default {
         showShares: shares !== undefined && shares !== null,
         showType: true,
         loadingText: "Descargando audio...",
+        loadingIcon: "⏳",
       });
       await reply({ text: caption });
       await reply({

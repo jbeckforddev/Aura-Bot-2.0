@@ -4,6 +4,7 @@ export interface DownloadTemplateOptions {
   label?: string;
   icon?: string;
   loadingText?: string;
+  loadingIcon?: string;
   showTitle?: boolean;
   showLoading?: boolean;
   showCost?: boolean;

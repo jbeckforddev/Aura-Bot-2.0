@@ -74,6 +74,7 @@ export default {
         showQuality: true,
         showType: true,
         loadingText: "Descargando video...",
+        loadingIcon: "⏳",
       });
       await reply({
         video: { url: file },

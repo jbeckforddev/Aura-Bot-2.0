@@ -59,6 +59,7 @@ export default {
         showAlbum: Boolean(song.album),
         showType: true,
         loadingText: "Descargando documento...",
+        loadingIcon: "⏳",
       });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover

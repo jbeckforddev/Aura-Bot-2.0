@@ -72,6 +72,7 @@ export default {
         showExtension: true,
         showType: true,
         loadingText: "Descargando archivo...",
+        loadingIcon: "⏳",
       });
       await reply({ text: caption });
       await reply({ document: { url: file }, mimetype: mime, fileName: name });

@@ -169,6 +169,7 @@ export default {
         showViews: Boolean(result.views),
         showQuality: Boolean(quality),
         loadingText: "Descargando audio...",
+        loadingIcon: "⏳",
       });
 
       const thumbnail = String(

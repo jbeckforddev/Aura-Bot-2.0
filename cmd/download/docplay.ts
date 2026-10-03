@@ -74,6 +74,7 @@ export default {
         showQuality: Boolean(info.quality),
         showType: true,
         loadingText: "Descargando documento...",
+        loadingIcon: "⏳",
       });
       const videoId = url.match(YT_ID)?.[1];
       const thumbnail = videoId

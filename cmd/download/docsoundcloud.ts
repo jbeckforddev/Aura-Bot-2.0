@@ -107,6 +107,7 @@ export default {
         showArtist: Boolean(track.user?.username),
         showType: true,
         loadingText: "Descargando documento...",
+        loadingIcon: "⏳",
       });
       const thumbnail = track.artwork_url?.replace("large", "t500x500");
       const hasPreview = thumbnail

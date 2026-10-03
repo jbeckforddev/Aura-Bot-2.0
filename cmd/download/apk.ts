@@ -52,6 +52,7 @@ export default {
         showVersion: Boolean(data.lastUpdated),
         showType: true,
         loadingText: "Descargando APK...",
+        loadingIcon: "⏳",
       });
       const hasPreview = data.banner
         ? await sendDownloadPreview({

@@ -62,6 +62,7 @@ export default {
         showDuration: Boolean(data.duracion),
         showType: true,
         loadingText: "Descargando documento...",
+        loadingIcon: "⏳",
       });
       await reply({ text: caption });
       await reply({

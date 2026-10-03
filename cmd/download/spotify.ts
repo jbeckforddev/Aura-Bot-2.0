@@ -67,6 +67,7 @@ export default {
         showDuration: Boolean(song.duration),
         showType: true,
         loadingText: "Descargando audio...",
+        loadingIcon: "⏳",
       });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover
