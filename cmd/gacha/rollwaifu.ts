@@ -17,7 +17,7 @@ interface Character {
 
 const charactersFilePath = "./src/database/characters[1].json";
 const cooldowns = new Map<string, number>();
-const COOLDOWN = 3 * 60 * 1000;
+const COOLDOWN = 15 * 60 * 1000;
 
 async function loadCharacters(): Promise<Character[]> {
   const data = await fs.readFile(charactersFilePath, "utf-8");
