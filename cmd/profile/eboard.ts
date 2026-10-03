@@ -6,6 +6,7 @@ export default {
   name: ["eboard", "auratop"],
   description: "Clasificación global de Aura.",
   category: "profile",
+  ownerOnly: true,
   async run(ctx: CommandContext) {
     const pageSize = 10;
     const requestedPage = Number.parseInt(String(ctx.args?.[0] || "1"), 10);
