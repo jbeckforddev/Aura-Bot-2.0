@@ -142,7 +142,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       shouldLimitSize = inputSize > MAX_VIDEO_SIZE;
     }
 
-    const audioBitrate = 128000;
+    const audioBitrate = 64000;
     const sizeLimitedBitrate = Math.floor(
       (TARGET_VIDEO_SIZE * 8) / duration - audioBitrate,
     );
@@ -179,7 +179,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
               "-bufsize",
               String(videoBitrate * 2),
             ]
-          : ["-crf", "30"]),
+          : ["-crf", "18"]),
         "-preset",
         "ultrafast",
         "-pix_fmt",
