@@ -26,15 +26,18 @@ export default {
     let status = "";
     let system = "";
 
-    if (latency < 500) {
-      status = "🟢 Excelente";
+    if (latency < 100) {
+      status = "🔵 Excelente";
       system = "Estable";
-    } else if (latency < 1000) {
-      status = "🟠 Aceptable";
+    } else if (latency < 300) {
+      status = "🟢 Buena";
       system = "Normal";
+    } else if (latency < 500) {
+      status = "🟠 Moderado";
+      system = "Estabilizando";
     } else {
-      status = "🔴 Malo";
-      system = "En problemas";
+      status = "🔴 Malo",
+      system = "En problemas"
     }
 
     let textPing2 = `${fytBold("⚡ RESULTADO DE LA PRUEBA ⚡")}\n\n`;
