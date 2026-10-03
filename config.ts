@@ -25,7 +25,7 @@ setupCustomTmp();
 export const DL_CONFIG = {
   alya: {
     BASE_URL: "https://api.alyacore.xyz/",
-    API_KEY: "oboe",
+    API_KEY: "AURA-BOT-JERIELB",
   },
   lempi: {
     BASE_URL: "https://api.lempi.lat/",
