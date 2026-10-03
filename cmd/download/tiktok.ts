@@ -84,8 +84,7 @@ export default {
         showLikes: likes !== undefined && likes !== null,
         showComments: comments !== undefined && comments !== null,
         showShares: shares !== undefined && shares !== null,
-        loadingText: "✅ Listo mi rey",
-        loadingIcon: "⏳",
+        loadingText: "✅ Listo mi compa",
       });
       await reply({
         video: { url: convertedFile },
