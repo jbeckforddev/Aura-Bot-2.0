@@ -1052,6 +1052,8 @@ export const db: IDatabase = {
           canonicalJid ? normalizeJid(canonicalJid) : null,
           role,
           Number(current.is_banned ?? 0),
+          current.coins ?? 100000, // <--- Faltaba coins
+          current.bank ?? 10000,   // <--- Faltaba bank
           JSON.stringify(payload),
           current.jid,
         );
