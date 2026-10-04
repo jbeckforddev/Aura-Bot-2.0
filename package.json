@@ -25,7 +25,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@napi-rs/canvas": "^0.1.66",
-    "@whiskeysockets/baileys": "github:jerielweb/Bail",
+    "@whiskeysockets/baileys": "github:jbeckforddev/Bail",
     "better-sqlite3": "^13.0.3",
     "chalk": "^6.0.0",
     "ffmpeg-static": "^5.3.0",
@@ -53,7 +53,7 @@
     "typescript": "^5.7.3"
   },
   "allowScripts": {
-    "github:jerielweb/Bail": true,
+    "github:jbeckforddev/Bail": true,
     "@whiskeysockets/baileys": true,
     "canvas": true,
     "better-sqlite3": true,
