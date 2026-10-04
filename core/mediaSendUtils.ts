@@ -16,8 +16,8 @@ import type {
 
 export type { AlbumItem, SendMessageContent };
 
-const ALBUM_DELAY = Number(process.env.ALBUM_ITEM_DELAY_MS || 900);
-const MAX_ITEMS = Number(process.env.MAX_ALBUM_ITEMS || 6);
+const ALBUM_DELAY = Number(200);
+const MAX_ITEMS = Number(10);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -91,7 +91,7 @@ async function relayWithRateLimit(
   }
 }
 
-export async function sendAlbumMessage(
+async function sendAlbumBatch(
   socket: ExtendedWASocket,
   jid: string,
   items: AlbumItem[],
@@ -99,10 +99,9 @@ export async function sendAlbumMessage(
 ) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
-  const albumItems = items.slice(0, MAX_ITEMS);
   const userJid = jidNormalizedUser(socket.user?.id || "");
-  const expectedImageCount = albumItems.filter((item) => item.image).length;
-  const expectedVideoCount = albumItems.filter((item) => item.video).length;
+  const expectedImageCount = items.filter((item) => item.image).length;
+  const expectedVideoCount = items.filter((item) => item.video).length;
 
   if (expectedImageCount === 0 && expectedVideoCount === 0) return null;
 
@@ -117,13 +116,13 @@ export async function sendAlbumMessage(
 
   await relayWithRateLimit(socket, jid, album.message, album.key.id);
 
-  for (let index = 0; index < albumItems.length; index += 1) {
+  for (let index = 0; index < items.length; index += 1) {
     if (index > 0) await sleep(ALBUM_DELAY);
 
     try {
       const mediaMessage = await generateWAMessage(
         jid,
-        albumItems[index] as AnyMessageContent,
+        items[index] as AnyMessageContent,
         {
           upload: socket.waUploadToServer,
           userJid,
@@ -148,4 +147,28 @@ export async function sendAlbumMessage(
   }
 
   return album;
+}
+
+export async function sendAlbumMessage(
+  socket: ExtendedWASocket,
+  jid: string,
+  items: AlbumItem[],
+  quoted?: proto.IWebMessageInfo | WAMessage,
+) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const batches: AlbumItem[][] = [];
+  for (let index = 0; index < items.length; index += MAX_ITEMS) {
+    batches.push(items.slice(index, index + MAX_ITEMS));
+  }
+
+  let lastAlbum: Awaited<ReturnType<typeof sendAlbumBatch>> = null;
+  for (const batch of batches) {
+    lastAlbum = await sendAlbumBatch(socket, jid, batch, quoted);
+    if (batch.length > 0 && batch !== batches[batches.length - 1]) {
+      await sleep(ALBUM_DELAY);
+    }
+  }
+
+  return lastAlbum;
 }

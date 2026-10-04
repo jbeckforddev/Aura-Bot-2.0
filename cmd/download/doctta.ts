@@ -19,16 +19,34 @@ import {
 import { DL_CONFIG } from "../../config.ts";
 import type {
   CommandContext,
-  TikTokDownloadData,
   TikTokSearchItem,
   TikTokSearchResponse,
-  TikTokMediaItem,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const execFileAsync = promisify(execFile);
-const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
+const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
+const TIKWM_API = "https://www.tikwm.com/api";
 const TIKTOK = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
+
+type TikWMVideoResponse = {
+  code?: number;
+  msg?: string;
+  data?: {
+    title?: string;
+    play?: string;
+    wmplay?: string;
+    author?: {
+      nickname?: string;
+      fullname?: string;
+      unique_id?: string;
+    };
+    play_count?: number | string;
+    digg_count?: number | string;
+    comment_count?: number | string;
+    share_count?: number | string;
+  };
+};
 
 export default {
   name: ["dtta", "dtka", "docttaudio", "dtkmusic", "doctiktokaudio"],
@@ -50,21 +68,19 @@ export default {
       let searchResult: TikTokSearchItem | null = null;
       if (!TIKTOK.test(query)) {
         const search = await requestJson<TikTokSearchResponse>(
-          `${API}/search/tiktok?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
-        );
+          `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
+        ).catch(() => null);
         searchResult = pickSearchResult<TikTokSearchItem>(search?.data, query);
         url = searchResult?.url || "";
       }
       if (!url)
         throw new Error("No se encontró ningún resultado para tu búsqueda.");
-      const data = await requestJson<TikTokDownloadData>(
-        `${API}/dl/tiktokv2?url=${encodeURIComponent(url)}&key=${DL_CONFIG.alya.API_KEY}`,
+      const data = await requestJson<TikWMVideoResponse>(
+        `${TIKWM_API}/?url=${encodeURIComponent(url)}`,
         60000,
       );
-      const video = (data?.data || []).find(
-        (item: TikTokMediaItem) => item?.url,
-      )?.url;
-      if (!data?.status || !video)
+      const video = data?.data?.play || data?.data?.wmplay || "";
+      if (!data?.data || !video)
         throw new Error("No se encontró audio descargable.");
       input = await downloadToCache(video, 180000);
       await execFileAsync(
@@ -82,16 +98,18 @@ export default {
         ],
         { timeout: 120000 },
       );
-      const title = data.title || "Audio de TikTok";
+      const title = data.data.title || "Audio de TikTok";
       const author =
-        data.author?.nickname ||
-        data.author?.fullname ||
+        data.data.author?.nickname ||
+        data.data.author?.fullname ||
+        data.data.author?.unique_id ||
         searchResult?.author?.nickname ||
         "Desconocido";
       const { cost } = await prepareDownloadCharge(ctx, "document", output);
-      const views = data.stats?.views ?? data.play_count ?? searchResult?.views;
-      const likes = data.stats?.likes ?? data.digg_count ?? searchResult?.likes;
-      const comments = data.stats?.comment ?? data.comment_count ?? searchResult?.comments;
+      const views = data.data.play_count ?? searchResult?.views;
+      const likes = data.data.digg_count ?? searchResult?.likes;
+      const comments =
+        data.data.comment_count ?? searchResult?.comments;
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "TIKTOK DOCUMENT",
