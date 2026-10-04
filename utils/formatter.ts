@@ -185,7 +185,19 @@ export function formatDate(value: unknown): string {
       return "Invalid Date";
     }
   } else {
-    date = new Date(raw);
+    const timestamp = Number(raw);
+    const timestampDigits = raw.startsWith("-") ? raw.length - 1 : raw.length;
+    if (/^-?\d{9,16}$/.test(raw) && Number.isFinite(timestamp)) {
+      const timestampMs =
+        timestampDigits <= 10
+          ? timestamp * 1000
+          : timestampDigits <= 13
+            ? timestamp
+            : timestamp / 1000;
+      date = new Date(timestampMs);
+    } else {
+      date = new Date(raw);
+    }
   }
 
   if (isNaN(date.getTime())) return "Invalid Date";
@@ -243,3 +255,5 @@ export function formatClock(value: unknown): string {
 
   return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
 }
+
+console.log(formatDate(1768547642)); // Example usage

@@ -1,118 +1,152 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { formatDate } from "../../utils/formatter.ts";
 
 const GROUP_INVITE_URL =
-	/(?:https?:\/\/)?chat\.whatsapp\.com\/([0-9A-Za-z]{22,24})/i;
+  /(?:https?:\/\/)?chat\.whatsapp\.com\/([0-9A-Za-z]{22,24})/i;
 const CHANNEL_INVITE_URL =
-	/(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([0-9A-Za-z@._-]+)/i;
-
-function formatInspect(title: string, details: string[]): string {
-	return `╭〔 🔍 ${fytBold("AURA REED")} 〕⬣\n┃ ${fytBold(title)}\n╰━━━━━━━━━━━━⬣\n\n${details.map((detail) => `┃ ${detail}`).join("\n")}\n\n╰〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕⬣`;
-}
+  /(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([0-9A-Za-z@._-]+)/i;
 
 function formatError(message: string): string {
-	return `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("INSPECCIÓN FALLIDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${message}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+  return `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("INSPECCIÓN FALLIDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${message}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+}
+
+function formatAvailableDate(value: unknown): string {
+  if (value === null || value === undefined || value === "")
+    return "No disponible";
+  return formatDate(value);
+}
+
+function getTextValue(value: unknown, fallback: string): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const text = (value as Record<string, unknown>).text;
+    if (typeof text === "string") return text;
+  }
+  return fallback;
 }
 
 export default {
-	name: ["inspect", "inspeccionar"],
-	description: "Inspecciona un enlace de grupo, comunidad o canal de WhatsApp.",
-	category: "herramientas",
+  name: ["inspect", "inspeccionar"],
+  description: "Inspecciona un enlace de grupo, comunidad o canal de WhatsApp.",
+  category: "herramientas",
 
-	async run({ sock, text, reply }: CommandContext) {
-		const input = text.trim();
-		if (!input) {
-			return reply(
-				formatError("Ingresa un enlace de grupo, comunidad o canal."),
-			);
-		}
+  async run({ sock, text, reply }: CommandContext) {
+    const link = text.trim();
+    if (!link) {
+      return reply(
+        formatError(
+          "Proporciona un enlace válido de grupo, comunidad o canal de WhatsApp.",
+        ),
+      );
+    }
 
-		const channelCode = input.match(CHANNEL_INVITE_URL)?.[1];
-		if (channelCode) {
-			try {
-				const info = await sock.newsletterMetadata("invite", channelCode);
-				if (!info) {
-					return reply(
-						formatError(
-							"No se encontró información del canal. Verifica que el enlace sea correcto.",
-						),
-					);
-				}
+    const groupMatch = link.match(GROUP_INVITE_URL);
+    if (groupMatch) {
+      try {
+        const groupMeta = await sock.groupGetInviteInfo(groupMatch[1]);
+        const detalles = [
+          `╭〔 🔍 ${fytBold("INSPECCIÓN DE GRUPO")} 〕⬣\n\n`,
+          `┃ ${groupMeta.subject || "Grupo sin nombre"}\n`,
+          `╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🆔 ${fytBold("ID")} › ${groupMeta.id}\n`,
+          `┃ 👥 ${fytBold("Participantes")} › ${groupMeta.size ?? "No disponible"}\n`,
+          `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(groupMeta.creation)}\n`,
+          `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
+          `┃ ${groupMeta.desc || "No hay descripción"}\n`,
+          `╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🔗 ${fytBold("Enlace de invitación")} › ${link}\n`,
+          `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        ];
 
-				const metadata = info.thread_metadata as
-					| (typeof info.thread_metadata & {
-							subscribers_count?: number;
-							verification?: string;
-						})
-					| undefined;
-				const name = metadata?.name || "Sin nombre";
-				const description = metadata?.description || "Sin descripción";
-				const subscribers = metadata?.subscribers_count ?? "No disponible";
-				const verified =
-					metadata?.verification === "VERIFIED"
-						? "✅ Verificado"
-						: "❌ No verificado";
+        return reply(detalles.join(""));
+      } catch {
+        return reply(
+          formatError(
+            "No se pudo obtener información del grupo. Verifica que el enlace sea válido.",
+          ),
+        );
+      }
+    }
 
-				return reply(
-					formatInspect("INFORMACIÓN DEL CANAL", [
-						`🪪 ${fytBold("Nombre")} › ${name}`,
-						`🆔 ${fytBold("ID")} › ${info.id || "No encontrado"}`,
-						`👥 ${fytBold("Suscriptores")} › ${subscribers}`,
-						verified,
-						`📝 ${fytBold("Descripción")} › ${description}`,
-					]),
-				);
-			} catch {
-				return reply(
-					formatError("Ocurrió un error al obtener la información del canal."),
-				);
-			}
-		}
+    const channelMatch = link.match(CHANNEL_INVITE_URL);
+    if (channelMatch) {
+      try {
+        const channelMeta = await sock.newsletterMetadata(
+          "invite",
+          channelMatch[1],
+        );
+        if (!channelMeta) {
+          return reply(
+            formatError(
+              "No se encontró el canal. Verifica que el enlace sea válido.",
+            ),
+          );
+        }
 
-		const groupCode = input.match(GROUP_INVITE_URL)?.[1];
-		if (groupCode) {
-			try {
-				const info = await sock.groupGetInviteInfo(groupCode);
-				if (!info) {
-					return reply(
-						formatError(
-							"No se encontró información. Verifica que el enlace sea válido.",
-						),
-					);
-				}
+        const rawMeta = channelMeta as typeof channelMeta &
+          Record<string, unknown>;
+        const threadMetadata = rawMeta.thread_metadata as
+          | Record<string, unknown>
+          | undefined;
+          const nameMetadata = threadMetadata?.name as
+            | Record<string, unknown>
+            | undefined;
+          const descriptionMetadata = threadMetadata?.description as
+            | Record<string, unknown>
+            | undefined;
+        const creationTime =
+          channelMeta.creation_time ?? threadMetadata?.creation_time;
+        const name = getTextValue(
+          channelMeta.name ?? threadMetadata?.name,
+          "Canal sin nombre",
+        );
+        const description = getTextValue(
+          channelMeta.description ?? threadMetadata?.description,
+          "No hay descripción",
+        );
+        const subscribers =
+          channelMeta.subscribers ??
+          threadMetadata?.subscribers_count ??
+          rawMeta.subscribers_count;
+        const verification =
+          channelMeta.verification ??
+          threadMetadata?.verification ??
+          rawMeta.verification;
 
-				const name = info.subject || "Sin nombre";
-				const description = info.desc || "Sin descripción";
-				const participants =
-					info.size ?? info.participants?.length ?? "No disponible";
-				const isCommunity = Boolean(info.isCommunity);
-				const type = isCommunity ? "COMUNIDAD" : "GRUPO";
-				const created = info.creation
-					? new Date(info.creation * 1000).toLocaleDateString("es-ES")
-					: "No disponible";
+        const verificationText = verification === "UNVERIFIED" ? "No verificado" : verification === "VERIFIED" ? "Verificado" : "No disponible";
 
-				return reply(
-					formatInspect(`INFORMACIÓN DEL ${type}`, [
-						`📛 ${fytBold("Nombre")} › ${name}`,
-						`🆔 ${fytBold("ID")} › ${info.id || "No encontrado"}`,
-						`👥 ${fytBold("Participantes")} › ${participants}`,
-						`📅 ${fytBold("Creado")} › ${created}`,
-						`📝 ${fytBold("Descripción")} › ${description}`,
-					]),
-				);
-			} catch {
-				return reply(
-					formatError(
-						"Ocurrió un error al obtener la información del grupo o comunidad.",
-					),
-				);
-			}
-		}
+        const detalles = [
+          `╭〔 🔍 ${fytBold("INSPECCIÓN DE CANAL")} 〕⬣\n\n`,
+          `┃ ${getTextValue(name, "Canal sin nombre")}\n`,
+          `╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🆔 ${fytBold("ID")} › ${channelMeta.id}\n`,
+          `┃ 👥 ${fytBold("Seguidores")} › ${subscribers || "No disponible"}\n`,
+          `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(creationTime)}\n`,
+          `┃ ✏️ ${fytBold("Nombre actualizado")} › ${formatAvailableDate(nameMetadata?.update_time)}\n`,
+          `┃ 📝 ${fytBold("Descripción actualizada")} › ${formatAvailableDate(descriptionMetadata?.update_time)}\n`,
+          `┃ ${fytBold("❌ Verificación")} › ${verificationText}\n`,
+          `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
+          `┃ ${description}\n`,
+          `╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🔗 ${fytBold("Enlace del canal")} › ${link}\n`,
+          `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        ];
 
-		return reply(
-			formatError(
-				"No se detectó un enlace válido de grupo, comunidad o canal de WhatsApp.",
-			),
-		);
-	},
+        return reply(detalles.join(""));
+      } catch {
+        return reply(
+          formatError(
+            "No se pudo obtener información del canal. Verifica que el enlace sea válido.",
+          ),
+        );
+      }
+    }
+
+    return reply(
+      formatError(
+        "El enlace no tiene un formato reconocido de grupo o canal de WhatsApp.",
+      ),
+    );
+  },
 };
