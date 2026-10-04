@@ -46,7 +46,7 @@ export default {
       try {
         const groupMeta = await sock.groupGetInviteInfo(groupMatch[1]);
         const detalles = [
-          `╭〔 🔍 ${fytBold("INSPECCIÓN DE GRUPO")} 〕⬣\n\n`,
+          `╭〔 🔍 ${fytBold("INSPECCIÓN DE GRUPO")} 〕⬣\n`,
           `┃ ${groupMeta.subject || "Grupo sin nombre"}\n`,
           `╰━━━━━━━━━━━━⬣\n\n`,
           `┃ 🆔 ${fytBold("ID")} › ${groupMeta.id}\n`,
@@ -54,8 +54,8 @@ export default {
           `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(groupMeta.creation)}\n`,
           `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
           `┃ ${groupMeta.desc || "No hay descripción"}\n`,
-          `╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🔗 ${fytBold("Enlace de invitación")} › ${link}\n`,
+          `\n╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🔗 ${fytBold("Enlace de invitación")} › ${link}\n\n`,
           `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
         ];
 
@@ -114,10 +114,10 @@ export default {
           threadMetadata?.verification ??
           rawMeta.verification;
 
-        const verificationText = verification === "UNVERIFIED" ? "No verificado" : verification === "VERIFIED" ? "Verificado" : "No disponible";
+        const verificationText = verification === "UNVERIFIED" ? "❌ No verificado" : verification === "VERIFIED" ? "✅ Verificado" : "No disponible";
 
         const detalles = [
-          `╭〔 🔍 ${fytBold("INSPECCIÓN DE CANAL")} 〕⬣\n\n`,
+          `╭〔 🔍 ${fytBold("INSPECCIÓN DE CANAL")} 〕⬣\n`,
           `┃ ${getTextValue(name, "Canal sin nombre")}\n`,
           `╰━━━━━━━━━━━━⬣\n\n`,
           `┃ 🆔 ${fytBold("ID")} › ${channelMeta.id}\n`,
@@ -125,11 +125,11 @@ export default {
           `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(creationTime)}\n`,
           `┃ ✏️ ${fytBold("Nombre actualizado")} › ${formatAvailableDate(nameMetadata?.update_time)}\n`,
           `┃ 📝 ${fytBold("Descripción actualizada")} › ${formatAvailableDate(descriptionMetadata?.update_time)}\n`,
-          `┃ ${fytBold("❌ Verificación")} › ${verificationText}\n`,
+          `┃ ${fytBold("Verificación")} › ${verificationText}\n`,
           `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
           `┃ ${description}\n`,
-          `╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🔗 ${fytBold("Enlace del canal")} › ${link}\n`,
+          `\n╰━━━━━━━━━━━━⬣\n\n`,
+          `┃ 🔗 ${fytBold("Enlace del canal")} › ${link}\n\n`,
           `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
         ];
 
