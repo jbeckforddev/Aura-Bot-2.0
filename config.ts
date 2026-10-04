@@ -1,6 +1,7 @@
 import os from "os";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "node:url";
 
 export function setupCustomTmp(): string {
   const customTmpDir =
@@ -77,6 +78,9 @@ globalThis.DEFAULT_USER_ROLES = [
 // Directorio de sesiones de bots
 globalThis.mainBotSession = "./sessions";
 globalThis.subBotSession = "./sessions/subs";
-globalThis.DATA_BASE_DIR = "./data";
+globalThis.DATA_BASE_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "data",
+);
 
 globalThis.mainSocket = null;

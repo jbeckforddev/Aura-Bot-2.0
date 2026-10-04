@@ -140,11 +140,6 @@ for (const column of [
   ["phone_number", "TEXT"],
   ["lid", "TEXT"],
   ["groups", "TEXT DEFAULT '[]'"],
-  ["genre", "TEXT DEFAULT 'Unknown'"],
-  ["aura_points", "INTEGER DEFAULT 0"],
-  ["aura_level", "INTEGER DEFAULT 1"],
-  ["stickerPackAuthor", "TEXT DEFAULT NULL"],
-  ["stickerPackName", "TEXT DEFAULT NULL"],
   ["botOnline", "INTEGER DEFAULT 1"],
 ] as const) {
   const exists = db_instance
@@ -152,6 +147,26 @@ for (const column of [
     .get(column[0]);
   if (!exists)
     db_instance.exec(`ALTER TABLE bots ADD COLUMN ${column[0]} ${column[1]}`);
+}
+
+for (const column of [
+  ["phone_number", "TEXT"],
+  ["lid", "TEXT"],
+  ["name", "TEXT DEFAULT NULL"],
+  ["marriage_to", "TEXT DEFAULT NULL"],
+  ["genre", "TEXT DEFAULT 'Unknown'"],
+  ["birth_date", "TEXT DEFAULT NULL"],
+  ["description", "TEXT DEFAULT 'Sin descripcion'"],
+  ["aura_points", "INTEGER DEFAULT 0"],
+  ["aura_level", "INTEGER DEFAULT 1"],
+  ["stickerPackAuthor", "TEXT DEFAULT NULL"],
+  ["stickerPackName", "TEXT DEFAULT NULL"],
+] as const) {
+  const exists = db_instance
+    .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?")
+    .get(column[0]);
+  if (!exists)
+    db_instance.exec(`ALTER TABLE users ADD COLUMN ${column[0]} ${column[1]}`);
 }
 
 const groupsMeta = db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{ name: string }>;
@@ -201,7 +216,7 @@ const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 const stmts = {
   getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
   insertUser: db_instance.prepare(
-    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateEconomyLastByJid: db_instance.prepare(
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE jid = ?`,
@@ -210,13 +225,13 @@ const stmts = {
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE lid = ?`,
   ),
   updateUser: db_instance.prepare(
-    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ? WHERE jid = ?",
+    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
   ),
   updateUserByLid: db_instance.prepare(
-    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ? WHERE lid = ?",
+    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
-    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
+    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
 
   getGroup: db_instance.prepare("SELECT * FROM groups WHERE jid = ?"),
@@ -242,7 +257,7 @@ const stmts = {
   ),
   deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?"),
   resetGroupTopMsgUsers: db_instance.prepare(
-    "UPDATE groups SET topMsgUsers = '[]' WHERE jid = ?",
+    "UPDATE groups SET topMsgUsers = '[]', data = ? WHERE jid = ?",
   ),
 };
 
@@ -253,10 +268,9 @@ function normalizeJid(input: string) {
     .replace(/:.*/, "");
 }
 
-function safeJson<T = Record<string, unknown>>(
-  value: string | null | undefined,
-): T {
-  if (!value) return {} as T;
+function safeJson<T = Record<string, unknown>>(value: unknown): T {
+  if (value == null || value === "") return {} as T;
+  if (typeof value !== "string") return value as T;
 
   try {
     return JSON.parse(value) as T;
@@ -265,7 +279,125 @@ function safeJson<T = Record<string, unknown>>(
   }
 }
 
-function safeJsonArray(value: string | null | undefined): string[] {
+function hydrateUserProfile(
+  data: Record<string, unknown>,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const hydrated = { ...data };
+  const columns = [
+    ["name", "name"],
+    ["description", "description"],
+    ["gender", "genre"],
+    ["birthDate", "birth_date"],
+    ["marriedTo", "marriage_to"],
+    ["level", "aura_level"],
+  ] as const;
+
+  for (const [key, column] of columns) {
+    const value = row[column];
+    if (hydrated[key] !== undefined || value == null) continue;
+    if (key === "description" && value === "Sin descripcion") continue;
+    if (key === "gender" && value === "Unknown") continue;
+    hydrated[key] = value;
+  }
+
+  const auraPoints = row.aura_points;
+  if (auraPoints != null) {
+    if (hydrated.aura === undefined) hydrated.aura = Number(auraPoints);
+    if (hydrated.auraXp === undefined) hydrated.auraXp = Number(auraPoints);
+  }
+
+  return hydrated;
+}
+
+function getUserProfileValues(
+  user: Record<string, unknown>,
+  row?: Record<string, unknown>,
+): unknown[] {
+  const value = (key: string, column: string, fallback: unknown) =>
+    user[key] !== undefined ? user[key] : (row?.[column] ?? fallback);
+  const auraPoints =
+    user.auraXp !== undefined
+      ? user.auraXp
+      : user.aura !== undefined
+        ? user.aura
+        : (row?.aura_points ?? 0);
+
+  return [
+    value("name", "name", null),
+    value("marriedTo", "marriage_to", null),
+    value("gender", "genre", "Unknown"),
+    value("birthDate", "birth_date", null),
+    value("description", "description", "Sin descripcion"),
+    Number(auraPoints ?? 0),
+    Number(value("level", "aura_level", 1) ?? 1),
+  ];
+}
+
+function migrateUserProfileColumns(): void {
+  const columns = [
+    ["name", "name"],
+    ["description", "description"],
+    ["gender", "genre"],
+    ["birthDate", "birth_date"],
+    ["marriedTo", "marriage_to"],
+    ["level", "aura_level"],
+  ] as const;
+  const rows = db_instance
+    .prepare(
+      "SELECT rowid AS userRowId, jid, data, name, description, genre, birth_date, marriage_to, aura_points, aura_level FROM users",
+    )
+    .all() as Array<Record<string, unknown>>;
+  const statements = new Map<
+    string,
+    ReturnType<typeof db_instance.prepare<unknown[], unknown>>
+  >();
+
+  const migrate = db_instance.transaction(() => {
+    for (const row of rows) {
+      const data = safeJson<Record<string, unknown>>(row.data as string | undefined);
+      const assignments: string[] = [];
+      const values: unknown[] = [];
+
+      for (const [key, column] of columns) {
+        if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+        const value = data[key];
+        if (Object.is(row[column], value)) continue;
+        assignments.push(`${column} = ?`);
+        values.push(value ?? null);
+      }
+
+      const hasAura = Object.prototype.hasOwnProperty.call(data, "aura");
+      const hasAuraXp = Object.prototype.hasOwnProperty.call(data, "auraXp");
+      if (hasAura || hasAuraXp) {
+        const auraPoints = hasAuraXp ? data.auraXp : data.aura;
+        if (!Object.is(row.aura_points, auraPoints)) {
+          assignments.push("aura_points = ?");
+          values.push(auraPoints ?? null);
+        }
+      }
+
+      if (assignments.length === 0) continue;
+      const query = assignments.join(", ");
+      let stmt = statements.get(query);
+      if (!stmt) {
+        stmt = db_instance.prepare<unknown[], unknown>(
+          `UPDATE users SET ${query} WHERE rowid = ?`,
+        );
+        statements.set(query, stmt);
+      }
+      stmt.run(...[...values, row.userRowId]);
+    }
+  });
+
+  migrate();
+}
+
+migrateUserProfileColumns();
+
+function safeJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value || "[]");
     return Array.isArray(parsed) ? parsed.map(String) : [];
@@ -380,28 +512,29 @@ function getUser(input: string): DatabaseUser {
       data: {},
     };
 
-    try {
-      stmts.insertUser.run(
-        defaultUser.jid,
-        defaultUser.lid,
-        defaultUser.username,
-        defaultUser.phone_number,
-        defaultUser.role,
-        defaultUser.is_banned,
-        100000,
-        10000,
-        JSON.stringify(defaultUser.data),
-      );
-    } catch {
-      // Ignora errores si la fila fue creada concurrentemente
-    }
+    stmts.insertUser.run(
+      defaultUser.jid,
+      defaultUser.lid,
+      defaultUser.username,
+      defaultUser.phone_number,
+      defaultUser.role,
+      defaultUser.is_banned,
+      100000,
+      10000,
+      JSON.stringify(defaultUser.data),
+      ...getUserProfileValues(defaultUser),
+    );
 
     return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
   }
 
-  const jsonData = hydrateEconomyLasts(
-    safeJson<Record<string, unknown>>(row.data as string | undefined),
-    row as unknown as Record<string, unknown>,
+  const userRow = row as unknown as Record<string, unknown>;
+  const jsonData = hydrateUserProfile(
+    hydrateEconomyLasts(
+      safeJson<Record<string, unknown>>(row.data as string | undefined),
+      userRow,
+    ),
+    userRow,
   );
   const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
   const bank = Number(row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000);
@@ -481,46 +614,48 @@ function getGroup(jid: string): DatabaseGroup {
     row.data as string | undefined,
   );
   const storedMutedUsers = safeJsonArray(
-    (row.mutedUsers ?? row.medUsers ?? jsonData.mutedUsers ?? jsonData.medUsers) as
-      string | undefined,
+    jsonData.mutedUsers ??
+      jsonData.medUsers ??
+      row.mutedUsers ??
+      row.medUsers,
   );
   const storedTopMsgUsers = safeJson<TopMsgUser[]>(
-    (row.topMsgUsers ?? jsonData.topMsgUsers) as string | undefined,
+    jsonData.topMsgUsers ?? row.topMsgUsers,
   );
   const currentWeek = getCurrentMessageWeek();
   const hasPreviousWeek =
     storedTopMsgUsers.length > 0 &&
     storedTopMsgUsers.some((user) => user?.week !== currentWeek);
   if (hasPreviousWeek) {
-    stmts.resetGroupTopMsgUsers.run(key);
+    jsonData.topMsgUsers = [];
+    stmts.resetGroupTopMsgUsers.run(JSON.stringify(jsonData), key);
   }
 
   return {
     ...jsonData,
-    group_id: (row.group_id ?? jsonData.group_id ?? key) as string,
-    group_name: (row.group_name ?? jsonData.group_name ?? null) as
+    group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
+    group_name: (jsonData.group_name ?? row.group_name ?? null) as
       string | null,
-    antilink: Number(row.antilink ?? jsonData.antilink ?? 0),
-    antiCalls: Number(row.antiCalls ?? jsonData.antiCalls ?? 0),
-    antiToxic: Number(row.antiToxic ?? jsonData.antiToxic ?? 0),
-    antiSpam: Number(row.antiSpam ?? jsonData.antiSpam ?? 0),
-    antiStatus: Number(row.antiStatus ?? jsonData.antiStatus ?? 0),
-    onlyAdmin: Number(row.onlyAdmin ?? jsonData.onlyAdmin ?? 0),
-    prefix: (row.prefix ?? jsonData.prefix ?? null) as string | null,
-    self: Number(row.self ?? jsonData.self ?? 0),
+    antilink: Number(jsonData.antilink ?? row.antilink ?? 0),
+    antiCalls: Number(jsonData.antiCalls ?? row.antiCalls ?? 0),
+    antiToxic: Number(jsonData.antiToxic ?? row.antiToxic ?? 0),
+    antiSpam: Number(jsonData.antiSpam ?? row.antiSpam ?? 0),
+    antiStatus: Number(jsonData.antiStatus ?? row.antiStatus ?? 0),
+    onlyAdmin: Number(jsonData.onlyAdmin ?? row.onlyAdmin ?? 0),
+    prefix: (jsonData.prefix ?? row.prefix ?? null) as string | null,
+    self: Number(jsonData.self ?? row.self ?? 0),
     catBlocked: safeJsonArray(
-      (row.catBlocked ?? jsonData.catBlocked ?? '["nsfw"]') as
-        string | undefined,
+      jsonData.catBlocked ?? row.catBlocked ?? '["nsfw"]',
     ),
     privateMode: Boolean(row.privateMode ?? jsonData.privateMode ?? false),
     adminMode: Boolean(row.adminMode ?? jsonData.adminMode ?? false),
-    primaryBot: (row.primaryBot ?? jsonData.primaryBot ?? null) as
+    primaryBot: (jsonData.primaryBot ?? row.primaryBot ?? null) as
       string | null,
     welcome: Boolean(row.welcome ?? jsonData.welcome ?? false),
     goodbye: Boolean(row.goodbye ?? jsonData.goodbye ?? false),
-    welcomeMessage: (row.welcomeMessage ?? jsonData.welcomeMessage ?? null) as
+    welcomeMessage: (jsonData.welcomeMessage ?? row.welcomeMessage ?? null) as
       string | null,
-    goodbyeMessage: (row.goodbyeMessage ?? jsonData.goodbyeMessage ?? null) as
+    goodbyeMessage: (jsonData.goodbyeMessage ?? row.goodbyeMessage ?? null) as
       string | null,
     topMsgUsers: hasPreviousWeek ? [] : storedTopMsgUsers,
     mutedUsers: storedMutedUsers,
@@ -576,28 +711,28 @@ function getBot(jid: string): DatabaseBot {
     row.data as string | undefined,
   );
   return {
-    jid: (row.jid ?? key) as string,
     ...jsonData,
-    bot_id: (row.bot_id ?? jsonData.bot_id ?? key) as string,
-    bot_name: (row.bot_name ?? jsonData.bot_name ?? null) as string | null,
-    phone_number: (row.phone_number ?? jsonData.phone_number ?? null) as
+    jid: (row.jid ?? key) as string,
+    bot_id: (jsonData.bot_id ?? row.bot_id ?? key) as string,
+    bot_name: (jsonData.bot_name ?? row.bot_name ?? null) as string | null,
+    phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as
       string | null,
-    lid: (row.lid ?? jsonData.lid ?? null) as string | null,
+    lid: (jsonData.lid ?? row.lid ?? null) as string | null,
     groups: safeJsonArray(
-      (row.groups ?? jsonData.groups) as string | undefined,
+      jsonData.groups ?? row.groups,
     ),
-    isMain: Number(row.isMain ?? jsonData.isMain ?? 0),
-    status: (row.status ?? jsonData.status ?? "offline") as string,
-    modPrefix: (row.modPrefix ?? jsonData.modPrefix ?? null) as string | null,
-    modSelf: Number(row.modSelf ?? jsonData.modSelf ?? 0),
-    currency: (row.currency ?? jsonData.currency ?? "AuraCoins") as string,
-    currencySymbol: (row.currencySymbol ??
-      jsonData.currencySymbol ??
+    isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+    status: (jsonData.status ?? row.status ?? "offline") as string,
+    modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as string | null,
+    modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
+    currency: (jsonData.currency ?? row.currency ?? "AuraCoins") as string,
+    currencySymbol: (jsonData.currencySymbol ??
+      row.currencySymbol ??
       "₡") as string,
-    currentBanner: (row.currentBanner ?? jsonData.currentBanner ?? null) as
+    currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as
       | string
       | null,
-    currentAudio: (row.currentAudio ?? jsonData.currentAudio ?? null) as
+    currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as
       | string
       | null,
     data: jsonData,
@@ -633,7 +768,7 @@ export const db: IDatabase = {
 
     delete payload.data;
 
-    const row = getUserRow(rawJid ?? key, rawLid);
+    let row = getUserRow(rawJid ?? key, rawLid);
     const coins = Number(
       merged.coins ?? merged.bolsillo ?? row?.coins ?? 100000,
     );
@@ -642,23 +777,24 @@ export const db: IDatabase = {
     );
 
     if (!row) {
-      try {
-        stmts.insertUser.run(
-          rawJid,
-          rawLid || merged.lid || null,
-          merged.username ?? null,
-          isLidOnly ? null : (merged.phone_number ?? key),
-          merged.role ?? "user",
-          Number(Boolean(merged.is_banned ?? 0)),
-          coins,
-          bank,
-          JSON.stringify(payload),
-        );
+      const result = stmts.insertUser.run(
+        rawJid,
+        rawLid || merged.lid || null,
+        merged.username ?? null,
+        isLidOnly ? null : (merged.phone_number ?? key),
+        merged.role ?? "user",
+        Number(Boolean(merged.is_banned ?? 0)),
+        coins,
+        bank,
+        JSON.stringify(payload),
+        ...getUserProfileValues(merged),
+      );
+      if (result.changes > 0) {
         persistEconomyLasts(rawJid ?? key, rawLid, payload);
         return;
-      } catch {
-        // Si ya existía, continuará al flujo de actualización más abajo
       }
+      row = getUserRow(rawJid ?? key, rawLid);
+      if (!row) throw new Error("No se pudo recuperar la fila del usuario.");
     }
 
     const storedLid = rawLid || row.lid || merged.lid || null;
@@ -674,6 +810,10 @@ export const db: IDatabase = {
         coins,
         bank,
         JSON.stringify(payload),
+        ...getUserProfileValues(
+          merged,
+          row as unknown as Record<string, unknown>,
+        ),
         storedLid,
       );
     } else {
@@ -686,6 +826,10 @@ export const db: IDatabase = {
         coins,
         bank,
         JSON.stringify(payload),
+        ...getUserProfileValues(
+          merged,
+          row as unknown as Record<string, unknown>,
+        ),
         row.jid ?? key,
       );
     }
@@ -897,8 +1041,11 @@ export const db: IDatabase = {
   getAllUsers(): DatabaseUser[] {
     const rows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
     return rows.map((row) => {
-      const jsonData = hydrateEconomyLasts(
-        safeJson<Record<string, unknown>>(row.data as string | undefined),
+      const jsonData = hydrateUserProfile(
+        hydrateEconomyLasts(
+          safeJson<Record<string, unknown>>(row.data as string | undefined),
+          row,
+        ),
         row,
       );
       const coins = Number(
@@ -908,8 +1055,8 @@ export const db: IDatabase = {
         row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000,
       );
       return {
-        jid: (row.jid ?? jsonData.jid ?? null) as string | null,
         ...jsonData,
+        jid: (row.jid ?? jsonData.jid ?? null) as string | null,
         lid: (row.lid ?? jsonData.lid ?? null) as string | null,
         username: (row.username ?? jsonData.username ?? null) as string | null,
         phone_number: (row.phone_number ?? jsonData.phone_number ?? row.jid) as
@@ -932,30 +1079,30 @@ export const db: IDatabase = {
         row.data as string | undefined,
       );
       return {
-        jid: String(row.jid),
         ...jsonData,
+        jid: String(row.jid),
         data: jsonData,
-        bot_id: (row.bot_id ?? jsonData.bot_id ?? row.jid) as string,
-        bot_name: (row.bot_name ?? jsonData.bot_name ?? null) as string | null,
-        phone_number: (row.phone_number ?? jsonData.phone_number ?? null) as
+        bot_id: (jsonData.bot_id ?? row.bot_id ?? row.jid) as string,
+        bot_name: (jsonData.bot_name ?? row.bot_name ?? null) as string | null,
+        phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as
           string | null,
-        lid: (row.lid ?? jsonData.lid ?? null) as string | null,
+        lid: (jsonData.lid ?? row.lid ?? null) as string | null,
         groups: safeJsonArray(
-          (row.groups ?? jsonData.groups) as string | undefined,
+          jsonData.groups ?? row.groups,
         ),
-        isMain: Number(row.isMain ?? jsonData.isMain ?? 0),
-        status: (row.status ?? jsonData.status ?? "offline") as string,
-        modPrefix: (row.modPrefix ?? jsonData.modPrefix ?? null) as
+        isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+        status: (jsonData.status ?? row.status ?? "offline") as string,
+        modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as
           string | null,
-        modSelf: Number(row.modSelf ?? jsonData.modSelf ?? 0),
-        currency: (row.currency ?? jsonData.currency ?? "AuraCoins") as string,
-        currencySymbol: (row.currencySymbol ??
-          jsonData.currencySymbol ??
+        modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
+        currency: (jsonData.currency ?? row.currency ?? "AuraCoins") as string,
+        currencySymbol: (jsonData.currencySymbol ??
+          row.currencySymbol ??
           "₡") as string,
-        currentBanner: (row.currentBanner ?? jsonData.currentBanner ?? null) as
+        currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as
           | string
           | null,
-        currentAudio: (row.currentAudio ?? jsonData.currentAudio ?? null) as
+        currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as
           | string
           | null,
       };
@@ -1013,6 +1160,7 @@ export const db: IDatabase = {
           100000,
           10000,
           JSON.stringify({ jid: canonicalJid, lid, role }),
+          ...getUserProfileValues({}),
         );
         continue;
       }
@@ -1030,8 +1178,12 @@ export const db: IDatabase = {
 
       if (!changed) continue;
 
+      const profileData = hydrateUserProfile(
+        currentData,
+        current as unknown as Record<string, unknown>,
+      );
       const payload = {
-        ...currentData,
+        ...profileData,
         jid: canonicalJid,
         lid,
         role,
@@ -1043,6 +1195,7 @@ export const db: IDatabase = {
           role,
           Number(current.is_banned ?? 0),
           JSON.stringify(payload),
+          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           lid,
         );
       } else if (current.jid) {
@@ -1055,6 +1208,7 @@ export const db: IDatabase = {
           current.coins ?? 100000, // <--- Faltaba coins
           current.bank ?? 10000,   // <--- Faltaba bank
           JSON.stringify(payload),
+          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           current.jid,
         );
       }

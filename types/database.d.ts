@@ -1,6 +1,11 @@
 export type UserRole = "user" | "premium" | "mod" | "coowner" | "owner";
 
 export interface DatabaseUserData {
+  name?: string | null;
+  description?: string | null;
+  gender?: string | null;
+  birthDate?: string | null;
+  marriedTo?: string | null;
   bolsillo?: number;
   banco?: number;
   xp?: number;
@@ -8,6 +13,7 @@ export interface DatabaseUserData {
   warns?: number;
   aura?: number;
   auraXp?: number;
+  level?: number;
   stickerPackName?: string;
   stickerPackAuthor?: string;
   marry?: string | null;
@@ -37,6 +43,11 @@ export interface DatabaseUser {
   username: string | null;
   pushName?: string | null;
   phone_number: string | null;
+  name?: string | null;
+  description?: string | null;
+  gender?: string | null;
+  birthDate?: string | null;
+  marriedTo?: string | null;
   role: UserRole | string;
   is_banned: number;
   banned?: boolean;
@@ -162,6 +173,13 @@ export interface UserDbRow {
   self: number | null;
   coins?: number | null;
   bank?: number | null;
+  name?: string | null;
+  marriage_to?: string | null;
+  genre?: string | null;
+  birth_date?: string | null;
+  description?: string | null;
+  aura_points?: number | null;
+  aura_level?: number | null;
   LastEconomyDaily?: number | null;
   LastEconomyWeekly?: number | null;
   LastEconomyMonthly?: number | null;

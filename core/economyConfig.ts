@@ -63,9 +63,9 @@ export function getEconomyUser(
 
   const merged: EconomyUser = {
     ...DEFAULT_ECONOMY_USER,
+    ...defaults,
     ...userData,
     ...economyData,
-    ...defaults,
   };
 
   const savedCoins =
