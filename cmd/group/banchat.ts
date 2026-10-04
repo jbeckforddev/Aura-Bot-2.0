@@ -2,7 +2,7 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 export default {
-  name: ["banchathhh", "banearchat", "mutechat"],
+  name: ["banchat", "banearchat", "mutechat"],
   category: "group",
   description: "Desactiva las funciones del bot en el chat actual.",
   groupOnly: true,
