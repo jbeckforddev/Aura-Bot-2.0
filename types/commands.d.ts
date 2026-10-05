@@ -44,6 +44,7 @@ export interface CommandContext {
   isAdmin: boolean;
   isBotAdmin: boolean;
   isBotUser: boolean;
+  prefix: string;
   resolveLid: (lidJid: string) => Promise<string>;
   clearGroupCache: () => boolean;
   reply: (content: ReplyContent) => Promise<proto.WAMessage | undefined>;

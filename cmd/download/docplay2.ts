@@ -4,7 +4,6 @@ import {
   requestJson,
   safeFileName,
 } from "../../core/downloadUtils.ts";
-import { DL_CONFIG } from "../../config.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
@@ -13,9 +12,9 @@ import {
 import type {
   CommandContext,
   YouTubeVideoData,
-  YouTubeSearchResponse,
-} from "../../types/index.d.ts";
+} from "../../types/index";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
 
 const API = "https://api.lempi.lat";
 const ID =
@@ -33,10 +32,7 @@ export default {
     try {
       let url = query;
       if (!ID.test(query)) {
-        const search = await requestJson<YouTubeSearchResponse>(
-          `${DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "")}/search/yt?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
-        );
-        url = search?.result?.[0]?.url || "";
+        url = (await searchYouTubeVideo(query)).url;
       } else url = `https://youtu.be/${query.match(ID)?.[1]}`;
       if (!url) throw new Error("No se encontró ningún video.");
       const data = await requestJson<YouTubeVideoData>(

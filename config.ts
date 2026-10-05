@@ -67,7 +67,7 @@ globalThis.DEFAULT_USER_ROLES = [
     role: "owner",
     jid: "50672373785@s.whatsapp.net",
   },
-  //Michigely-bam 
+  //Michigely-bam
   {
     lid: "5163322441896@lid",
     role: "owner",
@@ -78,6 +78,7 @@ globalThis.DEFAULT_USER_ROLES = [
 // Directorio de sesiones de bots
 globalThis.mainBotSession = "./sessions";
 globalThis.subBotSession = "./sessions/subs";
+globalThis.premBotSession = "./sessions/prem";
 globalThis.DATA_BASE_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "data",

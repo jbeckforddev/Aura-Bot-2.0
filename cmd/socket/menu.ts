@@ -2,11 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { proto } from "@whiskeysockets/baileys";
 import type { CommandPlugin } from "../../types/commands.d.ts";
+import type { CommandContext } from "../../types/commands.d.ts";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
 } from "@whiskeysockets/baileys";
 import { getPlugins } from "../../core/cmdLoader.ts";
+import { sendWithRecordingPresence } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 type CachedMediaMessage =
@@ -42,7 +44,9 @@ export default {
   privateOnly: false,
   botUserOnly: false,
 
-  async run({ sock, from, msg, args, prefix, usedPrefix, db: runtimeDb }) {
+  async run(ctx: CommandContext) {
+    const { sock, from, msg, args, prefix, usedPrefix, db: runtimeDb } = ctx;
+    const quotedMessage = msg?.key ? { ...msg, key: msg.key } : undefined;
     const activePrefix =
       prefix ?? usedPrefix ?? globalThis.DEFAULT_PREFIXES?.[0] ?? ".";
     const remoteJid = from;
@@ -77,7 +81,7 @@ export default {
 
     let textoMenu = `╭━━〔 ${tituloEstilizado} 〕━━⬣\n`;
     textoMenu += `┃ > ${fytBold("Usuario:")} ${pushName}\n`;
-    textoMenu += `┃ > ${fytBold("Bot:")} ${botType}\n`;
+    textoMenu += `┃ > ${fytBold("Instancia:")} ${botType}\n`;
     textoMenu += `┃ > ${fytBold("Version:")} 2.5\n`;
     textoMenu += `┃ > ${fytBold("Owner:")} Jeriel B.\n`;
     textoMenu += `┃ > ${fytBold("Prefix:")} [ ${activePrefix} ]\n`;
@@ -112,7 +116,7 @@ export default {
       return await sock.sendMessage(
         remoteJid,
         { text: textErr },
-        { quoted: msg },
+        { quoted: quotedMessage },
       );
     }
 
@@ -173,16 +177,12 @@ export default {
         ? { path: storedBannerPath }
         : null) ??
       botRecord?.data?.customBanner ??
-      botRecord?.customBanner ??
-      runtimeDb?.customBanner ??
       null;
     const customAudio =
       (storedAudioPath && existsSync(storedAudioPath)
         ? { path: storedAudioPath }
         : null) ??
       botRecord?.data?.customAudio ??
-      botRecord?.customAudio ??
-      runtimeDb?.customAudio ??
       null;
     const customBannerBuffer = customBanner?.base64
       ? Buffer.from(customBanner.base64, "base64")
@@ -215,7 +215,8 @@ export default {
           mediaTypeOverride: "thumbnail-link",
         });
 
-        imgBanner = isGif ? prepared.videoMessage : prepared.imageMessage;
+        imgBanner =
+          (isGif ? prepared.videoMessage : prepared.imageMessage) ?? undefined;
         if (imgBanner) {
           if (mediaCacheMap.size >= 10) mediaCacheMap.clear();
           mediaCacheMap.set(bannerPath, imgBanner);
@@ -261,8 +262,8 @@ export default {
     } as proto.IMessage;
 
     const waMsg = generateWAMessageFromContent(remoteJid, content, {
-      userJid: sock.user?.id,
-      quoted: msg,
+      userJid: sock.user?.id || remoteJid,
+      ...(quotedMessage ? { quoted: quotedMessage } : {}),
     });
 
     await sock.relayMessage(remoteJid, waMsg.message, {
@@ -270,24 +271,28 @@ export default {
     });
 
     if (customAudio?.path && existsSync(customAudio.path)) {
-      await sock.sendMessage(
-        remoteJid,
-        {
-          audio: readFileSync(customAudio.path),
-          mimetype: "audio/ogg; codecs=opus",
-          ptt: true,
-        },
-        { quoted: msg },
+      await sendWithRecordingPresence(sock, remoteJid, () =>
+        sock.sendMessage(
+          remoteJid,
+          {
+            audio: readFileSync(customAudio.path),
+            mimetype: "audio/ogg; codecs=opus",
+            ptt: true,
+          },
+          quotedMessage ? { quoted: quotedMessage } : undefined,
+        ),
       );
     } else if (customAudio?.base64) {
-      await sock.sendMessage(
-        remoteJid,
-        {
-          audio: Buffer.from(customAudio.base64, "base64"),
-          mimetype: customAudio.mimetype || "audio/ogg; codecs=opus",
-          ptt: customAudio.ptt ?? true,
-        },
-        { quoted: msg },
+      await sendWithRecordingPresence(sock, remoteJid, () =>
+        sock.sendMessage(
+          remoteJid,
+          {
+            audio: Buffer.from(customAudio.base64, "base64"),
+            mimetype: customAudio.mimetype || "audio/ogg; codecs=opus",
+            ptt: customAudio.ptt ?? true,
+          },
+          quotedMessage ? { quoted: quotedMessage } : undefined,
+        ),
       );
     }
   },

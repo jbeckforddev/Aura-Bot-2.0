@@ -1,7 +1,5 @@
 import type {
   CommandContext,
-  YouTubeSearchItem,
-  YouTubeSearchResponse,
   YouTubeMp3Data,
   YouTubeMp3Response,
 } from "../../types/index.d.ts";
@@ -23,6 +21,10 @@ import {
 } from "../../core/economyConfig.ts";
 import { formatCount, formatDuration } from "../../utils/formatter.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import {
+  searchYouTubeVideo,
+  type YouTubeSearchVideo,
+} from "../../core/youtubeSearch.ts";
 
 const API_KEY = DL_CONFIG.alya.API_KEY;
 const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -69,30 +71,6 @@ function isYouTubeUrl(value: string): boolean {
   );
 }
 
-async function queryYouTubeAudio(query: string): Promise<YouTubeSearchItem> {
-  const queryUrl = `${BASE_URL}/search/yt?query=${encodeURIComponent(query)}&key=${API_KEY}`;
-
-  const response = await request(queryUrl, {
-    signal: AbortSignal.timeout(20000),
-    headers: { "User-Agent": "AuraReedBot/2.0" },
-  });
-
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(`La búsqueda respondió HTTP ${response.statusCode}.`);
-  }
-
-  const data = (await response.body.json()) as YouTubeSearchResponse;
-  if (
-    data?.status !== true ||
-    !Array.isArray(data.result) ||
-    !data.result.length
-  ) {
-    throw new Error("No se encontraron resultados en YouTube.");
-  }
-
-  return data.result[0];
-}
-
 async function downloadYouTubeAudio(url: string): Promise<YouTubeMp3Data> {
   const downloadUrl = `${BASE_URL}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${API_KEY}`;
   const response = await request(downloadUrl, {
@@ -126,12 +104,12 @@ export default {
 
     await react("🎵");
     try {
-      let result: YouTubeSearchItem = {};
+      let result: YouTubeSearchVideo | null = null;
       let finalUrl = query;
 
       if (!isYouTubeUrl(query)) {
-        result = await queryYouTubeAudio(query);
-        finalUrl = result.url || query;
+        result = await searchYouTubeVideo(query);
+        finalUrl = result.url;
       } else {
         const videoId = getYouTubeVideoId(query);
         if (!videoId) throw new Error("URL de YouTube no válida.");
@@ -139,17 +117,17 @@ export default {
       }
 
       const audio = await downloadYouTubeAudio(finalUrl);
-      const title = String(audio.title || result.title || "audio").trim();
-      const author = audio.author || result.autor || "Desconocido";
-      const duration = audio.duration || result.duration || "??";
-      const views = result.views || "0";
+      const title = String(audio.title || result?.title || "audio").trim();
+      const author = audio.author || result?.author || "Desconocido";
+      const duration = audio.duration || result?.duration || "??";
+      const views = result?.views || "0";
       const quality = audio.quality || "128k";
       const videoId = String(
-        audio.videoId || getYouTubeVideoId(finalUrl) || "",
+        audio.videoId || result?.videoId || getYouTubeVideoId(finalUrl) || "",
       ).trim();
       const youtubeUrl = videoId
         ? `https://youtu.be/${videoId}`
-        : result.url || finalUrl;
+        : result?.url || finalUrl;
       if (!audio.dl) throw new Error("No se pudo obtener el audio.");
       const file = await downloadToCache(audio.dl);
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
@@ -166,7 +144,7 @@ export default {
         url: youtubeUrl,
         showChannel: true,
         showDuration: Boolean(duration && duration !== "??"),
-        showViews: Boolean(result.views),
+        showViews: Boolean(result?.views),
         showQuality: Boolean(quality),
         loadingText: "Descargando audio...",
         loadingIcon: "⏳",
@@ -175,7 +153,7 @@ export default {
       const thumbnail = String(
         videoId
           ? audio.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-          : audio.thumbnail || result.banner || "",
+          : audio.thumbnail || result?.thumbnail || "",
       );
       if (thumbnail) {
         const thumbnailBuffer = await readFile(
@@ -188,23 +166,31 @@ export default {
             mediaTypeOverride: "thumbnail-link",
           },
         );
-        const preview = createLinkPreviewWithoutChannel({
-          textOriginal: caption,
-          link: youtubeUrl,
-          author: globalThis.DEFAULT_BOT_AUTHOR,
-          title,
-          banner: prepared.imageMessage,
-          mentionedJid: [sender],
-          isForwarded: false,
-          forwardingScore: 0,
-        });
-        const previewMessage = generateWAMessageFromContent(from, preview, {
-          quoted: msg as unknown as WAMessage,
-          userJid: sock.user?.id,
-        });
-        await sock.relayMessage(from, previewMessage.message, {
-          messageId: previewMessage.key.id,
-        });
+        if (prepared.imageMessage) {
+          const preview = createLinkPreviewWithoutChannel({
+            textOriginal: caption,
+            link: youtubeUrl,
+            author: globalThis.DEFAULT_BOT_AUTHOR,
+            title,
+            banner: prepared.imageMessage,
+            mentionedJid: [sender],
+            isForwarded: false,
+            forwardingScore: 0,
+          });
+          const previewMessage = generateWAMessageFromContent(from, preview, {
+            quoted: msg as unknown as WAMessage,
+            userJid: sock.user?.id || from,
+          });
+          if (previewMessage.message) {
+            await sock.relayMessage(from, previewMessage.message, {
+              messageId: previewMessage.key.id || undefined,
+            });
+          } else {
+            await reply({ text: caption });
+          }
+        } else {
+          await reply({ text: caption });
+        }
       } else {
         await reply({ text: caption });
       }

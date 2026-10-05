@@ -1,4 +1,4 @@
-export const fytBold = (texto) => {
+export const fytBold = (texto?: string) => {
   const mapa = {
     a: "𝐚",
     b: "𝐛",
@@ -153,10 +153,10 @@ export const NOT_MOD = () => {
 
 export const NOT_PREMIUM = () => {
   return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("NO PREMIUM")}
+┃ ❌ ${fytBold("BOT NO PREMIUM")}
 ╰━━━━━━━━━━━━⬣
 ┃ > Este comando solo puede ser usado
-┃ > por los usuarios premium del bot.`;
+┃ > por los Prem-Bots de Aura Reed.`;
 };
 
 export const IS_SUBBOT_ONLINE = ({ prefix }: { prefix?: string }) => {

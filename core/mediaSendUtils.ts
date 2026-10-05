@@ -21,6 +21,29 @@ const MAX_ITEMS = Number(10);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export async function sendWithRecordingPresence<T>(
+  socket: ExtendedWASocket,
+  jid: string,
+  send: () => Promise<T>,
+  onPresenceError?: (state: "recording" | "paused", error: unknown) => void,
+): Promise<T> {
+  const updatePresence = async (state: "recording" | "paused") => {
+    try {
+      await socket.sendPresenceUpdate(state, jid);
+    } catch (error: unknown) {
+      if (onPresenceError) onPresenceError(state, error);
+      else console.warn(`[presence] ${state} falló en ${jid}:`, error);
+    }
+  };
+
+  await updatePresence("recording");
+  try {
+    return await send();
+  } finally {
+    await updatePresence("paused");
+  }
+}
+
 function isRateLimitError(error: unknown): boolean {
   const err = error as Record<string, unknown> | undefined;
   const status =

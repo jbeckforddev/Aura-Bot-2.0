@@ -100,7 +100,6 @@ db_instance.exec(`
     jid TEXT PRIMARY KEY,
     group_id TEXT,
     group_name TEXT,
-    mutedUsers TEXT DEFAULT '[]',
     antilink INTEGER DEFAULT 0,
     antiCalls INTEGER DEFAULT 0,
     antiToxic INTEGER DEFAULT 0,
@@ -112,6 +111,7 @@ db_instance.exec(`
     topMsgUsers TEXT DEFAULT '[]',
     topCmdUsers TEXT DEFAULT '[]',
     userWarns TEXT DEFAULT '{}',
+    Muted_Users TEXT DEFAULT '[]',
     catBlocked TEXT DEFAULT '["nsfw"]',
     data TEXT DEFAULT '{}'
   );
@@ -121,7 +121,6 @@ db_instance.exec(`
     bot_id TEXT,
     bot_name TEXT,
     phone_number TEXT,
-    isPremBot INTEGER DEFAULT 0,
     lid TEXT,
     groups TEXT DEFAULT '[]',
     isMain INTEGER DEFAULT 0,
@@ -132,6 +131,7 @@ db_instance.exec(`
     currencySymbol TEXT DEFAULT '₡',
     currentBanner TEXT DEFAULT NULL,
     currentAudio TEXT DEFAULT NULL,
+    bot_type TEXT DEFAULT 'Principal',
     data TEXT DEFAULT '{}'
   );
 `);
@@ -140,6 +140,7 @@ for (const column of [
   ["phone_number", "TEXT"],
   ["lid", "TEXT"],
   ["groups", "TEXT DEFAULT '[]'"],
+  ["bot_type", "TEXT DEFAULT 'Principal'"],
   ["botOnline", "INTEGER DEFAULT 1"],
 ] as const) {
   const exists = db_instance
@@ -170,10 +171,12 @@ for (const column of [
 }
 
 const groupsMeta = db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{ name: string }>;
-const hasMutedUsers = groupsMeta.some((column) => column.name === "mutedUsers");
+const hasMutedUsers = groupsMeta.some(
+  (column) => column.name.toLowerCase() === "muted_users",
+);
 const hasLegacyMedUsers = groupsMeta.some((column) => column.name === "medUsers");
 if (!hasMutedUsers && hasLegacyMedUsers) {
-  db_instance.exec("ALTER TABLE groups RENAME COLUMN medUsers TO mutedUsers");
+  db_instance.exec("ALTER TABLE groups RENAME COLUMN medUsers TO Muted_Users");
 }
 
 for (const [table, column, definition] of [
@@ -184,7 +187,7 @@ for (const [table, column, definition] of [
   ["groups", "topCmdUsers", "TEXT DEFAULT '[]'"],
   ["groups", "userWarns", "TEXT DEFAULT '{}'"],
   ["groups", "catBlocked", "TEXT DEFAULT '[\"nsfw\"]'"],
-  ["groups", "mutedUsers", "TEXT DEFAULT '[]'"],
+  ["groups", "Muted_Users", "TEXT DEFAULT '[]'"],
   ["groups", "botOnline", "INTEGER DEFAULT 1"],
   ["groups", "data", "TEXT DEFAULT '{}'"],
   ["bots", "modPrefix", "TEXT"],
@@ -196,11 +199,54 @@ for (const [table, column, definition] of [
   ["bots", "data", "TEXT DEFAULT '{}'"],
   ["users", "data", "TEXT DEFAULT '{}'"],
 ] as const) {
-  const exists = db_instance
-    .prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`)
-    .get(column);
+  const exists = (
+    db_instance.prepare(`PRAGMA table_info('${table}')`).all() as Array<{
+      name: string;
+    }>
+  ).some((entry) => entry.name.toLowerCase() === column.toLowerCase());
   if (!exists)
     db_instance.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+const legacyMutedColumns = (
+  db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{
+    name: string;
+  }>
+)
+  .map((column) => column.name)
+  .filter((name) => {
+    const normalized = name.toLowerCase().replace(/_/g, "");
+    return (
+      normalized === "medusers" ||
+      (normalized === "mutedusers" && name.toLowerCase() !== "muted_users")
+    );
+  });
+const groupRows = db_instance.prepare("SELECT * FROM groups").all() as Array<
+  Record<string, unknown>
+>;
+const updateMutedUsers = db_instance.prepare(
+  "UPDATE groups SET Muted_Users = ? WHERE jid = ?",
+);
+for (const row of groupRows) {
+  const currentMutedUsers = safeJsonArray(row.Muted_Users);
+  if (currentMutedUsers.length > 0) continue;
+
+  const groupData = safeJson<Record<string, unknown>>(
+    row.data as string | undefined,
+  );
+  const legacyMutedUsers = [
+    ...legacyMutedColumns.map((column) => row[column]),
+    groupData.mutedUsers,
+    groupData.medUsers,
+  ]
+    .map(safeJsonArray)
+    .find((users) => users.length > 0);
+  if (legacyMutedUsers) {
+    updateMutedUsers.run(JSON.stringify(legacyMutedUsers), row.jid);
+  }
+}
+for (const column of legacyMutedColumns) {
+  db_instance.exec(`ALTER TABLE groups DROP COLUMN "${column}"`);
 }
 
 for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
@@ -236,10 +282,10 @@ const stmts = {
 
   getGroup: db_instance.prepare("SELECT * FROM groups WHERE jid = ?"),
   insertGroup: db_instance.prepare(
-    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, topMsgUsers, catBlocked, mutedUsers, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, topMsgUsers, catBlocked, Muted_Users, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateGroup: db_instance.prepare(
-    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, topMsgUsers = ?, catBlocked = ?, mutedUsers = ?, data = ? WHERE jid = ?",
+    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, topMsgUsers = ?, catBlocked = ?, Muted_Users = ?, data = ? WHERE jid = ?",
   ),
   getAllGroups: db_instance.prepare(
     "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, topMsgUsers, data FROM groups",
@@ -247,13 +293,13 @@ const stmts = {
 
   getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
   insertBot: db_instance.prepare(
-    "INSERT INTO bots (jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO bots (jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateBot: db_instance.prepare(
-    "UPDATE bots SET bot_id = ?, bot_name = ?, phone_number = ?, lid = ?, groups = ?, isMain = ?, status = ?, modPrefix = ?, modSelf = ?, currency = ?, currencySymbol = ?, currentBanner = ?, currentAudio = ?, data = ? WHERE jid = ?",
+    "UPDATE bots SET bot_id = ?, bot_name = ?, phone_number = ?, lid = ?, groups = ?, isMain = ?, bot_type = ?, status = ?, modPrefix = ?, modSelf = ?, currency = ?, currencySymbol = ?, currentBanner = ?, currentAudio = ?, data = ? WHERE jid = ?",
   ),
   getAllBots: db_instance.prepare(
-    "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
+    "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
   ),
   deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?"),
   resetGroupTopMsgUsers: db_instance.prepare(
@@ -614,7 +660,8 @@ function getGroup(jid: string): DatabaseGroup {
     row.data as string | undefined,
   );
   const storedMutedUsers = safeJsonArray(
-    jsonData.mutedUsers ??
+      row.Muted_Users ??
+      jsonData.mutedUsers ??
       jsonData.medUsers ??
       row.mutedUsers ??
       row.medUsers,
@@ -663,6 +710,25 @@ function getGroup(jid: string): DatabaseGroup {
   };
 }
 
+function resolveBotTypeLabel(input: Record<string, unknown> = {}): string {
+  const data =
+    input.data && typeof input.data === "object"
+      ? (input.data as Record<string, unknown>)
+      : {};
+
+  const normalized = String(
+    (input.bot_type as string | undefined) ??
+      (data.bot_type as string | undefined) ??
+      (data.botType as string | undefined) ??
+      "Principal",
+  ).trim();
+  const botType = normalized.toLowerCase();
+
+  if (botType.includes("sub")) return "Sub-Bot";
+  if (botType.includes("prem") || botType.includes("premium")) return "Prem-Bot";
+  return "Principal";
+}
+
 function getBot(jid: string): DatabaseBot {
   const key = normalizeJid(jid);
   const row = stmts.getBot.get(key) as BotDbRow | undefined;
@@ -676,6 +742,7 @@ function getBot(jid: string): DatabaseBot {
       lid: null,
       groups: [],
       isMain: 0,
+      bot_type: "Principal",
       status: "offline",
       modPrefix: null,
       modSelf: 0,
@@ -694,6 +761,7 @@ function getBot(jid: string): DatabaseBot {
       defaultBot.lid,
       JSON.stringify(defaultBot.groups),
       defaultBot.isMain,
+      defaultBot.bot_type,
       defaultBot.status,
       defaultBot.modPrefix,
       defaultBot.modSelf,
@@ -710,6 +778,13 @@ function getBot(jid: string): DatabaseBot {
   const jsonData = safeJson<Record<string, unknown>>(
     row.data as string | undefined,
   );
+  const normalizedBotType = resolveBotTypeLabel({
+    ...jsonData,
+    ...row,
+    isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+    bot_type: (jsonData.bot_type ?? row.bot_type ?? "Principal") as string | null,
+  });
+
   return {
     ...jsonData,
     jid: (row.jid ?? key) as string,
@@ -722,6 +797,7 @@ function getBot(jid: string): DatabaseBot {
       jsonData.groups ?? row.groups,
     ),
     isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+    bot_type: normalizedBotType,
     status: (jsonData.status ?? row.status ?? "offline") as string,
     modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as string | null,
     modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
@@ -939,8 +1015,14 @@ export const db: IDatabase = {
       "AuraCoins";
     const currencySymbol =
       String(merged.currencySymbol ?? row?.currencySymbol ?? "₡").trim() || "₡";
+    const botType = resolveBotTypeLabel({
+      ...merged,
+      isMain: Number(Boolean(merged.isMain ?? row?.isMain ?? 0)),
+      bot_type: String(merged.bot_type ?? row?.bot_type ?? "Principal").trim() || "Principal",
+    });
     payload.currency = currency;
     payload.currencySymbol = currencySymbol;
+    payload.bot_type = botType;
     if (!row) {
       stmts.insertBot.run(
         key,
@@ -950,6 +1032,7 @@ export const db: IDatabase = {
         merged.lid ?? null,
         JSON.stringify(Array.isArray(merged.groups) ? merged.groups : []),
         Number(Boolean(merged.isMain ?? 0)),
+        botType,
         merged.status ?? "offline",
         merged.modPrefix ?? null,
         Number(Boolean(merged.modSelf ?? 0)),
@@ -973,6 +1056,7 @@ export const db: IDatabase = {
           : safeJsonArray(row.groups),
       ),
       Number(Boolean(merged.isMain ?? row.isMain ?? 0)),
+      botType,
       merged.status ?? row.status ?? "offline",
       merged.modPrefix !== undefined
         ? merged.modPrefix
@@ -1078,6 +1162,13 @@ export const db: IDatabase = {
       const jsonData = safeJson<Record<string, unknown>>(
         row.data as string | undefined,
       );
+      const botType = resolveBotTypeLabel({
+        ...jsonData,
+        ...row,
+        isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+        bot_type: (jsonData.bot_type ?? row.bot_type ?? "Principal") as string | null,
+      });
+
       return {
         ...jsonData,
         jid: String(row.jid),
@@ -1091,6 +1182,7 @@ export const db: IDatabase = {
           jsonData.groups ?? row.groups,
         ),
         isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+        bot_type: botType,
         status: (jsonData.status ?? row.status ?? "offline") as string,
         modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as
           string | null,

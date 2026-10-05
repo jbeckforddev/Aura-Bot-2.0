@@ -2,6 +2,10 @@ import js from "@eslint/js";
 import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const configDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
   {
@@ -14,7 +18,7 @@ export default [
       parser: tsParser,
       parserOptions: {
         project: "./tsconfig.json",
-        tsconfigRootDir: new globalThis.URL(".", import.meta.url).pathname,
+        tsconfigRootDir: configDirectory,
         sourceType: "module",
       },
       globals: {

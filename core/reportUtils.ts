@@ -40,13 +40,41 @@ export function decodeReportData(text: unknown): ReportData | null {
 export function getQuotedText(message: proto.IWebMessageInfo): string {
   const quoted =
     message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  return String(
-    quoted?.conversation ||
-      quoted?.extendedTextMessage?.text ||
-      quoted?.imageMessage?.caption ||
-      quoted?.videoMessage?.caption ||
-      "",
-  );
+  const extractText = (content: unknown, seen = new Set<object>()): string => {
+    if (!content || typeof content !== "object" || seen.has(content)) return "";
+    seen.add(content);
+
+    const messageContent = content as Record<string, unknown>;
+    const conversation = messageContent.conversation;
+    if (typeof conversation === "string") return conversation;
+
+    for (const key of ["extendedTextMessage", "imageMessage", "videoMessage", "documentMessage"]) {
+      const item = messageContent[key];
+      if (!item || typeof item !== "object") continue;
+      const text = item as Record<string, unknown>;
+      const value = text.text ?? text.caption;
+      if (typeof value === "string") return value;
+    }
+
+    for (const key of [
+      "ephemeralMessage",
+      "viewOnceMessage",
+      "viewOnceMessageV2",
+      "viewOnceMessageV2Extension",
+      "documentWithCaptionMessage",
+      "editedMessage",
+    ]) {
+      const wrapped = messageContent[key];
+      if (!wrapped || typeof wrapped !== "object") continue;
+      const nestedMessage = (wrapped as Record<string, unknown>).message ?? wrapped;
+      const text = extractText(nestedMessage, seen);
+      if (text) return text;
+    }
+
+    return "";
+  };
+
+  return extractText(quoted);
 }
 
 export function reportCaption(data: ReportData, reportText: string): string {

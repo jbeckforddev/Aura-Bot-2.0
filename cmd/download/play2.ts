@@ -5,7 +5,6 @@ import {
   requestJson,
   safeFileName,
 } from "../../core/downloadUtils.ts";
-import { DL_CONFIG } from "../../config.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import {
   prepareDownloadCharge,
@@ -15,25 +14,16 @@ import {
 import type {
   CommandContext,
   YouTubeVideoData,
-  YouTubeSearchResponse,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
+import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
 
 const API = "https://api.delirius.online/download/ytmp4";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "480p";
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
-}
-
-async function searchVideo(query: string): Promise<string> {
-  const data = await requestJson<YouTubeSearchResponse>(
-    `${DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "")}/search/yt?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
-  );
-  if (!data?.status || !data.result?.[0]?.url)
-    throw new Error("No se encontró ningún video.");
-  return data.result[0].url as string;
 }
 
 export default {
@@ -48,7 +38,9 @@ export default {
     let convertedFile = "";
     try {
       const id = videoId(query);
-      const url = id ? `https://youtu.be/${id}` : await searchVideo(query);
+      const url = id
+        ? `https://youtu.be/${id}`
+        : (await searchYouTubeVideo(query)).url;
       const data = await requestJson<YouTubeVideoData>(
         `${API}?url=${encodeURIComponent(url)}&format=${ql}`,
         60000,

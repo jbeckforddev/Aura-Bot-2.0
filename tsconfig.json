@@ -18,6 +18,6 @@
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
-  "include": ["**/*"],
+  "include": ["**/*", "**/.*"],
   "exclude": ["node_modules", "dist", ".git", "src/libs/**", "cache/**"]
 }

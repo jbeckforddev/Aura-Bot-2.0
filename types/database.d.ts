@@ -152,6 +152,7 @@ export interface DatabaseBot {
   lid: string | null;
   groups: string[] | string;
   isMain: number;
+  bot_type?: string | null;
   status: "active" | "offline" | "connecting" | string;
   modPrefix: string | null;
   modSelf: number;
@@ -213,6 +214,7 @@ export interface GroupDbRow {
   self: number | null;
   topMsgUsers: string | null;
   catBlocked: string | null;
+  Muted_Users?: string | null;
   mutedUsers?: string | null;
   medUsers?: string | null;
   welcome?: number | boolean | null;
@@ -233,6 +235,7 @@ export interface BotDbRow {
   lid: string | null;
   groups: string | null;
   isMain: number | null;
+  bot_type?: string | null;
   status: string | null;
   modPrefix: string | null;
   modSelf: number | null;

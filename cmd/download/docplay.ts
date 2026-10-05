@@ -13,10 +13,10 @@ import {
 } from "../../core/economyConfig.ts";
 import type {
   CommandContext,
-  YouTubeSearchResponse,
   YouTubeMp3Response,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const YT_ID =
@@ -43,20 +43,22 @@ export default {
     try {
       let url = query;
       if (!YT_ID.test(query)) {
-        const search = await requestJson<YouTubeSearchResponse>(
-          `${API}/search/yt?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
-        );
-        url = search?.result?.[0]?.url || "";
-      } else url = `https://youtu.be/${query.match(YT_ID)?.[1]}`;
+        url = (await searchYouTubeVideo(query)).url;
+      } else {
+        const videoId = query.match(YT_ID)?.[1];
+        if (!videoId) throw new Error("URL de YouTube no válida.");
+        url = `https://youtu.be/${videoId}`;
+      }
       if (!url) throw new Error("No se encontró ningún video.");
       const data = await requestJson<YouTubeMp3Response>(
         `${API}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${DL_CONFIG.alya.API_KEY}`,
       );
-      if (!data?.status || !data.data?.dl)
+      const info = data?.data;
+      const downloadUrl = info?.dl;
+      if (!data?.status || !info || !downloadUrl)
         throw new Error("No se pudo obtener el audio.");
-      const info = data.data;
       const title = info.title || "Audio de YouTube";
-      const file = await downloadToCache(info.dl);
+      const file = await downloadToCache(downloadUrl);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,

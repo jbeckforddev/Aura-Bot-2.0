@@ -1,0 +1,12 @@
+diff --git a/node_modules/libsignal/src/session_record.js b/node_modules/libsignal/src/session_record.js
+index 7626a39..e9a95f0 100644
+--- a/node_modules/libsignal/src/session_record.js
++++ b/node_modules/libsignal/src/session_record.js
+@@ -270,7 +270,6 @@ class SessionRecord {
+             console.warn("Session already closed", session);
+             return;
+         }
+-        console.info("Closing session:", session);
+         session.indexInfo.closed = Date.now();
+     }
+ 

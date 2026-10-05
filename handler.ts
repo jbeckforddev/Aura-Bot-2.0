@@ -21,6 +21,7 @@ import {
   NOT_HAVE_COINS
 } from "./core/socketText.ts";
 import { db } from "./database/AuraDB.ts";
+import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
 import {
   handleGroupStatus,
   handleGroupToxic,
@@ -603,6 +604,17 @@ export async function handleMessage(
     const isMod = isOwner || isCoOwner || runtimeDb.hasRole(sender, "mod");
     const isPremium = isMod || runtimeDb.hasRole(senderNum, "premium");
 
+    const botTypeLabel = String(
+      storedBot?.bot_type ||
+        (sock.isSubBot ? "Sub-Bot" : "Principal") ||
+        "Principal",
+    ).trim();
+    const botTypeLower = botTypeLabel.toLowerCase();
+    const isSubBotInstance = Boolean(sock.isSubBot || botTypeLower.includes("sub"));
+    const isPremBotInstance =
+      botTypeLower.includes("prem") || botTypeLower.includes("premium");
+    const isMainBotInstance = !isSubBotInstance && !isPremBotInstance;
+
     if (isModPrefixCommand && !isMod && !isBotUser) return;
 
     let isAdmin = false;
@@ -731,18 +743,6 @@ export async function handleMessage(
         const mutedUsers = groupData?.mutedUsers;
 
         if (Array.isArray(mutedUsers) && mutedUsers.length > 0) {
-          const participantVariants = new Set<string>();
-          for (const participant of groupMeta?.participants ?? []) {
-            const candidateIds = [participant.id, participant.lid].filter(Boolean) as string[];
-            for (const candidate of candidateIds) {
-              const cleaned = cleanJid(candidate);
-              if (!cleaned) continue;
-              const local = cleaned.split("@")[0].split(":")[0];
-              participantVariants.add(cleaned);
-              participantVariants.add(local);
-            }
-          }
-
           const senderVariants = new Set<string>();
           const rawParticipantCandidates = [
             msg.key?.participant,
@@ -775,8 +775,7 @@ export async function handleMessage(
             }
 
             const directHit = Array.from(mutedVariants).some((value) => senderVariants.has(value));
-            const rosterHit = Array.from(mutedVariants).some((value) => participantVariants.has(value));
-            return directHit || rosterHit;
+            return directHit;
           });
 
           if (isMuted) {
@@ -884,6 +883,9 @@ export async function handleMessage(
       );
     }
 
+    let commandPresenceActive = false;
+    let commandPresenceStartedAt = 0;
+    const minTypingDurationMs = 700;
     const ctx = {
       sock,
       db: runtimeDb,
@@ -916,6 +918,24 @@ export async function handleMessage(
       resolveLid: (lidJid: string) => resolveLid(lidJid, groupMeta, sock),
       clearGroupCache: () => groupCache.delete(from),
       reply: async (content: ReplyContent) => {
+        const managesPresence = !commandPresenceActive;
+        if (managesPresence) {
+          commandPresenceStartedAt = Date.now();
+          try {
+            await sock.sendPresenceUpdate("composing", from);
+          } catch (error: unknown) {
+            logger.warn?.(
+              `[${botLabel}] no se pudo activar composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
+            );
+          }
+        }
+        const remainingTypingMs =
+          minTypingDurationMs - (Date.now() - commandPresenceStartedAt);
+        if (remainingTypingMs > 0) {
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, remainingTypingMs),
+          );
+        }
         const sendable =
           typeof content === "string" ? { text: content } : { ...content };
         if (typeof sendable.text === "string") {
@@ -924,20 +944,44 @@ export async function handleMessage(
             ...new Set([sender, ...extra]),
           ];
         }
-        try {
-          return await sock.sendMessage(from, sendable, {
-            quoted: msg as unknown as WAMessage,
-          });
-        } catch (e1: unknown) {
-          logger.warn?.(
-            `[${botLabel}] reply con quoted falló (${e1 instanceof Error ? e1.message : String(e1)}), reintentando sin quoted...`,
-          );
+        const sendReply = async () => {
           try {
-            return await sock.sendMessage(from, sendable);
-          } catch (e2: unknown) {
-            logger.error?.(
-              `[${botLabel}] reply sin quoted también falló: ${e2 instanceof Error ? e2.message : String(e2)} | from: ${from}`,
+            return await sock.sendMessage(from, sendable, {
+              quoted: msg as unknown as WAMessage,
+            });
+          } catch (e1: unknown) {
+            logger.warn?.(
+              `[${botLabel}] reply con quoted falló (${e1 instanceof Error ? e1.message : String(e1)}), reintentando sin quoted...`,
             );
+            try {
+              return await sock.sendMessage(from, sendable);
+            } catch (e2: unknown) {
+              logger.error?.(
+                `[${botLabel}] reply sin quoted también falló: ${e2 instanceof Error ? e2.message : String(e2)} | from: ${from}`,
+              );
+            }
+          }
+        };
+
+        if (sendable.audio) {
+          return sendWithRecordingPresence(sock, from, sendReply, (state, error) =>
+            logger.warn?.(
+              `[${botLabel}] no se pudo ${state === "recording" ? "activar" : "detener"} recording: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
+            ),
+          );
+        }
+
+        try {
+          return await sendReply();
+        } finally {
+          if (managesPresence) {
+            try {
+              await sock.sendPresenceUpdate("paused", from);
+            } catch (error: unknown) {
+              logger.warn?.(
+                `[${botLabel}] no se pudo detener composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
+              );
+            }
           }
         }
       },
@@ -1121,7 +1165,11 @@ export async function handleMessage(
       return ctx.reply({ text: NOT_BOT_ADMIN() });
     if (plugin.adminOnly && isGroup && !isAdmin && !isMod)
       return ctx.reply({ text: NOT_ADMIN() });
-    if (plugin.premiumOnly && !isPremium)
+    const canUsePremiumCommands =
+      isMainBotInstance ||
+      isPremBotInstance ||
+      (!isSubBotInstance && (isOwner || isMod || isPremium));
+    if (plugin.premiumOnly && !canUsePremiumCommands)
       return ctx.reply({ text: NOT_PREMIUM() });
     if (plugin.groupOnly && !isGroup) return ctx.reply({ text: NOT_GROUP() });
     if (plugin.privateOnly && isGroup)
@@ -1189,6 +1237,15 @@ export async function handleMessage(
 
     const start = Date.now();
     try {
+      commandPresenceStartedAt = Date.now();
+      try {
+        await sock.sendPresenceUpdate("composing", from);
+      } catch (error: unknown) {
+        logger.warn?.(
+          `[${botLabel}] no se pudo activar composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
+        );
+      }
+      commandPresenceActive = true;
       await plugin.run(ctx);
       const downloadState = ctx as Record<string, unknown>;
       if (
@@ -1235,6 +1292,15 @@ export async function handleMessage(
         const errorDetails =
           e instanceof Error ? e.stack || e.message : String(e);
         await ctx.reply({ text: ERROR_CMD({ cmdName, errorDetails }) });
+      }
+    } finally {
+      commandPresenceActive = false;
+      try {
+        await sock.sendPresenceUpdate("paused", from);
+      } catch (error: unknown) {
+        logger.warn?.(
+          `[${botLabel}] no se pudo detener composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
+        );
       }
     }
   } catch (e: unknown) {
