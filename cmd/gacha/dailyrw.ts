@@ -35,6 +35,15 @@ export default {
         "Tu recompensa fue agregada a tu harem.",
       );
 
+      if (char.image_url) {
+        return ctx.reply({
+          image: char.image_url,
+          caption: text,
+          mentions: [userId],
+          limitSharing: false,
+        });
+      }
+
       return ctx.reply({ text, mentions: [userId] });
     } catch {
       return ctx.reply("⚠️ Hubo un error al reclamar la tirada diaria.");
