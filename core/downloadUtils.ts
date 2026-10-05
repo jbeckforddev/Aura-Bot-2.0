@@ -4,7 +4,7 @@ import { mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import { fetch } from "undici";
+import { request } from "undici";
 import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
 
@@ -21,13 +21,14 @@ export async function requestJson<T = Record<string, unknown>>(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(url, {
+      const { statusCode, body } = await request(url, {
         headers: HEADERS,
         signal: AbortSignal.timeout(timeout),
-        redirect: "follow",
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return (await response.json()) as T;
+      if (statusCode < 200 || statusCode >= 300) {
+        throw new Error(`HTTP ${statusCode}`);
+      }
+      return (await body.json()) as T;
     } catch (error) {
       lastError = error;
       if (attempt < 2)
