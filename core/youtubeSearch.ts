@@ -1,5 +1,6 @@
 import { LRUCache } from "lru-cache";
-import yts from "yt-search";
+import yts, { type VideoSearchResult } from "yt-search";
+import { requestText } from "./downloadUtils.ts";
 
 export type YouTubeSearchVideo = {
   videoId: string;
@@ -13,8 +14,6 @@ export type YouTubeSearchVideo = {
 
 const RECENT_VIDEO_LIMIT = 12;
 const SEARCH_RESULTS_TTL_MS = 10 * 60 * 1000;
-const BROWSER_USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const recentVideosByQuery = new LRUCache<string, string[]>({
   max: 500,
   ttl: 24 * 60 * 60 * 1000,
@@ -33,15 +32,35 @@ function normalizeQuery(query: string): string {
     .trim();
 }
 
-async function searchVideos(query: string) {
+async function searchVideos(
+  query: string,
+): Promise<VideoSearchResult[]> {
   try {
     return (await yts(query)).videos || [];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!/http status:\s*302\b/i.test(message)) throw error;
 
-    const result = await yts({ query, userAgent: BROWSER_USER_AGENT });
-    return result.videos || [];
+    const url = `https://m.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en&gl=US`;
+    const html = await requestText(url, 30000, {
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "text/html",
+    });
+
+    return new Promise<VideoSearchResult[]>((resolve, reject) => {
+      yts._parseSearchResultInitialData(html, (parseError, results) => {
+        if (parseError) {
+          reject(
+            parseError instanceof Error
+              ? parseError
+              : new Error(String(parseError)),
+          );
+          return;
+        }
+        resolve(results.filter((result) => result.type === "video"));
+      });
+    });
   }
 }
 

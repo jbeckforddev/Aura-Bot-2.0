@@ -1,5 +1,5 @@
 declare module "yt-search" {
-  type VideoSearchResult = {
+  export type VideoSearchResult = {
     videoId: string;
     title: string;
     url: string;
@@ -14,10 +14,18 @@ declare module "yt-search" {
     videos?: VideoSearchResult[];
   };
 
-  type SearchOptions = {
-    query: string;
-    userAgent?: string;
+  type ParsedSearchResult = VideoSearchResult & {
+    type?: string;
   };
 
-  export default function yts(query: string | SearchOptions): Promise<SearchResult>;
+  type YtSearch = {
+    (query: string): Promise<SearchResult>;
+    _parseSearchResultInitialData(
+      responseText: string,
+      callback: (error: unknown, results: ParsedSearchResult[]) => void,
+    ): void;
+  };
+
+  const yts: YtSearch;
+  export default yts;
 }

@@ -54,6 +54,22 @@ export async function requestJson<T = Record<string, unknown>>(
     : new Error("Solicitud fallida.");
 }
 
+export async function requestText(
+  url: string,
+  timeout = 30000,
+  headers: Record<string, string> = {},
+): Promise<string> {
+  const response = await request(url, {
+    dispatcher: REQUEST_AGENT,
+    headers: { ...HEADERS, ...headers },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`HTTP ${response.statusCode}`);
+  }
+  return response.body.text();
+}
+
 const CACHE_DIR = path.resolve(process.env.GLOBAL_CUSTOM_TMP || "./cache");
 
 export async function getFileBytes(filePath: string): Promise<number> {
