@@ -14,5 +14,10 @@ declare module "yt-search" {
     videos?: VideoSearchResult[];
   };
 
-  export default function yts(query: string): Promise<SearchResult>;
+  type SearchOptions = {
+    query: string;
+    userAgent?: string;
+  };
+
+  export default function yts(query: string | SearchOptions): Promise<SearchResult>;
 }

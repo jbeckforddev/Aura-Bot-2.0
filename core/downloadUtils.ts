@@ -23,6 +23,7 @@ const HEADERS = {
 export async function requestJson<T = Record<string, unknown>>(
   url: string,
   timeout = 30000,
+  headers: Record<string, string> = {},
 ): Promise<T> {
   let lastError: unknown;
   let requestUrl = url;
@@ -30,7 +31,7 @@ export async function requestJson<T = Record<string, unknown>>(
     try {
       const response = await request(requestUrl, {
         dispatcher: REQUEST_AGENT,
-        headers: HEADERS,
+        headers: { ...HEADERS, ...headers },
         signal: AbortSignal.timeout(timeout),
       });
       if (response.statusCode === 304) {

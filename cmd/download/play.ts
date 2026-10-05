@@ -3,7 +3,6 @@ import type {
   YouTubeMp3Data,
   YouTubeMp3Response,
 } from "../../types/index.d.ts";
-import { Agent, interceptors, request } from "undici";
 import { readFile } from "node:fs/promises";
 import {
   generateWAMessageFromContent,
@@ -13,7 +12,10 @@ import {
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
-import { downloadToCache } from "../../core/downloadUtils.ts";
+import {
+  downloadToCache,
+  requestJson,
+} from "../../core/downloadUtils.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
@@ -28,9 +30,6 @@ import {
 
 const API_KEY = DL_CONFIG.alya.API_KEY;
 const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
-const REQUEST_AGENT = new Agent().compose(
-  interceptors.redirect({ maxRedirections: 1 }),
-);
 
 function getYouTubeVideoId(value: string): string | null {
   const rawUrl = String(value || "").trim();
@@ -76,26 +75,9 @@ function isYouTubeUrl(value: string): boolean {
 
 async function downloadYouTubeAudio(url: string): Promise<YouTubeMp3Data> {
   const downloadUrl = `${BASE_URL}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${API_KEY}`;
-  const requestOptions = {
-    dispatcher: REQUEST_AGENT,
-    signal: AbortSignal.timeout(30000),
-    headers: {
-      "User-Agent": "AuraReedBot/2.0",
-      "Cache-Control": "no-cache, no-store",
-      Pragma: "no-cache",
-    },
-  };
-  let response = await request(downloadUrl, requestOptions);
-  if (response.statusCode === 304) {
-    await response.body.dump();
-    response = await request(`${downloadUrl}&_=${Date.now()}`, requestOptions);
-  }
-
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(`La descarga respondió HTTP ${response.statusCode}.`);
-  }
-
-  const data = (await response.body.json()) as YouTubeMp3Response;
+  const data = await requestJson<YouTubeMp3Response>(downloadUrl, 30000, {
+    "User-Agent": "AuraReedBot/2.0",
+  });
   if (data?.status !== true || !data.data?.dl) {
     throw new Error("La API no devolvió un audio descargable.");
   }

@@ -13,6 +13,8 @@ export type YouTubeSearchVideo = {
 
 const RECENT_VIDEO_LIMIT = 12;
 const SEARCH_RESULTS_TTL_MS = 10 * 60 * 1000;
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const recentVideosByQuery = new LRUCache<string, string[]>({
   max: 500,
   ttl: 24 * 60 * 60 * 1000,
@@ -31,6 +33,18 @@ function normalizeQuery(query: string): string {
     .trim();
 }
 
+async function searchVideos(query: string) {
+  try {
+    return (await yts(query)).videos || [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/http status:\s*302\b/i.test(message)) throw error;
+
+    const result = await yts({ query, userAgent: BROWSER_USER_AGENT });
+    return result.videos || [];
+  }
+}
+
 export async function searchYouTubeVideo(
   query: string,
 ): Promise<YouTubeSearchVideo> {
@@ -39,7 +53,7 @@ export async function searchYouTubeVideo(
 
   let availableVideos = searchResultsByQuery.get(normalizedQuery);
   if (!availableVideos) {
-    const { videos = [] } = await yts(query);
+    const videos = await searchVideos(query);
     availableVideos = videos
       .filter((video) => video.videoId && video.url && video.title)
       .map((video) => ({
