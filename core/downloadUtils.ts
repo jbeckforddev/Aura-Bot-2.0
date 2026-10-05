@@ -4,9 +4,13 @@ import { mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import { request } from "undici";
+import { Agent, interceptors, request } from "undici";
 import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
+
+const REQUEST_AGENT = new Agent().compose(
+  interceptors.redirect({ maxRedirections: 5 }),
+);
 
 const HEADERS = {
   "User-Agent":
@@ -24,19 +28,20 @@ export async function requestJson<T = Record<string, unknown>>(
   let requestUrl = url;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { statusCode, body } = await request(requestUrl, {
+      const response = await request(requestUrl, {
+        dispatcher: REQUEST_AGENT,
         headers: HEADERS,
         signal: AbortSignal.timeout(timeout),
       });
-      if (statusCode === 304) {
-        await body.dump();
+      if (response.statusCode === 304) {
+        await response.body.dump();
         requestUrl = `${url}${url.includes("?") ? "&" : "?"}_=${Date.now()}-${attempt}`;
         throw new Error("HTTP 304");
       }
-      if (statusCode < 200 || statusCode >= 300) {
-        throw new Error(`HTTP ${statusCode}`);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`HTTP ${response.statusCode}`);
       }
-      return (await body.json()) as T;
+      return (await response.body.json()) as T;
     } catch (error) {
       lastError = error;
       if (attempt < 2)
