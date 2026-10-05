@@ -9,7 +9,7 @@ import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
 
 const REQUEST_AGENT = new Agent().compose(
-  interceptors.redirect({ maxRedirections: 5 }),
+  interceptors.redirect({ maxRedirections: 1 }),
 );
 
 const HEADERS = {
