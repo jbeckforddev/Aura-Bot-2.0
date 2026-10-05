@@ -19,7 +19,7 @@ import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
-const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
+const LEGACY_API = DL_CONFIG.alya.BASE_URL;
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
 const TIKTOK_URL = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
@@ -61,18 +61,26 @@ export default {
     await react("⏳");
     let convertedFile = "";
     try {
-      let url = query;
+            let url = query;
       if (!TIKTOK_URL.test(query)) {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
-        url = search?.data?.[0]?.url || "";
+        
+        // Si no encuentra resultados en la búsqueda, lanza el error de inmediato
+        if (!search?.data?.[0]?.url) {
+          throw new Error("No se encontró ningún video para esa búsqueda.");
+        }
+
+        url = search.data[0].url;
       }
-      if (!url) throw new Error("No se encontró ningún enlace válido.");
+
+      // Con la URL obtenida (sea por enlace o por búsqueda), se consulta a TikWM
       const data = await requestJson<TikWMVideoResponse>(
         `${TIKWM_API}/?url=${encodeURIComponent(url)}`,
         60000,
       );
+
       const imageUrls = Array.isArray(data?.data?.images)
         ? data.data.images.filter(
             (image): image is string =>
