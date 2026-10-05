@@ -10,7 +10,7 @@ interface ReactionEntry {
   self: string;
   target: string;
   videos: string[];
-  descripcion: string;
+  description: string;
 }
 
 const DATA_PATH = path.resolve(process.cwd(), "database/reacctiones2.json");
@@ -75,7 +75,7 @@ function resolveDisplayName(
 
 export default {
   name: Object.keys(DATA),
-  description: Object.values(DATA).map((entry) => entry.descripcion),
+  description: Object.values(DATA).map((entry) => entry.description),
   category: "nsfw",
   groupOnly: false,
   showAllNames: true,
