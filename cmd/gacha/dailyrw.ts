@@ -3,19 +3,18 @@ import { gacha, recordUserRoll } from "../../database/gachaDB.ts";
 import { box } from "../../core/gachaUI.ts";
 
 export default {
-  name: ["claim", "claimgacha"],
+  name: ["dailyrw", "dailyroll", "dailygacha"],
   category: "gacha",
-  description: "Reclama un personaje gratis si aún no lo has usado hoy.",
+  description: "Reclama la tirada diaria del gacha.",
   async run(ctx: CommandContext) {
     const userId = ctx.sender;
-
     if (gacha.hasUsedDailyRoll(userId)) {
-      return ctx.reply("⏳ Ya reclamaste tu tirada diaria de hoy.");
+      return ctx.reply("⏳ Ya usaste tu tirada diaria hoy.");
     }
 
     const char = gacha.getRandomCharacter();
     if (!char) {
-      return ctx.reply("❌ Todavía no hay personajes disponibles.");
+      return ctx.reply("❌ El gacha está vacío por ahora.");
     }
 
     try {
@@ -24,21 +23,21 @@ export default {
       recordUserRoll(userId, char);
 
       const text = box(
-        "🎁",
-        "CLAIM DIARIO",
+        "🎉",
+        "TIRADA DIARIA",
         `@${userId.split("@")[0]}`,
         [
           `✨ ${char.name}`,
           `📚 ${char.series}`,
-          `💎 Valor: ${char.value}`,
+          `💎 ${char.value} valor`,
           `${gacha.getRarityEmoji(char.rarity)} ${char.rarity.toUpperCase()}`,
         ],
-        "Tu tirada diaria ya quedó registrada.",
+        "Tu recompensa fue agregada a tu harem.",
       );
 
       return ctx.reply({ text, mentions: [userId] });
     } catch {
-      return ctx.reply("⚠️ No se pudo reclamar la tirada diaria.");
+      return ctx.reply("⚠️ Hubo un error al reclamar la tirada diaria.");
     }
   },
 };
