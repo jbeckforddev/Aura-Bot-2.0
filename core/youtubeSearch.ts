@@ -116,3 +116,9 @@ export async function searchYouTubeVideo(
 
   return selected;
 }
+
+console.log(searchYouTubeVideo("Never Gonna Give You Up").then((video) => {
+  console.log("Video encontrado:", video);
+}).catch((error) => {
+  console.error("Error al buscar video:", error);
+}));

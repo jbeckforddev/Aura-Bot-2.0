@@ -11,6 +11,9 @@ import type { SearchItem } from "../types/index.d.ts";
 const REQUEST_AGENT = new Agent().compose(
   interceptors.redirect({ maxRedirections: 1 }),
 );
+const TEXT_REQUEST_AGENT = new Agent().compose(
+  interceptors.redirect({ maxRedirections: 5 }),
+);
 
 const HEADERS = {
   "User-Agent":
@@ -60,7 +63,7 @@ export async function requestText(
   headers: Record<string, string> = {},
 ): Promise<string> {
   const response = await request(url, {
-    dispatcher: REQUEST_AGENT,
+    dispatcher: TEXT_REQUEST_AGENT,
     headers: { ...HEADERS, ...headers },
     signal: AbortSignal.timeout(timeout),
   });
