@@ -39,7 +39,7 @@ export default {
         source.mimetype?.includes("png") ? "image.png" : "image.jpg",
       );
       const response = await fetch(
-        "https://api.alyacore.xyz/tools/upscale?key=oboe",
+        "https://api.alyacore.xyz/tools/upscale?key=AURA-BOT-JERIELB",
         { method: "POST", body: form, signal: AbortSignal.timeout(120000) },
       );
       if (!response.ok) {
