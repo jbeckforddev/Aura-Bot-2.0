@@ -29,7 +29,7 @@ import {
 const API_KEY = DL_CONFIG.alya.API_KEY;
 const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const REQUEST_AGENT = new Agent().compose(
-  interceptors.redirect({ maxRedirections: 5 }),
+  interceptors.redirect({ maxRedirections: 1 }),
 );
 
 function getYouTubeVideoId(value: string): string | null {
