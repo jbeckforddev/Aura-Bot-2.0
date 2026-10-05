@@ -41,26 +41,37 @@ async function searchVideos(
     const message = error instanceof Error ? error.message : String(error);
     if (!/http status:\s*302\b/i.test(message)) throw error;
 
-    const url = `https://m.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en&gl=US`;
-    const html = await requestText(url, 30000, {
-      "User-Agent":
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "text/html",
-    });
-
-    return new Promise<VideoSearchResult[]>((resolve, reject) => {
-      yts._parseSearchResultInitialData(html, (parseError, results) => {
-        if (parseError) {
-          reject(
-            parseError instanceof Error
-              ? parseError
-              : new Error(String(parseError)),
-          );
-          return;
-        }
-        resolve(results.filter((result) => result.type === "video"));
-      });
-    });
+    let fallbackError: unknown;
+    for (const host of ["www.youtube.com", "youtube.com", "m.youtube.com"]) {
+      try {
+        const url = `https://${host}/results?search_query=${encodeURIComponent(query)}&hl=en&gl=US`;
+        const html = await requestText(url, 30000, {
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Accept: "text/html",
+        });
+        const videos = await new Promise<VideoSearchResult[]>(
+          (resolve, reject) => {
+            yts._parseSearchResultInitialData(html, (parseError, results) => {
+              if (parseError) {
+                reject(
+                  parseError instanceof Error
+                    ? parseError
+                    : new Error(String(parseError)),
+                );
+                return;
+              }
+              resolve(results.filter((result) => result.type === "video"));
+            });
+          },
+        );
+        if (videos.length > 0) return videos;
+      } catch (error) {
+        fallbackError = error;
+      }
+    }
+    if (fallbackError instanceof Error) throw fallbackError;
+    return [];
   }
 }
 
@@ -116,9 +127,3 @@ export async function searchYouTubeVideo(
 
   return selected;
 }
-
-console.log(searchYouTubeVideo("Never Gonna Give You Up").then((video) => {
-  console.log("Video encontrado:", video);
-}).catch((error) => {
-  console.error("Error al buscar video:", error);
-}));
