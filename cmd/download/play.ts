@@ -73,10 +73,25 @@ function isYouTubeUrl(value: string): boolean {
 
 async function downloadYouTubeAudio(url: string): Promise<YouTubeMp3Data> {
   const downloadUrl = `${BASE_URL}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${API_KEY}`;
-  const response = await request(downloadUrl, {
+  let response = await request(downloadUrl, {
     signal: AbortSignal.timeout(30000),
-    headers: { "User-Agent": "AuraReedBot/2.0" },
+    headers: {
+      "User-Agent": "AuraReedBot/2.0",
+      "Cache-Control": "no-cache, no-store",
+      Pragma: "no-cache",
+    },
   });
+  if (response.statusCode === 304) {
+    await response.body.dump();
+    response = await request(`${downloadUrl}&_=${Date.now()}`, {
+      signal: AbortSignal.timeout(30000),
+      headers: {
+        "User-Agent": "AuraReedBot/2.0",
+        "Cache-Control": "no-cache, no-store",
+        Pragma: "no-cache",
+      },
+    });
+  }
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(`La descarga respondió HTTP ${response.statusCode}.`);

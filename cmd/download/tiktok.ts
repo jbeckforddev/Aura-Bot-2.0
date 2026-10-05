@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import {
   downloadToCache,
+  pickSearchResult,
   requestJson,
   safeFileName,
   formatCount,
@@ -19,7 +20,7 @@ import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
-const LEGACY_API = DL_CONFIG.alya.BASE_URL;
+const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
 const TIKTOK_URL = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
@@ -66,13 +67,12 @@ export default {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
-        
-        // Si no encuentra resultados en la búsqueda, lanza el error de inmediato
-        if (!search?.data?.[0]?.url) {
+              const result = pickSearchResult(search?.data, query);
+              if (!result?.url) {
           throw new Error("No se encontró ningún video para esa búsqueda.");
         }
 
-        url = search.data[0].url;
+              url = result.url;
       }
 
       // Con la URL obtenida (sea por enlace o por búsqueda), se consulta a TikWM

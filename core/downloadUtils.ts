@@ -12,6 +12,8 @@ const HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
   Accept: "application/json, text/plain, */*",
+  "Cache-Control": "no-cache, no-store",
+  Pragma: "no-cache",
 };
 
 export async function requestJson<T = Record<string, unknown>>(
@@ -19,12 +21,18 @@ export async function requestJson<T = Record<string, unknown>>(
   timeout = 30000,
 ): Promise<T> {
   let lastError: unknown;
+  let requestUrl = url;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { statusCode, body } = await request(url, {
+      const { statusCode, body } = await request(requestUrl, {
         headers: HEADERS,
         signal: AbortSignal.timeout(timeout),
       });
+      if (statusCode === 304) {
+        await body.dump();
+        requestUrl = `${url}${url.includes("?") ? "&" : "?"}_=${Date.now()}-${attempt}`;
+        throw new Error("HTTP 304");
+      }
       if (statusCode < 200 || statusCode >= 300) {
         throw new Error(`HTTP ${statusCode}`);
       }

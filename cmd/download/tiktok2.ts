@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import {
   downloadToCache,
+  pickSearchResult,
   requestJson,
   safeFileName,
   formatCount,
@@ -65,7 +66,7 @@ export default {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
-        url = search?.data?.[0]?.url || "";
+        url = pickSearchResult(search?.data, query)?.url || "";
       }
       if (!url) throw new Error("No se encontró ningún enlace válido.");
       const data = await requestJson<TikWMVideoResponse>(
