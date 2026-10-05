@@ -20,6 +20,7 @@ db.exec(`
     booru_tag TEXT NOT NULL,
     value INTEGER NOT NULL,
     rarity TEXT NOT NULL DEFAULT 'common',
+    image_url TEXT DEFAULT NULL,
     UNIQUE(name, series)
   );
 
@@ -64,6 +65,13 @@ db.exec(`
   );
 `);
 
+const gachaColumns = db
+  .prepare("PRAGMA table_info('gacha_characters')")
+  .all() as Array<{ name: string }>;
+if (!gachaColumns.some((column) => column.name === "image_url")) {
+  db.exec("ALTER TABLE gacha_characters ADD COLUMN image_url TEXT DEFAULT NULL");
+}
+
 const RARITY_EMOJI: Record<string, string> = {
   common: "⚪",
   rare: "🔵",
@@ -82,6 +90,7 @@ export interface GachaCharacter {
   booru_tag: string;
   value: number;
   rarity: GachaRarity | string;
+  image_url: string | null;
 }
 
 export function computeRarity(value: number): GachaRarity {
@@ -102,6 +111,7 @@ function rowToChar(row: Record<string, any> | undefined): GachaCharacter | null 
     booru_tag: String(row.booru_tag),
     value: Number(row.value),
     rarity: String(row.rarity || "common"),
+    image_url: row.image_url ? String(row.image_url) : null,
   };
 }
 
@@ -182,12 +192,14 @@ function addCharacter({
   gender,
   booru_tag,
   value,
+  image_url,
 }: {
   name: string;
   series: string;
   gender: string;
   booru_tag: string;
   value: number;
+  image_url?: string | null;
 }) {
   const dup = db
     .prepare("SELECT 1 FROM gacha_characters WHERE name = ? AND series = ?")
@@ -195,8 +207,8 @@ function addCharacter({
   if (dup) throw new Error("DUPLICATE_CHARACTER");
   const rarity = computeRarity(value);
   db.prepare(
-    "INSERT INTO gacha_characters (name, series, gender, booru_tag, value, rarity) VALUES (?,?,?,?,?,?)",
-  ).run(name, series, gender, booru_tag, value, rarity);
+    "INSERT INTO gacha_characters (name, series, gender, booru_tag, value, rarity, image_url) VALUES (?,?,?,?,?,?,?)",
+  ).run(name, series, gender, booru_tag, value, rarity, image_url ?? null);
 }
 
 function giveCharacter(userId: string, charId: number) {
@@ -325,9 +337,9 @@ function fusionCharacters(userId: string, id1: number, id2: number) {
   } else {
     const info = db
       .prepare(
-        "INSERT INTO gacha_characters (name, series, gender, booru_tag, value, rarity) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO gacha_characters (name, series, gender, booru_tag, value, rarity, image_url) VALUES (?,?,?,?,?,?,?)",
       )
-      .run(name, series, c1.gender, c1.booru_tag, value, rarity);
+      .run(name, series, c1.gender, c1.booru_tag, value, rarity, c1.image_url ?? null);
     fusedId = Number(info.lastInsertRowid);
   }
 

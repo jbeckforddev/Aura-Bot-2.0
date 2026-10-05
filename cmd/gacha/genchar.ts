@@ -34,6 +34,10 @@ function tagToName(tag: string) {
     .trim();
 }
 
+function pickPostImage(post: any) {
+  return post?.sample_url || post?.file_url || null;
+}
+
 async function fetchAllPosts(seriesTag: string, extraTags: string[] = [], pages = 5) {
   const baseTags = [seriesTag, ...extraTags].join(" ");
   const allPosts: any[] = [];
@@ -358,6 +362,11 @@ async function runGeneration(
   for (const charTag of charTagNames) {
     const dbName = tagToName(charTag);
     const gender = getGenderFromPosts(charTag, posts);
+    const bestMatch = posts.find((post) =>
+      typeof post?.tags === "string" && post.tags.includes(charTag),
+    );
+    const imageUrl = pickPostImage(bestMatch);
+
     try {
       const value = randomValue();
       gacha.addCharacter({
@@ -366,6 +375,7 @@ async function runGeneration(
         gender,
         booru_tag: charTag,
         value,
+        image_url: imageUrl,
       });
       agregados.push(`${dbName} (${gender}) — ${value.toLocaleString()} ¥`);
     } catch (error: unknown) {

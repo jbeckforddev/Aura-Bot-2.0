@@ -30,6 +30,15 @@ export default {
         "Usa .harem para ver tu colección.",
       );
 
+      if (char.image_url) {
+        return ctx.reply({
+          image: char.image_url,
+          caption: text,
+          mentions: [ctx.sender],
+          limitSharing: false,
+        });
+      }
+
       return ctx.reply({ text, mentions: [ctx.sender] });
     } catch {
       return ctx.reply("⚠️ Ya tienes ese personaje en tu colección.");
