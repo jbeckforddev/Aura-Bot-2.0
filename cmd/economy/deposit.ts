@@ -7,7 +7,7 @@ import {
 } from "../../core/economyRuntime.ts";
 
 export default {
-  name: ["deposit", "d", "dep"],
+  name: ["deposit", "d", "dep", "depositar"],
   category: "economy",
   description: "Deposita monedas en el banco.",
   async run(ctx: CommandContext) {
