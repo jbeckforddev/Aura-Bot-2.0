@@ -11,7 +11,7 @@ import fs from "fs";
 import readline from "readline";
 import qrcodeTerminal from "qrcode-terminal";
 import { Boom } from "@hapi/boom";
-import { handleMessage } from "../handler.ts";
+import { handleMessage, invalidateGroupCache } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
 import { connectionLog, pairingLog } from "./logger.ts";
 import { db } from "../database/AuraDB.ts";
@@ -700,9 +700,16 @@ export async function connectToWhatsApp(
     }
   });
 
+  sock.ev.on("groups.update", async (updates) => {
+    for (const update of updates) {
+      if (update.id) invalidateGroupCache(update.id);
+    }
+  });
+
   sock.ev.on(
     "group-participants.update",
     async ({ id, participants, action }) => {
+      if (id) invalidateGroupCache(id);
       if (
         !id ||
         !Array.isArray(participants) ||
