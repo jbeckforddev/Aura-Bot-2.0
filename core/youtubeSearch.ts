@@ -1,6 +1,6 @@
 import { LRUCache } from "lru-cache";
-import yts, { type VideoSearchResult } from "yt-search";
-import { requestText } from "./downloadUtils.ts";
+import { DL_CONFIG } from "../config.ts";
+import { requestJson } from "./downloadUtils.ts";
 
 export type YouTubeSearchVideo = {
   videoId: string;
@@ -11,6 +11,27 @@ export type YouTubeSearchVideo = {
   views: number;
   thumbnail: string;
 };
+
+interface AlyacoreYtItem {
+  title: string;
+  autor?: string;
+  author?: string;
+  duration?: string;
+  views?: string | number;
+  uploaded?: string;
+  banner?: string;
+  thumbnail?: string;
+  url: string;
+}
+
+interface AlyacoreYtResponse {
+  status: boolean;
+  creator?: string;
+  result?: AlyacoreYtItem[];
+}
+
+const API_KEY = DL_CONFIG.alya.API_KEY;
+const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 
 const RECENT_VIDEO_LIMIT = 12;
 const SEARCH_RESULTS_TTL_MS = 10 * 60 * 1000;
@@ -32,74 +53,69 @@ function normalizeQuery(query: string): string {
     .trim();
 }
 
-async function searchVideos(
-  query: string,
-): Promise<VideoSearchResult[]> {
-  try {
-    return (await yts(query)).videos || [];
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/http status:\s*302\b/i.test(message)) throw error;
+function extractVideoId(url: string, banner = ""): string {
+  const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (watchMatch) return watchMatch[1];
+  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortMatch) return shortMatch[1];
+  const bannerMatch = banner.match(/\/vi\/([a-zA-Z0-9_-]{11})\//);
+  if (bannerMatch) return bannerMatch[1];
+  return "";
+}
 
-    let fallbackError: unknown;
-    for (const host of ["www.youtube.com", "youtube.com", "m.youtube.com"]) {
-      try {
-        const url = `https://${host}/results?search_query=${encodeURIComponent(query)}&hl=en&gl=US`;
-        const html = await requestText(url, 30000, {
-          "User-Agent":
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          Accept: "text/html",
-        });
-        const videos = await new Promise<VideoSearchResult[]>(
-          (resolve, reject) => {
-            yts._parseSearchResultInitialData(html, (parseError, results) => {
-              if (parseError) {
-                reject(
-                  parseError instanceof Error
-                    ? parseError
-                    : new Error(String(parseError)),
-                );
-                return;
-              }
-              resolve(results.filter((result) => result.type === "video"));
-            });
-          },
-        );
-        if (videos.length > 0) return videos;
-      } catch (error) {
-        fallbackError = error;
-      }
-    }
-    if (fallbackError instanceof Error) throw fallbackError;
-    return [];
+function parseViews(views: string | number | undefined): number {
+  if (typeof views === "number") return views;
+  if (!views) return 0;
+  const cleaned = String(views).replace(/[^\d]/g, "");
+  return parseInt(cleaned, 10) || 0;
+}
+
+export async function searchYouTubeVideos(
+  query: string,
+): Promise<YouTubeSearchVideo[]> {
+  const normalizedQuery = normalizeQuery(query);
+  if (!normalizedQuery) throw new Error("Escribe qué quieres buscar en YouTube.");
+
+  const cached = searchResultsByQuery.get(normalizedQuery);
+  if (cached && cached.length > 0) return cached;
+
+  const searchUrl = `${BASE_URL}/search/yt?query=${encodeURIComponent(query)}&key=${API_KEY}`;
+  const response = await requestJson<AlyacoreYtResponse>(searchUrl, 30000, {
+    "User-Agent": "AuraReedBot/2.0",
+  });
+
+  if (!response?.status || !Array.isArray(response.result) || response.result.length === 0) {
+    throw new Error("No se encontraron resultados en YouTube.");
   }
+
+  const videos: YouTubeSearchVideo[] = response.result
+    .filter((item) => item.url && item.title)
+    .map((item) => {
+      const banner = item.banner || item.thumbnail || "";
+      const videoId = extractVideoId(item.url, banner);
+      return {
+        videoId,
+        title: item.title,
+        url: item.url,
+        author: item.autor || item.author || "Desconocido",
+        duration: item.duration || "",
+        views: parseViews(item.views),
+        thumbnail: banner || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
+      };
+    });
+
+  if (videos.length > 0) {
+    searchResultsByQuery.set(normalizedQuery, videos);
+  }
+
+  return videos;
 }
 
 export async function searchYouTubeVideo(
   query: string,
 ): Promise<YouTubeSearchVideo> {
   const normalizedQuery = normalizeQuery(query);
-  if (!normalizedQuery) throw new Error("Escribe qué quieres buscar en YouTube.");
-
-  let availableVideos = searchResultsByQuery.get(normalizedQuery);
-  if (!availableVideos) {
-    const videos = await searchVideos(query);
-    availableVideos = videos
-      .filter((video) => video.videoId && video.url && video.title)
-      .map((video) => ({
-        videoId: video.videoId,
-        title: video.title,
-        url: video.url,
-        author: video.author?.name || "Desconocido",
-        duration: video.timestamp || video.duration?.timestamp || "",
-        views: Number(video.views) || 0,
-        thumbnail: video.thumbnail || "",
-      }));
-
-    if (availableVideos.length > 0) {
-      searchResultsByQuery.set(normalizedQuery, availableVideos);
-    }
-  }
+  const availableVideos = await searchYouTubeVideos(query);
 
   if (availableVideos.length === 0) {
     throw new Error("No se encontraron resultados en YouTube.");
@@ -108,22 +124,24 @@ export async function searchYouTubeVideo(
   const recentIds = recentVideosByQuery.get(normalizedQuery) || [];
   const recentIdSet = new Set(recentIds);
   let selected = availableVideos.find(
-    (video) => !recentIdSet.has(video.videoId),
+    (video) => video.videoId && !recentIdSet.has(video.videoId),
   );
 
   if (!selected) {
     selected =
-      availableVideos.find((video) => video.videoId !== recentIds[0]) ||
+      availableVideos.find((video) => video.videoId && video.videoId !== recentIds[0]) ||
       availableVideos[0];
   }
 
-  recentVideosByQuery.set(
-    normalizedQuery,
-    [selected.videoId, ...recentIds.filter((id) => id !== selected.videoId)].slice(
-      0,
-      RECENT_VIDEO_LIMIT,
-    ),
-  );
+  if (selected.videoId) {
+    recentVideosByQuery.set(
+      normalizedQuery,
+      [selected.videoId, ...recentIds.filter((id) => id !== selected.videoId)].slice(
+        0,
+        RECENT_VIDEO_LIMIT,
+      ),
+    );
+  }
 
   return selected;
-}
+}

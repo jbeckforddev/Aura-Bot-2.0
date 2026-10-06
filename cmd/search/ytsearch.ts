@@ -1,15 +1,15 @@
 import type { WAMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
-import yts from "yt-search";
 import { readFile } from "node:fs/promises";
 import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
-import { downloadToCache, formatCount } from "../../core/downloadUtils.ts";
+import { downloadToCache } from "../../core/downloadUtils.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
+import { searchYouTubeVideos } from "../../core/youtubeSearch.ts";
 
 export default {
   name: ["ytsearch", "yts", "plays"],
@@ -20,38 +20,45 @@ export default {
     if (!query) return reply("⚠️ Debes especificar qué buscar.");
     await react("🔍");
     try {
-      const result = await yts(query);
-      const videos = result.videos.slice(0, 5);
+      const searchResults = await searchYouTubeVideos(query);
+      const videos = searchResults.slice(0, 5);
       if (!videos.length) throw new Error("No se encontraron resultados.");
       const text = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE SEARCH",
         icon: "🎬",
         query,
-        engine: "yt-search",
+        engine: "AlyaCore API",
         results: videos.map((video) => ({
           title: video.title,
-          artist: video.author?.name || "Desconocido",
-          duration: video.timestamp || "N/A",
+          artist: video.author || "Desconocido",
+          duration: video.duration || "N/A",
           url: video.url,
         })),
       });
-      const thumbnailBuffer = await readFile(
-        await downloadToCache(videos[0].thumbnail, 30000),
-      );
-      const prepared = await prepareWAMessageMedia(
-        { image: thumbnailBuffer },
-        {
-          upload: sock.waUploadToServer,
-          mediaTypeOverride: "thumbnail-link",
-        },
-      );
+      let preparedMedia: { imageMessage?: unknown } = {};
+      if (videos[0].thumbnail) {
+        try {
+          const thumbnailBuffer = await readFile(
+            await downloadToCache(videos[0].thumbnail, 30000),
+          );
+          preparedMedia = await prepareWAMessageMedia(
+            { image: thumbnailBuffer },
+            {
+              upload: sock.waUploadToServer,
+              mediaTypeOverride: "thumbnail-link",
+            },
+          );
+        } catch {
+          // Si falla la miniatura, se ignora la imagen en la vista previa
+        }
+      }
       const preview = createLinkPreviewWithoutChannel({
         textOriginal: text,
         link: videos[0].url,
-        author: videos[0].author?.name || "YouTube",
+        author: videos[0].author || "YouTube",
         title: videos[0].title,
-        banner: prepared.imageMessage,
+        banner: preparedMedia.imageMessage as import("@whiskeysockets/baileys").proto.Message.IImageMessage,
         mentionedJid: sender ? [sender] : [],
         isForwarded: false,
         forwardingScore: 0,
@@ -72,3 +79,4 @@ export default {
     }
   },
 };
+
