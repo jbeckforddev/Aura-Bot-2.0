@@ -7,7 +7,7 @@ export default {
   name: ["qr", "vincularqr"],
   description: "Vincula un subbot mediante código QR.",
   category: "socket",
-  ownerOnly: true,
+  ownerOnly: false,
 
   async run({ sender, reply }: CommandContext) {
     await reply({ text: "⏳ Preparando el código QR de vinculación..." });
