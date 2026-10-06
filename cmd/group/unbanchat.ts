@@ -6,7 +6,7 @@ export default {
   category: "group",
   description: "Reactiva las funciones del bot en el chat.",
   groupOnly: true,
-  adminOnly: true,
+  botUserOnly: true,
   async run(ctx: CommandContext) {
     if (!ctx.isAdmin && !ctx.isMod && !ctx.isOwner)
       return ctx.reply({
