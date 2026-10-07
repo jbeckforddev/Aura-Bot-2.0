@@ -44,33 +44,49 @@ export default {
     const id = randomBytes(8).toString("hex");
     const ext = isZip ? ".zip" : (isVideo ? ".mp4" : ".jpg");
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
-    const outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
+    let outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
-      const writer = createWriteStream(inputP);
-      for await (const chunk of stream) {
-        writer.write(chunk);
-      }
-      writer.end();
+      await new Promise((resolve, reject) => {
+        const writer = createWriteStream(inputP);
+        stream.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
 
       let finalPath = inputP;
 
       if (isZip) {
         await react("📦");
         await mkdir(extractDir, { recursive: true }).catch(() => undefined);
-        await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`);
         
-        const { stdout } = await execAsync(`find "${extractDir}" -type f -name "*.mp4" | head -n 1`);
-        const extractedMp4 = stdout.trim();
-        
-        if (!extractedMp4) {
-          throw new Error("No se encontró ningún archivo .mp4 dentro del ZIP.");
+        try {
+          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 15000 });
+        } catch (e: any) {
+          throw new Error("Fallo al descomprimir. Asegúrate de que no tenga contraseña o que 'unzip' esté instalado en tu host.");
         }
         
-        finalPath = extractedMp4;
-        isVideo = true;
+        const { stdout } = await execAsync(`find "${extractDir}" -type f \\( -iname "*.mp4" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \\) | head -n 1`);
+        const extractedFile = stdout.trim();
+        
+        if (!extractedFile) {
+          throw new Error("No se encontró ningún archivo de video o imagen dentro del ZIP.");
+        }
+        
+        finalPath = extractedFile;
+        const extractedExt = finalPath.toLowerCase();
+        
+        if (extractedExt.endsWith(".mp4")) {
+          isVideo = true;
+          isImage = false;
+          outputP = join(tmpDir, `hd_${id}_out.mp4`);
+        } else {
+          isImage = true;
+          isVideo = false;
+          outputP = join(tmpDir, `hd_${id}_out.jpg`);
+        }
       }
 
       if (isVideo) {
@@ -99,7 +115,7 @@ export default {
           await execAsync(`ffmpeg -y -i "${finalPath}" -q:v 2 "${outputP}"`);
           finalPath = outputP;
         } catch (e) {
-          finalPath = inputP;
+          finalPath = isZip ? finalPath : inputP;
         }
       }
 
@@ -119,10 +135,10 @@ export default {
 
       await react("✅");
 
-    } catch (error: unknown) {
-      await react("❌");
-      const errorMsg = error instanceof Error ? error.message : "Ocurrió un error inesperado.";
-      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+    } catch (error: any) {
+      await react("❌").catch(() => undefined);
+      const errorMsg = error?.message || "Ocurrió un error inesperado.";
+      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
     } finally {
       await rm(inputP, { force: true }).catch(() => undefined);
       await rm(outputP, { force: true }).catch(() => undefined);
