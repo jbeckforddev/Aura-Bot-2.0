@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 
 export default {
-  name: ["estadohd", "eshd", "hd"],
+  name: ["estadohd", "eshd"],
   category: "system",
   description: "Convierte un documento (o zip) a video/imagen HD para estados usando el motor AVC.",
   async run(ctx: CommandContext) {
