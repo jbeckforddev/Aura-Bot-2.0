@@ -14,22 +14,25 @@ const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento a video/imagen HD para estados.",
+  description: "Convierte un documento (o zip) a video/imagen HD para estados.",
   async run(ctx: CommandContext) {
     const { reply, react, msg } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
     if (!quoted || !quoted.documentMessage) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA ARCHIVO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde a un archivo en modo\n┃ > documento (Video o Imagen).\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA ARCHIVO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde a un archivo en modo\n┃ > documento (Video, Imagen o ZIP).\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
     }
 
     const docMsg = quoted.documentMessage;
     const mime = docMsg.mimetype || "";
-    const isVideo = mime.includes("video");
-    const isImage = mime.includes("image");
+    const fileName = docMsg.fileName?.toLowerCase() || "";
+    
+    let isVideo = mime.includes("video");
+    let isImage = mime.includes("image");
+    const isZip = mime.includes("zip") || fileName.endsWith(".zip");
 
-    if (!isVideo && !isImage) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FORMATO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El documento debe ser un video\n┃ > o una imagen.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+    if (!isVideo && !isImage && !isZip) {
+      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FORMATO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El documento debe ser un video,\n┃ > imagen o archivo .zip\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
     }
 
     await react("⏳");
@@ -39,9 +42,10 @@ export default {
     }
 
     const id = randomBytes(8).toString("hex");
-    const ext = isVideo ? ".mp4" : ".jpg";
+    const ext = isZip ? ".zip" : (isVideo ? ".mp4" : ".jpg");
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
-    const outputP = join(tmpDir, `hd_${id}_out${ext}`);
+    const outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
+    const extractDir = join(tmpDir, `hd_${id}_unzip`);
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
@@ -53,8 +57,24 @@ export default {
 
       let finalPath = inputP;
 
+      if (isZip) {
+        await react("📦");
+        await mkdir(extractDir, { recursive: true }).catch(() => undefined);
+        await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`);
+        
+        const { stdout } = await execAsync(`find "${extractDir}" -type f -name "*.mp4" | head -n 1`);
+        const extractedMp4 = stdout.trim();
+        
+        if (!extractedMp4) {
+          throw new Error("No se encontró ningún archivo .mp4 dentro del ZIP.");
+        }
+        
+        finalPath = extractedMp4;
+        isVideo = true;
+      }
+
       if (isVideo) {
-        const sizeMB = statSync(inputP).size / (1024 * 1024);
+        const sizeMB = statSync(finalPath).size / (1024 * 1024);
         try {
           if (sizeMB > 60) {
             await react("🗜️");
@@ -72,7 +92,7 @@ export default {
             finalPath = outputP;
           }
         } catch (e) {
-          finalPath = inputP;
+          finalPath = isZip ? finalPath : inputP;
         }
       } else if (isImage) {
         try {
@@ -106,6 +126,7 @@ export default {
     } finally {
       await rm(inputP, { force: true }).catch(() => undefined);
       await rm(outputP, { force: true }).catch(() => undefined);
+      await rm(extractDir, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 };
