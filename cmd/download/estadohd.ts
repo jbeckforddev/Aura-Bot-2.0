@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
@@ -14,7 +15,7 @@ const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento (o zip) a video/imagen HD para estados con progreso.",
+  description: "Convierte un documento (o zip) a video/imagen HD para estados usando el motor AVC.",
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -59,6 +60,7 @@ export default {
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
     let outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
+    let convertedFile = "";
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
@@ -66,18 +68,21 @@ export default {
       let downloaded = 0;
       let lastUpdate = Date.now();
 
-      const writer = createWriteStream(inputP);
-      for await (const chunk of stream) {
-        writer.write(chunk);
-        downloaded += chunk.length;
-        const now = Date.now();
-        if (total > 0 && now - lastUpdate > 1500) {
-          const percent = Math.round((downloaded / total) * 100);
-          await updateStatus(`┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`);
-          lastUpdate = now;
-        }
-      }
-      writer.end();
+      await new Promise((resolve, reject) => {
+        const writer = createWriteStream(inputP);
+        stream.on('data', (chunk) => {
+          downloaded += chunk.length;
+          const now = Date.now();
+          if (total > 0 && now - lastUpdate > 1500) {
+            const percent = Math.round((downloaded / total) * 100);
+            updateStatus(`┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`).catch(() => {});
+            lastUpdate = now;
+          }
+        });
+        stream.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
 
       let finalPath = inputP;
 
@@ -89,7 +94,7 @@ export default {
         try {
           await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 20000 });
         } catch (e: any) {
-          throw new Error("Fallo al descomprimir. Asegúrate de que no tenga contraseña o que 'unzip' esté instalado en tu host.");
+          throw new Error("Fallo al descomprimir. Asegúrate de que no tenga contraseña o que 'unzip' esté instalado.");
         }
         
         const { stdout } = await execAsync(`find "${extractDir}" -type f \\( -iname "*.mp4" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \\) | head -n 1`);
@@ -114,28 +119,11 @@ export default {
       }
 
       await react("🗜️");
-      await updateStatus(`┃ 🗜️ Estado: Optimizando calidad...\n┃ 📊 Progreso: Procesando (FFmpeg)...`);
+      await updateStatus(`┃ 🗜️ Estado: Optimizando calidad...\n┃ 📊 Progreso: Procesando motor AVC...`);
 
       if (isVideo) {
-        const sizeMB = statSync(finalPath).size / (1024 * 1024);
-        try {
-          if (sizeMB > 60) {
-            await execAsync(`ffmpeg -y -i "${finalPath}" -c:v libx264 -crf 26 -preset fast -c:a aac -b:a 128k -movflags +faststart -threads 0 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
-            finalPath = outputP;
-          } else {
-            const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
-            const codec = codecInfo.trim().toLowerCase();
-
-            if (codec === "h264") {
-              await execAsync(`ffmpeg -y -i "${finalPath}" -c copy -movflags +faststart -threads 0 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
-            } else {
-              await execAsync(`ffmpeg -y -i "${finalPath}" -c:v libx264 -preset fast -c:a aac -b:a 128k -movflags +faststart -threads 0 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
-            }
-            finalPath = outputP;
-          }
-        } catch (e) {
-          finalPath = isZip ? finalPath : inputP;
-        }
+        convertedFile = await CONVERT_TO_AVC(finalPath);
+        finalPath = convertedFile;
       } else if (isImage) {
         try {
           await execAsync(`ffmpeg -y -i "${finalPath}" -q:v 2 "${outputP}"`);
@@ -148,17 +136,17 @@ export default {
       await updateStatus(`┃ 📤 Estado: Enviando archivo...\n┃ 📊 Progreso: Subiendo a WhatsApp...`);
 
       if (isVideo) {
-        await sock.sendMessage(from, {
+        await reply({
           video: { url: finalPath },
-          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (AVC)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "video/mp4"
-        }, { quoted: msg });
+        });
       } else {
-        await sock.sendMessage(from, {
+        await reply({
           image: { url: finalPath },
           caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Imagen optimizada\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "image/jpeg"
-        }, { quoted: msg });
+        });
       }
 
       await react("✅");
@@ -180,6 +168,9 @@ export default {
       await rm(inputP, { force: true }).catch(() => undefined);
       await rm(outputP, { force: true }).catch(() => undefined);
       await rm(extractDir, { recursive: true, force: true }).catch(() => undefined);
+      if (convertedFile) {
+        await rm(convertedFile, { force: true }).catch(() => undefined);
+      }
     }
   }
 };
