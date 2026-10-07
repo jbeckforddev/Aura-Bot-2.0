@@ -14,9 +14,9 @@ const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento (o zip) a video/imagen HD para estados.",
+  description: "Convierte un documento (o zip) a video/imagen HD para estados con progreso.",
   async run(ctx: CommandContext) {
-    const { reply, react, msg } = ctx;
+    const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
     if (!quoted || !quoted.documentMessage) {
@@ -37,6 +37,19 @@ export default {
 
     await react("⏳");
 
+    const progressMsg = await sock.sendMessage(from, { 
+      text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando proceso...\n╰━━━━━━━━━━━━⬣` 
+    }, { quoted: msg }).catch(() => null);
+
+    const updateStatus = async (status: string) => {
+      if (progressMsg?.key) {
+        await sock.sendMessage(from, { 
+          text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n${status}\n╰━━━━━━━━━━━━⬣`, 
+          edit: progressMsg.key 
+        }).catch(() => {});
+      }
+    };
+
     if (!existsSync(tmpDir)) {
       await mkdir(tmpDir, { recursive: true }).catch(() => undefined);
     }
@@ -49,21 +62,32 @@ export default {
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
-      await new Promise((resolve, reject) => {
-        const writer = createWriteStream(inputP);
-        stream.pipe(writer);
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+      const total = Number(docMsg.fileLength) || 0;
+      let downloaded = 0;
+      let lastUpdate = Date.now();
+
+      const writer = createWriteStream(inputP);
+      for await (const chunk of stream) {
+        writer.write(chunk);
+        downloaded += chunk.length;
+        const now = Date.now();
+        if (total > 0 && now - lastUpdate > 1500) {
+          const percent = Math.round((downloaded / total) * 100);
+          await updateStatus(`┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`);
+          lastUpdate = now;
+        }
+      }
+      writer.end();
 
       let finalPath = inputP;
 
       if (isZip) {
         await react("📦");
+        await updateStatus(`┃ 📦 Estado: Descomprimiendo ZIP...\n┃ 📊 Progreso: Extrayendo archivos...`);
         await mkdir(extractDir, { recursive: true }).catch(() => undefined);
         
         try {
-          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 15000 });
+          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 20000 });
         } catch (e: any) {
           throw new Error("Fallo al descomprimir. Asegúrate de que no tenga contraseña o que 'unzip' esté instalado en tu host.");
         }
@@ -89,11 +113,13 @@ export default {
         }
       }
 
+      await react("🗜️");
+      await updateStatus(`┃ 🗜️ Estado: Optimizando calidad...\n┃ 📊 Progreso: Procesando (FFmpeg)...`);
+
       if (isVideo) {
         const sizeMB = statSync(finalPath).size / (1024 * 1024);
         try {
           if (sizeMB > 60) {
-            await react("🗜️");
             await execAsync(`ffmpeg -y -i "${finalPath}" -c:v libx264 -crf 26 -preset fast -c:a aac -b:a 128k -movflags +faststart -threads 0 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
             finalPath = outputP;
           } else {
@@ -119,26 +145,37 @@ export default {
         }
       }
 
+      await updateStatus(`┃ 📤 Estado: Enviando archivo...\n┃ 📊 Progreso: Subiendo a WhatsApp...`);
+
       if (isVideo) {
-        await reply({
+        await sock.sendMessage(from, {
           video: { url: finalPath },
           caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "video/mp4"
-        });
+        }, { quoted: msg });
       } else {
-        await reply({
+        await sock.sendMessage(from, {
           image: { url: finalPath },
           caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Imagen optimizada\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "image/jpeg"
-        });
+        }, { quoted: msg });
       }
 
       await react("✅");
+      
+      if (progressMsg?.key) {
+        await sock.sendMessage(from, { delete: progressMsg.key }).catch(() => {});
+      }
 
     } catch (error: any) {
       await react("❌").catch(() => undefined);
       const errorMsg = error?.message || "Ocurrió un error inesperado.";
-      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+      
+      if (progressMsg?.key) {
+        await updateStatus(`┃ ⚠️ Estado: Error crítico\n┃ ❌ Fallo: ${errorMsg.slice(0, 80)}...`);
+      } else {
+        await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+      }
     } finally {
       await rm(inputP, { force: true }).catch(() => undefined);
       await rm(outputP, { force: true }).catch(() => undefined);
