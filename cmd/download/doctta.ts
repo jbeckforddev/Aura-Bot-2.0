@@ -23,11 +23,11 @@ import type {
   TikTokSearchResponse,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
 
 const execFileAsync = promisify(execFile);
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const TIKWM_API = "https://www.tikwm.com/api";
-const TIKTOK = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
 
 type TikWMVideoResponse = {
   code?: number;
@@ -64,9 +64,10 @@ export default {
     await react("⏳");
     try {
       await mkdir(dir, { recursive: true });
-      let url = query;
+      const formattedUrl = tiktokUrlFormatter(query);
+      let url = formattedUrl;
       let searchResult: TikTokSearchItem | null = null;
-      if (!TIKTOK.test(query)) {
+      if (!isTikTokUrl(formattedUrl)) {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
         ).catch(() => null);

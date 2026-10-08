@@ -24,10 +24,10 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
 
 const execFileAsync = promisify(execFile);
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
-const TIKTOK = /^(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\//i;
 
 export default {
   name: ["tta", "tka", "ttaudio", "tkmusic", "tiktokaudio"],
@@ -45,9 +45,10 @@ export default {
     await react("⏳");
     try {
       await mkdir(dir, { recursive: true });
-      let url = query;
+      const formattedUrl = tiktokUrlFormatter(query);
+      let url = formattedUrl;
       let searchResult: TikTokSearchItem | null = null;
-      if (!TIKTOK.test(query)) {
+      if (!isTikTokUrl(formattedUrl)) {
         const search = await requestJson<TikTokSearchResponse>(
           `${API}/search/tiktok?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
         );
