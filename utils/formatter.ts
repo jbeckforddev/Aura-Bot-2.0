@@ -258,7 +258,7 @@ export function formatClock(value: unknown): string {
 
 const TT_REGEX = /^(?:https?:\/\/)?(?:(?:www|vm|vt)\.)?tiktok\.com\/(?:(?:@?[A-Za-z0-9._]{1,24}(?:\/(?:video|photo)\/\d+)?)|[A-Za-z0-9]{6,15})(?:\?.*)?$/i;
 
-export function tiktokUrlFormatter(value) {
+export function tiktokUrlFormatter(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -297,7 +297,11 @@ export function tiktokUrlFormatter(value) {
       return null;
     }
 
-    const canonical = `https://www.tiktok.com${pathname}`;
+    const canonicalHost =
+      host === "vm.tiktok.com" || host === "vt.tiktok.com"
+        ? host
+        : "www.tiktok.com";
+    const canonical = `https://${canonicalHost}${pathname}`;
     return TT_REGEX.test(canonical) ? canonical : null;
   } catch {
     // Fall through to raw string validation below.

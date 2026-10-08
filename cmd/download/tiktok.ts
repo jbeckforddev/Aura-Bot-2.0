@@ -60,8 +60,11 @@ export default {
     await react("⏳");
     let convertedFile = "";
     try {
-      let url = tiktokUrlFormatter(query);
-      if (!url) {
+      const formattedUrl = tiktokUrlFormatter(query);
+      let url: string;
+      if (formattedUrl) {
+        url = formattedUrl;
+      } else {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
