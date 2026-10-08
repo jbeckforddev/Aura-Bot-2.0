@@ -21,7 +21,7 @@ import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
 
 const API = "https://api.delirius.online/download/ytmp4";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-const ql = "480p";
+const ql = "360p";
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
 }
