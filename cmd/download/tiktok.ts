@@ -56,8 +56,8 @@ export default {
   category: "download",
   description: "Busca y descarga videos de TikTok.",
   async run(ctx: CommandContext) {
-    const { args, reply, react, sock, from, msg } = ctx;
-    const query = args.join(" ").trim();
+    const { args = [], reply, react, sock, from, msg } = ctx;
+    const query = Array.isArray(args) ? args.join(" ").trim() : String(args ?? "").trim();
     if (!query)
       return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
     await react("⏳");
@@ -68,11 +68,11 @@ export default {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
-              const result = pickSearchResult(search?.data, query);
-              if (!result?.url) {
+      const result = pickSearchResult(search?.data, query);
+      if (!result?.url) {
           throw new Error("No se encontró ningún video para esa búsqueda.");
         }
-          url = result.url;
+      url = result.url;
       }
 
       // Con la URL obtenida (sea por enlace o por búsqueda), se consulta a TikWM
