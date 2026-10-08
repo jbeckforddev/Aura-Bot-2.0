@@ -258,14 +258,10 @@ export function formatClock(value: unknown): string {
 
 const TT_REGEX = /^(?:https?:\/\/)?(?:(?:www|vm|vt)\.)?tiktok\.com\/(?:(?:@?[A-Za-z0-9._]{1,24}(?:\/(?:video|photo)\/\d+)?)|[A-Za-z0-9]{6,15})(?:\?.*)?$/i;
 
-export function tiktokUrlFormatter(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
+export function tiktokUrlFormatter(value: string): string {
   const raw = value.trim();
   if (!raw) {
-    return null;
+    return value;
   }
 
   const normalized = raw.replace(/[?#].*$/, "").replace(/\/+$/, "");
@@ -285,16 +281,16 @@ export function tiktokUrlFormatter(value: unknown): string | null {
 
     if (host === "tt.site" || host.endsWith(".tt.site")) {
       const pathCode = url.pathname.match(/^\/t\/([A-Za-z0-9]+)$/i)?.[1];
-      return pathCode ? `https://vt.tiktok.com/${pathCode}` : null;
+      return pathCode ? `https://vt.tiktok.com/${pathCode}` : value;
     }
 
     if (!["tiktok.com", "www.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"].includes(host)) {
-      return null;
+      return value;
     }
 
     const pathname = url.pathname.replace(/\/+$/, "") || "/";
     if (pathname === "/") {
-      return null;
+      return value;
     }
 
     const canonicalHost =
@@ -302,7 +298,7 @@ export function tiktokUrlFormatter(value: unknown): string | null {
         ? host
         : "www.tiktok.com";
     const canonical = `https://${canonicalHost}${pathname}`;
-    return TT_REGEX.test(canonical) ? canonical : null;
+    return TT_REGEX.test(canonical) ? canonical : value;
   } catch {
     // Fall through to raw string validation below.
   }
@@ -310,21 +306,25 @@ export function tiktokUrlFormatter(value: unknown): string | null {
   const bare = normalized.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
   if (bare.includes("tt.site")) {
     const shortCode = bare.match(/tt\.site\/t\/([A-Za-z0-9]+)$/i)?.[1];
-    return shortCode ? `https://vt.tiktok.com/${shortCode}` : null;
+    return shortCode ? `https://vt.tiktok.com/${shortCode}` : value;
   }
 
   if (!bare.includes("tiktok.com")) {
-    return null;
+    return value;
   }
 
   const formatted = bare.startsWith("tiktok.com")
     ? `https://${bare}`
     : `https://www.${bare}`;
 
-  return TT_REGEX.test(formatted) ? formatted : null;
+  return TT_REGEX.test(formatted) ? formatted : value;
+}
+
+export function isTikTokUrl(value: string): boolean {
+  return TT_REGEX.test(tiktokUrlFormatter(value));
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { TT_REGEX, tiktokUrlFormatter };
+  module.exports = { TT_REGEX, tiktokUrlFormatter, isTikTokUrl };
   module.exports.default = tiktokUrlFormatter;
 }

@@ -16,7 +16,7 @@ import type {
   CommandContext,
   TikTokSearchResponse,
 } from "../../types/index.d.ts";
-import { tiktokUrlFormatter } from "../../utils/formatter.ts";
+import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
@@ -62,7 +62,7 @@ export default {
     try {
       const formattedUrl = tiktokUrlFormatter(query);
       let url: string;
-      if (formattedUrl) {
+      if (isTikTokUrl(formattedUrl)) {
         url = formattedUrl;
       } else {
         const search = await requestJson<TikTokSearchResponse>(
