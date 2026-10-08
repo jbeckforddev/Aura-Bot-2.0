@@ -107,6 +107,50 @@ async function getAdminSocket(
   return null;
 }
 
+async function isGroupAdmin(
+  current: ExtendedWASocket,
+  groupJid: string,
+  userJid: string,
+): Promise<boolean> {
+  const targetJid = cleanJid(userJid);
+  if (!targetJid) return false;
+
+  const sockets = [current, globalThis.mainSocket, ...getActiveSubBots()];
+  const candidates = sockets.filter(
+    (socket, index) =>
+      socket?.groupMetadata && sockets.indexOf(socket) === index,
+  );
+
+  for (const socket of candidates) {
+    try {
+      const metadata = await socket.groupMetadata(groupJid);
+      const targetIdentities = new Set([targetJid]);
+      if (targetJid.endsWith("@s.whatsapp.net")) {
+        try {
+          const lid =
+            await socket.signalRepository?.lidMapping?.getLIDForPN(targetJid);
+          if (lid) targetIdentities.add(cleanJid(lid));
+        } catch {
+          // La identidad directa todavía permite cotejar la metadata.
+        }
+      }
+
+      const participant = metadata?.participants?.find((entry) => {
+        const e = entry as unknown as Record<string, unknown>;
+        return [e?.id, e?.lid, e?.jid, e?.phoneNumber]
+          .map(cleanJid)
+          .some((jid) => jid && targetIdentities.has(jid));
+      });
+      if (participant?.admin === "admin" || participant?.admin === "superadmin")
+        return true;
+    } catch {
+      continue;
+    }
+  }
+
+  return false;
+}
+
 type ToxicMatch = { word: string; reason: string };
 
 const prohibitedLinkRegex =
@@ -255,6 +299,19 @@ export async function handleGroupCall(
   const group = db.getGroup(groupJid);
   if (!group.antiCalls) return;
 
+  const callParticipants = [
+    call.creator,
+    call.from,
+    (call as Record<string, unknown>).participant,
+  ]
+    .map((jid) => String(jid || ""))
+    .filter((jid) => jid && jid !== groupJid);
+  const userJid = callParticipants[0];
+  if (!userJid) return;
+  for (const participantJid of callParticipants) {
+    if (await isGroupAdmin(sock, groupJid, participantJid)) return;
+  }
+
   const actionSock = (await getAdminSocket(sock, groupJid)) || sock;
 
   try {
@@ -270,10 +327,6 @@ export async function handleGroupCall(
           rejectCall: (id: string, from: string) => Promise<void>;
         }
       ).rejectCall(String(call.id), String(call.from || groupJid));
-    const userJid = String(
-      call.from || (call as Record<string, unknown>).participant || "",
-    );
-    if (!userJid) return;
     const count = addWarning(
       db,
       groupJid,
@@ -324,9 +377,6 @@ export async function handleGroupStatus(
   const group = db.getGroup(groupJid);
   if (!group.antiStatus) return false;
 
-  const actionSock = await getAdminSocket(sock, groupJid);
-  if (!actionSock) return false;
-
   const statusKey = statusMessage.statusKey || statusMessage.key;
   const userJid =
     statusKey?.participant ||
@@ -335,6 +385,10 @@ export async function handleGroupStatus(
     statusKey?.remoteJid;
   if (!userJid || userJid.endsWith("@broadcast") || message.key?.fromMe)
     return false;
+  if (await isGroupAdmin(sock, groupJid, userJid)) return false;
+
+  const actionSock = await getAdminSocket(sock, groupJid);
+  if (!actionSock) return false;
 
   try {
     await actionSock.sendMessage(groupJid, {
