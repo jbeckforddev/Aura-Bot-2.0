@@ -7,7 +7,6 @@ import {
 } from "@whiskeysockets/baileys";
 import { cmdLog } from "./core/logger.ts";
 import {
-  fytBold,
   NOT_CMD_FOUND,
   ERROR_CMD,
   NOT_BOT_ADMIN,
@@ -18,7 +17,8 @@ import {
   NOT_ADMIN,
   NOT_MOD,
   NOT_PREMIUM,
-  NOT_HAVE_COINS
+  NOT_HAVE_COINS,
+  PLUGINS_OFF
 } from "./core/socketText.ts";
 import { db } from "./database/AuraDB.ts";
 import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
@@ -1155,7 +1155,7 @@ export async function handleMessage(
       )
     ) {
       return ctx.reply({
-        text: `❌ El catálogo ${fytBold(pluginCategory)} está desactivado para este grupo.`,
+        text: PLUGINS_OFF({ pluginCategory, prefix: usedPrefix ?? "." }),
       });
     }
 

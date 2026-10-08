@@ -187,3 +187,18 @@ export const NOT_HAVE_COINS = ({userBalance, typeMedia, minAmount, currencyName,
 ╰━━〔 ${fytBold("AURA ECONOMY")} 〕━━⬣
 `;
 }
+
+export const PLUGINS_OFF = ({ pluginCategory, prefix }) => {
+  return `╭〔 ⚠️ ${fytBold("SOCKET SYSTEM")} 〕⬣
+┃ ${fytBold("COMANDOS DESACTIVADOS")}
+╰━━━━━━━━━━━━⬣
+
+┃ > Los comandos ${fytBold(String(pluginCategory).toUpperCase())}
+┃ > están desactivados en este grupo.
+┣━━━━━━━━━━━━⬣
+┃ > Un administrador del
+┃ > grupo puede activarlos con
+┃ > \`${prefix}enable ${pluginCategory}\`
+
+╰〔 ⚡ ${fytBold("SYSTEM ALERT")} 〕⬣`;
+};
