@@ -144,7 +144,7 @@ export default {
           url: result.url,
         })),
       });
-
+      await react("✅");
       return reply({ text: searchCaption });
     } catch (error: unknown) {
       await react("❌");

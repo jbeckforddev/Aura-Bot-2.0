@@ -141,6 +141,7 @@ export default {
         })),
       });
 
+      await react("✅");
       return reply({ text: searchCaption });
     } catch (error: unknown) {
       await react("❌");
