@@ -4,8 +4,11 @@ export default {
   description: "Activa o desactiva el modo self del grupo.",
   category: "socket",
   groupOnly: true,
-  modOnly: true,
   async run(ctx: CommandContext) {
+    if (!ctx.isMod && !ctx.isBotUser) {
+      return ctx.reply("⛔ Solo un moderador o esta instancia del bot puede cambiar este modo.");
+    }
+
     const value = String(ctx.args?.[0] ?? "").toLowerCase();
     if (!["on", "off", "true", "false", "1", "0"].includes(value)) {
       return ctx.reply(`⚠️ Uso: ${ctx.usedPrefix ?? "."}self on|off`);

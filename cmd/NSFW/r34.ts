@@ -19,6 +19,7 @@ export default {
   name: ["rule34", "r34"],
   category: "nsfw",
   description: "Busca imágenes en Rule34.",
+  premiumOnly: true,
 
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;

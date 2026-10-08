@@ -3,8 +3,11 @@ export default {
   name: ["modself", "setmodself"],
   description: "Activa o desactiva el modo self de moderación.",
   category: "system",
-  modOnly: true,
   async run(ctx: CommandContext) {
+    if (!ctx.isMod && !ctx.isBotUser) {
+      return ctx.reply("⛔ Solo un moderador o esta instancia del bot puede cambiar este modo.");
+    }
+
     const value = String(ctx.args?.[0] ?? "").toLowerCase();
     if (!["on", "off", "true", "false", "1", "0"].includes(value)) {
       return ctx.reply(`⚠️ Uso: ${ctx.usedPrefix ?? "."}modself on|off`);

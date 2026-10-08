@@ -6,7 +6,6 @@ export default {
   category: "group",
   description: "Desactiva las funciones del bot en el chat actual.",
   groupOnly: true,
-  botUserOnly: true,
   async run(ctx: CommandContext) {
     ctx.db.setGroup(ctx.from, { chatBanned: 1 });
     return ctx.reply({
