@@ -24,9 +24,6 @@ import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
-
-
-const TIKTOK_URL = tiktokUrlFormatter;
 type TikWMVideoResponse = {
   code?: number;
   msg?: string;
@@ -63,16 +60,16 @@ export default {
     await react("⏳");
     let convertedFile = "";
     try {
-      let url = query;
-      if (!TIKTOK_URL.test(query)) {
+      let url = tiktokUrlFormatter(query);
+      if (!url) {
         const search = await requestJson<TikTokSearchResponse>(
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
-      const result = pickSearchResult(search?.data, query);
-      if (!result?.url) {
+        const result = pickSearchResult(search?.data, query);
+        if (!result?.url) {
           throw new Error("No se encontró ningún video para esa búsqueda.");
         }
-      url = result.url;
+        url = result.url;
       }
 
       // Con la URL obtenida (sea por enlace o por búsqueda), se consulta a TikWM
