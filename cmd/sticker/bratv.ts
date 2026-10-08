@@ -5,7 +5,16 @@ import { DL_CONFIG } from "../../config.ts";
 import { applyStickerMetadata, toSticker } from "../../core/stickerUtils.ts";
 
 async function getSticker(url: URL): Promise<Buffer> {
-  const response = await request(url, { signal: AbortSignal.timeout(60000) });
+  const response = await request(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      Accept: "application/json, text/plain, */*",
+      "Cache-Control": "no-cache, no-store",
+      Pragma: "no-cache",
+    },
+    signal: AbortSignal.timeout(60000),
+  });
   if (response.statusCode < 200 || response.statusCode >= 300)
     throw new Error(`HTTP ${response.statusCode}`);
   const raw = Buffer.from(await response.body.arrayBuffer());

@@ -54,7 +54,7 @@ function pickVideoUrl(
   return videos?.high || videos?.low || videos?.HLS || "";
 }
 
-// ─── Comando ────────────────────────────────────────────────────
+// ─── Comando ───────
 
 export default {
   name: ["xnxx", "xn"],
