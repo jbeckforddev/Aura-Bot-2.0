@@ -42,7 +42,7 @@ function isXvideosUrl(text: string): boolean {
 export default {
   name: ["xv", "xvideos", "xvid"],
   category: "nsfw",
-  description: "Busca y descarga videos de XVideos.",
+  description: "Busca videos de XVideos y descarga por enlace.",
   premiumOnly: true,
 
   async run(ctx: CommandContext) {
@@ -64,10 +64,7 @@ export default {
           90000,
         );
 
-        const videoUrl =
-          data?.download ||
-          data?.url ||
-          data?.result?.url;
+        const videoUrl = data?.download || data?.url || data?.result?.url;
 
         if (!data?.status || !videoUrl) {
           throw new Error("La API no devolvió un video descargable.");
@@ -116,7 +113,6 @@ export default {
       return;
     }
 
-    // BUSQUEDA DESCARGA DIRECTA POR TEXTO
     try {
       const searchData = await requestJson<XvideosApiResponse>(
         `${API}/nsfw/search/xvideos?query=${encodeURIComponent(query)}&key=${KEY}`,
@@ -124,83 +120,28 @@ export default {
       ).catch(() => null);
 
       const results: XvideosResult[] = Array.isArray(searchData?.resultados)
-        ? searchData!.resultados
+        ? searchData.resultados
         : [];
 
       if (results.length === 0) {
         throw new Error(`No se encontraron resultados para "${query}".`);
       }
 
-      // Mostrar lista de resultados al usuario
       const searchCaption = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
         label: "XVIDEOS SEARCH",
         icon: "🔞",
         query,
         engine: "XVideos API",
-        results: results.slice(0, 5).map((r) => ({
-          title: r.title || "Sin título",
-          artist: r.artist,
-          duration: r.duration,
-          url: r.url,
+        results: results.slice(0, 5).map((result) => ({
+          title: result.title || "Sin título",
+          artist: result.artist,
+          duration: result.duration,
+          url: result.url,
         })),
       });
 
-      await reply({ text: searchCaption });
-
-      // Descarga automática del primer resultado
-      const top = results[0];
-      if (!top?.url) throw new Error("El resultado no tiene URL de video.");
-
-      await react("⬇️");
-
-      const dlData = await requestJson<XvideosApiResponse>(
-        `${API}/nsfw/dl/xvideos?url=${encodeURIComponent(top.url)}&key=${KEY}`,
-        90000,
-      );
-
-      const videoUrl =
-        dlData?.download ||
-        dlData?.url ||
-        dlData?.result?.url;
-
-      if (!dlData?.status || !videoUrl) {
-        throw new Error("No se pudo descargar el video automáticamente.");
-      }
-
-      const title = top.title || "Video XVideos";
-      const artist = top.artist || "Desconocido";
-      const resolution = (top.resolution || "HD").replace(/(.+)\1/, "$1");
-      const duration = top.duration || "";
-
-      const file = await downloadToCache(videoUrl, 180000);
-      const { cost } = await prepareDownloadCharge(ctx, "video", file);
-
-      const caption = DL_TEMPLATE({
-        bold: fytBold,
-        label: "XVIDEOS",
-        icon: "🎥",
-        title,
-        author: artist,
-        quality: resolution,
-        duration,
-        cost: formatMoney(cost, ctx),
-        url: top.url,
-        showAuthor: true,
-        showQuality: true,
-        showDuration: Boolean(duration),
-        loadingText: "✅ Video listo",
-      });
-
-      await reply({
-        video: { url: file },
-        mimetype: "video/mp4",
-        fileName: "xvideos.mp4",
-        caption,
-      });
-
-      confirmDownloadCharge(ctx);
-      await react("✅");
+      return reply({ text: searchCaption });
     } catch (error: unknown) {
       await react("❌");
       return reply({

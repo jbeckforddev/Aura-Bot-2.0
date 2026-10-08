@@ -12,8 +12,6 @@ import { DL_TEMPLATE, SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 
-// ─── Tipos de la API ─────────
-
 interface XnxxSearchResult {
   title?: string;
   views?: string;
@@ -50,7 +48,9 @@ function isXnxxUrl(text: string): boolean {
 }
 
 /** Elige la mejor URL de video disponible (high > low > HLS) */
-function pickVideoUrl(videos?: XnxxDownloadResponse["resultado"]["videos"]): string {
+function pickVideoUrl(
+  videos?: XnxxDownloadResponse["resultado"]["videos"],
+): string {
   return videos?.high || videos?.low || videos?.HLS || "";
 }
 
@@ -59,7 +59,7 @@ function pickVideoUrl(videos?: XnxxDownloadResponse["resultado"]["videos"]): str
 export default {
   name: ["xnxx", "xn"],
   category: "nsfw",
-  description: "Busca y descarga videos de XNXX.",
+  description: "Busca videos de XNXX y descarga por enlace.",
 
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
@@ -73,9 +73,6 @@ export default {
 
     await react("⏳");
 
-    // ──────────────────────────────────────────────────────────────
-    // MODO DESCARGA DIRECTA: el usuario pasó una URL de xnxx
-    // ──────────────────────────────────────────────────────────────
     if (isXnxxUrl(query)) {
       try {
         const data = await requestJson<XnxxDownloadResponse>(
@@ -121,7 +118,6 @@ export default {
       return;
     }
 
-    // BUSQUEDA DESCARGA DIRECTA POR TEXTO
     try {
       const searchData = await requestJson<XnxxSearchResponse>(
         `${API}/nsfw/search/xnxx?query=${encodeURIComponent(query)}&key=${KEY}`,
@@ -129,79 +125,27 @@ export default {
       ).catch(() => null);
 
       const results: XnxxSearchResult[] = Array.isArray(searchData?.resultados)
-        ? searchData!.resultados
+        ? searchData.resultados
         : [];
 
       if (results.length === 0) {
         throw new Error(`No se encontraron resultados para "${query}".`);
       }
 
-      // Mostrar lista de resultados al usuario
       const searchCaption = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
         label: "XNXX SEARCH",
         icon: "🔞",
         query,
         engine: "XNXX API",
-        results: results.slice(0, 5).map((r) => ({
-          title: r.title || "Sin título",
-          duration: r.duration,
-          url: r.url,
+        results: results.slice(0, 5).map((result) => ({
+          title: result.title || "Sin título",
+          duration: result.duration,
+          url: result.url,
         })),
       });
 
-      await reply({ text: searchCaption });
-
-      // Descarga automática del primer resultado
-      const top = results[0];
-      if (!top?.url) throw new Error("El resultado no tiene URL de video.");
-
-      await react("⬇️");
-
-      const dlData = await requestJson<XnxxDownloadResponse>(
-        `${API}/nsfw/dl/xnxx?url=${encodeURIComponent(top.url)}&key=${KEY}`,
-        90000,
-      );
-
-      const videoUrl = pickVideoUrl(dlData?.resultado?.videos);
-
-      if (!dlData?.status || !videoUrl) {
-        throw new Error("No se pudo descargar el video automáticamente.");
-      }
-
-      const title = top.title || "Video XNXX";
-      const resolution = top.resolution || "HD";
-      const duration = top.duration || "";
-      const views = top.views || "";
-
-      const file = await downloadToCache(videoUrl, 180000);
-      const { cost } = await prepareDownloadCharge(ctx, "video", file);
-
-      const caption = DL_TEMPLATE({
-        bold: fytBold,
-        label: "XNXX",
-        icon: "🎥",
-        title,
-        quality: resolution,
-        duration,
-        views,
-        cost: formatMoney(cost, ctx),
-        url: top.url,
-        showQuality: true,
-        showDuration: Boolean(duration),
-        showViews: Boolean(views),
-        loadingText: "✅ Video listo",
-      });
-
-      await reply({
-        video: { url: file },
-        mimetype: "video/mp4",
-        fileName: "xnxx.mp4",
-        caption,
-      });
-
-      confirmDownloadCharge(ctx);
-      await react("✅");
+      return reply({ text: searchCaption });
     } catch (error: unknown) {
       await react("❌");
       return reply({
