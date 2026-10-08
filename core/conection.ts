@@ -145,6 +145,8 @@ async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
   }
 }
 
+const botStartTime = Math.floor(Date.now() / 1000);
+
 export async function connectToWhatsApp(
   sessionName: string,
   isSubBot: boolean = false,
@@ -643,6 +645,16 @@ export async function connectToWhatsApp(
 
     for (const msg of messages) {
       if (!msg) continue;
+      
+      // --- AGREGAR ESTA VALIDACIÓN ---
+      // Si el mensaje se envió antes de que el bot se encendiera, se ignora
+      const msgTimestamp = typeof msg.messageTimestamp === 'number' 
+        ? msg.messageTimestamp 
+        : (msg.messageTimestamp as any)?.low ?? 0;
+
+        if (msgTimestamp && msgTimestamp < botStartTime) {
+         continue; // Salta los mensajes viejos acumulados
+        }
 
       try {
         if (msg.key?.remoteJid?.endsWith("@g.us")) {
