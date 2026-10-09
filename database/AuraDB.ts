@@ -93,6 +93,7 @@ db_instance.exec(`
     LastEconomyRoulete INTEGER DEFAULT 0,
     LastEconomyAura INTEGER DEFAULT 0,
     LastEconomyRob INTEGER DEFAULT 0,
+    UserLang TEXT DEFAULT 'es',
     data TEXT DEFAULT '{}'
   );
 
@@ -113,6 +114,7 @@ db_instance.exec(`
     userWarns TEXT DEFAULT '{}',
     Muted_Users TEXT DEFAULT '[]',
     catBlocked TEXT DEFAULT '["nsfw"]',
+    GroupLang TEXT DEFAULT 'es',
     data TEXT DEFAULT '{}'
   );
 

@@ -1,5 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { DL_CONFIG } from "../../config.ts";
 
 export default {
   name: ["ssweb", "ss", "webss"],
@@ -14,7 +15,7 @@ export default {
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
     await react("🌐");
     try {
-      const apiUrl = `https://api.alyacore.xyz/tools/ssweb?url=${encodeURIComponent(url)}&device=pc&key=oboe`;
+      const apiUrl = `${DL_CONFIG.alya.BASE_URL}tools/ssweb?url=${encodeURIComponent(url)}&device=pc&key=${DL_CONFIG.alya.API_KEY}`;
       const response = await fetch(apiUrl, {
         signal: AbortSignal.timeout(60000),
       });
