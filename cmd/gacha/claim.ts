@@ -36,6 +36,15 @@ export default {
         "Tu tirada diaria ya quedó registrada.",
       );
 
+      if (char.image_url) {
+        return ctx.reply({
+          image: char.image_url,
+          caption: text,
+          mentions: [userId],
+          limitSharing: false,
+        });
+      }
+
       return ctx.reply({ text, mentions: [userId] });
     } catch {
       return ctx.reply("⚠️ No se pudo reclamar la tirada diaria.");

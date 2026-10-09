@@ -38,9 +38,15 @@ export default {
 
     await react("⏳");
 
-    const progressMsg = await sock.sendMessage(from, { 
-      text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando proceso...\n╰━━━━━━━━━━━━⬣` 
-    }, { quoted: msg }).catch(() => null);
+    const progressMsg = await sock
+      .sendMessage(
+        from,
+        {
+          text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando proceso...\n╰━━━━━━━━━━━━⬣`,
+        },
+        { quoted: msg as unknown as any },
+      )
+      .catch(() => null);
 
     const updateStatus = async (status: string) => {
       if (progressMsg?.key) {
@@ -68,19 +74,21 @@ export default {
       let downloaded = 0;
       let lastUpdate = Date.now();
 
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         const writer = createWriteStream(inputP);
-        stream.on('data', (chunk) => {
+        stream.on("data", (chunk) => {
           downloaded += chunk.length;
           const now = Date.now();
           if (total > 0 && now - lastUpdate > 1500) {
             const percent = Math.round((downloaded / total) * 100);
-            updateStatus(`┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`).catch(() => {});
+            updateStatus(
+              `┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`,
+            ).catch(() => {});
             lastUpdate = now;
           }
         });
         stream.pipe(writer);
-        writer.on("finish", resolve);
+        writer.on("finish", () => resolve());
         writer.on("error", reject);
       });
 

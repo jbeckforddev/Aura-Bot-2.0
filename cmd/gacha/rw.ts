@@ -14,6 +14,7 @@ export default {
 
     try {
       gacha.giveCharacter(ctx.sender, char.id);
+      gacha.setDailyRollUsed(ctx.sender);
       recordUserRoll(ctx.sender, char);
 
       const text = box(
