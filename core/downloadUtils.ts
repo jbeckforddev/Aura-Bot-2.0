@@ -167,6 +167,7 @@ export async function downloadToCache(
   url: string,
   timeout = 180000,
   headers: Record<string, string> = {},
+  maxBytes = Number.POSITIVE_INFINITY,
 ): Promise<string> {
   return queueDownload(async () => {
     await mkdir(CACHE_DIR, { recursive: true });
@@ -195,8 +196,23 @@ export async function downloadToCache(
         });
         if (!response.ok) throw new Error(`Descarga HTTP ${response.status}`);
 
+        const contentLength = response.headers.get("content-length");
+        if (contentLength) {
+          const length = Number(contentLength);
+          if (Number.isFinite(length) && length > maxBytes) {
+            throw new Error(
+              `El archivo excede el máximo permitido (${formatBytes(maxBytes)}).`,
+            );
+          }
+        }
+
         const buffer = Buffer.from(await response.arrayBuffer());
         if (!buffer.length) throw new Error("La descarga no devolvió contenido.");
+        if (buffer.length > maxBytes) {
+          throw new Error(
+            `El archivo excede el máximo permitido (${formatBytes(maxBytes)}).`,
+          );
+        }
 
         await writeFile(partialPath, buffer);
         await rename(partialPath, filePath);
@@ -210,6 +226,20 @@ export async function downloadToCache(
     }
     throw lastError instanceof Error ? lastError : new Error("Descarga fallida.");
   });
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "sin límite";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 export function safeFileName(value: unknown, fallback: string): string {

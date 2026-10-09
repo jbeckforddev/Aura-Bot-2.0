@@ -49,7 +49,12 @@ export default {
     await react("⏳");
     try {
       const data = await resolveMediaFire(url);
-      const file = await downloadToCache(data.download, 180000);
+      const file = await downloadToCache(
+        data.download,
+        180000,
+        {},
+        2 * 1024 * 1024 * 1024,
+      );
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const name = safeFileName(data.name, "mediafire");
       const extension =
@@ -80,8 +85,12 @@ export default {
       await react("✅");
     } catch (error: unknown) {
       await react("❌");
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error) || "No se pudo descargar el archivo.";
       return reply({
-        text: `${error instanceof Error ? error.message : String(error) || "No se pudo descargar el archivo."}`,
+        text: `${message}\n\nMáximo permitido: 2 GB para MediaFire.`,
       });
     }
   },

@@ -22,8 +22,46 @@ import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
 const API = "https://api.delirius.online/download/ytmp4";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
+const MAX_VIDEO_DURATION_SECONDS = 20 * 60;
+
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
+}
+
+function parseDurationToSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+  if (typeof value !== "string") return null;
+
+  const text = value.trim();
+  if (!text) return null;
+
+  if (/^\d+$/.test(text)) return Number(text);
+
+  const isoMatch = text.match(
+    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i,
+  );
+  if (isoMatch && /[hms]/i.test(text)) {
+    const days = Number(isoMatch[1] || 0);
+    const hours = Number(isoMatch[2] || 0);
+    const minutes = Number(isoMatch[3] || 0);
+    const seconds = Number(isoMatch[4] || 0);
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  }
+
+  const colonMatch = text.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+  if (colonMatch) {
+    const hours = Number(colonMatch[1] || 0);
+    const minutes = Number(colonMatch[2]);
+    const seconds = Number(colonMatch[3]);
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  const mmssMatch = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (mmssMatch) {
+    return Number(mmssMatch[1]) * 60 + Number(mmssMatch[2]);
+  }
+
+  return null;
 }
 
 export default {
@@ -53,8 +91,18 @@ export default {
       const channel = video.author || video.channel || data.canal || "YouTube";
       const thumbnail = video.image || data.miniatura;
       const size = video.size || video.tamaño;
-      const duration = data.duracion;
-      const file = await downloadToCache(downloadUrl);
+      const durationValue =
+        data.duracion || data.duration || (typeof video?.duration === "string" ? video.duration : undefined);
+      const duration = String(durationValue || "");
+      const durationSeconds = parseDurationToSeconds(duration);
+
+      if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
+        throw new Error(
+          `El video excede la duración máxima permitida (20 minutos).`,
+        );
+      }
+
+      const file = await downloadToCache(downloadUrl, 20 * 60 * 1000);
       convertedFile = await CONVERT_TO_AVC(file);
       const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
       const caption = DL_TEMPLATE({
@@ -98,8 +146,10 @@ export default {
       await react("✅");
     } catch (error: unknown) {
       await react("❌");
+      const message =
+        error instanceof Error ? error.message : "No se pudo descargar el video.";
       return reply({
-        text: `${error instanceof Error ? error.message : "No se pudo descargar el video."}`,
+        text: `${message}\n\nMáximo permitido: 20 minutos de duración para YouTube video normal.`,
       });
     } finally {
       if (convertedFile)
