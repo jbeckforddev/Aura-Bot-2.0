@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
-import { identifySong } from "../../core/shazamScraper.ts";
+import { identifySong } from "../../utils/shazamScraper.js";
 import { fytBold } from "../../core/socketText.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 
