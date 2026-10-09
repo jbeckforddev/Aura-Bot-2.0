@@ -1,9 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
 import { Agent, interceptors, request } from "undici";
 import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
@@ -74,6 +71,59 @@ export async function requestText(
 }
 
 const CACHE_DIR = path.resolve(process.env.GLOBAL_CUSTOM_TMP || "./cache");
+const MAX_CONCURRENT_DOWNLOADS = 2;
+const MAX_QUEUED_DOWNLOADS_BEFORE_NOTICE = 3;
+let activeDownloads = 0;
+const queuedDownloads: Array<() => void> = [];
+
+export function getDownloadQueueStatus() {
+  const waiting = queuedDownloads.length;
+  const message =
+    activeDownloads >= MAX_CONCURRENT_DOWNLOADS
+      ? "El bot está ocupando 2 descargas simultáneas. Inténtalo en unos segundos."
+      : waiting > 0
+        ? `Hay ${waiting} descarga(s) esperando en cola. El bot va a procesarlas en orden.`
+        : null;
+
+  return {
+    active: activeDownloads,
+    waiting,
+    maxConcurrent: MAX_CONCURRENT_DOWNLOADS,
+    message,
+  };
+}
+
+function queueDownload<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeDownloads += 1;
+      task()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => {
+          activeDownloads -= 1;
+          const next = queuedDownloads.shift();
+          if (next) next();
+        });
+    };
+
+    if (activeDownloads < MAX_CONCURRENT_DOWNLOADS) {
+      run();
+      return;
+    }
+
+    if (queuedDownloads.length >= MAX_QUEUED_DOWNLOADS_BEFORE_NOTICE) {
+      reject(
+        new Error(
+          "El bot está saturado: ya hay 2 descargas activas y varias en cola. Inténtalo en unos segundos.",
+        ),
+      );
+      return;
+    }
+
+    queuedDownloads.push(run);
+  });
+}
 
 export async function getFileBytes(filePath: string): Promise<number> {
   const info = await stat(filePath);
@@ -88,47 +138,47 @@ export async function downloadToCache(
   timeout = 180000,
   headers: Record<string, string> = {},
 ): Promise<string> {
-  await mkdir(CACHE_DIR, { recursive: true });
-  const cacheKey = createHash("sha256").update(url).digest("hex").slice(0, 32);
-  const filePath = path.join(CACHE_DIR, `download-${cacheKey}.bin`);
+  return queueDownload(async () => {
+    await mkdir(CACHE_DIR, { recursive: true });
+    const cacheKey = createHash("sha256").update(url).digest("hex").slice(0, 32);
+    const filePath = path.join(CACHE_DIR, `download-${cacheKey}.bin`);
 
-  try {
-    const cached = await stat(filePath);
-    if (cached.size > 0) return filePath;
-  } catch {
-    // El archivo aún no existe o quedó incompleto.
-  }
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const partialPath = path.join(
-      CACHE_DIR,
-      `.download-${cacheKey}-${process.pid}-${randomBytes(4).toString("hex")}.part`,
-    );
     try {
-      const response = await fetch(url, {
-        headers: { ...HEADERS, ...headers },
-        signal: AbortSignal.timeout(timeout),
-        redirect: "follow",
-      });
-      if (!response.ok) throw new Error(`Descarga HTTP ${response.status}`);
-      if (!response.body) throw new Error("La descarga no devolvió contenido.");
-      await pipeline(
-        Readable.fromWeb(
-          response.body as import("node:stream/web").ReadableStream,
-        ),
-        createWriteStream(partialPath),
-      );
-      await rename(partialPath, filePath);
-      return filePath;
-    } catch (error) {
-      lastError = error;
-      await rm(partialPath, { force: true }).catch(() => {});
-      if (attempt < 2)
-        await new Promise((resolve) => setTimeout(resolve, 700 * 2 ** attempt));
+      const cached = await stat(filePath);
+      if (cached.size > 0) return filePath;
+    } catch {
+      // El archivo aún no existe o quedó incompleto.
     }
-  }
-  throw lastError instanceof Error ? lastError : new Error("Descarga fallida.");
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const partialPath = path.join(
+        CACHE_DIR,
+        `.download-${cacheKey}-${process.pid}-${randomBytes(4).toString("hex")}.part`,
+      );
+      try {
+        const response = await fetch(url, {
+          headers: { ...HEADERS, ...headers },
+          signal: AbortSignal.timeout(timeout),
+          redirect: "follow",
+        });
+        if (!response.ok) throw new Error(`Descarga HTTP ${response.status}`);
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (!buffer.length) throw new Error("La descarga no devolvió contenido.");
+
+        await writeFile(partialPath, buffer);
+        await rename(partialPath, filePath);
+        return filePath;
+      } catch (error) {
+        lastError = error;
+        await rm(partialPath, { force: true }).catch(() => {});
+        if (attempt < 2)
+          await new Promise((resolve) => setTimeout(resolve, 700 * 2 ** attempt));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Descarga fallida.");
+  });
 }
 
 export function safeFileName(value: unknown, fallback: string): string {
