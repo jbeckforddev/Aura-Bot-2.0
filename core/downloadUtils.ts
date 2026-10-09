@@ -16,9 +16,39 @@ const HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
   Accept: "application/json, text/plain, */*",
+  "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
   "Cache-Control": "no-cache, no-store",
   Pragma: "no-cache",
+  DNT: "1",
+  Connection: "keep-alive",
 };
+
+function resolveRequestHeaders(
+  url: string,
+  extraHeaders: Record<string, string> = {},
+): Record<string, string> {
+  const hostname = new URL(url).hostname.toLowerCase();
+  const isFacebookHost =
+    hostname.includes("facebook") || hostname.includes("fbcdn");
+
+  if (!isFacebookHost) {
+    return { ...HEADERS, ...extraHeaders };
+  }
+
+  return {
+    ...HEADERS,
+    ...extraHeaders,
+    Accept: "video/*,*/*;q=0.8",
+    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+    Origin: "https://www.facebook.com",
+    Referer: "https://www.facebook.com/",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Sec-Fetch-Dest": "video",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+  };
+}
 
 export async function requestJson<T = Record<string, unknown>>(
   url: string,
@@ -157,8 +187,9 @@ export async function downloadToCache(
         `.download-${cacheKey}-${process.pid}-${randomBytes(4).toString("hex")}.part`,
       );
       try {
+        const requestHeaders = resolveRequestHeaders(url, headers);
         const response = await fetch(url, {
-          headers: { ...HEADERS, ...headers },
+          headers: requestHeaders,
           signal: AbortSignal.timeout(timeout),
           redirect: "follow",
         });
