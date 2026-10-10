@@ -465,8 +465,4 @@ export async function searchYouTubeVideo(
   }
 
   return selected;
-}
-
-console.log(searchYouTubeVideos("Hola remix").then((videos) => {
-  console.log("Resultados de búsqueda de YouTube:", videos[0]);
-}));
+};
