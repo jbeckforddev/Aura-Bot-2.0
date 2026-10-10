@@ -51,8 +51,6 @@ export default {
         duration: video.duration,
         views: video.views === undefined ? undefined : String(video.views),
         likes: video.likes === undefined ? undefined : String(video.likes),
-        videoId: video.videoId,
-        source: video.winner,
         type: "Documento MP4",
         cost: formatMoney(cost, ctx),
         url,

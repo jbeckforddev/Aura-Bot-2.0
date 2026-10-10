@@ -66,8 +66,6 @@ export default {
         quality: audio.quality,
         views: audio.views === undefined ? undefined : String(audio.views),
         likes: audio.likes === undefined ? undefined : String(audio.likes),
-        videoId: audio.videoId,
-        source: audio.winner,
         type: "Documento MP3",
         cost: formatMoney(cost, ctx),
         url,

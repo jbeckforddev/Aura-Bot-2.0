@@ -112,8 +112,6 @@ export default {
         type: `Video MP4 (${video.quality})`,
         views: video.views === undefined ? undefined : String(video.views),
         likes: video.likes === undefined ? undefined : String(video.likes),
-        videoId: video.videoId,
-        source: video.winner,
         cost: formatMoney(cost, ctx),
         url,
         showChannel: Boolean(channel),
