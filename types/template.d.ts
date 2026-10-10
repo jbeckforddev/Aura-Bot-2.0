@@ -15,6 +15,8 @@ export interface DownloadTemplateOptions {
   showType?: boolean;
   showViews?: boolean;
   showLikes?: boolean;
+  showVideoId?: boolean;
+  showSource?: boolean;
   showComments?: boolean;
   showShares?: boolean;
   showAuthor?: boolean;
@@ -37,6 +39,8 @@ export interface DownloadTemplateOptions {
   url?: string;
   views?: string | number;
   likes?: string | number;
+  videoId?: string;
+  source?: string;
   comments?: string | number;
   shares?: string | number;
   total?: string | number;

@@ -1,7 +1,5 @@
 import type {
   CommandContext,
-  YouTubeMp3Data,
-  YouTubeMp3Response,
 } from "../../types/index.d.ts";
 import { readFile } from "node:fs/promises";
 import {
@@ -10,12 +8,8 @@ import {
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
-import { DL_CONFIG } from "../../config.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
-import {
-  downloadToCache,
-  requestJson,
-} from "../../core/downloadUtils.ts";
+import { downloadToCache } from "../../core/downloadUtils.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
@@ -26,10 +20,8 @@ import { DL_TEMPLATE } from "../../utils/template.ts";
 import {
   searchYouTubeVideo,
   type YouTubeSearchVideo,
-} from "../../core/youtubeSearch.ts";
-
-const API_KEY = DL_CONFIG.alya.API_KEY;
-const BASE_URL = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
+} from "../../src/api/youtubeSearch.ts";
+import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
 
 function getYouTubeVideoId(value: string): string | null {
   const rawUrl = String(value || "").trim();
@@ -73,18 +65,6 @@ function isYouTubeUrl(value: string): boolean {
   );
 }
 
-async function downloadYouTubeAudio(url: string): Promise<YouTubeMp3Data> {
-  const downloadUrl = `${BASE_URL}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${API_KEY}`;
-  const data = await requestJson<YouTubeMp3Response>(downloadUrl, 30000, {
-    "User-Agent": "AuraReedBot/2.0",
-  });
-  if (data?.status !== true || !data.data?.dl) {
-    throw new Error("La API no devolvió un audio descargable.");
-  }
-
-  return data.data;
-}
-
 export default {
   name: ["play", "ytmp3", "ytaudio", "playaudio", "playmp3", "ytmusic", "yta"],
   description: "Busca y descarga audio de YouTube.",
@@ -111,20 +91,24 @@ export default {
         finalUrl = `https://youtu.be/${videoId}`;
       }
 
-      const audio = await downloadYouTubeAudio(finalUrl);
+      const audio = await downloadYouTube(
+        finalUrl,
+        "audio",
+        128,
+        result || undefined,
+      );
       const title = String(audio.title || result?.title || "audio").trim();
       const author = audio.author || result?.author || "Desconocido";
       const duration = audio.duration || result?.duration || "??";
-      const views = result?.views || "0";
+      const views = audio.views ?? result?.views ?? "0";
+      const likes = audio.likes ?? result?.likes;
       const quality = audio.quality || "128k";
-      const videoId = String(
-        audio.videoId || result?.videoId || getYouTubeVideoId(finalUrl) || "",
-      ).trim();
+      const videoId = audio.videoId;
       const youtubeUrl = videoId
         ? `https://youtu.be/${videoId}`
         : result?.url || finalUrl;
-      if (!audio.dl) throw new Error("No se pudo obtener el audio.");
-      const file = await downloadToCache(audio.dl);
+      if (!audio.dl_url) throw new Error("No se pudo obtener el audio.");
+      const file = await downloadToCache(audio.dl_url);
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
@@ -134,12 +118,18 @@ export default {
         channel: author,
         duration: formatDuration(duration),
         views: formatCount(views),
+        likes: likes === undefined ? undefined : formatCount(likes),
+        videoId,
+        source: audio.winner,
         quality,
         cost: formatMoney(cost, ctx),
         url: youtubeUrl,
         showChannel: true,
         showDuration: Boolean(duration && duration !== "??"),
-        showViews: Boolean(result?.views),
+        showViews: views !== undefined,
+        showLikes: likes !== undefined,
+        showVideoId: Boolean(videoId),
+        showSource: true,
         showQuality: Boolean(quality),
         loadingText: "Descargando audio...",
         loadingIcon: "⏳",

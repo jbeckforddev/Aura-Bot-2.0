@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
-import { identifySong } from "../../utils/shazamScraper.js";
+import { identifySong } from "../../src/api/shazamScraper.js";
 import { fytBold } from "../../core/socketText.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 
@@ -52,9 +52,7 @@ export default {
       const track = await identifySong(buffer);
       let text = `╭〔 🔍 ${fytBold("SHAZAM RESULT")} 〕━⬣\n\n┃ ➥ ${track.title || "Desconocido"}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Artista")} › ${track.artist || "Desconocido"}\n┃ > ${fytBold("Álbum")} › ${track.album || "Desconocido"}\n┃ > ${fytBold("Género")} › ${track.genre || "Desconocido"}\n┃ > ${fytBold("Fecha")} › ${track.releaseDate || "Desconocida"}\n┃ > ${fytBold("Sello")} › ${track.label || "Desconocida"}\n\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
       const title = track.title || "Canción identificada";
-      const link =
-        track.url ||
-        `https://www.google.com/search?q=${encodeURIComponent(`${title} ${track.artist || ""}`)}`;
+      const link = `https://www.google.com/search?q=${encodeURIComponent(`${title} ${track.artist || ""}`)}`;
       const hasPreview = track.coverArt
         ? await sendDownloadPreview({
             sock: ctx.sock,

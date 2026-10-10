@@ -1,10 +1,8 @@
 import { fytBold } from "../../core/socketText.ts";
 import {
   downloadToCache,
-  requestJson,
   safeFileName,
 } from "../../core/downloadUtils.ts";
-import { DL_CONFIG } from "../../config.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import {
   prepareDownloadCharge,
@@ -13,12 +11,14 @@ import {
 } from "../../core/economyConfig.ts";
 import type {
   CommandContext,
-  YouTubeMp3Response,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
-import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
+import {
+  searchYouTubeVideo,
+  type YouTubeSearchVideo,
+} from "../../src/api/youtubeSearch.ts";
+import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
 
-const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const YT_ID =
   /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 
@@ -42,46 +42,50 @@ export default {
     await react("⏳");
     try {
       let url = query;
+      let searchResult: YouTubeSearchVideo | undefined;
       if (!YT_ID.test(query)) {
-        url = (await searchYouTubeVideo(query)).url;
+        searchResult = await searchYouTubeVideo(query);
+        url = searchResult.url;
       } else {
         const videoId = query.match(YT_ID)?.[1];
         if (!videoId) throw new Error("URL de YouTube no válida.");
         url = `https://youtu.be/${videoId}`;
       }
       if (!url) throw new Error("No se encontró ningún video.");
-      const data = await requestJson<YouTubeMp3Response>(
-        `${API}/dl/ytmp3v2?url=${encodeURIComponent(url)}&key=${DL_CONFIG.alya.API_KEY}`,
-      );
-      const info = data?.data;
-      const downloadUrl = info?.dl;
-      if (!data?.status || !info || !downloadUrl)
-        throw new Error("No se pudo obtener el audio.");
-      const title = info.title || "Audio de YouTube";
-      const file = await downloadToCache(downloadUrl);
+      const audio = await downloadYouTube(url, "audio", 128, searchResult);
+      const title = audio.title || "Audio de YouTube";
+      const file = await downloadToCache(audio.dl_url);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE DOCUMENT",
         icon: "🎵",
         title,
-        channel: info.author,
-        duration: info.duration,
-        quality: info.quality,
+        channel: audio.author,
+        duration: audio.duration,
+        quality: audio.quality,
+        views: audio.views === undefined ? undefined : String(audio.views),
+        likes: audio.likes === undefined ? undefined : String(audio.likes),
+        videoId: audio.videoId,
+        source: audio.winner,
         type: "Documento MP3",
         cost: formatMoney(cost, ctx),
         url,
-        showChannel: Boolean(info.author),
-        showDuration: Boolean(info.duration),
-        showQuality: Boolean(info.quality),
+        showChannel: Boolean(audio.author),
+        showDuration: Boolean(audio.duration),
+        showQuality: Boolean(audio.quality),
+        showViews: audio.views !== undefined,
+        showLikes: audio.likes !== undefined,
+        showVideoId: Boolean(audio.videoId),
+        showSource: true,
         showType: true,
         loadingText: "Descargando documento...",
         loadingIcon: "⏳",
       });
-      const videoId = url.match(YT_ID)?.[1];
+      const videoId = audio.videoId || url.match(YT_ID)?.[1];
       const thumbnail = videoId
-        ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-        : "";
+        ? audio.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+        : audio.thumbnail;
       const hasPreview = thumbnail
         ? await sendDownloadPreview({
             sock,

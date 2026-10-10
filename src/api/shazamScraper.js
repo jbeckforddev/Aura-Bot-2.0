@@ -50,8 +50,8 @@ async function recognizeUrl(audioUrl, startTime = 0) {
   let json = null;
   try {
     json = JSON.parse(texto);
-  } catch {
-    
+  } catch (err) {
+    console.error("Error al parsear JSON de SongFinder:", err);
   }
 
   if (!res.ok) throw new Error(`SongFinder respondió HTTP ${res.status}`);
@@ -136,7 +136,9 @@ function prepareClip(buffer, seconds = CLIP_SECONDS) {
     const limpiar = () => {
       try {
         fs.unlinkSync(tmpIn);
-      } catch {}
+      } catch (err) {
+        console.error("Error al eliminar archivo temporal:", err);
+      }
     };
 
     ff.stdout.on("data", (c) => chunks.push(c));

@@ -2,7 +2,6 @@ import { rm } from "node:fs/promises";
 import { fytBold } from "../../core/socketText.ts";
 import {
   downloadToCache,
-  requestJson,
   safeFileName,
 } from "../../core/downloadUtils.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
@@ -13,13 +12,15 @@ import {
 } from "../../core/economyConfig.ts";
 import type {
   CommandContext,
-  YouTubeVideoData,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
-import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
+import {
+  searchYouTubeVideo,
+  type YouTubeSearchVideo,
+} from "../../src/api/youtubeSearch.ts";
+import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
 
-const API = "https://api.delirius.online/download/ytmp4";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
 const MAX_VIDEO_DURATION_SECONDS = 20 * 60;
@@ -76,24 +77,20 @@ export default {
     let convertedFile = "";
     try {
       const id = videoId(query);
+      let searchResult: YouTubeSearchVideo | undefined;
       const url = id
         ? `https://youtu.be/${id}`
-        : (await searchYouTubeVideo(query)).url;
-      const data = await requestJson<YouTubeVideoData>(
-        `${API}?url=${encodeURIComponent(url)}&format=${ql}`,
-        60000,
+        : ((searchResult = await searchYouTubeVideo(query)).url);
+      const video = await downloadYouTube(
+        url,
+        "video",
+        Number.parseInt(ql, 10),
+        searchResult,
       );
-      const video = data?.data;
-      const downloadUrl = video?.download || video?.url;
-      if (!data?.status || !downloadUrl)
-        throw new Error("La API no pudo procesar el video.");
-      const title = video.title || data.titulo || "Video de YouTube";
-      const channel = video.author || video.channel || data.canal || "YouTube";
-      const thumbnail = video.image || data.miniatura;
-      const size = video.size || video.tamaño;
-      const durationValue =
-        data.duracion || data.duration || (typeof video?.duration === "string" ? video.duration : undefined);
-      const duration = String(durationValue || "");
+      const title = video.title || "Video de YouTube";
+      const channel = video.author || "YouTube";
+      const thumbnail = video.thumbnail;
+      const duration = video.duration;
       const durationSeconds = parseDurationToSeconds(duration);
 
       if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
@@ -102,7 +99,7 @@ export default {
         );
       }
 
-      const file = await downloadToCache(downloadUrl, 20 * 60 * 1000);
+      const file = await downloadToCache(video.dl_url, 20 * 60 * 1000);
       convertedFile = await CONVERT_TO_AVC(file);
       const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
       const caption = DL_TEMPLATE({
@@ -112,14 +109,20 @@ export default {
         title,
         channel,
         duration,
-        size,
-        type: `Video MP4${video.format ? ` (${video.format})` : ""}`,
+        type: `Video MP4 (${video.quality})`,
+        views: video.views === undefined ? undefined : String(video.views),
+        likes: video.likes === undefined ? undefined : String(video.likes),
+        videoId: video.videoId,
+        source: video.winner,
         cost: formatMoney(cost, ctx),
         url,
         showChannel: Boolean(channel),
         showDuration: Boolean(duration),
-        showSize: Boolean(size),
         showType: true,
+        showViews: video.views !== undefined,
+        showLikes: video.likes !== undefined,
+        showVideoId: Boolean(video.videoId),
+        showSource: true,
         loadingText: "Enviando video...",
         loadingIcon: "⏳",
       });

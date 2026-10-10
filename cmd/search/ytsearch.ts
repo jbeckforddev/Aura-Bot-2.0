@@ -9,7 +9,7 @@ import { fytBold } from "../../core/socketText.ts";
 import { downloadToCache } from "../../core/downloadUtils.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
-import { searchYouTubeVideos } from "../../core/youtubeSearch.ts";
+import { searchYouTubeVideos } from "../../src/api/youtubeSearch.ts";
 
 export default {
   name: ["ytsearch", "yts", "plays"],
@@ -28,11 +28,13 @@ export default {
         label: "YOUTUBE SEARCH",
         icon: "🎬",
         query,
-        engine: "AlyaCore API",
+        engine: videos[0].winner,
         results: videos.map((video) => ({
           title: video.title,
           artist: video.author || "Desconocido",
           duration: video.duration || "N/A",
+          likes:
+            video.likes === undefined ? "No disponible" : String(video.likes),
           url: video.url,
         })),
       });
@@ -79,4 +81,3 @@ export default {
     }
   },
 };
-

@@ -4,6 +4,7 @@ interface SearchResultItem {
   title: string;
   artist?: string;
   duration?: string;
+  likes?: string;
   url?: string;
 }
 
@@ -31,6 +32,8 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
     showType = false,
     showViews = false,
     showLikes = false,
+    showVideoId = false,
+    showSource = false,
     showComments = false,
     showShares = false,
     showAuthor = false,
@@ -53,6 +56,8 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
     url,
     views,
     likes,
+    videoId,
+    source,
     comments,
     shares,
     total,
@@ -74,6 +79,8 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
   if (showDuration && duration) {lines.push(`┃ > ${bold("Duración")} › ${duration}`)}
   if (showViews && views !== undefined && views !== null && views !== "") {lines.push(`┃ > ${bold("Vistas")} › ${views}`)}
   if (showLikes && likes !== undefined && likes !== null && likes !== "") {lines.push(`┃ > ${bold("Likes")} › ${likes}`);}
+  if (showVideoId && videoId) {lines.push(`┃ > ${bold("ID")} › ${videoId}`);}
+  if (showSource && source) {lines.push(`┃ > ${bold("Motor")} › ${source}`);}
   if (showComments && comments !== undefined && comments !== null && comments !== "") {lines.push(`┃ > ${bold("Comentarios")} › ${comments}`)}
   if (showShares && shares !== undefined && shares !== null && shares !== "") {lines.push(`┃ > ${bold("Compartidos")} › ${shares}`)}
   if (showQuality && quality) {lines.push(`┃ > ${bold("Calidad")} › ${quality}`);}
@@ -127,6 +134,7 @@ function buildSearchResultsTemplate(options: SearchTemplateOptions = {}): string
     lines.push(`┃ ${index + 1}. ${bold(item.title || "Sin título")}`);
     if (item.artist) lines.push(`┃ ├ 👤 ${bold("Artista")} › ${item.artist}`);
     if (item.duration) lines.push(`┃ ├ ⏱️ ${bold("Duración")} › ${item.duration}`);
+    if (item.likes) lines.push(`┃ ├ 👍 ${bold("Likes")} › ${item.likes}`);
     if (item.url) lines.push(`┃ └ 🔗 ${bold("Url")} › ${item.url}`);
     lines.push("");
   });

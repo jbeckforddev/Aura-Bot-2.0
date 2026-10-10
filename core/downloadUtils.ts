@@ -54,15 +54,19 @@ export async function requestJson<T = Record<string, unknown>>(
   url: string,
   timeout = 30000,
   headers: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<T> {
   let lastError: unknown;
   let requestUrl = url;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const requestSignal = signal
+        ? AbortSignal.any([AbortSignal.timeout(timeout), signal])
+        : AbortSignal.timeout(timeout);
       const response = await request(requestUrl, {
         dispatcher: REQUEST_AGENT,
         headers: { ...HEADERS, ...headers },
-        signal: AbortSignal.timeout(timeout),
+        signal: requestSignal,
       });
       if (response.statusCode === 304) {
         await response.body.dump();
@@ -74,6 +78,7 @@ export async function requestJson<T = Record<string, unknown>>(
       }
       return (await response.body.json()) as T;
     } catch (error) {
+      if (signal?.aborted) throw error;
       lastError = error;
       if (attempt < 2)
         await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));

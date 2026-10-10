@@ -1,7 +1,6 @@
 import { fytBold } from "../../core/socketText.ts";
 import {
   downloadToCache,
-  requestJson,
   safeFileName,
 } from "../../core/downloadUtils.ts";
 import {
@@ -11,12 +10,14 @@ import {
 } from "../../core/economyConfig.ts";
 import type {
   CommandContext,
-  YouTubeVideoData,
 } from "../../types/index";
 import { DL_TEMPLATE } from "../../utils/template.ts";
-import { searchYouTubeVideo } from "../../core/youtubeSearch.ts";
+import {
+  searchYouTubeVideo,
+  type YouTubeSearchVideo,
+} from "../../src/api/youtubeSearch.ts";
+import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
 
-const API = "https://api.lempi.lat";
 const ID =
   /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 
@@ -31,31 +32,36 @@ export default {
     await react("⏳");
     try {
       let url = query;
+      let searchResult: YouTubeSearchVideo | undefined;
       if (!ID.test(query)) {
-        url = (await searchYouTubeVideo(query)).url;
+        searchResult = await searchYouTubeVideo(query);
+        url = searchResult.url;
       } else url = `https://youtu.be/${query.match(ID)?.[1]}`;
       if (!url) throw new Error("No se encontró ningún video.");
-      const data = await requestJson<YouTubeVideoData>(
-        `${API}/dl/ytv?url=${encodeURIComponent(url)}&quality=1080&apikey=OBOE-AERETHIX`,
-        60000,
-      );
-      if (!data?.status || !data.datos?.url)
-        throw new Error("No se pudo obtener el video.");
-      const title = data.titulo || "Video de YouTube";
-      const file = await downloadToCache(data.datos.url);
+      const video = await downloadYouTube(url, "video", 1080, searchResult);
+      const title = video.title || "Video de YouTube";
+      const file = await downloadToCache(video.dl_url);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE DOCUMENT",
         icon: "🎬",
         title,
-        channel: globalThis.DEFAULT_BOT_AUTHOR,
-        duration: data.duracion,
+        channel: video.author,
+        duration: video.duration,
+        views: video.views === undefined ? undefined : String(video.views),
+        likes: video.likes === undefined ? undefined : String(video.likes),
+        videoId: video.videoId,
+        source: video.winner,
         type: "Documento MP4",
         cost: formatMoney(cost, ctx),
         url,
-        showChannel: Boolean(data.canal),
-        showDuration: Boolean(data.duracion),
+        showChannel: Boolean(video.author),
+        showDuration: Boolean(video.duration),
+        showViews: video.views !== undefined,
+        showLikes: video.likes !== undefined,
+        showVideoId: Boolean(video.videoId),
+        showSource: true,
         showType: true,
         loadingText: "Descargando documento...",
         loadingIcon: "⏳",
