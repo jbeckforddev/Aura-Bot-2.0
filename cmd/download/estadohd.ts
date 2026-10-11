@@ -38,7 +38,7 @@ const createProgressBar = (percent: number): string => {
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento a video HD garantizando calidad original.",
+  description: "Convierte un documento a video HD rápido y con calidad original.",
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -63,7 +63,7 @@ export default {
 
     const progressMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Analizando heurística...\n╰━━━━━━━━━━━━⬣` },
+      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Preparando entorno...\n╰━━━━━━━━━━━━⬣` },
       { quoted: msg as any }
     ).catch(() => null);
 
@@ -140,14 +140,16 @@ export default {
       }
 
       await react("🗜️").catch(() => undefined);
-      await updateStatus(`┃ 🗜️ Estado: Parcheando metadatos\n┃ 📊 Progreso: Evaluando bitrate...`);
 
       if (isVideo) {
+        await updateStatus(`┃ 🗜️ Estado: Analizando formato\n┃ 📊 Progreso: Leyendo códec base...`);
         const sizeMB = statSync(finalPath).size / (1024 * 1024);
+        
         try {
           if (sizeMB > 60) {
+            await updateStatus(`┃ ⚙️ Estado: Renderizando video\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
             await execAsync(
-              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 20 -preset slow -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
+              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
               { maxBuffer: 1024 * 1024 * 50 }
             );
             finalPath = outputP;
@@ -156,13 +158,15 @@ export default {
             const codec = codecInfo.trim().toLowerCase();
 
             if (codec === "h264") {
+              await updateStatus(`┃ ⚙️ Estado: Clonando flujo (0% pérdida)\n┃ 📊 Progreso: Bypass directo...`);
               await execAsync(
                 `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outputP}"`,
                 { maxBuffer: 1024 * 1024 * 50 }
               );
             } else {
+              await updateStatus(`┃ ⚙️ Estado: Re-codificando formato\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
               await execAsync(
-                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
+                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
                 { maxBuffer: 1024 * 1024 * 50 }
               );
             }
@@ -172,6 +176,7 @@ export default {
           finalPath = isZip ? finalPath : inputP;
         }
       } else if (isImage) {
+        await updateStatus(`┃ 🗜️ Estado: Optimizando imagen\n┃ 📊 Progreso: Renderizando...`);
         try {
           await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
           finalPath = outputP;
