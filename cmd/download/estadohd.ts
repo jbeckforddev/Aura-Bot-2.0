@@ -11,22 +11,23 @@ import { fytBold } from "../../core/socketText.ts";
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 
-const findMediaFile = async (dir: string): Promise<string | null> => {
+const findAllMediaFiles = async (dir: string): Promise<string[]> => {
+  let results: string[] = [];
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
-        const found = await findMediaFile(fullPath);
-        if (found) return found;
+        const subResults = await findAllMediaFiles(fullPath);
+        results = results.concat(subResults);
       } else if (/\.(mp4|jpg|jpeg|png)$/i.test(entry.name)) {
-        return fullPath;
+        results.push(fullPath);
       }
     }
   } catch {
-    return null;
+    return results;
   }
-  return null;
+  return results;
 };
 
 const createProgressBar = (percent: number): string => {
@@ -38,7 +39,7 @@ const createProgressBar = (percent: number): string => {
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento a video HD rápido y con calidad original.",
+  description: "Convierte lote de documentos/zips a HD rápido y con calidad original.",
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -51,8 +52,8 @@ export default {
     const mime = docMsg.mimetype || "";
     const fileName = docMsg.fileName?.toLowerCase() || "";
     
-    let isVideo = mime.includes("video");
-    let isImage = mime.includes("image");
+    const isVideo = mime.includes("video");
+    const isImage = mime.includes("image");
     const isZip = mime.includes("zip") || fileName.endsWith(".zip");
 
     if (!isVideo && !isImage && !isZip) {
@@ -84,8 +85,9 @@ export default {
     const ext = isZip ? ".zip" : (isVideo ? ".mp4" : ".jpg");
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
-    const outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
-    let finalPath = inputP;
+    
+    let mediaFiles: string[] = [];
+    const processedFiles: { path: string, type: 'video' | 'image' }[] = [];
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
@@ -116,90 +118,103 @@ export default {
         await mkdir(extractDir, { recursive: true }).catch(() => undefined);
         
         try {
-          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 30000 });
+          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 45000 });
         } catch {
           throw new Error("Fallo de integridad al descomprimir. El archivo podría estar corrupto o cifrado.");
         }
         
-        const extractedFile = await findMediaFile(extractDir);
+        mediaFiles = await findAllMediaFiles(extractDir);
         
-        if (!extractedFile) {
+        if (mediaFiles.length === 0) {
           throw new Error("El archivo ZIP no contiene formatos multimedia soportados (MP4, JPG, PNG).");
         }
-        
-        finalPath = extractedFile;
-        const extractedExt = finalPath.toLowerCase();
-        
-        if (extractedExt.endsWith(".mp4")) {
-          isVideo = true;
-          isImage = false;
-        } else {
-          isImage = true;
-          isVideo = false;
-        }
+      } else {
+        mediaFiles = [inputP];
       }
 
       await react("🗜️").catch(() => undefined);
+      
+      const totalFiles = mediaFiles.length;
+      let currentIndex = 1;
 
-      if (isVideo) {
-        await updateStatus(`┃ 🗜️ Estado: Analizando formato\n┃ 📊 Progreso: Leyendo códec base...`);
-        const sizeMB = statSync(finalPath).size / (1024 * 1024);
+      for (const file of mediaFiles) {
+        const currentExt = file.toLowerCase();
+        const fileIsVid = currentExt.endsWith(".mp4");
+        const fileIsImg = /\.(jpg|jpeg|png)$/.test(currentExt);
         
-        try {
-          if (sizeMB > 60) {
-            await updateStatus(`┃ ⚙️ Estado: Renderizando video\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
-            await execAsync(
-              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
-              { maxBuffer: 1024 * 1024 * 50 }
-            );
-            finalPath = outputP;
-          } else {
-            const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
-            const codec = codecInfo.trim().toLowerCase();
+        const outFile = join(tmpDir, `hd_${id}_out_${currentIndex}${fileIsVid ? ".mp4" : ".jpg"}`);
+        let finalPath = file;
 
-            if (codec === "h264") {
-              await updateStatus(`┃ ⚙️ Estado: Clonando flujo (0% pérdida)\n┃ 📊 Progreso: Bypass directo...`);
+        if (fileIsVid) {
+          await updateStatus(`┃ 🗜️ Estado: Procesando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Leyendo códec base...`);
+          const sizeMB = statSync(finalPath).size / (1024 * 1024);
+          
+          try {
+            if (sizeMB > 60) {
+              await updateStatus(`┃ ⚙️ Estado: Renderizando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
               await execAsync(
-                `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outputP}"`,
+                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
                 { maxBuffer: 1024 * 1024 * 50 }
               );
+              finalPath = outFile;
             } else {
-              await updateStatus(`┃ ⚙️ Estado: Re-codificando formato\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
-              await execAsync(
-                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
-                { maxBuffer: 1024 * 1024 * 50 }
-              );
+              const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
+              const codec = codecInfo.trim().toLowerCase();
+
+              if (codec === "h264") {
+                await updateStatus(`┃ ⚙️ Estado: Clonando flujo (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Bypass directo (0% pérdida)...`);
+                await execAsync(
+                  `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outFile}"`,
+                  { maxBuffer: 1024 * 1024 * 50 }
+                );
+              } else {
+                await updateStatus(`┃ ⚙️ Estado: Re-codificando formato (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
+                await execAsync(
+                  `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
+                  { maxBuffer: 1024 * 1024 * 50 }
+                );
+              }
+              finalPath = outFile;
             }
-            finalPath = outputP;
+          } catch {
+            finalPath = file;
           }
-        } catch {
-          finalPath = isZip ? finalPath : inputP;
+          processedFiles.push({ path: finalPath, type: 'video' });
+          
+        } else if (fileIsImg) {
+          await updateStatus(`┃ 🗜️ Estado: Procesando imagen (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Optimizando...`);
+          try {
+            await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outFile}"`, { maxBuffer: 1024 * 1024 * 50 });
+            finalPath = outFile;
+          } catch {
+            finalPath = file;
+          }
+          processedFiles.push({ path: finalPath, type: 'image' });
         }
-      } else if (isImage) {
-        await updateStatus(`┃ 🗜️ Estado: Optimizando imagen\n┃ 📊 Progreso: Renderizando...`);
-        try {
-          await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
-          finalPath = outputP;
-        } catch {
-          finalPath = isZip ? finalPath : inputP;
-        }
+        
+        currentIndex++;
       }
 
-      const outSize = statSync(finalPath).size;
-      await updateStatus(`┃ 📤 Estado: Transmitiendo datos\n┃ 📦 Tamaño: ${(outSize / (1024 * 1024)).toFixed(2)} MB`);
+      await updateStatus(`┃ 📤 Estado: Transmitiendo lote\n┃ 📦 Cantidad: ${processedFiles.length} archivo(s)`);
 
-      if (isVideo) {
-        await reply({
-          video: { url: finalPath },
-          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (Original)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
-          mimetype: "video/mp4"
-        });
-      } else {
-        await reply({
-          image: { url: finalPath },
-          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Imagen optimizada\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
-          mimetype: "image/jpeg"
-        });
+      for (let i = 0; i < processedFiles.length; i++) {
+        const { path: pFile, type } = processedFiles[i];
+        const currentCount = i + 1;
+        const total = processedFiles.length;
+
+        if (type === 'video') {
+          await sock.sendMessage(from, {
+            video: { url: pFile },
+            caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado ${total > 1 ? `(${currentCount}/${total})` : ""}\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+            mimetype: "video/mp4"
+          }, { quoted: msg as any });
+        } else {
+          await sock.sendMessage(from, {
+            image: { url: pFile },
+            caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Imagen optimizada ${total > 1 ? `(${currentCount}/${total})` : ""}\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+            mimetype: "image/jpeg"
+          }, { quoted: msg as any });
+        }
       }
 
       await react("✅").catch(() => undefined);
@@ -218,11 +233,13 @@ export default {
         await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
       }
     } finally {
-      await Promise.allSettled([
-        rm(inputP, { force: true }),
-        rm(outputP, { force: true }),
-        rm(extractDir, { recursive: true, force: true })
-      ]);
+      await rm(inputP, { force: true }).catch(() => undefined);
+      await rm(extractDir, { recursive: true, force: true }).catch(() => undefined);
+      
+      for (let i = 1; i <= (mediaFiles.length || 10); i++) {
+        await rm(join(tmpDir, `hd_${id}_out_${i}.mp4`), { force: true }).catch(() => undefined);
+        await rm(join(tmpDir, `hd_${id}_out_${i}.jpg`), { force: true }).catch(() => undefined);
+      }
     }
   }
 };
