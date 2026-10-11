@@ -7,7 +7,6 @@ import { randomBytes } from "node:crypto";
 import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
@@ -39,7 +38,7 @@ const createProgressBar = (percent: number): string => {
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento (o zip) a video/imagen HD para estados usando el motor AVC.",
+  description: "Convierte un documento a video HD evadiendo la compresión de WhatsApp.",
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -64,7 +63,7 @@ export default {
 
     const progressMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando motor AVC...\n╰━━━━━━━━━━━━⬣` },
+      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Analizando heurística...\n╰━━━━━━━━━━━━⬣` },
       { quoted: msg as any }
     ).catch(() => null);
 
@@ -85,9 +84,9 @@ export default {
     const ext = isZip ? ".zip" : (isVideo ? ".mp4" : ".jpg");
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
-    let outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
-    let convertedFile = "";
+    const outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     let finalPath = inputP;
+    let isConverted = false;
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
@@ -135,24 +134,40 @@ export default {
         if (extractedExt.endsWith(".mp4")) {
           isVideo = true;
           isImage = false;
-          outputP = join(tmpDir, `hd_${id}_out.mp4`);
         } else {
           isImage = true;
           isVideo = false;
-          outputP = join(tmpDir, `hd_${id}_out.jpg`);
         }
       }
 
       await react("🗜️").catch(() => undefined);
-      await updateStatus(`┃ 🗜️ Estado: Motor H/W activado\n┃ 📊 Progreso: Re-codificando hilos...`);
+      await updateStatus(`┃ 🗜️ Estado: Parcheando metadatos\n┃ 📊 Progreso: Inyectando códec WA...`);
 
       if (isVideo) {
-        convertedFile = await CONVERT_TO_AVC(finalPath);
-        finalPath = convertedFile;
+        try {
+          await execAsync(
+            `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -profile:v high -level:v 4.2 -pix_fmt yuv420p -crf 22 -maxrate 5M -bufsize 10M -preset slow -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
+            { maxBuffer: 1024 * 1024 * 50 }
+          );
+          finalPath = outputP;
+          isConverted = true;
+        } catch {
+          try {
+            await execAsync(
+              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 26 -preset fast -c:a aac -b:a 128k "${outputP}"`,
+              { maxBuffer: 1024 * 1024 * 50 }
+            );
+            finalPath = outputP;
+            isConverted = true;
+          } catch {
+            finalPath = isZip ? finalPath : inputP;
+          }
+        }
       } else if (isImage) {
         try {
           await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
           finalPath = outputP;
+          isConverted = true;
         } catch {
           finalPath = isZip ? finalPath : inputP;
         }
@@ -164,7 +179,7 @@ export default {
       if (isVideo) {
         await reply({
           video: { url: finalPath },
-          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (AVC)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (Bypass)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "video/mp4"
         });
       } else {
@@ -193,9 +208,8 @@ export default {
     } finally {
       await Promise.allSettled([
         rm(inputP, { force: true }),
-        rm(outputP, { force: true }),
-        rm(extractDir, { recursive: true, force: true }),
-        convertedFile ? rm(convertedFile, { force: true }) : Promise.resolve()
+        isConverted ? rm(outputP, { force: true }) : Promise.resolve(),
+        rm(extractDir, { recursive: true, force: true })
       ]);
     }
   }
