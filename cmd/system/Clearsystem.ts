@@ -19,16 +19,28 @@ export default {
 
     await react("⏳").catch(() => undefined);
 
-    const before = process.memoryUsage().rss;
-    let killedProcesses = false;
+    const beforeMem = process.memoryUsage().rss;
+    const beforeStr = (beforeMem / 1024 / 1024).toFixed(2) + " MB";
 
+    let killedList: string[] = [];
+    
     try {
-      await execAsync(`ps -eo pid,etimes,comm | awk '$2>60 && $3~/ffmpeg|unzip|wget|curl/ {print $1}' | xargs -r kill -9`, { timeout: 5000 });
-      killedProcesses = true;
+      const { stdout: zombiePids } = await execAsync(`ps -eo pid,etimes,comm | awk '$2>60 && $3~/ffmpeg|unzip|wget|curl/ {print $1}'`, { timeout: 5000 });
+      const pids = zombiePids.trim().split("\n").filter(Boolean);
+      
+      if (pids.length > 0) {
+        for (const pid of pids) {
+          try {
+            const { stdout: procName } = await execAsync(`ps -p ${pid} -o comm=`);
+            killedList.push(`${procName.trim()} (PID: ${pid})`);
+            await execAsync(`kill -9 ${pid}`);
+          } catch {}
+        }
+      }
     } catch {
       try {
         await execAsync("pkill -9 -f ffmpeg || true; pkill -9 -f unzip || true", { timeout: 5000 });
-        killedProcesses = true;
+        killedList.push("Múltiples subprocesos de conversión (Forzado)");
       } catch {}
     }
 
@@ -45,12 +57,22 @@ export default {
       await execAsync("npm cache clean --force || true", { timeout: 10000 });
     } catch {}
 
-    const after = process.memoryUsage().rss;
-    const currentRam = (after / 1024 / 1024).toFixed(2) + " MB";
-    const diff = before - after;
+    const afterMem = process.memoryUsage().rss;
+    const afterStr = (afterMem / 1024 / 1024).toFixed(2) + " MB";
+    const diff = beforeMem - afterMem;
     const freedRam = diff > 0 ? (diff / 1024 / 1024).toFixed(2) + " MB" : "0.00 MB";
 
-    const text = `╭〔 🚀 ${fytBold("AURA REED OPTIMIZER")} 〕⬣\n┃ 🧠 ${fytBold("MEMORIA RAM")}\n┃ > Gestión: Automática (V8 Engine)\n┃ > RAM Liberada: ${freedRam}\n┃ > RAM Actual: ${currentRam}\n┃\n┃ 🧹 ${fytBold("LIMPIEZA DE CACHÉ")}\n┃ > Archivos eliminados: ${deletedFiles}\n┃ > Caché NPM: Purgada\n┃\n┃ 💀 ${fytBold("CONTROL DE PROCESOS")}\n┃ > ${killedProcesses ? "Subprocesos fantasma (>60s) aniquilados." : "No se detectaron subprocesos colgados."}\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+    let processReport = "";
+    if (killedList.length > 0) {
+      processReport = `┃ > ${killedList.length} proceso(s) aniquilado(s):\n`;
+      killedList.forEach(p => {
+        processReport += `┃   - ${p}\n`;
+      });
+    } else {
+      processReport = "┃ > No se detectaron subprocesos colgados.\n";
+    }
+
+    const text = `╭〔 🚀 ${fytBold("AURA REED OPTIMIZER")} 〕⬣\n┃ 🧠 ${fytBold("MEMORIA RAM")}\n┃ > Gestión: Automática (V8 Engine)\n┃ > RAM Inicial: ${beforeStr}\n┃ > RAM Final: ${afterStr}\n┃ > Liberado: ${freedRam}\n┃\n┃ 🧹 ${fytBold("LIMPIEZA DE CACHÉ")}\n┃ > Archivos eliminados: ${deletedFiles}\n┃ > Caché NPM: Purgada\n┃\n┃ 💀 ${fytBold("CONTROL DE PROCESOS")}\n${processReport}╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
 
     await reply(text).catch(() => undefined);
     await react("✅").catch(() => undefined);
