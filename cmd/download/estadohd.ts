@@ -38,7 +38,7 @@ const createProgressBar = (percent: number): string => {
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte un documento a video HD evadiendo la compresión de WhatsApp.",
+  description: "Convierte un documento a video HD garantizando calidad original.",
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -86,7 +86,6 @@ export default {
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
     const outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     let finalPath = inputP;
-    let isConverted = false;
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
@@ -141,33 +140,41 @@ export default {
       }
 
       await react("🗜️").catch(() => undefined);
-      await updateStatus(`┃ 🗜️ Estado: Parcheando metadatos\n┃ 📊 Progreso: Inyectando códec WA...`);
+      await updateStatus(`┃ 🗜️ Estado: Parcheando metadatos\n┃ 📊 Progreso: Evaluando bitrate...`);
 
       if (isVideo) {
+        const sizeMB = statSync(finalPath).size / (1024 * 1024);
         try {
-          await execAsync(
-            `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -profile:v high -level:v 4.2 -pix_fmt yuv420p -crf 22 -maxrate 5M -bufsize 10M -preset slow -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
-            { maxBuffer: 1024 * 1024 * 50 }
-          );
-          finalPath = outputP;
-          isConverted = true;
-        } catch {
-          try {
+          if (sizeMB > 60) {
             await execAsync(
-              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 26 -preset fast -c:a aac -b:a 128k "${outputP}"`,
+              `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 20 -preset slow -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
               { maxBuffer: 1024 * 1024 * 50 }
             );
             finalPath = outputP;
-            isConverted = true;
-          } catch {
-            finalPath = isZip ? finalPath : inputP;
+          } else {
+            const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
+            const codec = codecInfo.trim().toLowerCase();
+
+            if (codec === "h264") {
+              await execAsync(
+                `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outputP}"`,
+                { maxBuffer: 1024 * 1024 * 50 }
+              );
+            } else {
+              await execAsync(
+                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outputP}"`,
+                { maxBuffer: 1024 * 1024 * 50 }
+              );
+            }
+            finalPath = outputP;
           }
+        } catch {
+          finalPath = isZip ? finalPath : inputP;
         }
       } else if (isImage) {
         try {
           await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
           finalPath = outputP;
-          isConverted = true;
         } catch {
           finalPath = isZip ? finalPath : inputP;
         }
@@ -179,7 +186,7 @@ export default {
       if (isVideo) {
         await reply({
           video: { url: finalPath },
-          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (Bypass)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+          caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado (Original)\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
           mimetype: "video/mp4"
         });
       } else {
@@ -208,7 +215,7 @@ export default {
     } finally {
       await Promise.allSettled([
         rm(inputP, { force: true }),
-        isConverted ? rm(outputP, { force: true }) : Promise.resolve(),
+        rm(outputP, { force: true }),
         rm(extractDir, { recursive: true, force: true })
       ]);
     }
