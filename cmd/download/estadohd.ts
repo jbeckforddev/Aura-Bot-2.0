@@ -1,4 +1,4 @@
-import { rm, mkdir } from "node:fs/promises";
+import { rm, mkdir, readdir } from "node:fs/promises";
 import { createWriteStream, existsSync, statSync } from "node:fs";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
@@ -12,8 +12,32 @@ import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 
+const findMediaFile = async (dir: string): Promise<string | null> => {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const found = await findMediaFile(fullPath);
+        if (found) return found;
+      } else if (/\.(mp4|jpg|jpeg|png)$/i.test(entry.name)) {
+        return fullPath;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const createProgressBar = (percent: number): string => {
+  const filled = Math.floor(percent / 10);
+  const empty = 10 - filled;
+  return "█".repeat(filled) + "▒".repeat(empty);
+};
+
 export default {
-  name: ["estadohd", "eshd"],
+  name: ["estadohd", "eshd", "hd"],
   category: "system",
   description: "Convierte un documento (o zip) a video/imagen HD para estados usando el motor AVC.",
   async run(ctx: CommandContext) {
@@ -36,24 +60,20 @@ export default {
       return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FORMATO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El documento debe ser un video,\n┃ > imagen o archivo .zip\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
     }
 
-    await react("⏳");
+    await react("⏳").catch(() => undefined);
 
-    const progressMsg = await sock
-      .sendMessage(
-        from,
-        {
-          text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando proceso...\n╰━━━━━━━━━━━━⬣`,
-        },
-        { quoted: msg as unknown as any },
-      )
-      .catch(() => null);
+    const progressMsg = await sock.sendMessage(
+      from,
+      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Iniciando motor AVC...\n╰━━━━━━━━━━━━⬣` },
+      { quoted: msg as any }
+    ).catch(() => null);
 
     const updateStatus = async (status: string) => {
       if (progressMsg?.key) {
         await sock.sendMessage(from, { 
           text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n${status}\n╰━━━━━━━━━━━━⬣`, 
           edit: progressMsg.key 
-        }).catch(() => {});
+        }).catch(() => undefined);
       }
     };
 
@@ -64,52 +84,49 @@ export default {
     const id = randomBytes(8).toString("hex");
     const ext = isZip ? ".zip" : (isVideo ? ".mp4" : ".jpg");
     const inputP = join(tmpDir, `hd_${id}_in${ext}`);
-    let outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     const extractDir = join(tmpDir, `hd_${id}_unzip`);
+    let outputP = join(tmpDir, `hd_${id}_out${isVideo || isZip ? ".mp4" : ".jpg"}`);
     let convertedFile = "";
+    let finalPath = inputP;
 
     try {
       const stream = await downloadContentFromMessage(docMsg, "document");
       const total = Number(docMsg.fileLength) || 0;
       let downloaded = 0;
       let lastUpdate = Date.now();
+      const writer = createWriteStream(inputP);
 
-      await new Promise<void>((resolve, reject) => {
-        const writer = createWriteStream(inputP);
-        stream.on("data", (chunk) => {
-          downloaded += chunk.length;
-          const now = Date.now();
-          if (total > 0 && now - lastUpdate > 1500) {
-            const percent = Math.round((downloaded / total) * 100);
-            updateStatus(
-              `┃ 📥 Estado: Descargando archivo...\n┃ 📊 Progreso: ${percent}%`,
-            ).catch(() => {});
-            lastUpdate = now;
-          }
-        });
-        stream.pipe(writer);
-        writer.on("finish", () => resolve());
-        writer.on("error", reject);
-      });
-
-      let finalPath = inputP;
+      for await (const chunk of stream) {
+        if (!writer.write(chunk)) {
+          await new Promise((resolve) => writer.once("drain", resolve));
+        }
+        downloaded += chunk.length;
+        const now = Date.now();
+        if (total > 0 && now - lastUpdate > 1500) {
+          const percent = Math.round((downloaded / total) * 100);
+          updateStatus(`┃ 📥 Estado: Descargando origen\n┃ 📊 Progreso: [${createProgressBar(percent)}] ${percent}%`).catch(() => undefined);
+          lastUpdate = now;
+        }
+      }
+      
+      writer.end();
+      await new Promise((resolve) => writer.once("close", resolve));
 
       if (isZip) {
-        await react("📦");
-        await updateStatus(`┃ 📦 Estado: Descomprimiendo ZIP...\n┃ 📊 Progreso: Extrayendo archivos...`);
+        await react("📦").catch(() => undefined);
+        await updateStatus(`┃ 📦 Estado: Descomprimiendo matriz\n┃ 📊 Progreso: [██████████] 100%`);
         await mkdir(extractDir, { recursive: true }).catch(() => undefined);
         
         try {
-          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 20000 });
-        } catch (e: any) {
-          throw new Error("Fallo al descomprimir. Asegúrate de que no tenga contraseña o que 'unzip' esté instalado.");
+          await execAsync(`unzip -o "${inputP}" -d "${extractDir}"`, { timeout: 30000 });
+        } catch {
+          throw new Error("Fallo de integridad al descomprimir. El archivo podría estar corrupto o cifrado.");
         }
         
-        const { stdout } = await execAsync(`find "${extractDir}" -type f \\( -iname "*.mp4" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \\) | head -n 1`);
-        const extractedFile = stdout.trim();
+        const extractedFile = await findMediaFile(extractDir);
         
         if (!extractedFile) {
-          throw new Error("No se encontró ningún archivo de video o imagen dentro del ZIP.");
+          throw new Error("El archivo ZIP no contiene formatos multimedia soportados (MP4, JPG, PNG).");
         }
         
         finalPath = extractedFile;
@@ -126,22 +143,23 @@ export default {
         }
       }
 
-      await react("🗜️");
-      await updateStatus(`┃ 🗜️ Estado: Optimizando calidad...\n┃ 📊 Progreso: Procesando motor AVC...`);
+      await react("🗜️").catch(() => undefined);
+      await updateStatus(`┃ 🗜️ Estado: Motor H/W activado\n┃ 📊 Progreso: Re-codificando hilos...`);
 
       if (isVideo) {
         convertedFile = await CONVERT_TO_AVC(finalPath);
         finalPath = convertedFile;
       } else if (isImage) {
         try {
-          await execAsync(`ffmpeg -y -i "${finalPath}" -q:v 2 "${outputP}"`);
+          await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outputP}"`, { maxBuffer: 1024 * 1024 * 50 });
           finalPath = outputP;
-        } catch (e) {
+        } catch {
           finalPath = isZip ? finalPath : inputP;
         }
       }
 
-      await updateStatus(`┃ 📤 Estado: Enviando archivo...\n┃ 📊 Progreso: Subiendo a WhatsApp...`);
+      const outSize = statSync(finalPath).size;
+      await updateStatus(`┃ 📤 Estado: Transmitiendo datos\n┃ 📦 Tamaño: ${(outSize / (1024 * 1024)).toFixed(2)} MB`);
 
       if (isVideo) {
         await reply({
@@ -157,28 +175,28 @@ export default {
         });
       }
 
-      await react("✅");
+      await react("✅").catch(() => undefined);
       
       if (progressMsg?.key) {
-        await sock.sendMessage(from, { delete: progressMsg.key }).catch(() => {});
+        await sock.sendMessage(from, { delete: progressMsg.key }).catch(() => undefined);
       }
 
     } catch (error: any) {
       await react("❌").catch(() => undefined);
-      const errorMsg = error?.message || "Ocurrió un error inesperado.";
+      const errorMsg = error?.message || "Ocurrió un error inesperado de segmentación.";
       
       if (progressMsg?.key) {
-        await updateStatus(`┃ ⚠️ Estado: Error crítico\n┃ ❌ Fallo: ${errorMsg.slice(0, 80)}...`);
+        await updateStatus(`┃ ⚠️ Estado: Error de procesamiento\n┃ ❌ Fallo: ${errorMsg.slice(0, 80)}...`);
       } else {
         await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
       }
     } finally {
-      await rm(inputP, { force: true }).catch(() => undefined);
-      await rm(outputP, { force: true }).catch(() => undefined);
-      await rm(extractDir, { recursive: true, force: true }).catch(() => undefined);
-      if (convertedFile) {
-        await rm(convertedFile, { force: true }).catch(() => undefined);
-      }
+      await Promise.allSettled([
+        rm(inputP, { force: true }),
+        rm(outputP, { force: true }),
+        rm(extractDir, { recursive: true, force: true }),
+        convertedFile ? rm(convertedFile, { force: true }) : Promise.resolve()
+      ]);
     }
   }
 };
