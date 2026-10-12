@@ -7,7 +7,6 @@ import type {
   DatabaseGroup,
   DatabaseBot,
   UserRole,
-  TopMsgUser,
   UserDbRow,
   GroupDbRow,
   BotDbRow,
@@ -109,7 +108,6 @@ db_instance.exec(`
     onlyAdmin INTEGER DEFAULT 0,
     botOnline INTEGER DEFAULT 1,
     prefix TEXT DEFAULT NULL,
-    topMsgUsers TEXT DEFAULT '[]',
     topCmdUsers TEXT DEFAULT '[]',
     userWarns TEXT DEFAULT '{}',
     Muted_Users TEXT DEFAULT '[]',
@@ -185,7 +183,6 @@ for (const [table, column, definition] of [
   ["groups", "prefix", "TEXT"],
   ["groups", "self", "INTEGER DEFAULT 0"],
   ["groups", "onlyAdmin", "INTEGER DEFAULT 0"],
-  ["groups", "topMsgUsers", "TEXT DEFAULT '[]'"],
   ["groups", "topCmdUsers", "TEXT DEFAULT '[]'"],
   ["groups", "userWarns", "TEXT DEFAULT '{}'"],
   ["groups", "catBlocked", "TEXT DEFAULT '[\"nsfw\"]'"],
@@ -261,6 +258,17 @@ for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
 
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
+const groupColumns = db_instance
+  .prepare("PRAGMA table_info('groups')")
+  .all() as Array<{ name: string }>;
+const hasLegacyTopMsgUsersColumn = groupColumns.some(
+  (column) => column.name.toLowerCase() === "topmsgusers",
+);
+const groupSelectColumns = groupColumns
+  .filter((column) => column.name.toLowerCase() !== "topmsgusers")
+  .map((column) => `"${column.name}"`)
+  .join(", ");
+
 const stmts = {
   getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
   insertUser: db_instance.prepare(
@@ -282,15 +290,17 @@ const stmts = {
     `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
 
-  getGroup: db_instance.prepare("SELECT * FROM groups WHERE jid = ?"),
+  getGroup: db_instance.prepare(
+    `SELECT ${groupSelectColumns} FROM groups WHERE jid = ?`,
+  ),
   insertGroup: db_instance.prepare(
-    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, topMsgUsers, catBlocked, Muted_Users, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, catBlocked, Muted_Users, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateGroup: db_instance.prepare(
-    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, topMsgUsers = ?, catBlocked = ?, Muted_Users = ?, data = ? WHERE jid = ?",
+    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, catBlocked = ?, Muted_Users = ?, data = ? WHERE jid = ?",
   ),
   getAllGroups: db_instance.prepare(
-    "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, topMsgUsers, data FROM groups",
+    "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, data FROM groups",
   ),
 
   getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
@@ -304,9 +314,6 @@ const stmts = {
     "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
   ),
   deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?"),
-  resetGroupTopMsgUsers: db_instance.prepare(
-    "UPDATE groups SET topMsgUsers = '[]', data = ? WHERE jid = ?",
-  ),
 };
 
 function normalizeJid(input: string) {
@@ -326,6 +333,29 @@ function safeJson<T = Record<string, unknown>>(value: unknown): T {
     return {} as T;
   }
 }
+
+function clearLegacyTopMessageRankings(): void {
+  const rows = db_instance
+    .prepare(`SELECT jid, data FROM groups WHERE data LIKE '%"topMsgUsers"%'`)
+    .all() as Array<{ jid: string; data: string | null }>;
+  const updateData = db_instance.prepare("UPDATE groups SET data = ? WHERE jid = ?");
+
+  for (const row of rows) {
+    const data = safeJson<Record<string, unknown>>(row.data);
+    if (!Object.prototype.hasOwnProperty.call(data, "topMsgUsers")) continue;
+
+    delete data.topMsgUsers;
+    updateData.run(JSON.stringify(data), row.jid);
+  }
+
+  if (hasLegacyTopMsgUsersColumn) {
+    db_instance.exec(
+      "UPDATE groups SET topMsgUsers = '[]' WHERE topMsgUsers != '[]'",
+    );
+  }
+}
+
+clearLegacyTopMessageRankings();
 
 function hydrateUserProfile(
   data: Record<string, unknown>,
@@ -502,19 +532,6 @@ function persistEconomyLasts(
   }
 }
 
-function getCurrentMessageWeek(date = new Date()): string {
-  const current = new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
-  );
-  const day = current.getUTCDay() || 7;
-  current.setUTCDate(current.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(current.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(
-    ((current.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
-  );
-  return `${current.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
 const userStmtCache = new Map<string, ReturnType<typeof db_instance.prepare>>();
 
 function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
@@ -632,7 +649,6 @@ function getGroup(jid: string): DatabaseGroup {
       goodbye: false,
       welcomeMessage: null,
       goodbyeMessage: null,
-      topMsgUsers: [],
       mutedUsers: [],
       data: {},
     };
@@ -649,7 +665,6 @@ function getGroup(jid: string): DatabaseGroup {
       defaultGroup.onlyAdmin,
       defaultGroup.prefix,
       defaultGroup.self,
-      JSON.stringify(defaultGroup.topMsgUsers),
       JSON.stringify(defaultGroup.catBlocked),
       JSON.stringify(defaultGroup.mutedUsers),
       JSON.stringify(defaultGroup.data),
@@ -661,6 +676,7 @@ function getGroup(jid: string): DatabaseGroup {
   const jsonData = safeJson<Record<string, unknown>>(
     row.data as string | undefined,
   );
+  delete jsonData.topMsgUsers;
   const storedMutedUsers = safeJsonArray(
       row.Muted_Users ??
       jsonData.mutedUsers ??
@@ -668,18 +684,6 @@ function getGroup(jid: string): DatabaseGroup {
       row.mutedUsers ??
       row.medUsers,
   );
-  const storedTopMsgUsers = safeJson<TopMsgUser[]>(
-    jsonData.topMsgUsers ?? row.topMsgUsers,
-  );
-  const currentWeek = getCurrentMessageWeek();
-  const hasPreviousWeek =
-    storedTopMsgUsers.length > 0 &&
-    storedTopMsgUsers.some((user) => user?.week !== currentWeek);
-  if (hasPreviousWeek) {
-    jsonData.topMsgUsers = [];
-    stmts.resetGroupTopMsgUsers.run(JSON.stringify(jsonData), key);
-  }
-
   return {
     ...jsonData,
     group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
@@ -706,7 +710,6 @@ function getGroup(jid: string): DatabaseGroup {
       string | null,
     goodbyeMessage: (jsonData.goodbyeMessage ?? row.goodbyeMessage ?? null) as
       string | null,
-    topMsgUsers: hasPreviousWeek ? [] : storedTopMsgUsers,
     mutedUsers: storedMutedUsers,
     data: jsonData,
   };
@@ -935,6 +938,7 @@ export const db: IDatabase = {
     };
 
     delete payload.data;
+    delete (payload as Record<string, unknown>).topMsgUsers;
 
     const row = stmts.getGroup.get(key) as Record<string, unknown> | undefined;
     if (!row) {
@@ -950,9 +954,6 @@ export const db: IDatabase = {
         Number(Boolean(merged.onlyAdmin ?? 0)),
         merged.prefix ?? null,
         Number(Boolean(merged.self ?? 0)),
-        JSON.stringify(
-          Array.isArray(merged.topMsgUsers) ? merged.topMsgUsers : [],
-        ),
         JSON.stringify(
           Array.isArray(merged.catBlocked) ? merged.catBlocked : ["nsfw"],
         ),
@@ -973,13 +974,6 @@ export const db: IDatabase = {
       Number(Boolean(merged.onlyAdmin ?? row.onlyAdmin ?? 0)),
       merged.prefix !== undefined ? merged.prefix : (row.prefix ?? null),
       Number(Boolean(merged.self ?? row.self ?? 0)),
-      JSON.stringify(
-        Array.isArray(merged.topMsgUsers)
-          ? merged.topMsgUsers
-          : safeJson<Record<string, unknown>[]>(
-              row.topMsgUsers as string | undefined,
-            ),
-      ),
       JSON.stringify(
         Array.isArray(merged.catBlocked)
           ? merged.catBlocked

@@ -1,10 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { readFile, stat } from "node:fs/promises";
-import {
-  downloadToCache,
-  requestHead,
-  safeFileName,
-} from "../../core/downloadUtils.ts";
+import { downloadToCache, safeFileName } from "../../core/downloadUtils.ts";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_CODE_MESSAGE_SIZE = 12000;
@@ -35,6 +31,22 @@ const CODE_EXTENSIONS = new Set([
   "yml",
 ]);
 
+function extensionFromMime(mime: string): string {
+  return (
+    (
+      {
+        "application/pdf": "pdf",
+        "application/zip": "zip",
+        "application/json": "json",
+        "text/plain": "txt",
+        "text/html": "html",
+      } as Record<string, string>
+    )[mime] ||
+    mime.split("/")[1] ||
+    "bin"
+  );
+}
+
 function mimeFromExtension(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase();
   return (
@@ -57,30 +69,6 @@ function mimeFromExtension(name: string): string {
       } as Record<string, string>
     )[ext || ""] || "application/octet-stream"
   );
-}
-
-function extensionFromMime(mime: string): string {
-  return (
-    (
-      {
-        "application/pdf": "pdf",
-        "application/zip": "zip",
-        "application/json": "json",
-        "text/plain": "txt",
-        "text/html": "html",
-      } as Record<string, string>
-    )[mime] ||
-    mime.split("/")[1] ||
-    "bin"
-  );
-}
-
-function headerValue(
-  headers: Record<string, string | string[] | undefined>,
-  name: string,
-): string | null {
-  const value = headers[name.toLowerCase()];
-  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
 function fileNameFromResponse(
@@ -127,28 +115,29 @@ export default {
       });
     await react("⬇️");
     try {
-      let response: Awaited<ReturnType<typeof requestHead>> | null = null;
+      let response: Response | null = null;
       try {
-        response = await requestHead(url, 30000, {
-          "User-Agent": "Mozilla/5.0 AuraReedBot",
+        response = await fetch(url, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(30000),
+          headers: { "User-Agent": "Mozilla/5.0 AuraReedBot" },
         });
       } catch {
-        // Algunos servidores no admiten HEAD; la descarga validada sigue siendo la fuente de verdad.
+        // Algunos servidores no implementan HEAD; la descarga real valida el estado.
       }
-      const length = Number(headerValue(response?.headers ?? {}, "content-length") || 0);
-      if (response && (response.statusCode < 200 || response.statusCode >= 300))
-        throw new Error(`HTTP ${response.statusCode}`);
+      const length = Number(response?.headers.get("content-length") || 0);
+      if (response && !response.ok) throw new Error(`HTTP ${response.status}`);
       if (length > MAX_FILE_SIZE) throw new Error("El archivo supera 50 MB.");
-      const filePath = await downloadToCache(url, 180000, {}, MAX_FILE_SIZE);
+      const filePath = await downloadToCache(url, 180000);
       const fileSize = (await stat(filePath)).size;
       if (fileSize > MAX_FILE_SIZE) throw new Error("El archivo supera 50 MB.");
-      const headerMime = (headerValue(response?.headers ?? {}, "content-type") || "")
+      const headerMime = (response?.headers.get("content-type") || "")
         .split(";", 1)[0]
         .trim()
         .toLowerCase();
       const fileName = fileNameFromResponse(
         url,
-        headerValue(response?.headers ?? {}, "content-disposition"),
+        response?.headers.get("content-disposition") || null,
         extensionFromMime(headerMime),
       );
       const mimeType =

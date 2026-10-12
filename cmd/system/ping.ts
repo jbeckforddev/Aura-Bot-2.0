@@ -36,8 +36,8 @@ export default {
       status = "🟠 Moderado";
       system = "Estabilizando";
     } else {
-      status = "🔴 Malo";
-      system = "En problemas";
+      status = "🔴 Malo",
+      system = "En problemas"
     }
 
     let textPing2 = `${fytBold("⚡ RESULTADO DE LA PRUEBA ⚡")}\n\n`;

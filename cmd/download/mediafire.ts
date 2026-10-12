@@ -1,10 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
+import { request } from "undici";
 import { fytBold } from "../../core/socketText.ts";
-import {
-  downloadToCache,
-  requestText,
-  safeFileName,
-} from "../../core/downloadUtils.ts";
+import { downloadToCache, safeFileName } from "../../core/downloadUtils.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
@@ -21,7 +18,13 @@ async function resolveMediaFire(
 ): Promise<{ download: string; name: string; size: string }> {
   if (!/mediafire\.com\/file\//i.test(url))
     throw new Error("URL de MediaFire inválida.");
-  const html = await requestText(url, 30000, HEADERS);
+  const response = await request(url, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(30000),
+  });
+  if (response.statusCode < 200 || response.statusCode >= 300)
+    throw new Error(`MediaFire HTTP ${response.statusCode}`);
+  const html = await response.body.text();
   const link =
     html.match(/id=["']downloadButton["'][^>]+href=["']([^"']+)/i)?.[1] ||
     html.match(/href=["']([^"']+)["'][^>]*id=["']downloadButton/i)?.[1];

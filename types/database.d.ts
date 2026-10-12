@@ -60,14 +60,6 @@ export interface DatabaseUser {
   [key: string]: unknown;
 }
 
-export interface TopMsgUser {
-  jid: string;
-  lid?: string | null;
-  pushName?: string;
-  week: string;
-  count: number;
-}
-
 export interface GroupWarnEntry {
   reason: string;
   date: string;
@@ -101,7 +93,6 @@ export interface DatabaseGroup {
   onlyAdmin: number;
   prefix: string | null;
   self?: number;
-  topMsgUsers?: TopMsgUser[] | string;
   catBlocked?: string[] | string;
   mutedUsers?: string[] | string;
   primaryBot?: string | null;
@@ -212,7 +203,6 @@ export interface GroupDbRow {
   onlyAdmin: number | null;
   prefix: string | null;
   self: number | null;
-  topMsgUsers: string | null;
   catBlocked: string | null;
   Muted_Users?: string | null;
   mutedUsers?: string | null;

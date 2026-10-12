@@ -51,25 +51,11 @@ import type {
   HandlerConfig,
   HandlerLogger,
   HandlerOptions,
-  TopMsgUser,
   DatabaseBot,
   DatabaseUser,
 } from "./types/index.d.ts";
 
 export type { ContactMetadata, HandlerConfig, HandlerLogger, HandlerOptions };
-
-function getMessageWeek(date = new Date()): string {
-  const current = new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
-  );
-  const day = current.getUTCDay() || 7;
-  current.setUTCDate(current.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(current.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(
-    ((current.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
-  );
-  return `${current.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
 
 const groupCache = new LRUCache<string, GroupMetadata>({
   max: 150,
@@ -528,44 +514,6 @@ export async function handleMessage(
       if (contactChanged) runtimeDb.setUser?.(sender, nextContact);
     }
 
-    if (isGroup && !msg.key?.fromMe && sender) {
-      const groupData = runtimeDb.getGroup(from);
-      const currentWeek = getMessageWeek();
-      const storedTopMsgUsers = Array.isArray(groupData.topMsgUsers)
-        ? (groupData.topMsgUsers as TopMsgUser[])
-        : [];
-      const topMsgUsers =
-        storedTopMsgUsers.length > 0 &&
-        storedTopMsgUsers.some((user: TopMsgUser) => user.week !== currentWeek)
-          ? []
-          : storedTopMsgUsers;
-      const currentLid = senderLid || rawSenderLid || null;
-      const currentPushName =
-        msg.pushName || runtimeDb.getUser?.(sender)?.pushName || "Usuario";
-      const entry = topMsgUsers.find(
-        (user: TopMsgUser) =>
-          (user.jid && user.jid === sender) ||
-          (currentLid && user.lid && user.lid === currentLid),
-      );
-
-      if (entry) {
-        entry.jid = sender;
-        entry.lid = currentLid || entry.lid || null;
-        entry.pushName = currentPushName;
-        entry.week = currentWeek;
-        entry.count = Number(entry.count || 0) + 1;
-      } else {
-        topMsgUsers.push({
-          jid: sender,
-          lid: currentLid,
-          pushName: currentPushName,
-          week: currentWeek,
-          count: 1,
-        });
-      }
-
-      runtimeDb.setGroup(from, { topMsgUsers });
-    }
     const botUserJid = cleanJid(sock.user?.id || "");
     const storedBot: Partial<DatabaseBot> =
       runtimeDb.getBot?.(botUserJid) ?? botRecord;
