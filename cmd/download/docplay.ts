@@ -52,7 +52,7 @@ export default {
         url = `https://youtu.be/${videoId}`;
       }
       if (!url) throw new Error("No se encontró ningún video.");
-      const audio = await downloadYouTube(url, "audio", 128, searchResult);
+      const audio = await downloadYouTube(url, "audio", 320, searchResult);
       const title = audio.title || "Audio de YouTube";
       const file = await downloadToCache(audio.dl_url);
       const { cost } = await prepareDownloadCharge(ctx, "document", file);

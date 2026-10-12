@@ -94,7 +94,7 @@ export default {
       const audio = await downloadYouTube(
         finalUrl,
         "audio",
-        128,
+        320,
         result || undefined,
       );
       const title = String(audio.title || result?.title || "audio").trim();
@@ -102,7 +102,7 @@ export default {
       const duration = audio.duration || result?.duration || "??";
       const views = audio.views ?? result?.views ?? "0";
       const likes = audio.likes ?? result?.likes;
-      const quality = audio.quality || "128k";
+      const quality = audio.quality || "320k";
       const videoId = audio.videoId;
       const youtubeUrl = videoId
         ? `https://youtu.be/${videoId}`
