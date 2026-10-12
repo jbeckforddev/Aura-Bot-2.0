@@ -5,8 +5,12 @@ import type {
   SoundCloudSearchResponse,
 } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { downloadToCache, safeFileName } from "../../core/downloadUtils.ts";
-import { request } from "undici";
+import {
+  downloadToCache,
+  requestJson,
+  requestText,
+  safeFileName,
+} from "../../core/downloadUtils.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import {
   prepareDownloadCharge,
@@ -19,23 +23,11 @@ let cachedClientId = "";
 let cachedAt = 0;
 
 async function text(url: string): Promise<string> {
-  const response = await request(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300)
-    throw new Error(`HTTP ${response.statusCode}`);
-  return response.body.text();
+  return requestText(url, 30000, { "User-Agent": "Mozilla/5.0" });
 }
 
 async function json<T = unknown>(url: string): Promise<T> {
-  const response = await request(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300)
-    throw new Error(`HTTP ${response.statusCode}`);
-  return (await response.body.json()) as T;
+  return requestJson<T>(url, 30000, { "User-Agent": "Mozilla/5.0" });
 }
 
 async function clientId(): Promise<string> {

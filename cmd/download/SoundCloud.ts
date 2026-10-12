@@ -4,14 +4,17 @@ import type {
   SoundCloudTranscoding,
   SoundCloudSearchResponse,
 } from "../../types/index.d.ts";
-import { request } from "undici";
 import { readFile } from "node:fs/promises";
 import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
   type WAMessage,
 } from "@whiskeysockets/baileys";
-import { downloadToCache } from "../../core/downloadUtils.ts";
+import {
+  downloadToCache,
+  requestJson as sharedRequestJson,
+  requestText,
+} from "../../core/downloadUtils.ts";
 import { formatCount, formatDuration } from "../../utils/formatter.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
@@ -50,34 +53,29 @@ async function fetchText(
   url: string,
   init: { headers?: Record<string, string> } = {},
 ): Promise<string> {
-  const response = await request(url, {
-    headers: { ...SOUNDCloud_HEADERS, ...init.headers },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new SoundCloudHttpError(
-      response.statusCode,
-      await response.body.text(),
-    );
+  try {
+    return await requestText(url, 10000, {
+      ...SOUNDCloud_HEADERS,
+      ...init.headers,
+    });
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number })?.statusCode;
+    if (typeof statusCode === "number") throw new SoundCloudHttpError(statusCode);
+    throw error;
   }
-  return response.body.text();
 }
 
 async function requestJson<T = unknown>(
   url: URL | string,
   timeout = 10000,
 ): Promise<T> {
-  const response = await request(url, {
-    headers: SOUNDCloud_HEADERS,
-    signal: AbortSignal.timeout(timeout),
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new SoundCloudHttpError(
-      response.statusCode,
-      await response.body.text(),
-    );
+  try {
+    return await sharedRequestJson<T>(url.toString(), timeout, SOUNDCloud_HEADERS);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number })?.statusCode;
+    if (typeof statusCode === "number") throw new SoundCloudHttpError(statusCode);
+    throw error;
   }
-  return (await response.body.json()) as T;
 }
 
 async function getClientId(): Promise<string> {

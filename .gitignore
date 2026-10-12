@@ -10,3 +10,6 @@ dist
 test.endpoint.*
 test.*
 test/*
+!tests/
+tests/*
+!tests/downloadUtils.test.ts
