@@ -155,9 +155,6 @@ export async function searchYouTube(
       for (const item of section?.itemSectionRenderer?.contents || []) {
         const video = item.videoRenderer;
         if (!video?.videoId || !video.lengthText) continue;
-        const thump = `https://i.ytimg.com/vi/${video.videoId}/maxresdefault.jpg`
-        const thump2 = `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`
-
         results.push({
           id: video.videoId,
           title: video.title?.runs?.[0]?.text || "Sin título",
@@ -167,7 +164,7 @@ export async function searchYouTube(
           likes: "",
           url: `https://youtu.be/${video.videoId}`,
           channel_url: `https://www.youtube.com/channel/${video.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || ""}`,
-          thumbnail: thump || thump2,
+          thumbnail: `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
         });
         if (results.length >= limit) break;
       }

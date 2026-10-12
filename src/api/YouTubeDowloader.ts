@@ -274,10 +274,7 @@ async function getYouTubeVideoMetadata(videoId: string): Promise<{
         `https://www.youtube.com/channel/${videoDetails.channelId || ""}`,
       views: formatCount(videoDetails.viewCount || html.match(/"viewCount":"(\d+)"/)?.[1] || "0"),
       likes: formatCount(likeCount),
-      thumbnail:
-        videoDetails.thumbnail?.thumbnails?.at(-1)?.url ||
-        html.match(/<meta property="og:image" content="([^"]+)"/)?.[1] ||
-        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       duration:
         Number(lengthSeconds) > 0
           ? `${Math.floor(Number(lengthSeconds) / 60)}m ${Number(lengthSeconds) % 60}s`
@@ -427,8 +424,6 @@ async function savetube(
     const channelUrl =
       youtubeMeta?.channel_url ||
       (channelId ? `https://www.youtube.com/channel/${channelId}` : "https://www.youtube.com/");
-    const thump = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
-    const thump2 = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
     const result = {
       id: videoId,
       title: youtubeMeta?.title || info.title || "Sin título",
@@ -454,7 +449,7 @@ async function savetube(
               : "0"),
       url: `https://youtu.be/${videoId}`,
       channel_url: channelUrl,
-      thumbnail: thump || thump2,
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       dl_url: directMeta.url,
       size: directMeta.size,
     };
