@@ -48,13 +48,22 @@ export function isPrimaryBotForGroup(
   sock: ExtendedWASocket,
   groupJid: string,
   db: IDatabase,
+  primaryBotOverride?: string | null,
+  storedBotIdOverride?: string | null,
 ): boolean {
-  const primaryBot = cleanJid(db.getPrimary(groupJid));
+  const primaryBot = cleanJid(
+    primaryBotOverride !== undefined
+      ? primaryBotOverride
+      : db.getPrimary(groupJid),
+  );
   if (!primaryBot) return true;
 
   const botJid = cleanJid(sock.user?.id);
-  const storedBot = db.getBot(botJid);
-  const identities = [botJid, sock.subBotId, storedBot?.bot_id]
+  const storedBotId =
+    storedBotIdOverride !== undefined
+      ? storedBotIdOverride
+      : db.getBot(botJid)?.bot_id;
+  const identities = [botJid, sock.subBotId, storedBotId]
     .map(cleanJid)
     .filter(Boolean);
 

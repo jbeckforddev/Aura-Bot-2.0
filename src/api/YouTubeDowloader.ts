@@ -52,6 +52,19 @@ function formatCount(valor: unknown): string {
   }
   return numero.toString();
 }
+
+function formatYouTubeViewCount(value: unknown): string {
+  const raw = String(value ?? "").trim().replace(/\u00a0/g, " ");
+  const compact = raw.match(/([\d,.]+)\s*([KMBT])/i);
+  if (compact) return formatCount(`${compact[1].replace(/,/g, "")}${compact[2]}`);
+
+  const numeric = raw.match(/[\d.,]+/)?.[0];
+  if (!numeric) return "0";
+  const normalized = /\.\d{3}(?:\.|$)/.test(numeric)
+    ? numeric.replace(/[.,]/g, "")
+    : numeric.replace(/,/g, "");
+  return formatCount(normalized);
+}
 const audio_q = [92, 128, 256, 320];
 const video_q = [144, 360, 480, 720, 1080];
 const CONTENT_QUALITIES = {
@@ -115,92 +128,162 @@ async function getYouTubeVideoMetadata(videoId: string): Promise<{
   thumbnail: string;
   duration: string;
 }> {
-  const response = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=es`, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
-      "Accept-Language": "es-ES,es;q=0.9",
-      Cookie: "CONSENT=YES+1; SOCS=CAI",
-    },
-    redirect: "follow",
-  });
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "Accept-Language": "es-ES,es;q=0.9",
+    Cookie: "CONSENT=YES+1; SOCS=CAI",
+  };
 
-  if (!response.ok) {
-    throw new Error(`No se pudo obtener la metadata del video: ${response.status}`);
-  }
+  try {
+    const searchResponse = await fetch(
+      `https://www.youtube.com/results?search_query=${videoId}&hl=es`,
+      { headers, signal: AbortSignal.timeout(10000) },
+    );
+    if (!searchResponse.ok) {
+      throw new Error(`YouTube HTTP ${searchResponse.status}`);
+    }
 
-  const html = await response.text();
+    const searchHtml = await searchResponse.text();
+    const apiKey = searchHtml.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/)?.[1];
+    const clientVersion = searchHtml.match(
+      /"INNERTUBE_CLIENT_VERSION"\s*:\s*"([^"]+)"/,
+    )?.[1];
+    if (!apiKey || !clientVersion) {
+      throw new Error("No se encontró la configuración web de YouTube.");
+    }
 
-  const playerPatterns = [
-    /var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s,
-    /window\["ytInitialPlayerResponse"\]\s*=\s*(\{.+?\});<\/script>/s,
-    /ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
-  ];
+    const metadataResponse = await fetch(
+      `https://www.youtube.com/youtubei/v1/next?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Origin: "https://www.youtube.com",
+        },
+        body: JSON.stringify({
+          context: {
+            client: { clientName: "WEB", clientVersion, hl: "es", gl: "US" },
+          },
+          videoId,
+        }),
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+    if (!metadataResponse.ok) {
+      throw new Error(`YouTube metadata HTTP ${metadataResponse.status}`);
+    }
 
-  let player: any = {};
-  for (const pattern of playerPatterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) {
+    const data = (await metadataResponse.json()) as Record<string, any>;
+    const contents =
+      data.contents?.twoColumnWatchNextResults?.results?.results?.contents || [];
+    const primary = contents.find(
+      (item: Record<string, any>) => item.videoPrimaryInfoRenderer,
+    )?.videoPrimaryInfoRenderer;
+    const secondary = contents.find(
+      (item: Record<string, any>) => item.videoSecondaryInfoRenderer,
+    )?.videoSecondaryInfoRenderer;
+    const likeButton = primary?.videoActions?.menuRenderer?.topLevelButtons?.find(
+      (button: Record<string, any>) =>
+        button.segmentedLikeDislikeButtonViewModel,
+    )?.segmentedLikeDislikeButtonViewModel;
+    const likeTitle =
+      likeButton?.likeButtonViewModel?.likeButtonViewModel?.toggleButtonViewModel
+        ?.toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel?.title;
+    const likeText = typeof likeTitle === "string" ? likeTitle.replace(/\s/g, "") : "";
+    const viewCountRenderer = primary?.viewCount?.videoViewCountRenderer;
+    const originalViews = Number(viewCountRenderer?.originalViewCount);
+    const viewsCount =
+      Number.isFinite(originalViews) && originalViews > 0
+        ? formatCount(originalViews)
+        : formatYouTubeViewCount(
+            viewCountRenderer?.shortViewCount?.simpleText ||
+              viewCountRenderer?.viewCount?.simpleText,
+          );
+    const owner = secondary?.owner?.videoOwnerRenderer;
+    const channelUrl =
+      owner?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url || "";
+    const title = (primary?.title?.runs || [])
+      .map((run: { text?: string }) => run.text || "")
+      .join("")
+      .trim();
+
+    if (!title && !likeText) {
+      throw new Error("YouTube no devolvió metadatos para el video.");
+    }
+
+    return {
+      title: title || "Sin título",
+      channel:
+        owner?.title?.runs?.map((run: { text?: string }) => run.text || "").join("") ||
+        "Desconocido",
+      channel_url: channelUrl.startsWith("/")
+        ? `https://www.youtube.com${channelUrl}`
+        : channelUrl || `https://www.youtube.com/channel/${owner?.navigationEndpoint?.browseEndpoint?.browseId || ""}`,
+      views: viewsCount,
+      likes: /^[\d,.]+[KMBT]?$/i.test(likeText) ? formatCount(likeText) : "0",
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration: "",
+    };
+  } catch {
+    const response = await fetch(
+      `https://www.youtube.com/watch?v=${videoId}&hl=es`,
+      { headers, signal: AbortSignal.timeout(10000), redirect: "follow" },
+    );
+
+    if (!response.ok) {
+      throw new Error(`No se pudo obtener la metadata del video: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const playerMatch =
+      html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s) ||
+      html.match(/window\["ytInitialPlayerResponse"\]\s*=\s*(\{.+?\});<\/script>/s) ||
+      html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
+    let player: Record<string, any> = {};
+    if (playerMatch?.[1]) {
       try {
-        player = JSON.parse(match[1]);
-        break;
+        player = JSON.parse(playerMatch[1]);
       } catch {
         player = {};
       }
     }
+
+    const videoDetails = player.videoDetails || {};
+    const likeCount =
+      html.match(/"likeCount":"(\d+)"/)?.[1] ||
+      html.match(/"likeCount":(\d+)/)?.[1] ||
+      "0";
+    const lengthSeconds =
+      videoDetails.lengthSeconds || html.match(/"lengthSeconds":"?(\d+)"?/)?.[1] || "0";
+
+    return {
+      title:
+        videoDetails.title ||
+        html.match(/<meta property="og:title" content="([^"]+)"/)?.[1] ||
+        "Sin título",
+      channel:
+        videoDetails.author ||
+        videoDetails.ownerChannelName ||
+        html.match(/"author":"([^"]+)"/)?.[1] ||
+        "Desconocido",
+      channel_url:
+        videoDetails.ownerProfileUrl ||
+        html.match(/"ownerProfileUrl":"([^"]+)"/)?.[1] ||
+        `https://www.youtube.com/channel/${videoDetails.channelId || ""}`,
+      views: formatCount(videoDetails.viewCount || html.match(/"viewCount":"(\d+)"/)?.[1] || "0"),
+      likes: formatCount(likeCount),
+      thumbnail:
+        videoDetails.thumbnail?.thumbnails?.at(-1)?.url ||
+        html.match(/<meta property="og:image" content="([^"]+)"/)?.[1] ||
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration:
+        Number(lengthSeconds) > 0
+          ? `${Math.floor(Number(lengthSeconds) / 60)}m ${Number(lengthSeconds) % 60}s`
+          : "0s",
+    };
   }
-
-  const videoDetails = player?.videoDetails || {};
-  const channel =
-    videoDetails?.author ||
-    videoDetails?.ownerChannelName ||
-    html.match(/"author":"([^"]+)"/)?.[1] ||
-    "Desconocido";
-
-  const channel_url =
-    videoDetails?.ownerProfileUrl ||
-    html.match(/"ownerProfileUrl":"([^"]+)"/)?.[1] ||
-    `https://www.youtube.com/channel/${videoDetails?.channelId || ""}`;
-
-  const viewCount = videoDetails?.viewCount ||
-    html.match(/"viewCount":"(\d+)"/)?.[1] ||
-    "0";
-  const views = formatCount(viewCount);
-
-  const likeCount =
-    html.match(/"likeCount":"(\d+)"/)?.[1] ||
-    html.match(/"likeCount":(\d+)/)?.[1] ||
-    "0";
-  const likes = formatCount(likeCount);
-
-  const title =
-    videoDetails?.title ||
-    html.match(/<meta property="og:title" content="([^"]+)"/)?.[1] ||
-    "Sin título";
-
-  const thumbnail =
-    videoDetails?.thumbnail?.thumbnails?.at(-1)?.url ||
-    html.match(/<meta property="og:image" content="([^"]+)"/)?.[1] ||
-    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-
-  const lengthSeconds =
-    videoDetails?.lengthSeconds ||
-    html.match(/"lengthSeconds":"?(\d+)"?/)?.[1] ||
-    "0";
-  const duration =
-    Number(lengthSeconds) > 0
-      ? `${Math.floor(Number(lengthSeconds) / 60)}m ${Number(lengthSeconds) % 60}s`
-      : "0s";
-
-  return {
-    title,
-    channel,
-    channel_url,
-    views,
-    likes,
-    thumbnail,
-    duration,
-  };
 }
 
 async function savetube(

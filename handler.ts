@@ -62,6 +62,11 @@ const groupCache = new LRUCache<string, GroupMetadata>({
   ttl: 5 * 60 * 1000,
 });
 
+const processedGroupMessages = new LRUCache<string, true>({
+  max: 20_000,
+  ttl: 2 * 60 * 1000,
+});
+
 const GROUP_METADATA_CACHE = groupCache;
 
 const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
@@ -324,6 +329,15 @@ export async function handleMessage(
     if (from === "status@broadcast") return;
 
     const isGroup = from.endsWith("@g.us");
+    const groupData = isGroup ? runtimeDb.getGroup(from) : null;
+    const groupMessageKey =
+      isGroup && !msg.key?.fromMe && msg.key?.id
+        ? `${from}:${msg.key.id}:${msg.key.participant || msg.participant || ""}`
+        : null;
+    if (groupMessageKey && !groupData?.primaryBot) {
+      if (processedGroupMessages.has(groupMessageKey)) return;
+      processedGroupMessages.set(groupMessageKey, true);
+    }
     const participantRaw = isGroup
       ? msg.key?.participant || msg.participant || ""
       : "";
@@ -357,6 +371,15 @@ export async function handleMessage(
     const senderLid = cleanJid(senderLidJid);
     const botJid = cleanJid(sock.user?.id || "");
     const botRecord: Partial<DatabaseBot> = runtimeDb.getBot?.(botJid) ?? {};
+    const isPrimaryGroupBot = isGroup
+      ? isPrimaryBotForGroup(
+          sock,
+          from,
+          runtimeDb,
+          groupData?.primaryBot ?? null,
+          botRecord.bot_id ?? null,
+        )
+      : true;
     const modPrefix = String(botRecord.modPrefix ?? "").trim();
 
     const body =
@@ -419,7 +442,7 @@ export async function handleMessage(
                                       ? "Mension De Estado"
                                       : "Otro";
 
-    const groupPrefix = isGroup ? runtimeDb.getGroup(from)?.prefix : null;
+    const groupPrefix = groupData?.prefix;
     const activePrefixes = groupPrefix
       ? [groupPrefix]
       : modPrefix
@@ -450,10 +473,15 @@ export async function handleMessage(
       isGroup &&
       cmdName !== "delprimary" &&
       cmdName !== "setprimary" &&
-      runtimeDb.getPrimary(from) &&
-      !isPrimaryBotForGroup(sock, from, runtimeDb)
+      groupData?.primaryBot &&
+      !isPrimaryGroupBot
     ) {
       return;
+    }
+
+    if (groupMessageKey && groupData?.primaryBot) {
+      if (processedGroupMessages.has(groupMessageKey)) return;
+      processedGroupMessages.set(groupMessageKey, true);
     }
 
     let groupName = "";
@@ -473,16 +501,15 @@ export async function handleMessage(
         }
       }
 
-      const storedGroup = runtimeDb.getGroup(from);
+      const storedGroup = groupData;
       if (groupName && storedGroup.group_name !== groupName) {
         runtimeDb.setGroup(from, { group_name: groupName });
       }
 
-      const primaryBot = runtimeDb.getPrimary(from);
+      const primaryBot = groupData.primaryBot;
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
-        const storedBot = runtimeDb.getBot?.(botJid);
-        if (!isPrimaryBotForGroup(sock, from, runtimeDb) && isCmd) return;
-        if (storedBot?.status !== "active") return;
+        if (!isPrimaryGroupBot && isCmd) return;
+        if (botRecord.status !== "active") return;
       }
     }
 
@@ -614,13 +641,11 @@ export async function handleMessage(
     }
 
     if (isGroup) {
-      const groupData = runtimeDb.getGroup(from);
-
       // ── Protecciones de seguridad: se evalúan SIEMPRE antes de cualquier
       //    restricción de acceso (self, modSelf, chatBanned, etc.) para que
       //    funcionen incluso cuando el grupo está en modo self o modself. ──
       if (
-        isPrimaryBotForGroup(sock, from, runtimeDb) &&
+        isPrimaryGroupBot &&
         groupData?.antilink &&
         body &&
         !isAdmin &&
@@ -682,7 +707,7 @@ export async function handleMessage(
       // Verificar si el usuario está silenciado y eliminar su mensaje
       if (
         isGroup &&
-        isPrimaryBotForGroup(sock, from, runtimeDb) &&
+        isPrimaryGroupBot &&
         !isCmd &&
         !isBotUser &&
         !isMod &&
@@ -1087,9 +1112,7 @@ export async function handleMessage(
       ],
     };
 
-    const disabledCategories = isGroup
-      ? runtimeDb.getGroup(from)?.catBlocked
-      : [];
+    const disabledCategories = groupData?.catBlocked ?? [];
     const pluginCategory = String(plugin.category ?? "")
       .trim()
       .toLowerCase();
