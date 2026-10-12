@@ -15,13 +15,13 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
-import { formatCount, formatDuration } from "../../utils/formatter.ts";
+import { formatDuration } from "../../utils/formatter.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import {
   searchYouTubeVideo,
   type YouTubeSearchVideo,
-} from "../../src/api/youtubeSearch.ts";
-import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
+} from "../../src/api/YouTubeSearch.ts";
+import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 
 function getYouTubeVideoId(value: string): string | null {
   const rawUrl = String(value || "").trim();
@@ -117,8 +117,8 @@ export default {
         title,
         channel: author,
         duration: formatDuration(duration),
-        views: formatCount(views),
-        likes: likes === undefined ? undefined : formatCount(likes),
+        views: views,
+        likes: likes,
         cost: formatMoney(cost, ctx),
         url: youtubeUrl,
         showChannel: true,

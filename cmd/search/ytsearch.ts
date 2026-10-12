@@ -9,7 +9,7 @@ import { fytBold } from "../../core/socketText.ts";
 import { downloadToCache } from "../../core/downloadUtils.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
-import { searchYouTubeVideos } from "../../src/api/youtubeSearch.ts";
+import { searchYouTubeVideos } from "../../src/api/YouTubeSearch.ts";
 
 export default {
   name: ["ytsearch", "yts", "plays"],

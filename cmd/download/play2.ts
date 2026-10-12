@@ -18,8 +18,8 @@ import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import {
   searchYouTubeVideo,
   type YouTubeSearchVideo,
-} from "../../src/api/youtubeSearch.ts";
-import { downloadYouTube } from "../../src/api/youtubeDownloader.ts";
+} from "../../src/api/YouTubeSearch.ts";
+import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
