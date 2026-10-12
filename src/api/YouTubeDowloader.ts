@@ -427,7 +427,8 @@ async function savetube(
     const channelUrl =
       youtubeMeta?.channel_url ||
       (channelId ? `https://www.youtube.com/channel/${channelId}` : "https://www.youtube.com/");
-
+    const thump = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
+    const thump2 = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
     const result = {
       id: videoId,
       title: youtubeMeta?.title || info.title || "Sin título",
@@ -453,7 +454,7 @@ async function savetube(
               : "0"),
       url: `https://youtu.be/${videoId}`,
       channel_url: channelUrl,
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+      thumbnail: thump || thump2,
       dl_url: directMeta.url,
       size: directMeta.size,
     };
