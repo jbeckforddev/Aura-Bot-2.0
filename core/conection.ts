@@ -640,6 +640,8 @@ export async function connectToWhatsApp(
     scheduleReconnect(5000, sessionName, isSubBot, options);
   });
 
+  const knownGroupJids = new Set<string>();
+
   sock.ev.on("messages.upsert", async ({ messages }) => {
     if (!Array.isArray(messages) || messages.length === 0) return;
 
@@ -657,9 +659,13 @@ export async function connectToWhatsApp(
         }
 
       try {
-        if (msg.key?.remoteJid?.endsWith("@g.us")) {
+        const groupJid = msg.key?.remoteJid;
+        if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
           const connectedBot = sock.user?.id || "";
-          if (connectedBot) db.addBotGroup(connectedBot, msg.key.remoteJid);
+          if (connectedBot) {
+            db.addBotGroup(connectedBot, groupJid);
+            knownGroupJids.add(groupJid);
+          }
         }
         await handleMessage(
           sock,
