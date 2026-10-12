@@ -225,6 +225,7 @@ async function savetube(
         channel_url: string;
         thumbnail: string;
         dl_url: string;
+        size: number;
       }>;
     }
   | {
@@ -371,6 +372,7 @@ async function savetube(
       channel_url: channelUrl,
       thumbnail: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
       dl_url: directMeta.url,
+      size: directMeta.size,
     };
 
     return {
@@ -418,5 +420,6 @@ export async function downloadYouTube(
     likes: video.likes || searchResult?.likes,
     thumbnail: video.thumbnail || searchResult?.thumbnail,
     dl_url: video.dl_url,
+    size: video.size,
   };
 }

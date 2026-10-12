@@ -444,6 +444,18 @@ export async function prepareDownloadCharge(
   filePath: string,
 ): Promise<{ cost: number; size: number }> {
   const size = await getFileBytes(filePath);
+  return prepareDownloadChargeBySize(ctx, type, size);
+}
+
+export function prepareDownloadChargeBySize(
+  ctx: CommandContext,
+  type: DownloadMediaType,
+  size: number,
+): { cost: number; size: number } {
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new Error("No se pudo determinar el tamaño del archivo.");
+  }
+
   const bag = ctx as DownloadChargeContext;
   bag._downloadMediaType = type;
   bag._downloadSize = Number(bag._downloadSize || 0) + size;

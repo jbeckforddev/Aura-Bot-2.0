@@ -3,8 +3,6 @@ import {
   prepareWAMessageMedia,
   type WAMessage,
 } from "@whiskeysockets/baileys";
-import { readFile } from "node:fs/promises";
-import { downloadToCache } from "./downloadUtils.ts";
 import { createLinkPreviewWithoutChannel } from "./LinkPreview.ts";
 import type { DownloadPreviewOptions } from "../types/index.d.ts";
 
@@ -23,11 +21,8 @@ export async function sendDownloadPreview({
   mentions = [],
 }: DownloadPreviewOptions): Promise<boolean> {
   try {
-    const thumbnailBuffer = await readFile(
-      await downloadToCache(thumbnail, 30000),
-    );
     const prepared = await prepareWAMessageMedia(
-      { image: thumbnailBuffer },
+      { image: { url: thumbnail } },
       {
         upload: sock.waUploadToServer,
         mediaTypeOverride: "thumbnail-link",

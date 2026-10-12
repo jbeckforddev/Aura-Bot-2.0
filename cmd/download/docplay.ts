@@ -1,11 +1,8 @@
 import { fytBold } from "../../core/socketText.ts";
-import {
-  downloadToCache,
-  safeFileName,
-} from "../../core/downloadUtils.ts";
+import { safeFileName } from "../../core/downloadUtils.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import {
-  prepareDownloadCharge,
+  prepareDownloadChargeBySize,
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
@@ -54,8 +51,11 @@ export default {
       if (!url) throw new Error("No se encontró ningún video.");
       const audio = await downloadYouTube(url, "audio", 320, searchResult);
       const title = audio.title || "Audio de YouTube";
-      const file = await downloadToCache(audio.dl_url);
-      const { cost } = await prepareDownloadCharge(ctx, "document", file);
+      const { cost } = prepareDownloadChargeBySize(
+        ctx,
+        "document",
+        audio.size,
+      );
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE DOCUMENT",
@@ -99,7 +99,7 @@ export default {
         : false;
       if (!hasPreview) await reply({ text: caption });
       await reply({
-        document: { url: file },
+        document: { url: audio.dl_url },
         mimetype: "audio/mpeg",
         fileName: `${safeFileName(title, "youtube")}.mp3`,
       });

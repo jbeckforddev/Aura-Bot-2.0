@@ -1,12 +1,8 @@
-import { rm } from "node:fs/promises";
 import { fytBold } from "../../core/socketText.ts";
-import {
-  downloadToCache,
-  safeFileName,
-} from "../../core/downloadUtils.ts";
+import { safeFileName } from "../../core/downloadUtils.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import {
-  prepareDownloadCharge,
+  prepareDownloadChargeBySize,
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
@@ -14,7 +10,6 @@ import type {
   CommandContext,
 } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
-import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import {
   searchYouTubeVideo,
   type YouTubeSearchVideo,
@@ -24,6 +19,7 @@ import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
 const MAX_VIDEO_DURATION_SECONDS = 20 * 60;
+const MAX_DIRECT_VIDEO_SIZE = 100 * 1024 * 1024;
 
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
@@ -74,7 +70,6 @@ export default {
     const query = args.join(" ").trim();
     if (!query) return reply("⚠️ Proporciona el nombre o enlace de un video.");
     await react("⏳");
-    let convertedFile = "";
     try {
       const id = videoId(query);
       let searchResult: YouTubeSearchVideo | undefined;
@@ -99,9 +94,11 @@ export default {
         );
       }
 
-      const file = await downloadToCache(video.dl_url, 20 * 60 * 1000);
-      convertedFile = await CONVERT_TO_AVC(file);
-      const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
+      if (video.size > MAX_DIRECT_VIDEO_SIZE) {
+        throw new Error("El video supera el límite de 100 MB para envío directo.");
+      }
+
+      const { cost } = prepareDownloadChargeBySize(ctx, "video", video.size);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE VIDEO",
@@ -139,7 +136,7 @@ export default {
         : false;
       if (!hasPreview) await reply({ text: caption });
       await reply({
-        video: { url: convertedFile },
+        video: { url: video.dl_url },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "youtube")}.mp4`,
       });
@@ -152,9 +149,6 @@ export default {
       return reply({
         text: `${message}\n\nMáximo permitido: 20 minutos de duración para YouTube video normal.`,
       });
-    } finally {
-      if (convertedFile)
-        await rm(convertedFile, { force: true }).catch(() => undefined);
     }
   },
 };

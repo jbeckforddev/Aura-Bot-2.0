@@ -1,12 +1,10 @@
 import type { WAMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
-import { readFile } from "node:fs/promises";
 import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
-import { downloadToCache } from "../../core/downloadUtils.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 import { searchYouTubeVideos } from "../../src/api/YouTubeSearch.ts";
@@ -41,11 +39,8 @@ export default {
       let preparedMedia: { imageMessage?: unknown } = {};
       if (videos[0].thumbnail) {
         try {
-          const thumbnailBuffer = await readFile(
-            await downloadToCache(videos[0].thumbnail, 30000),
-          );
           preparedMedia = await prepareWAMessageMedia(
-            { image: thumbnailBuffer },
+            { image: { url: videos[0].thumbnail } },
             {
               upload: sock.waUploadToServer,
               mediaTypeOverride: "thumbnail-link",

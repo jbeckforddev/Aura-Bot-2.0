@@ -1,7 +1,6 @@
 import type {
   CommandContext,
 } from "../../types/index.d.ts";
-import { readFile } from "node:fs/promises";
 import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
@@ -9,9 +8,8 @@ import {
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
-import { downloadToCache } from "../../core/downloadUtils.ts";
 import {
-  prepareDownloadCharge,
+  prepareDownloadChargeBySize,
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
@@ -108,8 +106,7 @@ export default {
         ? `https://youtu.be/${videoId}`
         : result?.url || finalUrl;
       if (!audio.dl_url) throw new Error("No se pudo obtener el audio.");
-      const file = await downloadToCache(audio.dl_url);
-      const { cost } = await prepareDownloadCharge(ctx, "audio", file);
+      const { cost } = prepareDownloadChargeBySize(ctx, "audio", audio.size);
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "YOUTUBE PLAY",
@@ -138,11 +135,8 @@ export default {
           : audio.thumbnail || result?.thumbnail || "",
       );
       if (thumbnail) {
-        const thumbnailBuffer = await readFile(
-          await downloadToCache(thumbnail, 30000),
-        );
         const prepared = await prepareWAMessageMedia(
-          { image: thumbnailBuffer },
+          { image: { url: thumbnail } },
           {
             upload: sock.waUploadToServer,
             mediaTypeOverride: "thumbnail-link",
@@ -177,7 +171,7 @@ export default {
         await reply({ text: caption });
       }
       await reply({
-        audio: { url: file },
+        audio: { url: audio.dl_url },
         mimetype: "audio/mpeg",
         fileName: `${title.replace(/[<>:"/\\|?*]/g, "").slice(0, 100) || "youtube"}.mp3`,
       });
