@@ -3,13 +3,14 @@ import undici from "undici";
 const HEADER =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
 const REQUEST_TIMEOUT_MS = 10000;
+const LIKES_TIMEOUT_MS = 2500;
 type YouTubeVideo = {
   id: string;
   title: string;
   channel: string;
   duration: string;
   views: string;
-  likes: string;
+  likes?: string;
   url: string;
   thumbnail: string;
   channel_url: string;
@@ -66,33 +67,28 @@ function formatTime(duration: string): string {
   return formatted.join(" ") || "0s";
 }
 
-async function getVideoLikes(videoId: string): Promise<string> {
-  const response = await undici.fetch(
-    `https://www.youtube.com/watch?v=${videoId}&hl=es`,
-    {
-      headers: {
-        "User-Agent": HEADER,
-        "Accept-Language": "es-ES,es;q=0.9",
-        Cookie: "CONSENT=YES+1; SOCS=CAI",
+async function getVideoLikes(videoId: string): Promise<string | undefined> {
+  try {
+    const response = await undici.fetch(
+      `https://www.youtube.com/watch?v=${videoId}&hl=es`,
+      {
+        headers: {
+          "User-Agent": HEADER,
+          "Accept-Language": "es-ES,es;q=0.9",
+          Cookie: "CONSENT=YES+1; SOCS=CAI",
+        },
+        signal: AbortSignal.timeout(LIKES_TIMEOUT_MS),
       },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `YouTube respondió con HTTP ${response.status} al obtener los likes`,
     );
+
+    if (!response.ok) return undefined;
+
+    const html = await response.text();
+    const match = html.match(/"likeCount":"(\d+)"/);
+    return match ? Number(match[1]).toLocaleString("es-MX") : undefined;
+  } catch {
+    return undefined;
   }
-
-  const html = await response.text();
-  const match = html.match(/"likeCount":"(\d+)"/);
-  if (!match)
-    throw new Error(
-      `No se pudo obtener el contador de likes del video ${videoId}`,
-    );
-
-  return Number(match[1]).toLocaleString("es-MX");
 }
 
 function formatCount(valor: unknown): string {
@@ -126,6 +122,7 @@ function formatCount(valor: unknown): string {
 export async function searchYouTube(
   query: string,
   limit = 10,
+  includeLikes = true,
 ): Promise<YouTubeSearchResponse> {
   try {
     const SEARCH_URL = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=es`;
@@ -184,17 +181,14 @@ export async function searchYouTube(
       };
     }
 
-    const resultsWithLikes = await Promise.all(
-      results.map(async (video) => {
-        let likes = "0";
-        try {
-          likes = formatCount(await getVideoLikes(video.id));
-        } catch {
-          throw new Error(`No se pudo obtener el contador de likes del video ${video.id}`);
-        }
-        return { ...video, likes };
-      }),
-    );
+    const resultsWithLikes = includeLikes
+      ? await Promise.all(
+          results.map(async (video) => {
+            const likes = await getVideoLikes(video.id);
+            return likes ? { ...video, likes: formatCount(likes) } : video;
+          }),
+        )
+      : results;
     return {
       creator: "Jeriel B.",
       status: "success",
@@ -217,8 +211,9 @@ export async function searchYouTube(
 export async function searchYouTubeVideos(
   query: string,
   limit = 5,
+  includeLikes = true,
 ): Promise<YouTubeSearchVideo[]> {
-  const response = await searchYouTube(query, limit);
+  const response = await searchYouTube(query, limit, includeLikes);
   if (response.status !== "success") throw new Error(response.error);
 
   return response.results.map((video) => ({
@@ -237,7 +232,7 @@ export async function searchYouTubeVideos(
 export async function searchYouTubeVideo(
   query: string,
 ): Promise<YouTubeSearchVideo> {
-  const [video] = await searchYouTubeVideos(query, 1);
+  const [video] = await searchYouTubeVideos(query, 1, false);
   if (!video) throw new Error("No se encontraron resultados en YouTube.");
   return video;
 }
