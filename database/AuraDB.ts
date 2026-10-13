@@ -1,5 +1,5 @@
 import DataBase from "better-sqlite3";
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync } from "node:fs";
 import "../config.ts";
 import type {
   IDatabase,
@@ -50,10 +50,12 @@ if (!existsSync(DATA_BASE_DIR)) {
 const db_instance = new DataBase(`${DATA_BASE_DIR}/Aura.db`);
 db_instance.pragma("journal_mode = WAL");
 db_instance.pragma("synchronous = NORMAL");
+db_instance.pragma("temp_store = MEMORY");
+db_instance.pragma("mmap_size = 314572800");
 db_instance.pragma("foreign_keys = ON");
 db_instance.pragma("wal_checkpoint = 1000");
-db_instance.pragma("busy_timeout = 2000");
-db_instance.pragma("cache_size = -4000");
+db_instance.pragma("busy_timeout = 5000");
+db_instance.pragma("cache_size = -20000");
 
 db_instance.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -171,9 +173,7 @@ for (const column of [
 }
 
 const groupsMeta = db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{ name: string }>;
-const hasMutedUsers = groupsMeta.some(
-  (column) => column.name.toLowerCase() === "muted_users",
-);
+const hasMutedUsers = groupsMeta.some((column) => column.name.toLowerCase() === "muted_users");
 const hasLegacyMedUsers = groupsMeta.some((column) => column.name === "medUsers");
 if (!hasMutedUsers && hasLegacyMedUsers) {
   db_instance.exec("ALTER TABLE groups RENAME COLUMN medUsers TO Muted_Users");
@@ -199,87 +199,65 @@ for (const [table, column, definition] of [
   ["users", "data", "TEXT DEFAULT '{}'"],
 ] as const) {
   const exists = (
-    db_instance.prepare(`PRAGMA table_info('${table}')`).all() as Array<{
-      name: string;
-    }>
+    db_instance.prepare(`PRAGMA table_info('${table}')`).all() as Array<{ name: string; }>
   ).some((entry) => entry.name.toLowerCase() === column.toLowerCase());
-  if (!exists)
-    db_instance.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  if (!exists) db_instance.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
-const legacyMutedColumns = (
-  db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{
-    name: string;
-  }>
-)
+const legacyMutedColumns = (db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{ name: string; }>)
   .map((column) => column.name)
   .filter((name) => {
     const normalized = name.toLowerCase().replace(/_/g, "");
-    return (
-      normalized === "medusers" ||
-      (normalized === "mutedusers" && name.toLowerCase() !== "muted_users")
-    );
+    return normalized === "medusers" || (normalized === "mutedusers" && name.toLowerCase() !== "muted_users");
   });
-const groupRows = db_instance.prepare("SELECT * FROM groups").all() as Array<
-  Record<string, unknown>
->;
-const updateMutedUsers = db_instance.prepare(
-  "UPDATE groups SET Muted_Users = ? WHERE jid = ?",
-);
+
+const groupRows = db_instance.prepare("SELECT * FROM groups").all() as Array<Record<string, unknown>>;
+const updateMutedUsers = db_instance.prepare("UPDATE groups SET Muted_Users = ? WHERE jid = ?");
+
 for (const row of groupRows) {
   const currentMutedUsers = safeJsonArray(row.Muted_Users);
   if (currentMutedUsers.length > 0) continue;
 
-  const groupData = safeJson<Record<string, unknown>>(
-    row.data as string | undefined,
-  );
+  const groupData = safeJson<Record<string, unknown>>(row.data as string | undefined);
   const legacyMutedUsers = [
     ...legacyMutedColumns.map((column) => row[column]),
     groupData.mutedUsers,
     groupData.medUsers,
-  ]
-    .map(safeJsonArray)
-    .find((users) => users.length > 0);
+  ].map(safeJsonArray).find((users) => users.length > 0);
+
   if (legacyMutedUsers) {
     updateMutedUsers.run(JSON.stringify(legacyMutedUsers), row.jid);
   }
 }
+
 for (const column of legacyMutedColumns) {
   db_instance.exec(`ALTER TABLE groups DROP COLUMN "${column}"`);
 }
 
 for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
-  const exists = db_instance
-    .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?")
-    .get(column);
-  if (!exists)
-    db_instance.exec(`ALTER TABLE users ADD COLUMN ${column} INTEGER DEFAULT 0`);
+  const exists = db_instance.prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?").get(column);
+  if (!exists) db_instance.exec(`ALTER TABLE users ADD COLUMN ${column} INTEGER DEFAULT 0`);
 }
 
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
 function hasRoleLevel(userRole: string | null | undefined, role: string) {
-  const currentIndex = hierarchy.indexOf(
-    (userRole ?? "user") as (typeof hierarchy)[number],
-  );
+  const currentIndex = hierarchy.indexOf((userRole ?? "user") as (typeof hierarchy)[number]);
   const targetIndex = hierarchy.indexOf(role as (typeof hierarchy)[number]);
-
   return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
 }
 
-const groupColumns = db_instance
-  .prepare("PRAGMA table_info('groups')")
-  .all() as Array<{ name: string }>;
-const hasLegacyTopMsgUsersColumn = groupColumns.some(
-  (column) => column.name.toLowerCase() === "topmsgusers",
-);
+const groupColumns = db_instance.prepare("PRAGMA table_info('groups')").all() as Array<{ name: string }>;
+const hasLegacyTopMsgUsersColumn = groupColumns.some((column) => column.name.toLowerCase() === "topmsgusers");
 const groupSelectColumns = groupColumns
   .filter((column) => column.name.toLowerCase() !== "topmsgusers")
   .map((column) => `"${column.name}"`)
   .join(", ");
 
 const stmts = {
-  getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
+  getUserByJid: db_instance.prepare("SELECT * FROM users WHERE jid = ? LIMIT 1"),
+  getUserByLid: db_instance.prepare("SELECT * FROM users WHERE lid = ? LIMIT 1"),
+  getUserByBoth: db_instance.prepare("SELECT * FROM users WHERE jid = ? OR lid = ? LIMIT 1"),
   insertUser: db_instance.prepare(
     "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
@@ -299,9 +277,7 @@ const stmts = {
     `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
 
-  getGroup: db_instance.prepare(
-    `SELECT ${groupSelectColumns} FROM groups WHERE jid = ?`,
-  ),
+  getGroup: db_instance.prepare(`SELECT ${groupSelectColumns} FROM groups WHERE jid = ? LIMIT 1`),
   insertGroup: db_instance.prepare(
     "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, catBlocked, Muted_Users, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
@@ -312,7 +288,7 @@ const stmts = {
     "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, data FROM groups",
   ),
 
-  getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
+  getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ? LIMIT 1"),
   insertBot: db_instance.prepare(
     "INSERT INTO bots (jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
@@ -326,16 +302,12 @@ const stmts = {
 };
 
 function normalizeJid(input: string) {
-  return String(input || "")
-    .trim()
-    .replace(/@.*$/, "")
-    .replace(/:.*/, "");
+  return String(input || "").trim().replace(/@.*$/, "").replace(/:.*/, "");
 }
 
 function safeJson<T = Record<string, unknown>>(value: unknown): T {
   if (value == null || value === "") return {} as T;
   if (typeof value !== "string") return value as T;
-
   try {
     return JSON.parse(value) as T;
   } catch {
@@ -344,32 +316,24 @@ function safeJson<T = Record<string, unknown>>(value: unknown): T {
 }
 
 function clearLegacyTopMessageRankings(): void {
-  const rows = db_instance
-    .prepare(`SELECT jid, data FROM groups WHERE data LIKE '%"topMsgUsers"%'`)
-    .all() as Array<{ jid: string; data: string | null }>;
+  const rows = db_instance.prepare(`SELECT jid, data FROM groups WHERE data LIKE '%"topMsgUsers"%'`).all() as Array<{ jid: string; data: string | null }>;
   const updateData = db_instance.prepare("UPDATE groups SET data = ? WHERE jid = ?");
 
   for (const row of rows) {
     const data = safeJson<Record<string, unknown>>(row.data);
     if (!Object.prototype.hasOwnProperty.call(data, "topMsgUsers")) continue;
-
     delete data.topMsgUsers;
     updateData.run(JSON.stringify(data), row.jid);
   }
 
   if (hasLegacyTopMsgUsersColumn) {
-    db_instance.exec(
-      "UPDATE groups SET topMsgUsers = '[]' WHERE topMsgUsers != '[]'",
-    );
+    db_instance.exec("UPDATE groups SET topMsgUsers = '[]' WHERE topMsgUsers != '[]'");
   }
 }
 
 clearLegacyTopMessageRankings();
 
-function hydrateUserProfile(
-  data: Record<string, unknown>,
-  row: Record<string, unknown>,
-): Record<string, unknown> {
+function hydrateUserProfile(data: Record<string, unknown>, row: Record<string, unknown>): Record<string, unknown> {
   const hydrated = { ...data };
   const columns = [
     ["name", "name"],
@@ -397,18 +361,9 @@ function hydrateUserProfile(
   return hydrated;
 }
 
-function getUserProfileValues(
-  user: Record<string, unknown>,
-  row?: Record<string, unknown>,
-): unknown[] {
-  const value = (key: string, column: string, fallback: unknown) =>
-    user[key] !== undefined ? user[key] : (row?.[column] ?? fallback);
-  const auraPoints =
-    user.auraXp !== undefined
-      ? user.auraXp
-      : user.aura !== undefined
-        ? user.aura
-        : (row?.aura_points ?? 0);
+function getUserProfileValues(user: Record<string, unknown>, row?: Record<string, unknown>): unknown[] {
+  const value = (key: string, column: string, fallback: unknown) => user[key] !== undefined ? user[key] : (row?.[column] ?? fallback);
+  const auraPoints = user.auraXp !== undefined ? user.auraXp : user.aura !== undefined ? user.aura : (row?.aura_points ?? 0);
 
   return [
     value("name", "name", null),
@@ -430,15 +385,8 @@ function migrateUserProfileColumns(): void {
     ["marriedTo", "marriage_to"],
     ["level", "aura_level"],
   ] as const;
-  const rows = db_instance
-    .prepare(
-      "SELECT rowid AS userRowId, jid, data, name, description, genre, birth_date, marriage_to, aura_points, aura_level FROM users",
-    )
-    .all() as Array<Record<string, unknown>>;
-  const statements = new Map<
-    string,
-    ReturnType<typeof db_instance.prepare<unknown[], unknown>>
-  >();
+  const rows = db_instance.prepare("SELECT rowid AS userRowId, jid, data, name, description, genre, birth_date, marriage_to, aura_points, aura_level FROM users").all() as Array<Record<string, unknown>>;
+  const statements = new Map<string, ReturnType<typeof db_instance.prepare<unknown[], unknown>>>();
 
   const migrate = db_instance.transaction(() => {
     for (const row of rows) {
@@ -468,9 +416,7 @@ function migrateUserProfileColumns(): void {
       const query = assignments.join(", ");
       let stmt = statements.get(query);
       if (!stmt) {
-        stmt = db_instance.prepare<unknown[], unknown>(
-          `UPDATE users SET ${query} WHERE rowid = ?`,
-        );
+        stmt = db_instance.prepare<unknown[], unknown>(`UPDATE users SET ${query} WHERE rowid = ?`);
         statements.set(query, stmt);
       }
       stmt.run(...[...values, row.userRowId]);
@@ -498,14 +444,8 @@ function maxTimestamp(...values: unknown[]): number {
   return Math.max(0, ...timestamps);
 }
 
-function hydrateEconomyLasts(
-  data: Record<string, unknown>,
-  row: Record<string, unknown>,
-): Record<string, unknown> {
-  const economy =
-    data.economy && typeof data.economy === "object"
-      ? { ...(data.economy as Record<string, unknown>) }
-      : {};
+function hydrateEconomyLasts(data: Record<string, unknown>, row: Record<string, unknown>): Record<string, unknown> {
+  const economy = data.economy && typeof data.economy === "object" ? { ...(data.economy as Record<string, unknown>) } : {};
   const hydrated = { ...data };
 
   for (const [key, column] of Object.entries(ECONOMY_LAST_COLUMNS)) {
@@ -518,21 +458,12 @@ function hydrateEconomyLasts(
   return hydrated;
 }
 
-function persistEconomyLasts(
-  jid: string,
-  lid: string | null,
-  data: Record<string, unknown>,
-): void {
+function persistEconomyLasts(jid: string, lid: string | null, data: Record<string, unknown>): void {
   const row = getUserRow(jid, lid);
   if (!row) return;
 
-  const economy =
-    data.economy && typeof data.economy === "object"
-      ? (data.economy as Record<string, unknown>)
-      : {};
-  const values = Object.entries(ECONOMY_LAST_COLUMNS).map(([key, column]) =>
-    maxTimestamp(data[key], economy[key], row[column]),
-  );
+  const economy = data.economy && typeof data.economy === "object" ? (data.economy as Record<string, unknown>) : {};
+  const values = Object.entries(ECONOMY_LAST_COLUMNS).map(([key, column]) => maxTimestamp(data[key], economy[key], row[column]));
 
   if (row.jid === null && row.lid) {
     stmts.updateEconomyLastByLid.run(...values, row.lid);
@@ -541,33 +472,32 @@ function persistEconomyLasts(
   }
 }
 
-const userStmtCache = new Map<string, ReturnType<typeof db_instance.prepare>>();
+const CACHE_TTL = 2000;
+const rowCache = {
+  users: new Map<string, { row: UserDbRow | undefined; exp: number }>(),
+  groups: new Map<string, { row: GroupDbRow | undefined; exp: number }>(),
+  bots: new Map<string, { row: BotDbRow | undefined; exp: number }>(),
+};
 
 function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
-  const candidates = [rawInput, key, key ? `${key}@s.whatsapp.net` : ""].filter(
-    Boolean,
-  );
-  const conditions = candidates.flatMap(() => ["jid = ?", "lid = ?"]);
-  const values = candidates.flatMap((candidate) => [candidate, candidate]);
+  const cacheKey = `${key}_${lid || ""}`;
 
-  if (lid) {
-    conditions.push("lid = ?");
-    values.push(lid);
+  const cached = rowCache.users.get(cacheKey);
+  if (cached && cached.exp > Date.now()) return cached.row;
+
+  let row: UserDbRow | undefined;
+  if (key && lid) {
+    row = stmts.getUserByBoth.get(key, lid) as UserDbRow | undefined;
+  } else if (lid) {
+    row = stmts.getUserByLid.get(lid) as UserDbRow | undefined;
+  } else if (key) {
+    row = stmts.getUserByJid.get(key) as UserDbRow | undefined;
   }
 
-  // Sin condiciones no se puede construir una WHERE válida → nada que buscar.
-  if (conditions.length === 0) return undefined;
-
-  const queryKey = conditions.join(" OR ");
-  let stmt = userStmtCache.get(queryKey);
-  if (!stmt) {
-    stmt = db_instance.prepare(`SELECT * FROM users WHERE ${queryKey} LIMIT 1`);
-    userStmtCache.set(queryKey, stmt);
-  }
-
-  return (stmt as any).get(...values) as UserDbRow | undefined;
+  rowCache.users.set(cacheKey, { row, exp: Date.now() + CACHE_TTL });
+  return row;
 }
 
 function getUser(input: string): DatabaseUser {
@@ -591,7 +521,7 @@ function getUser(input: string): DatabaseUser {
       defaultUser.lid,
       defaultUser.username,
       defaultUser.phone_number,
-      defaultUser.role,
+       defaultUser.role,
       defaultUser.is_banned,
       100000,
       10000,
@@ -599,15 +529,13 @@ function getUser(input: string): DatabaseUser {
       ...getUserProfileValues(defaultUser),
     );
 
+    rowCache.users.delete(`${key}_`);
     return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
   }
 
   const userRow = row as unknown as Record<string, unknown>;
   const jsonData = hydrateUserProfile(
-    hydrateEconomyLasts(
-      safeJson<Record<string, unknown>>(row.data as string | undefined),
-      userRow,
-    ),
+    hydrateEconomyLasts(safeJson<Record<string, unknown>>(row.data as string | undefined), userRow),
     userRow,
   );
   const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
@@ -615,15 +543,10 @@ function getUser(input: string): DatabaseUser {
 
   return {
     ...jsonData,
-    jid: (row.jid !== undefined ? row.jid : (jsonData.jid ?? key)) as
-      string | null,
-    lid: (row.lid ??
-      jsonData.lid ??
-      (rawInput.endsWith("@lid") ? rawInput : null)) as string | null,
+    jid: (row.jid !== undefined ? row.jid : (jsonData.jid ?? key)) as string | null,
+    lid: (row.lid ?? jsonData.lid ?? (rawInput.endsWith("@lid") ? rawInput : null)) as string | null,
     username: (row.username ?? jsonData.username ?? null) as string | null,
-    phone_number: (row.phone_number !== undefined
-      ? row.phone_number
-      : (jsonData.phone_number ?? key)) as string | null,
+    phone_number: (row.phone_number !== undefined ? row.phone_number : (jsonData.phone_number ?? key)) as string | null,
     role: (row.role ?? jsonData.role ?? "user") as string,
     is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
     coins,
@@ -633,11 +556,17 @@ function getUser(input: string): DatabaseUser {
     data: jsonData,
   };
 }
-
 function getGroup(jid: string): DatabaseGroup {
   const key = normalizeJid(jid);
-  const row = stmts.getGroup.get(key) as GroupDbRow | undefined;
+  const cached = rowCache.groups.get(key);
+  let row: GroupDbRow | undefined;
 
+  if (cached && cached.exp > Date.now()) {
+    row = cached.row;
+  } else {
+    row = stmts.getGroup.get(key) as GroupDbRow | undefined;
+    rowCache.groups.set(key, { row, exp: Date.now() + CACHE_TTL });
+  }
   if (!row) {
     const defaultGroup: DatabaseGroup = {
       group_id: key,
@@ -661,7 +590,6 @@ function getGroup(jid: string): DatabaseGroup {
       mutedUsers: [],
       data: {},
     };
-
     stmts.insertGroup.run(
       key,
       defaultGroup.group_id,
@@ -679,25 +607,17 @@ function getGroup(jid: string): DatabaseGroup {
       JSON.stringify(defaultGroup.data),
     );
 
+    rowCache.groups.delete(key);
     return defaultGroup;
   }
-
-  const jsonData = safeJson<Record<string, unknown>>(
-    row.data as string | undefined,
-  );
+  const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
   delete jsonData.topMsgUsers;
-  const storedMutedUsers = safeJsonArray(
-      row.Muted_Users ??
-      jsonData.mutedUsers ??
-      jsonData.medUsers ??
-      row.mutedUsers ??
-      row.medUsers,
-  );
+  const storedMutedUsers = safeJsonArray(row.Muted_Users ?? jsonData.mutedUsers ?? jsonData.medUsers ?? row.mutedUsers ?? row.medUsers);
+  
   return {
     ...jsonData,
     group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
-    group_name: (jsonData.group_name ?? row.group_name ?? null) as
-      string | null,
+    group_name: (jsonData.group_name ?? row.group_name ?? null) as string | null,
     antilink: Number(jsonData.antilink ?? row.antilink ?? 0),
     antiCalls: Number(jsonData.antiCalls ?? row.antiCalls ?? 0),
     antiToxic: Number(jsonData.antiToxic ?? row.antiToxic ?? 0),
@@ -706,38 +626,22 @@ function getGroup(jid: string): DatabaseGroup {
     onlyAdmin: Number(jsonData.onlyAdmin ?? row.onlyAdmin ?? 0),
     prefix: (jsonData.prefix ?? row.prefix ?? null) as string | null,
     self: Number(jsonData.self ?? row.self ?? 0),
-    catBlocked: safeJsonArray(
-      jsonData.catBlocked ?? row.catBlocked ?? '["nsfw"]',
-    ),
+    catBlocked: safeJsonArray(jsonData.catBlocked ?? row.catBlocked ?? '["nsfw"]'),
     privateMode: Boolean(row.privateMode ?? jsonData.privateMode ?? false),
     adminMode: Boolean(row.adminMode ?? jsonData.adminMode ?? false),
-    primaryBot: (jsonData.primaryBot ?? row.primaryBot ?? null) as
-      string | null,
+    primaryBot: (jsonData.primaryBot ?? row.primaryBot ?? null) as string | null,
     welcome: Boolean(row.welcome ?? jsonData.welcome ?? false),
     goodbye: Boolean(row.goodbye ?? jsonData.goodbye ?? false),
-    welcomeMessage: (jsonData.welcomeMessage ?? row.welcomeMessage ?? null) as
-      string | null,
-    goodbyeMessage: (jsonData.goodbyeMessage ?? row.goodbyeMessage ?? null) as
-      string | null,
+    welcomeMessage: (jsonData.welcomeMessage ?? row.welcomeMessage ?? null) as string | null,
+    goodbyeMessage: (jsonData.goodbyeMessage ?? row.goodbyeMessage ?? null) as string | null,
     mutedUsers: storedMutedUsers,
     data: jsonData,
   };
 }
-
 function resolveBotTypeLabel(input: Record<string, unknown> = {}): string {
-  const data =
-    input.data && typeof input.data === "object"
-      ? (input.data as Record<string, unknown>)
-      : {};
-
-  const normalized = String(
-    (input.bot_type as string | undefined) ??
-      (data.bot_type as string | undefined) ??
-      (data.botType as string | undefined) ??
-      "Principal",
-  ).trim();
+  const data = input.data && typeof input.data === "object" ? (input.data as Record<string, unknown>) : {};
+  const normalized = String((input.bot_type as string | undefined) ?? (data.bot_type as string | undefined) ?? (data.botType as string | undefined) ?? "Principal").trim();
   const botType = normalized.toLowerCase();
-
   if (botType.includes("sub")) return "Sub-Bot";
   if (botType.includes("prem") || botType.includes("premium")) return "Prem-Bot";
   return "Principal";
@@ -745,8 +649,15 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): string {
 
 function getBot(jid: string): DatabaseBot {
   const key = normalizeJid(jid);
-  const row = stmts.getBot.get(key) as BotDbRow | undefined;
+  const cached = rowCache.bots.get(key);
+  let row: BotDbRow | undefined;
 
+  if (cached && cached.exp > Date.now()) {
+    row = cached.row;
+  } else {
+    row = stmts.getBot.get(key) as BotDbRow | undefined;
+    rowCache.bots.set(key, { row, exp: Date.now() + CACHE_TTL });
+  }
   if (!row) {
     const defaultBot: DatabaseBot = {
       jid: key,
@@ -766,7 +677,6 @@ function getBot(jid: string): DatabaseBot {
       currentAudio: null,
       data: {},
     };
-
     stmts.insertBot.run(
       key,
       defaultBot.bot_id,
@@ -786,12 +696,10 @@ function getBot(jid: string): DatabaseBot {
       JSON.stringify(defaultBot.data),
     );
 
+    rowCache.bots.delete(key);
     return defaultBot;
   }
-
-  const jsonData = safeJson<Record<string, unknown>>(
-    row.data as string | undefined,
-  );
+  const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
   const normalizedBotType = resolveBotTypeLabel({
     ...jsonData,
     ...row,
@@ -804,67 +712,40 @@ function getBot(jid: string): DatabaseBot {
     jid: (row.jid ?? key) as string,
     bot_id: (jsonData.bot_id ?? row.bot_id ?? key) as string,
     bot_name: (jsonData.bot_name ?? row.bot_name ?? null) as string | null,
-    phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as
-      string | null,
+    phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as string | null,
     lid: (jsonData.lid ?? row.lid ?? null) as string | null,
-    groups: safeJsonArray(
-      jsonData.groups ?? row.groups,
-    ),
+    groups: safeJsonArray(jsonData.groups ?? row.groups),
     isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
     bot_type: normalizedBotType,
     status: (jsonData.status ?? row.status ?? "offline") as string,
     modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as string | null,
     modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
     currency: (jsonData.currency ?? row.currency ?? "AuraCoins") as string,
-    currencySymbol: (jsonData.currencySymbol ??
-      row.currencySymbol ??
-      "₡") as string,
-    currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as
-      | string
-      | null,
-    currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as
-      | string
-      | null,
+    currencySymbol: (jsonData.currencySymbol ?? row.currencySymbol ?? "₡") as string,
+    currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as | string | null,
+    currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as | string | null,
     data: jsonData,
   };
 }
-
 export const db: IDatabase = {
   getUser,
   getGroup,
   getBot,
 
-  setUser(
-    jid: string,
-    dataObject: Partial<DatabaseUser> & Record<string, unknown>,
-  ) {
+  setUser(jid: string, dataObject: Partial<DatabaseUser> & Record<string, unknown>) {
     const key = normalizeJid(jid);
     const currentData = getUser(jid);
     const merged = { ...currentData, ...dataObject };
     const isLidOnly = String(jid).endsWith("@lid") && !dataObject?.jid;
-    const rawJid = isLidOnly
-      ? null
-      : String(dataObject?.jid ?? jid ?? key).trim() || key;
-    const rawLid =
-      String(
-        dataObject?.lid ?? currentData?.lid ?? (isLidOnly ? jid : ""),
-      ).trim() || null;
-    const payload = {
-      ...merged.data,
-      ...merged,
-      jid: rawJid,
-      lid: rawLid || merged.lid || null,
-    };
+    const rawJid = isLidOnly ? null : String(dataObject?.jid ?? jid ?? key).trim() || key;
+    const rawLid = String(dataObject?.lid ?? currentData?.lid ?? (isLidOnly ? jid : "")).trim() || null;
+    const payload = { ...merged.data, ...merged, jid: rawJid, lid: rawLid || merged.lid || null };
 
     delete payload.data;
 
     let row = getUserRow(rawJid ?? key, rawLid);
-    const coins = Number(
-      merged.coins ?? merged.bolsillo ?? row?.coins ?? 100000,
-    );
-    const bank = Number(
-      merged.bank ?? merged.banco ?? row?.bank ?? 10000,
-    );
+    const coins = Number(merged.coins ?? merged.bolsillo ?? row?.coins ?? 100000);
+    const bank = Number(merged.bank ?? merged.banco ?? row?.bank ?? 10000);
 
     if (!row) {
       const result = stmts.insertUser.run(
@@ -880,17 +761,16 @@ export const db: IDatabase = {
         ...getUserProfileValues(merged),
       );
       if (result.changes > 0) {
+        rowCache.users.delete(`${rawJid ?? key}_${rawLid || ""}`);
         persistEconomyLasts(rawJid ?? key, rawLid, payload);
         return;
       }
       row = getUserRow(rawJid ?? key, rawLid);
       if (!row) throw new Error("No se pudo recuperar la fila del usuario.");
     }
-
     const storedLid = rawLid || row.lid || merged.lid || null;
-    const phoneNumber = isLidOnly
-      ? null
-      : (merged.phone_number ?? row.phone_number ?? key);
+    const phoneNumber = isLidOnly ? null : (merged.phone_number ?? row.phone_number ?? key);
+    
     if (row.jid === null && storedLid) {
       stmts.updateUserByLid.run(
         merged.username ?? row.username ?? null,
@@ -900,10 +780,7 @@ export const db: IDatabase = {
         coins,
         bank,
         JSON.stringify(payload),
-        ...getUserProfileValues(
-          merged,
-          row as unknown as Record<string, unknown>,
-        ),
+        ...getUserProfileValues(merged, row as unknown as Record<string, unknown>),
         storedLid,
       );
     } else {
@@ -916,35 +793,20 @@ export const db: IDatabase = {
         coins,
         bank,
         JSON.stringify(payload),
-        ...getUserProfileValues(
-          merged,
-          row as unknown as Record<string, unknown>,
-        ),
+        ...getUserProfileValues(merged, row as unknown as Record<string, unknown>),
         row.jid ?? key,
       );
     }
+    rowCache.users.delete(`${rawJid ?? key}_${rawLid || ""}`);
     persistEconomyLasts(rawJid ?? key, rawLid, payload);
   },
 
-  setGroup(
-    jid: string,
-    dataObject: Partial<DatabaseGroup> & Record<string, unknown>,
-  ) {
+  setGroup(jid: string, dataObject: Partial<DatabaseGroup> & Record<string, unknown>) {
     const key = normalizeJid(jid);
     const currentData = getGroup(key);
     const merged = { ...currentData, ...dataObject };
-    const mutedUsers = Array.isArray(merged.mutedUsers)
-      ? merged.mutedUsers
-      : Array.isArray((merged.data as Record<string, unknown> | undefined)?.mutedUsers)
-        ? ((merged.data as Record<string, unknown>).mutedUsers as string[])
-        : Array.isArray((merged.data as Record<string, unknown> | undefined)?.medUsers)
-          ? ((merged.data as Record<string, unknown>).medUsers as string[])
-          : [];
-    const payload = {
-      ...merged.data,
-      ...merged,
-      mutedUsers,
-    };
+    const mutedUsers = Array.isArray(merged.mutedUsers) ? merged.mutedUsers : Array.isArray((merged.data as Record<string, unknown> | undefined)?.mutedUsers) ? ((merged.data as Record<string, unknown>).mutedUsers as string[]) : Array.isArray((merged.data as Record<string, unknown> | undefined)?.medUsers) ? ((merged.data as Record<string, unknown>).medUsers as string[]) : [];
+    const payload = { ...merged.data, ...merged, mutedUsers };
 
     delete payload.data;
     delete (payload as Record<string, unknown>).topMsgUsers;
@@ -963,73 +825,50 @@ export const db: IDatabase = {
         Number(Boolean(merged.onlyAdmin ?? 0)),
         merged.prefix ?? null,
         Number(Boolean(merged.self ?? 0)),
-        JSON.stringify(
-          Array.isArray(merged.catBlocked) ? merged.catBlocked : ["nsfw"],
-        ),
+        JSON.stringify(Array.isArray(merged.catBlocked) ? merged.catBlocked : ["nsfw"]),
         JSON.stringify(mutedUsers),
         JSON.stringify(payload),
       );
-      return;
+    } else {
+      stmts.updateGroup.run(
+        merged.group_id ?? key,
+        merged.group_name ?? row.group_name ?? null,
+        Number(Boolean(merged.antilink ?? row.antilink ?? 0)),
+        Number(Boolean(merged.antiCalls ?? row.antiCalls ?? 0)),
+        Number(Boolean(merged.antiToxic ?? row.antiToxic ?? 0)),
+        Number(Boolean(merged.antiSpam ?? row.antiSpam ?? 0)),
+        Number(Boolean(merged.antiStatus ?? row.antiStatus ?? 0)),
+        Number(Boolean(merged.onlyAdmin ?? row.onlyAdmin ?? 0)),
+        merged.prefix !== undefined ? merged.prefix : (row.prefix ?? null),
+        Number(Boolean(merged.self ?? row.self ?? 0)),
+        JSON.stringify(Array.isArray(merged.catBlocked) ? merged.catBlocked : safeJsonArray((row.catBlocked as string | undefined) ?? '["nsfw"]')),
+        JSON.stringify(mutedUsers),
+        JSON.stringify(payload),
+        key,
+      );
     }
-
-    stmts.updateGroup.run(
-      merged.group_id ?? key,
-      merged.group_name ?? row.group_name ?? null,
-      Number(Boolean(merged.antilink ?? row.antilink ?? 0)),
-      Number(Boolean(merged.antiCalls ?? row.antiCalls ?? 0)),
-      Number(Boolean(merged.antiToxic ?? row.antiToxic ?? 0)),
-      Number(Boolean(merged.antiSpam ?? row.antiSpam ?? 0)),
-      Number(Boolean(merged.antiStatus ?? row.antiStatus ?? 0)),
-      Number(Boolean(merged.onlyAdmin ?? row.onlyAdmin ?? 0)),
-      merged.prefix !== undefined ? merged.prefix : (row.prefix ?? null),
-      Number(Boolean(merged.self ?? row.self ?? 0)),
-      JSON.stringify(
-        Array.isArray(merged.catBlocked)
-          ? merged.catBlocked
-          : safeJsonArray((row.catBlocked as string | undefined) ?? '["nsfw"]'),
-      ),
-      JSON.stringify(mutedUsers),
-      JSON.stringify(payload),
-      key,
-    );
+    rowCache.groups.delete(key);
   },
-
-  setBot(
-    jid: string,
-    dataObject: Partial<DatabaseBot> & Record<string, unknown>,
-  ) {
+setBot(jid: string, dataObject: Partial<DatabaseBot> & Record<string, unknown>) {
     const key = normalizeJid(jid);
     const currentData = getBot(key);
     const row = stmts.getBot.get(key) as BotDbRow | undefined;
     const merged = { ...currentData, ...dataObject };
-    const currentBanner =
-      dataObject.currentBanner ?? currentData.currentBanner ?? row?.currentBanner ?? null;
-    const currentAudio =
-      dataObject.currentAudio ?? currentData.currentAudio ?? row?.currentAudio ?? null;
-    const payload = {
-      ...merged.data,
-      ...merged,
-      currentBanner,
-      currentAudio,
-    };
+    const currentBanner = dataObject.currentBanner ?? currentData.currentBanner ?? row?.currentBanner ?? null;
+    const currentAudio = dataObject.currentAudio ?? currentData.currentAudio ?? row?.currentAudio ?? null;
+    const payload = { ...merged.data, ...merged, currentBanner, currentAudio };
 
     delete payload.data;
 
-    const currency =
-      String(merged.currency ?? row?.currency ?? "AuraCoins").trim() ||
-      "AuraCoins";
-    const currencySymbol =
-      String(merged.currencySymbol ?? row?.currencySymbol ?? "₡").trim() || "₡";
-    const botType = resolveBotTypeLabel({
-      ...merged,
-      isMain: Number(Boolean(merged.isMain ?? row?.isMain ?? 0)),
-      bot_type: String(merged.bot_type ?? row?.bot_type ?? "Principal").trim() || "Principal",
-    });
+    const currency = String(merged.currency ?? row?.currency ?? "AuraCoins").trim() || "AuraCoins";
+    const currencySymbol = String(merged.currencySymbol ?? row?.currencySymbol ?? "₡").trim() || "₡";
+    const botType = resolveBotTypeLabel({ ...merged, isMain: Number(Boolean(merged.isMain ?? row?.isMain ?? 0)), bot_type: String(merged.bot_type ?? row?.bot_type ?? "Principal").trim() || "Principal" });
     payload.currency = currency;
     payload.currencySymbol = currencySymbol;
     payload.bot_type = botType;
+
     if (!row) {
-      stmts.insertBot.run(
+    stmts.insertBot.run(
         key,
         merged.bot_id ?? key,
         merged.bot_name ?? null,
@@ -1047,35 +886,28 @@ export const db: IDatabase = {
         currentAudio,
         JSON.stringify(payload),
       );
-      return;
+    } else {
+      stmts.updateBot.run(
+        merged.bot_id ?? key,
+        merged.bot_name ?? row.bot_name ?? null,
+        merged.phone_number ?? row.phone_number ?? null,
+        merged.lid ?? row.lid ?? null,
+        JSON.stringify(Array.isArray(merged.groups) ? merged.groups : safeJsonArray(row.groups)),
+        Number(Boolean(merged.isMain ?? row.isMain ?? 0)),
+        botType,
+        merged.status ?? row.status ?? "offline",
+        merged.modPrefix !== undefined ? merged.modPrefix : (row.modPrefix ?? null),
+        Number(Boolean(merged.modSelf ?? row.modSelf ?? 0)),
+        currency,
+        currencySymbol,
+        currentBanner,
+        currentAudio,
+        JSON.stringify(payload),
+        key,
+      );
     }
-
-    stmts.updateBot.run(
-      merged.bot_id ?? key,
-      merged.bot_name ?? row.bot_name ?? null,
-      merged.phone_number ?? row.phone_number ?? null,
-      merged.lid ?? row.lid ?? null,
-      JSON.stringify(
-        Array.isArray(merged.groups)
-          ? merged.groups
-          : safeJsonArray(row.groups),
-      ),
-      Number(Boolean(merged.isMain ?? row.isMain ?? 0)),
-      botType,
-      merged.status ?? row.status ?? "offline",
-      merged.modPrefix !== undefined
-        ? merged.modPrefix
-        : (row.modPrefix ?? null),
-      Number(Boolean(merged.modSelf ?? row.modSelf ?? 0)),
-      currency,
-      currencySymbol,
-      currentBanner,
-      currentAudio,
-      JSON.stringify(payload),
-      key,
-    );
+    rowCache.bots.delete(key);
   },
-
   setPushName(jid: string, pushName: string) {
     if (!pushName) return;
     const existing = getUser(jid);
@@ -1094,25 +926,19 @@ export const db: IDatabase = {
   },
 
   setPrimary(groupJid: string, botJid: string) {
-    this.setGroup(groupJid, {
-      primaryBot: String(botJid || "").trim() || null,
-    });
+    this.setGroup(groupJid, { primaryBot: String(botJid || "").trim() || null });
   },
-
   addBotGroup(botJid: string, groupJid: string) {
     const group = String(groupJid || "").trim();
     if (!group.endsWith("@g.us")) return;
-
     const bot = getBot(botJid);
     const groups = Array.isArray(bot.groups) ? bot.groups : [];
-    if (!groups.includes(group))
-      this.setBot(botJid, { groups: [...groups, group] });
+    if (!groups.includes(group)) this.setBot(botJid, { groups: [...groups, group] });
   },
 
   getBotById(botId: string) {
     const normalized = String(botId || "").trim();
     if (!normalized) return null;
-
     return (
       this.getAllBots().find(
         (bot) =>
@@ -1125,31 +951,23 @@ export const db: IDatabase = {
 
   deleteBot(jid: string) {
     stmts.deleteBot.run(normalizeJid(jid));
+    rowCache.bots.delete(normalizeJid(jid));
   },
-
-  getAllUsers(): DatabaseUser[] {
+ getAllUsers(): DatabaseUser[] {
     const rows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
     return rows.map((row) => {
       const jsonData = hydrateUserProfile(
-        hydrateEconomyLasts(
-          safeJson<Record<string, unknown>>(row.data as string | undefined),
-          row,
-        ),
+        hydrateEconomyLasts(safeJson<Record<string, unknown>>(row.data as string | undefined), row),
         row,
       );
-      const coins = Number(
-        row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000,
-      );
-      const bank = Number(
-        row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000,
-      );
+      const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
+      const bank = Number(row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000);
       return {
         ...jsonData,
         jid: (row.jid ?? jsonData.jid ?? null) as string | null,
         lid: (row.lid ?? jsonData.lid ?? null) as string | null,
         username: (row.username ?? jsonData.username ?? null) as string | null,
-        phone_number: (row.phone_number ?? jsonData.phone_number ?? row.jid) as
-          string | null,
+        phone_number: (row.phone_number ?? jsonData.phone_number ?? row.jid) as string | null,
         role: (row.role ?? jsonData.role ?? "user") as string,
         is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
         coins,
@@ -1160,13 +978,10 @@ export const db: IDatabase = {
       };
     });
   },
-
-  getAllBots(): DatabaseBot[] {
+getAllBots(): DatabaseBot[] {
     const rows = stmts.getAllBots.all() as Array<Record<string, unknown>>;
     return rows.map((row) => {
-      const jsonData = safeJson<Record<string, unknown>>(
-        row.data as string | undefined,
-      );
+      const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
       const botType = resolveBotTypeLabel({
         ...jsonData,
         ...row,
@@ -1180,39 +995,30 @@ export const db: IDatabase = {
         data: jsonData,
         bot_id: (jsonData.bot_id ?? row.bot_id ?? row.jid) as string,
         bot_name: (jsonData.bot_name ?? row.bot_name ?? null) as string | null,
-        phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as
-          string | null,
+        phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as string | null,
         lid: (jsonData.lid ?? row.lid ?? null) as string | null,
-        groups: safeJsonArray(
-          jsonData.groups ?? row.groups,
-        ),
+        groups: safeJsonArray(jsonData.groups ?? row.groups),
         isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
         bot_type: botType,
         status: (jsonData.status ?? row.status ?? "offline") as string,
-        modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as
-          string | null,
+        modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as string | null,
         modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
         currency: (jsonData.currency ?? row.currency ?? "AuraCoins") as string,
-        currencySymbol: (jsonData.currencySymbol ??
-          row.currencySymbol ??
-          "₡") as string,
-        currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as
-          | string
-          | null,
-        currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as
-          | string
-          | null,
+        currencySymbol: (jsonData.currencySymbol ?? row.currencySymbol ?? "₡") as string,
+        currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as | string | null,
+        currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as | string | null,
       };
     });
   },
 
   hasRoles(jid: string, roles: string[]) {
     const userRole = getUser(jid)?.role;
-    return Object.fromEntries(
-      roles.map((role) => [role, hasRoleLevel(userRole, role)]),
-    ) as Record<string, boolean>;
+    return Object.fromEntries(roles.map((role) => [role, hasRoleLevel(userRole, role)])) as Record<string, boolean>;
   },
 
+  hasRole(jid: string, role: string) {
+    return hasRoleLevel(getUser(jid)?.role, role);
+  },
   hasRole(jid: string, role: string) {
     return hasRoleLevel(getUser(jid)?.role, role);
   },
@@ -1223,14 +1029,10 @@ export const db: IDatabase = {
   },
 
   syncDefaultUserRoles() {
-    const configuredRoles = Array.isArray(globalThis.DEFAULT_USER_ROLES)
-      ? globalThis.DEFAULT_USER_ROLES
-      : [];
+    const configuredRoles = Array.isArray(globalThis.DEFAULT_USER_ROLES) ? globalThis.DEFAULT_USER_ROLES : [];
 
     for (const configured of configuredRoles) {
-      const role = hierarchy.includes(configured?.role as UserRole)
-        ? configured.role
-        : "user";
+      const role = hierarchy.includes(configured?.role as UserRole) ? configured.role : "user";
       const configuredJid = String(configured?.jid ?? "").trim();
       const configuredLid = String(configured?.lid ?? "").trim();
       if (!configuredJid && !configuredLid) continue;
@@ -1239,12 +1041,7 @@ export const db: IDatabase = {
       const current = getUserRow(lookup, configuredLid || null);
       const jid = configuredJid || current?.jid || null;
       const lid = configuredLid || current?.lid || null;
-      const canonicalJid =
-        jid && !jid.endsWith("@lid")
-          ? jid.includes("@")
-            ? jid
-            : `${jid}@s.whatsapp.net`
-          : null;
+      const canonicalJid = jid && !jid.endsWith("@lid") ? (jid.includes("@") ? jid : `${jid}@s.whatsapp.net`) : null;
 
       if (!current) {
         const phone = canonicalJid ? normalizeJid(canonicalJid) : null;
@@ -1262,10 +1059,7 @@ export const db: IDatabase = {
         );
         continue;
       }
-
-      const currentData = safeJson<Record<string, unknown>>(
-        current.data as string | undefined,
-      );
+      const currentData = safeJson<Record<string, unknown>>(current.data as string | undefined);
       const changed =
         current.jid !== canonicalJid ||
         current.lid !== lid ||
@@ -1276,35 +1070,30 @@ export const db: IDatabase = {
 
       if (!changed) continue;
 
-      const profileData = hydrateUserProfile(
-        currentData,
-        current as unknown as Record<string, unknown>,
-      );
-      const payload = {
-        ...profileData,
-        jid: canonicalJid,
-        lid,
-        role,
-      };
+      const profileData = hydrateUserProfile(currentData, current as unknown as Record<string, unknown>);
+      const payload = { ...profileData, jid: canonicalJid, lid, role };
+      
       if (current.jid === null && lid) {
         stmts.updateUserByLid.run(
           current.username ?? null,
           canonicalJid ? normalizeJid(canonicalJid) : null,
           role,
           Number(current.is_banned ?? 0),
+          current.coins ?? 100000,
+          current.bank ?? 10000,
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           lid,
         );
-      } else if (current.jid) {
+        } else if (current.jid) {
         stmts.updateUser.run(
           lid,
           current.username ?? null,
           canonicalJid ? normalizeJid(canonicalJid) : null,
           role,
           Number(current.is_banned ?? 0),
-          current.coins ?? 100000, // <--- Faltaba coins
-          current.bank ?? 10000,   // <--- Faltaba bank
+          current.coins ?? 100000,
+          current.bank ?? 10000,
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           current.jid,
@@ -1325,13 +1114,10 @@ export const db: IDatabase = {
     this.setUser(jid, { is_banned: 0, banned: false });
   },
 };
-
 export function checkpointDb() {
   try {
     db_instance.pragma("wal_checkpoint(PASSIVE)");
-  } catch {
-    // Ignora errores si la base de datos está ocupada
-  }
+  } catch {}
 }
 
 db.syncDefaultUserRoles();
