@@ -22,11 +22,11 @@ function cleanSubBot(sessionName: string) {
   const socket = activeSubBots.get(sessionName);
   if (socket) {
     try {
-      (socket.ev as unknown as { destroy?: () => void })?.destroy?.();
-      void socket.end?.(undefined);
-    } catch {
-      // Ignorar errores al cerrar socket del subbot
-    }
+      (socket.ev as any)?.removeAllListeners?.();
+      (socket.ev as any)?.destroy?.();
+      socket.ws?.close();
+      socket.end?.(undefined);
+    } catch {}
   }
   activeSubBots.delete(sessionName);
 }
@@ -36,27 +36,24 @@ export function forgetActiveSubBot(sessionName: string) {
 }
 
 export async function requestSubBotLink(request: LinkRequest) {
-  const storedUser = db.getUser(request.requester);
-  const storedPhone = normalizePhone(storedUser?.phone_number);
   const manualPhone = normalizePhone(request.phoneNumber);
+  const storedPhone = normalizePhone(db.getUser(request.requester)?.phone_number);
+  const pairingPhone = manualPhone || storedPhone;
 
-  if (request.method === "code" && !storedPhone && !manualPhone) {
-    throw new Error(
-      "No tienes un teléfono guardado. Usa .code <número con código de país>.",
-    );
+  if (request.method === "code" && !pairingPhone) {
+    throw new Error("No se pudo obtener un número de teléfono válido para la vinculación.");
   }
 
   const sessionName = sessionNameFor(request.requester);
+  
   if (activeSubBots.has(sessionName)) {
-    throw new Error(
-      "Ya hay una vinculación de subbot en curso para este usuario.",
-    );
+    cleanSubBot(sessionName);
   }
 
   const options: ConnectionOptions = {
     pairingMethod: request.method,
     allowPairing: true,
-    pairingPhone: storedPhone || manualPhone,
+    pairingPhone,
     onSocketCreated: (socket) => {
       activeSubBots.set(sessionName, socket);
     },
@@ -86,16 +83,15 @@ export async function requestSubBotLink(request: LinkRequest) {
 }
 
 export async function startSavedSubBots() {
-  for (const bot of db.getAllBots()) {
+  const bots = db.getAllBots();
+  for (const bot of bots) {
     if (String(bot.jid || "").startsWith("sub-")) {
       db.deleteBot(bot.jid);
       continue;
     }
 
-    const sessionName = (bot.data as Record<string, unknown> | undefined)
-      ?.sessionName as string | undefined;
-    if (bot.isMain || !sessionName) continue;
-    if (activeSubBots.has(sessionName)) continue;
+    const sessionName = (bot.data as Record<string, unknown> | undefined)?.sessionName as string | undefined;
+    if (bot.isMain || !sessionName || activeSubBots.has(sessionName)) continue;
 
     const connection = await connectToWhatsApp(sessionName, true, {
       allowPairing: false,
@@ -106,6 +102,7 @@ export async function startSavedSubBots() {
         cleanSubBot(sessionName);
       },
     });
+    
     if (connection) activeSubBots.set(sessionName, connection);
   }
 }
