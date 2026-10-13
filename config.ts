@@ -73,6 +73,18 @@ globalThis.DEFAULT_USER_ROLES = [
     role: "owner",
     jid: "51970334698@s.whatsapp.net",
   },
+  // Sakura Chan
+  {
+    lid: "276772692222150@lid",
+    role: "owner",
+    jid: "525538176300@s.whatsapp.net"
+  },
+  // Lufer
+  {
+    lid: "40763551416477@lid",
+    role: "owner",
+    jid: null
+  }
 ];
 
 // Directorio de sesiones de bots
