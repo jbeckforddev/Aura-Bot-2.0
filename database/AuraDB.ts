@@ -1019,9 +1019,6 @@ getAllBots(): DatabaseBot[] {
   hasRole(jid: string, role: string) {
     return hasRoleLevel(getUser(jid)?.role, role);
   },
-  hasRole(jid: string, role: string) {
-    return hasRoleLevel(getUser(jid)?.role, role);
-  },
 
   setRole(jid: string, role: string) {
     const normalizedRole = hierarchy.includes(role as UserRole) ? role : "user";
