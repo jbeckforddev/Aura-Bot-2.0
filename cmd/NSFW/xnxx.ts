@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import type { CommandContext } from "../../types/commands";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
@@ -71,9 +72,10 @@ export default {
       });
     }
 
-    await react("⏳");
+    await react("⏳").catch(() => undefined);
 
     if (isXnxxUrl(query)) {
+      let downloadedFile = "";
       try {
         const data = await requestJson<XnxxDownloadResponse>(
           `${API}/nsfw/dl/xnxx?url=${encodeURIComponent(query)}&key=${KEY}`,
@@ -86,13 +88,13 @@ export default {
           throw new Error("La API no devolvió un video descargable.");
         }
 
-        const file = await downloadToCache(videoUrl, 180000);
-        const { cost } = await prepareDownloadCharge(ctx, "video", file);
+        downloadedFile = await downloadToCache(videoUrl, 180000);
+        const { cost } = await prepareDownloadCharge(ctx, "video", downloadedFile);
 
         const caption = DL_TEMPLATE({
           bold: fytBold,
           label: "XNXX",
-          icon: "🎥",
+          icon: "🔞",
           type: "Video MP4",
           cost: formatMoney(cost, ctx),
           url: query,
@@ -101,19 +103,24 @@ export default {
         });
 
         await reply({
-          video: { url: file },
+          video: { url: downloadedFile },
           mimetype: "video/mp4",
           fileName: "xnxx.mp4",
           caption,
         });
 
         confirmDownloadCharge(ctx);
-        await react("✅");
+        await react("✅").catch(() => undefined);
       } catch (error: unknown) {
-        await react("❌");
+        await react("❌").catch(() => undefined);
         return reply({
-          text: `${error instanceof Error ? error.message : "No se pudo descargar el video."}`,
-        });
+          text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE DESCARGA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : "No se pudo descargar el video."}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        }).catch(() => undefined);
+      } finally {
+        // Garantiza que el video se borre del disco duro para no saturar el VPS
+        if (downloadedFile) {
+          await rm(downloadedFile, { force: true }).catch(() => undefined);
+        }
       }
       return;
     }
@@ -144,13 +151,14 @@ export default {
           url: result.url,
         })),
       });
-      await react("✅");
+
+      await react("✅").catch(() => undefined);
       return reply({ text: searchCaption });
     } catch (error: unknown) {
-      await react("❌");
+      await react("❌").catch(() => undefined);
       return reply({
         text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("SIN RESULTADOS")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
-      });
+      }).catch(() => undefined);
     }
   },
 };
