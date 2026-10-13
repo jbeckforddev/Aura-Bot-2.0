@@ -21,9 +21,11 @@ import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
+
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
+
 type TikWMVideoResponse = {
   code?: number;
   msg?: string;
@@ -51,17 +53,21 @@ type TikWMVideoResponse = {
 export default {
   name: ["tk", "tt", "ttv", "tiktok", "tkmp4"],
   category: "download",
-  description: "Busca y descarga videos de TikTok.",
+  description: "Busca y descarga videos de TikTok a máxima velocidad.",
   async run(ctx: CommandContext) {
     const { args = [], reply, react, sock, from, msg } = ctx;
     const query = Array.isArray(args) ? args.join(" ").trim() : String(args ?? "").trim();
-    if (!query)
-      return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
-    await react("⏳");
-    let convertedFile = "";
+    if (!query) return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
+    
+    await react("⏳").catch(() => undefined);
+    
+    // Rastreador estricto para evitar fugas de almacenamiento
+    const tempFiles = new Set<string>();
+
     try {
       const formattedUrl = tiktokUrlFormatter(query);
       let url: string;
+      
       if (isTikTokUrl(formattedUrl)) {
         url = formattedUrl;
       } else {
@@ -69,53 +75,58 @@ export default {
           `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
         ).catch(() => null);
         const result = pickSearchResult(search?.data, query);
-        if (!result?.url) {
-          throw new Error("No se encontró ningún video para esa búsqueda.");
-        }
+        if (!result?.url) throw new Error("No se encontró ningún video para esa búsqueda.");
         url = result.url;
       }
 
-      // Con la URL obtenida (sea por enlace o por búsqueda), se consulta a TikWM
       const data = await requestJson<TikWMVideoResponse>(
         `${TIKWM_API}/?url=${encodeURIComponent(url)}`,
         60000,
       );
 
-      const imageUrls = Array.isArray(data?.data?.images)
-        ? data.data.images.filter(
-            (image): image is string =>
-              typeof image === "string" && /^https?:\/\//.test(image),
-          )
+      if (!data?.data) throw new Error("La API no devolvió datos válidos.");
+
+      const author = data.data.author?.nickname || data.data.author?.fullname || data.data.author?.unique_id || "Desconocido";
+      const title = data.data.title || "TikTok";
+      const views = data.data.play_count;
+      const likes = data.data.digg_count;
+      const comments = data.data.comment_count;
+      const shares = data.data.share_count;
+
+      const imageUrls = Array.isArray(data.data.images)
+        ? data.data.images.filter((image): image is string => typeof image === "string" && /^https?:\/\//.test(image))
         : [];
+
+      // --- MODO: ÁLBUM DE IMÁGENES ---
       if (imageUrls.length > 0) {
-        const files: string[] = [];
-        let totalCost = 0;
-        for (const imageUrl of imageUrls.slice(0, 20)) {
+        const URL_PICTURES = `https://www.tiktok.com/@${data.data.author?.unique_id}/photo/${data.data.id}`;
+        const AUDIO_URL = data.data.music_info?.play || "";
+
+        // Descarga paralela (Imágenes + Audio al mismo tiempo)
+        const imagePromises = imageUrls.slice(0, 20).map(async (imageUrl) => {
           const file = await downloadToCache(imageUrl, 60000);
+          tempFiles.add(file);
           const charge = await prepareDownloadCharge(ctx, "image", file);
-          totalCost += charge.cost;
-          files.push(file);
+          return { file, cost: charge.cost };
+        });
+
+        let audioPromise = Promise.resolve({ file: "", cost: 0 });
+        if (AUDIO_URL) {
+          audioPromise = (async () => {
+            const file = await downloadToCache(AUDIO_URL, 120000);
+            tempFiles.add(file);
+            const charge = await prepareDownloadCharge(ctx, "document", file);
+            return { file, cost: charge.cost };
+          })();
         }
-        const author =
-          data.data?.author?.nickname ||
-          data.data?.author?.fullname ||
-          data.data?.author?.unique_id ||
-          "Desconocido";
-        const title = data.data?.title || "TikTok image";
-        const views = data.data?.play_count;
-        const likes = data.data?.digg_count;
-        const comments = data.data?.comment_count;
-        const shares = data.data?.share_count;
-        const URL_PICTURES = `https://www.tiktok.com/@${data.data.author.unique_id}/photo/${data.data.id}`;
-        const AUDIO = data.data?.music_info?.play || "";
-        let audioCost = 0;
-        let audioFile = "";
-        if (AUDIO) {
-          audioFile = await downloadToCache(AUDIO, 120000);
-          const charge = await prepareDownloadCharge(ctx, "document", audioFile);
-          audioCost = charge.cost;
-        }
-        const finalCost = totalCost + audioCost;
+
+        const [downloadedImages, audioResult] = await Promise.all([
+          Promise.all(imagePromises),
+          audioPromise
+        ]);
+
+        const totalCost = downloadedImages.reduce((sum, img) => sum + img.cost, 0) + audioResult.cost;
+
         const caption = DL_TEMPLATE({
           bold: fytBold,
           label: "TIKTOK IMAGES",
@@ -126,7 +137,7 @@ export default {
           likes: formatCount(likes),
           comments: formatCount(comments),
           shares: formatCount(shares),
-          cost: formatMoney(finalCost, ctx),
+          cost: formatMoney(totalCost, ctx),
           url: URL_PICTURES,
           showAuthor: true,
           showViews: views !== undefined && views !== null,
@@ -135,44 +146,45 @@ export default {
           showShares: shares !== undefined && shares !== null,
           loadingText: "📸 Álbum listo",
         });
-        const album = files.map((file, index) => ({
-          image: { url: file },
+
+        const album = downloadedImages.map((img, index) => ({
+          image: { url: img.file },
           caption: index === 0 ? caption : "",
         }));
-        if (AUDIO) {
+
+        if (audioResult.file) {
           await reply({
-            audio: { url: AUDIO },
+            audio: { url: audioResult.file },
             mimetype: "audio/mpeg",
             fileName: `${safeFileName(title, "tiktok")}.mp3`,
           });
         }
-        if (album.length === 1) await reply(album[0]);
-        else await sendAlbumMessage(sock, from, album, msg);
+
+        if (album.length === 1) {
+          await reply(album[0]);
+        } else {
+          await sendAlbumMessage(sock, from, album, msg as any);
+        }
+
         confirmDownloadCharge(ctx);
-        await react("✅");
+        await react("✅").catch(() => undefined);
         return;
       }
-      const videoUrl = data?.data?.play || data?.data?.wmplay || "";
-      if (!data?.data || !videoUrl)
-        throw new Error("La API no devolvió un video descargable.");
-      const author =
-        data.data.author?.nickname ||
-        data.data.author?.fullname ||
-        data.data.author?.unique_id ||
-        "Desconocido";
-      const title = data.data.title || "Video de TikTok";
+
+      // --- MODO: VIDEO ESTÁNDAR ---
+      const videoUrl = data.data.play || data.data.wmplay;
+      if (!videoUrl) throw new Error("La API no devolvió un video descargable.");
+
+      const URL_VIDEO = `https://www.tiktok.com/@${data.data.author?.unique_id}/video/${data.data.id}`;
+      
       const file = await downloadToCache(videoUrl, 180000);
-      convertedFile = await CONVERT_TO_AVC(file);
-      const { cost } = await prepareDownloadCharge(
-        ctx,
-        "video",
-        convertedFile,
-      );
-      const views = data.data.play_count;
-      const likes = data.data.digg_count;
-      const comments = data.data.comment_count;
-      const shares = data.data.share_count;
-      const URL_VIDEO = `https://www.tiktok.com/@${data.data.author.unique_id}/video/${data.data.id}`;
+      tempFiles.add(file);
+
+      const convertedFile = await CONVERT_TO_AVC(file);
+      tempFiles.add(convertedFile);
+
+      const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
+
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: "TIKTOK VIDEO",
@@ -192,26 +204,25 @@ export default {
         showShares: shares !== undefined && shares !== null,
         loadingText: "✅ Listo mi compa",
       });
+
       await reply({
         video: { url: convertedFile },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "tiktok")}.mp4`,
         caption,
       });
+
       confirmDownloadCharge(ctx);
-      await react("✅");
+      await react("✅").catch(() => undefined);
+
     } catch (error: unknown) {
-      await react("❌");
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No se pudo descargar el video.";
-      return reply({
-        text: `${message}`,
-      });
+      await react("❌").catch(() => undefined);
+      const message = error instanceof Error ? error.message : "No se pudo descargar el video.";
+      await reply({ text: `${message}` }).catch(() => undefined);
     } finally {
-      if (convertedFile)
-        await rm(convertedFile, { force: true }).catch(() => undefined);
+      for (const file of tempFiles) {
+        await rm(file, { force: true }).catch(() => undefined);
+      }
     }
   },
 };
