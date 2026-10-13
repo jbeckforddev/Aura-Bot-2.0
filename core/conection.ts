@@ -291,6 +291,7 @@ export async function connectToWhatsApp(
   });
 
   let connectionOpened = isRegistered;
+  let hasConnected = false;
   let pairingExpired = false;
   let pairingTimer: NodeJS.Timeout | null = null;
 
@@ -380,6 +381,7 @@ export async function connectToWhatsApp(
 
     if (u.connection === "open") {
       connectionOpened = true;
+      hasConnected = true;
       clearPairingTimer();
       const mainNum = sock.user?.id ?? "desconocido";
       const botJid = jidNormalizedUser(mainNum);
@@ -462,7 +464,7 @@ export async function connectToWhatsApp(
       if (fs.existsSync(authFolder))
         fs.rmSync(authFolder, { recursive: true, force: true });
       const logoutBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : sessionName;
-      db.setBot(logoutBotJid, { status: "offline" });
+      if (hasConnected) db.setBot(logoutBotJid, { status: "offline" });
       activeSubBots.delete(logoutBotJid);
       subBotActivity.delete(logoutBotJid);
       connectionLog("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
@@ -516,7 +518,7 @@ export async function connectToWhatsApp(
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
     if (disconnectedBotJid) {
       activeSubBots.delete(disconnectedBotJid);
-      if (!isNotRegistered) {
+      if (!isNotRegistered && hasConnected) {
         db.setBot(disconnectedBotJid, { status: "offline" });
       }
     }
