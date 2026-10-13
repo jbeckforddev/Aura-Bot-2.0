@@ -4,6 +4,7 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clearMenuMediaCache } from "./menu.ts";
+import { t } from "../../src/langs/index.ts";
 
 function unwrapMedia(
   message: proto.IMessage | null | undefined,
@@ -23,7 +24,7 @@ function unwrapMedia(
 export default {
   name: ["setbanner", "setmenuimage", "setmenubanner"],
   category: "socket",
-  description: "Cambia el banner que usa el menú.",
+  description: t("socketDescriptionSetBanner"),
   botUserOnly: true,
   async run(ctx: CommandContext) {
     const context = ctx.msg?.message?.extendedTextMessage?.contextInfo;
@@ -31,7 +32,7 @@ export default {
     const target = unwrapMedia(quotedMessage) || unwrapMedia(ctx.msg?.message);
     if (!target) {
       return ctx.reply(
-        "⚠️ Responde a una imagen o video para establecerlo como banner.",
+        t("socketSetBannerNeedReply"),
       );
     }
 
@@ -63,7 +64,7 @@ export default {
           ) => Promise<Parameters<typeof downloadMediaMessage>[0]>,
         },
       );
-      if (!buffer?.length) throw new Error("No se pudo descargar el banner.");
+      if (!buffer?.length) throw new Error(t("socketSetBannerDownloadError"));
 
       const mimetype =
         target.imageMessage?.mimetype ||
@@ -106,10 +107,12 @@ export default {
         },
       });
       clearMenuMediaCache();
-      return ctx.reply("✅ Banner del menú actualizado.");
+      return ctx.reply(t("socketSetBannerUpdated"));
     } catch (error: unknown) {
       return ctx.reply({
-        text: `❌ No se pudo guardar el banner: ${error instanceof Error ? error.message : String(error) || "error desconocido"}`,
+        text: t("socketSetBannerError", {
+          error: error instanceof Error ? error.message : String(error) || "error desconocido",
+        }),
       });
     }
   },

@@ -1,8 +1,10 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["hunt", "cazar", "caza"],
-  description: "Entra en combate para obtener monedas y experiencia.",
+  description: t("cmd_entra_en_combate_para_obtener__ead5f587"),
   title: "🏹 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐃𝐄 𝐂𝐎𝐌𝐁𝐀𝐓𝐄",
   icon: "🏹",
   cooldown: 30 * 60 * 1000,

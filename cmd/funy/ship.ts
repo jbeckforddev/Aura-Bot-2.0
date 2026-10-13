@@ -7,6 +7,8 @@ import {
   type Image,
 } from "@napi-rs/canvas";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 async function getProfilePic(
   sock: ExtendedWASocket,
@@ -138,7 +140,7 @@ function drawProgressBar(
 export default {
   name: ["ship"],
   category: "funy",
-  description: "Genera una tarjeta de compatibilidad entre dos usuarios.",
+  description: t("cmd_genera_una_tarjeta_de_compatib_aacb7ac6"),
   groupOnly: true,
 
   async run(ctx: CommandContext) {
@@ -154,11 +156,11 @@ export default {
 
     if (!userA || !userB)
       return ctx.reply({
-        text: "『💘』No pude identificar a los usuarios. Mencioná a alguien (o respondé su mensaje) para hacer el ship.\n\n*Uso:* .ship @usuario",
+        text: t("cmd_no_pude_identificar_a_los_usua_2643dccc"),
       });
     if (userA === userB)
       return ctx.reply({
-        text: "『💘』No podés hacerte ship con vos mismo, xd.",
+        text: t("cmd_no_podes_hacerte_ship_con_vos__2fa3d0e9"),
       });
 
     userA = await ctx.resolveLid(userA);
@@ -168,7 +170,7 @@ export default {
     );
     if (mentions.length !== 2)
       return ctx.reply({
-        text: "『💘』No pude identificar correctamente a los dos usuarios.",
+        text: t("cmd_no_pude_identificar_correctame_e2657c0a"),
       });
 
     const width = 1024;
@@ -212,14 +214,14 @@ export default {
     canvasContext.fillText(`${percent}%`, heartCenterX, heartCenterY + 20);
     drawProgressBar(canvasContext, 85, 580, 854, 78, percent);
 
-    let result = "Cero compatibilidad, lo siento.";
-    if (percent >= 90) result = "¡Ya casense y tengan hijos!";
-    else if (percent >= 85) result = "¡Son el uno para el otro!";
-    else if (percent >= 70) result = "¡Sus miradas se cruzan!";
-    else if (percent >= 50) result = "¡Lo pulsean!";
-    else if (percent >= 30) result = "Mejor quedan como amigos.";
+    let result = t("cmd_ship_cero_compatibilidad_4d5b0ef1");
+    if (percent >= 90) result = t("cmd_ship_ya_casense_y_tengan_hijos_4d5b0ef2");
+    else if (percent >= 85) result = t("cmd_ship_son_el_uno_para_el_otro_4d5b0ef3");
+    else if (percent >= 70) result = t("cmd_ship_sus_miradas_se_cruzan_4d5b0ef4");
+    else if (percent >= 50) result = t("cmd_ship_lo_pulsean_4d5b0ef5");
+    else if (percent >= 30) result = t("cmd_ship_mejor_quedan_como_amigos_4d5b0ef6");
 
-    const caption = `╭〔 💘 ${fytBold("¿HAY SHIP?")} 〕⬣\n\n┃ @${userA.split("@")[0]} 💞 @${userB.split("@")[0]}\n┃ ${fytBold("Porcentaje:")} ${percent}%\n┃ ${result}\n\n╰〔 ⚡ ${fytBold("FUN")} 〕⬣`;
+    const caption = t("cmd_value0_value1_value2_value3_va_bf910e73", { value0: fytBold(t("cmd_hay_ship_c00cf552")), value1: userA.split("@")[0], value2: userB.split("@")[0], value3: fytBold(t("cmd_porcentaje_693c242a")), value4: percent, value5: result, value6: fytBold(t("cmd_fun_2beb23b3")) });
     return ctx.sock.sendMessage(
       ctx.from,
       { image: canvas.toBuffer("image/png"), caption, mentions },

@@ -13,6 +13,8 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -45,13 +47,13 @@ function getBestVideo(result: TwitterDownloadData["result"]): string {
 export default {
   name: ["x", "twitter", "xdl"],
   category: "download",
-  description: "Descarga videos o imágenes de Twitter / X.",
+  description: t("cmd_descarga_videos_o_imagenes_de__74313e71"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const url = args.join(" ").trim();
 
     if (!url || !SOCIAL_URL.test(url)) {
-      return reply("⚠️ Proporciona un enlace válido de Twitter/X.");
+      return reply(t("cmd_proporciona_un_enlace_valido_d_18ec279d"));
     }
 
     await react("⏳");
@@ -92,10 +94,10 @@ export default {
       );
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "TWITTER DOWNLOAD",
-        icon: "𝕏",
+        label: t("cmd_twitter_download_ff9a5ff0"),
+        icon: t("cmd_text_761cd34b"),
         showTitle: false,
-        type: isVideo ? "Video MP4" : "Imagen",
+        type: isVideo ? t("cmd_video_mp4_1275e211") : t("cmd_imagen_100f9979"),
         cost: formatMoney(cost, ctx),
         url,
         showType: true,
@@ -116,7 +118,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : "No se pudo descargar Twitter/X."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : "No se pudo descargar Twitter/X." }),
       });
     }
   },

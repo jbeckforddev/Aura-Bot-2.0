@@ -7,6 +7,8 @@ import {
 } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/commands.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 type StatusType = "text" | "image" | "video" | "audio" | "document";
 
@@ -117,7 +119,7 @@ async function sendGroupStatus(
 
 export default {
   name: ["swgc", "gstatus", "statusgrupo"],
-  description: "Publica un estado exclusivo para el grupo actual.",
+  description: t("cmd_publica_un_estado_exclusivo_pa_0b04ead6"),
   category: "group",
   adminOnly: false,
   groupOnly: true,
@@ -129,7 +131,7 @@ export default {
       react: { text: "⏳", key: msg.key },
     });
 
-    const inputContent = args.join(" ");
+    const inputContent = args.join(t("cmd_text_b858cb28"));
     const quotedCtx =
       msg.message?.extendedTextMessage?.contextInfo ||
       msg.message?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo;
@@ -184,7 +186,7 @@ export default {
               react: { text: "❌", key: msg.key },
             });
             return await ctx.reply({
-              text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE ESTADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El mensaje citado no contiene texto válido.\n\n╰〔 ⚡${fytBold("SYSTEM ALERT")} 〕⬣`,
+              text: t("cmd_value0_value1_el_mensaje_citad_e8b4deba", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_de_estado_bb05d222")), value2: fytBold(t("cmd_system_alert_780bb6b6")) }),
             });
           }
 
@@ -199,7 +201,7 @@ export default {
             react: { text: "❌", key: msg.key },
           });
           return await ctx.reply({
-            text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE ESTADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Ingresa un texto o responde a un archivo multimedia\n┃ > para publicarlo en el estado del grupo.\n\n╰〔 ⚡${fytBold("SYSTEM ALERT")} 〕⬣`,
+            text: t("cmd_value0_value1_ingresa_un_texto_2ac2de6e", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_de_estado_bb05d222")), value2: fytBold(t("cmd_system_alert_780bb6b6")) }),
           });
         }
 
@@ -214,7 +216,7 @@ export default {
       });
 
       return await ctx.reply({
-        text: `╭〔 ✅ ${fytBold("AURA REED")} 〕⬣\n┃ 🟢 ${fytBold("ESTADO PUBLICADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El estado se ha subido correctamente al grupo.\n\n╰〔 ⚡${fytBold("SYSTEM INFO")} 〕⬣`,
+        text: t("cmd_value0_value1_el_estado_se_ha__e8493537", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_estado_publicado_38971c44")), value2: fytBold(t("cmd_system_info_1a78a0cb")) }),
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -224,7 +226,7 @@ export default {
       });
 
       return await ctx.reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE SISTEMA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${message}\n\n╰〔 ⚡${fytBold("SYSTEM ALERT")} 〕⬣`,
+        text: t("cmd_value0_value1_value2_value3_81a9f89e", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_de_sistema_5c013aab")), value2: message, value3: fytBold(t("cmd_system_alert_780bb6b6")) }),
       });
     }
   },

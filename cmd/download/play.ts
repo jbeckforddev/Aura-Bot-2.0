@@ -20,6 +20,8 @@ import {
   type YouTubeSearchVideo,
 } from "../../src/api/YouTubeSearch.ts";
 import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function getYouTubeVideoId(value: string): string | null {
   const rawUrl = String(value || "").trim();
@@ -65,14 +67,14 @@ function isYouTubeUrl(value: string): boolean {
 
 export default {
   name: ["play", "ytmp3", "ytaudio", "playaudio", "playmp3", "ytmusic", "yta"],
-  description: "Busca y descarga audio de YouTube.",
+  description: t("cmd_busca_y_descarga_audio_de_yout_04475ecb"),
   category: "download",
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg, sender } = ctx;
     const query = args.join(" ").trim();
     if (!query)
       return reply(
-        "⚠️ Escribe el nombre de una canción o pega un enlace de YouTube.",
+        t("cmd_escribe_el_nombre_de_una_canci_7d229544"),
       );
 
     await react("🎵");
@@ -109,8 +111,8 @@ export default {
       const { cost } = prepareDownloadChargeBySize(ctx, "audio", audio.size);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "YOUTUBE PLAY",
-        icon: "🎵",
+        label: t("cmd_youtube_play_507c8deb"),
+        icon: t("cmd_text_71ceeba5"),
         title,
         channel: author,
         duration: formatDuration(duration),
@@ -119,14 +121,14 @@ export default {
         cost: formatMoney(cost, ctx),
         url: youtubeUrl,
         showChannel: true,
-        showDuration: Boolean(duration && duration !== "??"),
+        showDuration: Boolean(duration && duration !== t("cmd_text_16c8f8ac")),
         showViews: views !== undefined,
         showLikes: likes !== undefined,
         showVideoId: Boolean(videoId),
         showSource: true,
         showQuality: Boolean(quality),
-        loadingText: "Descargando audio...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_audio_b1e6524a"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
 
       const thumbnail = String(
@@ -180,7 +182,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : String(error) || "No se pudo descargar el audio."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : String(error) || "No se pudo descargar el audio." }),
       });
     }
   },

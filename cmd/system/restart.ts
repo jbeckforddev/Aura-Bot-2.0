@@ -1,18 +1,20 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { checkpointDb } from "../../database/AuraDB.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["restart", "reiniciar"],
   category: "system",
-  description: "Reinicia el bot de forma segura guardando la base de datos.",
-  ownerOnly: true,
+  description: t("cmd_reinicia_el_bot_de_forma_segur_8b8cdd80"),
+  modOnly: true,
 
   async run({ reply, react }: CommandContext) {
     await react("🔄").catch(() => undefined);
 
     await reply({
-      text: `╭〔 🔄 ${fytBold("AURA REED")} 〕⬣\n┃ ⚙️ ${fytBold("SISTEMA RESTART")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El bot se está reiniciando\n┃ > guardando base de datos...\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+      text: t("cmd_value0_value1_el_bot_se_esta_r_414ac357", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_sistema_restart_41ddd314")), value2: fytBold(t("cmd_system_29d43743")) }),
     });
 
     // 1. Forzar el guardado de la memoria RAM al disco duro

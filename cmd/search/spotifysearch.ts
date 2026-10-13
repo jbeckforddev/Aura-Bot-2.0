@@ -5,15 +5,17 @@ import { DL_CONFIG } from "../../config.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import { formatDuration } from "../../utils/formatter.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["spsearch", "spotifysearch", "sps"],
   category: "search",
-  description: "Busca canciones en Spotify.",
+  description: t("cmd_busca_canciones_en_spotify_e4146d8d"),
   async run({ args, reply, react, sock, from, msg, sender }: CommandContext) {
     const query = args.join(" ").trim();
     if (!query)
-      return reply("⚠️ Proporciona el nombre de una canción o artista.");
+      return reply(t("cmd_proporciona_el_nombre_de_una_c_faeadcee"));
     await react("🔍");
     try {
       const api = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -29,15 +31,15 @@ export default {
         throw new Error("No se encontraron resultados en Spotify.");
       const text = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
-        label: "SPOTIFY SEARCH",
-        icon: "🎵",
+        label: t("cmd_spotify_search_bbdb3ee3"),
+        icon: t("cmd_text_71ceeba5"),
         query,
-        engine: "Alya Core",
+        engine: t("cmd_alya_core_44fc62cc"),
         results: tracks.map((track) => ({
-          title: track.title || "Sin título",
-          artist: track.artist || "Desconocido",
-          duration: formatDuration(track.duration) || "N/A",
-          url: track.url || "No disponible",
+          title: track.title || t("cmd_sin_titulo_fd8beeee"),
+          artist: track.artist || t("cmd_desconocido_452c8a12"),
+          duration: formatDuration(track.duration) || t("cmd_n_a_08d2e98e"),
+          url: track.url || t("cmd_no_disponible_9def5fe2"),
         })),
       });
       const cover = tracks[0].image || tracks[0].cover || tracks[0].coverHd;
@@ -64,7 +66,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ Error: ${error instanceof Error ? error.message : String(error) || "No se pudo buscar en Spotify."}`,
+        text: t("cmd_error_value0_a4bb764e", { value0: error instanceof Error ? error.message : String(error) || "No se pudo buscar en Spotify." }),
       });
     }
   },

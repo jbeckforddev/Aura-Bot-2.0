@@ -13,6 +13,8 @@ import type {
   UnwrappedMediaMessage,
   IDatabase,
 } from "../types/index.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 const execFileAsync = promisify(execFile);
 const STICKER_MAX_SIZE = 1_000_000;
@@ -554,9 +556,9 @@ export async function toStickerWithEffects(
 
 export function generateStickerHelp(prefix: string): string {
   return (
-    `╭━━〔 🎨 ${fytBold("STICKER")} 〕━━⬣\n` +
+    `╭━━〔 🎨 ${fytBold(t("core_sticker_8ea21826"))} 〕━━⬣\n` +
     `┃\n` +
-    `┃ 🔷 ${fytBold("Formas:")}\n` +
+    `┃ 🔷 ${fytBold(t("core_formas_10bc2582"))}\n` +
     `┃ -c círculo | -v corazón | -s estrella\n` +
     `┃ -h hexágono | -d diamante | -t triángulo\n` +
     `┃ -o octágono | -y pentágono | -e elipse\n` +
@@ -564,16 +566,16 @@ export function generateStickerHelp(prefix: string): string {
     `┃ -b borde | -f marco | -m espejo\n` +
     `┃ -x cover | -i contain\n` +
     `┃\n` +
-    `┃ ✨ ${fytBold("Efectos:")}\n` +
+    `┃ ✨ ${fytBold(t("core_efectos_4bd57fbe"))}\n` +
     `┃ -blur | -sepia | -sharpen | -grayscale\n` +
     `┃ -invert | -negate | -tint | -normalize\n` +
     `┃ -brighten | -darken | -rotate90 | -rotate180\n` +
     `┃ -flip | -flop\n` +
     `┃\n` +
-    `┃ 💡 ${fytBold("Ejemplos:")}\n` +
+    `┃ 💡 ${fytBold(t("core_ejemplos_bfb84ce8"))}\n` +
     `┃ ➪ ${prefix}s -c -blur\n` +
     `┃ ➪ ${prefix}s -v -sepia\n` +
     `┃\n` +
-    `╰━━〔 ⚡ ${fytBold("AURA REED")} ⚡ 〕━━⬣`
+    `╰━━〔 ⚡ ${fytBold(t("core_aura_reed_95dcfb15"))} ⚡ 〕━━⬣`
   );
 }

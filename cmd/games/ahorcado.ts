@@ -7,6 +7,8 @@ import type {
   CommandContext,
   ReplyContext,
 } from "../../types/index.d.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const games = new Map<string, HangmanGame>();
 const GAME_TIMEOUT = 5 * 60 * 1000;
@@ -31,7 +33,7 @@ function scheduleExpiry(
     if (games.get(key) !== game) return;
     clearGame(key);
     await ctx.reply(
-      `⏰ El juego expiró por inactividad. La palabra era: *${game.word.toUpperCase()}*`,
+      t("cmd_el_juego_expiro_por_inactivida_770c21b0", { value0: game.word.toUpperCase() }),
     );
   }, GAME_TIMEOUT);
 }
@@ -127,15 +129,15 @@ async function sendGame(
     .map((letter) => letter.toUpperCase())
     .join(", ");
   const text = [
-    "╭〔 🎮 𝐀𝐇𝐎𝐑𝐂𝐀𝐃𝐎 〕⬣",
-    `┃ ${status}`,
-    `┃ 🩸 Vidas: ${"❤️".repeat(lives)}${"🖤".repeat(game.mistakes)}`,
-    used && !ended ? `┃ 🔤 Usadas: ${used}` : "",
-    !ended ? "┃ > Escribe una letra o la palabra completa." : "",
-    "╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+    t("cmd_text_ae3d84da"),
+    t("cmd_value0_66aaf25a", { value0: status }),
+    t("cmd_vidas_value0_value1_66248bb0", { value0: "❤️".repeat(lives), value1: "🖤".repeat(game.mistakes) }),
+    used && !ended ? t("cmd_usadas_value0_eecf10ab", { value0: used }) : t("cmd_text_da39a3ee"),
+    !ended ? t("cmd_escribe_una_letra_o_la_palabra_6e15355e") : t("cmd_text_da39a3ee"),
+    t("cmd_text_001ce096"),
   ]
     .filter(Boolean)
-    .join("\n");
+    .join(t("cmd_text_adc83b19"));
 
   const buttons = ended
     ? []
@@ -181,7 +183,7 @@ export async function handleReply(ctx: ReplyContext): Promise<boolean> {
 const defaultCommand = {
   name: ["ahorcado", "hangman"],
   category: "games",
-  description: "Juega al ahorcado.",
+  description: t("cmd_juega_al_ahorcado_95c9c611"),
   handleReply,
   async run(ctx: CommandContext) {
     const key = gameKey(ctx.botJid, ctx.from);
@@ -208,16 +210,16 @@ const defaultCommand = {
       const word = game.word;
       clearGame(key);
       return ctx.reply(
-        `🏳️ Te has rendido. La palabra era: *${word.toUpperCase()}*`,
+        t("cmd_te_has_rendido_la_palabra_era__909953ec", { value0: word.toUpperCase() }),
       );
     }
 
     if (!input) return sendGame(ctx, game, "⚠️ Ya hay un juego en curso.");
     if (input.length === 1) {
       if (!/^[a-záéíóúüñ]$/u.test(input))
-        return ctx.reply("⚠️ Escribe una letra válida.");
+        return ctx.reply(t("cmd_escribe_una_letra_valida_d49dda64"));
       if (game.guessedLetters.has(input))
-        return ctx.reply("⚠️ Ya intentaste esa letra.");
+        return ctx.reply(t("cmd_ya_intentaste_esa_letra_8fc680ff"));
       game.guessedLetters.add(input);
       if (!game.word.includes(input)) game.mistakes += 1;
     } else if (input === game.word) {

@@ -2,6 +2,7 @@ import type { CommandContext } from "../../types/index.d.ts";
 import type { DatabaseBot } from "../../types/database.d.ts";
 import type { proto } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 
 type BotParticipant = {
   id?: string;
@@ -79,7 +80,7 @@ function getTargetFromMessage(message: proto.IWebMessageInfo): string | null {
 
 export default {
   name: ["setprimary", "delprimary"],
-  description: "Define qué bot responde en este grupo.",
+  description: t("socketDescriptionSetPrimary"),
   category: "socket",
   groupOnly: true,
   adminOnly: true,
@@ -103,19 +104,21 @@ export default {
         const targetBot = db.getBotById?.(requestedBot);
         if (!targetBot)
           return reply({
-            text: "No encontré el bot mencionado o citado en la base de datos.",
+            text: t("socketPrimaryNotFoundMentioned"),
           });
         const currentPrimary = normalize(db.getPrimary(from));
         if (currentPrimary && normalize(targetBot.bot_id) !== currentPrimary) {
           return reply({
-            text: "Ese bot no es el primario actual de este grupo.",
+            text: t("socketPrimaryNotCurrent"),
           });
         }
       }
 
       db.setPrimary(from, "");
       return reply({
-        text: `✅ ${fytBold("Bot primario eliminado")}. Todos los bots podrán responder.`,
+        text: t("socketPrimaryDeleted", {
+          label: fytBold(t("socketPrimaryLabel")),
+        }),
       });
     }
 
@@ -127,18 +130,18 @@ export default {
       : db.getBot(botJid);
     if (requestedBot && !selectedBot) {
       return reply({
-        text: "No encontré ese bot. Usa su bot_id completo, por ejemplo: 123456@lid",
+        text: t("socketPrimaryNotFound"),
       });
     }
     if (selectedBot?.status !== "active") {
       return reply({
-        text: "Ese bot no está activo actualmente y no puede ser el primario.",
+        text: t("socketPrimaryInactive"),
       });
     }
     const targetBot = selectedBot?.bot_id || currentBot;
     if (!targetBot) {
       return reply({
-        text: "No encontré ese bot. Usa su bot_id completo, por ejemplo: 123456@lid",
+        text: t("socketPrimaryNotFound"),
       });
     }
 
@@ -149,12 +152,18 @@ export default {
       resolveLid,
     );
     const targetName = String(
-      selectedBot?.bot_name || "Bot seleccionado",
+      selectedBot?.bot_name || t("socketPrimaryDefaultName"),
     ).trim();
     return reply({
       text: mentionJid
-        ? `✅ ${fytBold("Bot primario configurado")}: @${mentionJid.split("@")[0]}`
-        : `✅ ${fytBold("Bot primario configurado")}: ${targetName}`,
+        ? t("socketPrimaryConfiguredMention", {
+            label: fytBold(t("socketPrimaryConfiguredLabel")),
+            number: mentionJid.split("@")[0],
+          })
+        : t("socketPrimaryConfiguredName", {
+            label: fytBold(t("socketPrimaryConfiguredLabel")),
+            name: targetName,
+          }),
       mentions: mentionJid ? [mentionJid] : [],
     });
   },

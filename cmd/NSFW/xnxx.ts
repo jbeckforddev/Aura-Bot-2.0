@@ -9,6 +9,8 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE, SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -60,7 +62,7 @@ function pickVideoUrl(
 export default {
   name: ["xnxx", "xn"],
   category: "nsfw",
-  description: "Busca videos de XNXX y descarga por enlace.",
+  description: t("cmd_busca_videos_de_xnxx_y_descarg_daa326fb"),
 
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
@@ -68,7 +70,7 @@ export default {
 
     if (!query) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA BÚSQUEDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Proporciona una búsqueda o\n┃ > un enlace de XNXX.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_proporciona_una__534fe98a", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_busqueda_7c18b4d5")), value2: fytBold(t("cmd_system_29d43743")) }),
       });
     }
 
@@ -93,13 +95,13 @@ export default {
 
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "XNXX",
-          icon: "🔞",
-          type: "Video MP4",
+          label: t("cmd_xnxx_a0300bd7"),
+          icon: t("cmd_text_174a5aaa"),
+          type: t("cmd_video_mp4_1275e211"),
           cost: formatMoney(cost, ctx),
           url: query,
           showType: true,
-          loadingText: "✅ Video listo",
+          loadingText: t("cmd_video_listo_d647ff77"),
         });
 
         await reply({
@@ -114,7 +116,7 @@ export default {
       } catch (error: unknown) {
         await react("❌").catch(() => undefined);
         return reply({
-          text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE DESCARGA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : "No se pudo descargar el video."}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+          text: t("cmd_value0_value1_value2_value3_569f9d3d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_de_descarga_3b9d228e")), value2: error instanceof Error ? error.message : "No se pudo descargar el video.", value3: fytBold(t("cmd_system_29d43743")) }),
         }).catch(() => undefined);
       } finally {
         // Garantiza que el video se borre del disco duro para no saturar el VPS
@@ -141,12 +143,12 @@ export default {
 
       const searchCaption = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
-        label: "XNXX SEARCH",
-        icon: "🔞",
+        label: t("cmd_xnxx_search_a7fca36c"),
+        icon: t("cmd_text_174a5aaa"),
         query,
-        engine: "XNXX API",
+        engine: t("cmd_xnxx_api_a6c9c61a"),
         results: results.slice(0, 5).map((result) => ({
-          title: result.title || "Sin título",
+          title: result.title || t("cmd_sin_titulo_fd8beeee"),
           duration: result.duration,
           url: result.url,
         })),
@@ -157,7 +159,7 @@ export default {
     } catch (error: unknown) {
       await react("❌").catch(() => undefined);
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("SIN RESULTADOS")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_value2_value3_569f9d3d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_sin_resultados_aafe1c07")), value2: error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`, value3: fytBold(t("cmd_system_29d43743")) }),
       }).catch(() => undefined);
     }
   },

@@ -12,17 +12,19 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 
 export default {
   name: ["fb", "facebook", "fbdl", "facebookdl", "fbvideo", "fbv", "fbreels"],
   category: "download",
-  description: "Descarga videos de Facebook y Reels.",
+  description: t("cmd_descarga_videos_de_facebook_y__0f6b5fe3"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const url = args.join(" ").trim();
     if (!url)
-      return reply("⚠️ Proporciona un enlace de Facebook o Facebook Reels.");
+      return reply(t("cmd_proporciona_un_enlace_de_faceb_bd41ca88"));
     await react("⏳");
     try {
       const data = await requestJson<FacebookDownloadResponse>(
@@ -68,17 +70,17 @@ export default {
       const { cost } = await prepareDownloadCharge(ctx, "video", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "FACEBOOK VIDEO",
-        icon: "🎥",
+        label: t("cmd_facebook_video_9110f9de"),
+        icon: t("cmd_text_a2865ecb"),
         showTitle: false,
         quality,
-        type: "Video MP4",
+        type: t("cmd_video_mp4_1275e211"),
         cost: formatMoney(cost, ctx),
         url,
         showQuality: true,
         showType: true,
-        loadingText: "Descargando video...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_video_e3c0869f"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       await reply({
         video: { url: file },
@@ -91,7 +93,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : String(error) || "No se pudo descargar el video."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : String(error) || "No se pudo descargar el video." }),
       });
     }
   },

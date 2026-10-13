@@ -1,10 +1,12 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["fakemsg", "fake", "fmsg", "editfake"],
   category: "owner",
-  description: "Fuerza la edición visual de un mensaje ajeno mediante inyección de protocolo.",
+  description: t("cmd_fuerza_la_edicion_visual_de_un_c147ae7b"),
   groupOnly: true,
   ownerOnly: true,
   async run(ctx: CommandContext) {
@@ -14,13 +16,13 @@ export default {
     const quotedId = contextInfo?.stanzaId;
 
     if (!quotedId) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA MENSAJE")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde al mensaje original\n┃ > que deseas alterar.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_responde_al_mens_cb48935f", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_mensaje_dba5d803")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
-    const text = args.join(" ");
+    const text = args.join(t("cmd_text_b858cb28"));
     
     if (!text.trim()) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA TEXTO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Escribe el nuevo texto de\n┃ > reemplazo para la inyección.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_escribe_el_nuevo_f3208414", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_texto_c2677da2")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
     await react("🎭").catch(() => undefined);
@@ -82,7 +84,7 @@ export default {
       ]);
     } catch {
       await react("❌").catch(() => undefined);
-      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE PROTOCOLO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > La red rechazó la inyección\n┃ > del mensaje fantasma.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+      await reply(t("cmd_value0_value1_la_red_rechazo_l_3e179a26", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_de_protocolo_8d956d20")), value2: fytBold(t("cmd_system_29d43743")) })).catch(() => undefined);
     }
   }
 };

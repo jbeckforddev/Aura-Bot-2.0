@@ -5,6 +5,8 @@ import { safeFileName, requestJson } from "../../core/downloadUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { formatDuration } from "../../utils/formatter.ts";
 import type { CommandContext, OptionRow, LyricResult } from "../../types/index.d.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 type SearchSession = {
   sender: string;
@@ -32,7 +34,7 @@ function makeRow(title: string, rowId: string, description: string): OptionRow {
 export default {
   name: ["lrc", "lyrics"],
   category: "search",
-  description: "Busca letras y permite descargarlas o enviarlas como texto.",
+  description: t("cmd_busca_letras_y_permite_descarg_af382dc9"),
   async run({ args, reply, react, options, usedPrefix, sender, from }: CommandContext) {
     try {
       const action = String(args[0] || "").toLowerCase();
@@ -46,18 +48,18 @@ export default {
 
         const rows = [
           makeRow(
-            "Letras sincronizadas (.lrc)",
+            t("cmd_letras_sincronizadas_lrc_f0d9cffc"),
             `${usedPrefix}lrc file ${token} ${index} lrc`,
-            "Descargar archivo .lrc con marcas de tiempo"
+            t("cmd_descargar_archivo_lrc_con_marc_67a8cfaf")
           ),
           makeRow(
-            "Letras normales (.txt)",
+            t("cmd_letras_normales_txt_1293c923"),
             `${usedPrefix}lrc file ${token} ${index} txt`,
-            "Enviar como mensaje de texto normal"
+            t("cmd_enviar_como_mensaje_de_texto_n_240e9b71")
           ),
         ];
 
-        let preview = `╭〔🎙️ ${fytBold("LYRICS SELECT")} 〕━⬣\n`;
+        let preview = `╭〔🎙️ ${fytBold(t("cmd_lyrics_select_2d1136c7"))} 〕━⬣\n`;
         preview += `┃ ➥ ${fytBold(result.title) || "Desconocido"}\n`;
         preview += `┣━━━━━━━━━━━━⬣\n`;
         preview += `┃ > 👤 ${result.artist || "Desconocido"}\n`;
@@ -65,13 +67,13 @@ export default {
         preview += `┃ > ⏳️ ${formatDuration(result.duration) || "0:00"}\n`;
         preview += `┣━━━━━━━━━━━━⬣\n`;
         preview += `┃ > Elija el formato de letra\n`;
-        preview += `╰〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕⬣`;
+        preview += `╰〔 ⚡ ${fytBold(t("cmd_system_active_e403484a"))} 〕⬣`;
 
         return options(
           preview,
-          [{ title: "Descargas", rows }],
+          [{ title: t("cmd_descargas_fc3ae14d"), rows }],
           globalThis.DEFAULT_BOT_AUTHOR,
-          "Elegir formato"
+          t("cmd_elegir_formato_2a33f2e7")
         );
       }
 
@@ -106,7 +108,7 @@ export default {
             document: Buffer.from(content.trim(), "utf8"),
             mimetype: "text/plain; charset=utf-8",
             fileName,
-            caption: `${result.title || "Canción"} - ${result.artist || "Artista desconocido"} (LRC)`,
+            caption: t("cmd_value0_value1_lrc_e06e1c21", { value0: result.title || "Canción", value1: result.artist || "Artista desconocido" }),
           });
         } else {
           await reply({
@@ -119,7 +121,7 @@ export default {
 
       const query = args.slice(0).join(" ").trim();
       if (!query) {
-        return reply("⚠️ Proporciona el nombre de la canción o artista.");
+        return reply(t("cmd_proporciona_el_nombre_de_la_ca_db652e25"));
       }
 
       await react("⏳");
@@ -148,18 +150,18 @@ export default {
         )
       );
 
-      const h = `╭〔 ${fytBold("LYRICS SEARCH")} 〕━⬣`;
-      let t = `┃ ➥ ${fytBold(query)}\n`;
-      t += `┣━━━━━━━━━━━━⬣\n`;
-      t += `┃ > Elija tu letra preferida\n`;
-      t += `╰〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕⬣`;
+      const h = `╭〔 ${fytBold(t("cmd_lyrics_search_eb08b4de"))} 〕━⬣`;
+      let text = `┃ ➥ ${fytBold(query)}\n`;
+      text += `┣━━━━━━━━━━━━⬣\n`;
+      text += `┃ > Elija tu letra preferida\n`;
+      text += `╰〔 ⚡ ${fytBold(t("cmd_system_active_e403484a"))} 〕⬣`;
 
       await react("✅");
       return options(
-        t,
-        [{ title: "Canciones", rows }],
+        text,
+        [{ title: t("cmd_canciones_e168e120"), rows }],
         globalThis.DEFAULT_BOT_AUTHOR,
-        "Ver canciones",
+        t("cmd_ver_canciones_6c424d1d"),
         h
       );
     } catch (error: unknown) {
@@ -167,7 +169,7 @@ export default {
       const message =
         error instanceof Error ? error.message : "No se pudo procesar la solicitud.";
       return reply({
-        text: `❌ Error: ${message}`,
+        text: t("cmd_error_value0_a4bb764e", { value0: message }),
       });
     }
   },

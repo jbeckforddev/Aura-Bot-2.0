@@ -2,6 +2,8 @@ import type { CommandContext, AlbumItem } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { requestJson } from "../../core/downloadUtils.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const USER_ID = "6679412";
 const API_KEY =
@@ -18,7 +20,7 @@ interface Rule34Post {
 export default {
   name: ["rule34", "r34"],
   category: "nsfw",
-  description: "Busca imágenes en Rule34.",
+  description: t("cmd_busca_imagenes_en_rule34_82b5d6a4"),
   premiumOnly: true,
 
   async run(ctx: CommandContext) {
@@ -27,7 +29,7 @@ export default {
 
     if (!query) {
       return await reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA BUSQUEDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Por favor, proporciona un\n┃ > término de búsqueda.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_por_favor_propor_0e4394c3", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_busqueda_54bc392d")), value2: fytBold(t("cmd_system_29d43743")) }),
       });
     }
 
@@ -54,7 +56,7 @@ export default {
       const shuffled = validPosts.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, 10);
 
-      const captionText = `╭━━〔 ${fytBold("RULE34 SEARCH")} 〕━━⬣\n┃ 🔞 Tag: ${query}\n┃ ⚙️ Motor: › Rule34 API\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`;
+      const captionText = t("cmd_value0_tag_value1_motor_rule34_a4d08ddb", { value0: fytBold(t("cmd_rule34_search_9308b703")), value1: query, value2: fytBold(t("cmd_aura_reed_95dcfb15")) });
 
       const albumItems: AlbumItem[] = selected.map((item, index) => {
         const imageUrl = item.file_url || item.sample_url || item.image || "";
@@ -77,7 +79,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return await reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("SIN RESULTADOS")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_value2_value3_569f9d3d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_sin_resultados_aafe1c07")), value2: error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`, value3: fytBold(t("cmd_system_29d43743")) }),
       });
     }
   },

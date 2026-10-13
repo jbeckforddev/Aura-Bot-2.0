@@ -1,19 +1,21 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
 export default {
   name: ["amante", "noviosecreto", "casialgo", "cuernos"],
   category: "games",
-  description: "Revela quién es el amante o casi-algo secreto de un usuario.",
+  description: t("cmd_revela_quien_es_el_amante_o_ca_ab9b7f44"),
   groupOnly: true,
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg, groupMeta, botJid, sender } = ctx;
 
     const participants = groupMeta?.participants.filter(p => p.id !== botJid && p.id !== sender) || [];
     
-    if (participants.length < 1) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("NO HAY GANADO")}\n╰━━━━━━━━━━━━⬣`);
+    if (participants.length < 1) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_no_hay_ganado_cfd71a74")) }));
 
     const amante = participants[Math.floor(Math.random() * participants.length)].id;
     
@@ -56,24 +58,13 @@ export default {
 
     const searchMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 🕵️ ${fytBold("INVESTIGADOR AURA")} 〕━⬣\n┃ 🔍 Hackeando chats archivados...\n╰━━━━━━━━━━━━⬣` },
+      { text: t("cmd_value0_hackeando_chats_archiva_82e3345f", { value0: fytBold(t("cmd_investigador_aura_fba81982")) }) },
       { quoted: msg as any }
     ).catch(() => null);
 
     await new Promise((resolve) => setTimeout(resolve, 2500));
 
-    const text = `╭〔 🤫 ${fytBold("AMANTE SECRETO")} 〕━⬣
-┃ 👤 Infiel: @${sender.split("@")[0]}
-┃ 🫦 Ganado: @${amante.split("@")[0]}
-┃
-┃ 📍 Punto de encuentro: ${getRandom(lugares)}
-┃ ☣️ Nivel de toxicidad: ${nivelToxicidad}%
-┃ 📈 Riesgo de ser pillados: ${probDescubiertos}%
-┃
-┃ 💅 Veredicto: ${getRandom(frases)}
-┃
-┃ > ${alertaFinal}
-╰━━━━━━━━━━━━⬣`;
+    const text = t("cmd_value0_infiel_value1_ganado_va_27cdb372", { value0: fytBold(t("cmd_amante_secreto_1f494196")), value1: sender.split("@")[0], value2: amante.split("@")[0], value3: getRandom(lugares), value4: nivelToxicidad, value5: probDescubiertos, value6: getRandom(frases), value7: alertaFinal });
 
     if (searchMsg?.key) {
       await sock.sendMessage(from, { 

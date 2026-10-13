@@ -7,6 +7,8 @@ import {
   saveEconomy,
   formatMoney,
 } from "../../core/economyRuntime.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const options = ["piedra", "papel", "tijera"];
 const emojis: Record<string, string> = {
@@ -18,7 +20,7 @@ const emojis: Record<string, string> = {
 export default {
   name: ["ppt", "juego", "rps", "desafio", "retar"],
   category: "economy",
-  description: "Juega Piedra, Papel o Tijera contra Aura Reed.",
+  description: t("cmd_juega_piedra_papel_o_tijera_co_7b5cfc1c"),
   async run(ctx: CommandContext) {
     const user = economyUser(ctx, ctx.sender);
     const choice = String(ctx.args?.[0] ?? "").toLowerCase();
@@ -26,11 +28,11 @@ export default {
     const cooldown = 10 * 60 * 1000;
     if (user.lastPpt && now - user.lastPpt < cooldown)
       return ctx.reply(
-        `⏳ Espera *${cooldownText(cooldown - (now - user.lastPpt))}* para jugar de nuevo.`,
+        t("cmd_espera_value0_para_jugar_de_nu_82ca334f", { value0: cooldownText(cooldown - (now - user.lastPpt)) }),
       );
     if (!options.includes(choice))
       return ctx.reply(
-        `⚠️ Usa: *${ctx.usedPrefix ?? "."}ppt piedra|papel|tijera*`,
+        t("cmd_usa_value0_ppt_piedra_papel_ti_2ae6868a", { value0: ctx.usedPrefix ?? "." }),
       );
     const bot = options[Math.floor(Math.random() * options.length)];
     const won =
@@ -47,8 +49,8 @@ export default {
         : won
           ? `🎉 ¡Ganaste! +${formatMoney(reward, ctx)}`
           : "❌ ¡Perdiste!";
-    let text = `╭〔 🎮 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 𝐏𝐈𝐄𝐃𝐑𝐀, 𝐏𝐀𝐏𝐄𝐋 𝐎 𝐓𝐈𝐉𝐄𝐑𝐀\n╰━━━━━━━━━━━━⬣\n\n`;
-    text += `┃ 👤 Tu elección: ${emojis[choice]} *${choice.toUpperCase()}*\n┃ 🤖 Aura Reed: ${emojis[bot]} *${bot.toUpperCase()}*\n\n┃ ${result}\n┃ 💵 Cartera: ${formatMoney(user.bolsillo, ctx)}\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣`;
+    let text = t("cmd_text_31eb83c2");
+    text += t("cmd_tu_eleccion_value0_value1_aura_cdf7b24c", { value0: emojis[choice], value1: choice.toUpperCase(), value2: emojis[bot], value3: bot.toUpperCase(), value4: result, value5: formatMoney(user.bolsillo, ctx) });
     return ctx.reply({ text, mentions: [ctx.sender] });
   },
 };

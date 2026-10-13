@@ -5,11 +5,13 @@ import {
   setEconomyUser,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["daily", "diario"],
   category: "economy",
-  description: "Reclama tu recompensa diaria.",
+  description: t("cmd_reclama_tu_recompensa_diaria_a7b8907e"),
   async run(ctx: CommandContext) {
     const user = getEconomyUser(ctx.from, ctx.sender, {
       lastDaily: 0,
@@ -21,7 +23,7 @@ export default {
 
     if (user.lastDaily && now - user.lastDaily < cooldown) {
       return ctx.reply(
-        `⏳ Ya reclamaste tu recompensa diaria.\nVuelve en *${cooldownText(cooldown - (now - user.lastDaily))}*.`,
+        t("cmd_ya_reclamaste_tu_recompensa_di_488f828d", { value0: cooldownText(cooldown - (now - user.lastDaily)) }),
       );
     }
 
@@ -40,15 +42,15 @@ export default {
     user.lastDaily = now;
     setEconomyUser(ctx.from, ctx.sender, user);
 
-    let text = `╭〔 🎁 𝐑𝐄𝐂𝐎𝐌𝐏𝐄𝐍𝐒𝐀 𝐃𝐈𝐀𝐑𝐈𝐀 〕⬣\n`;
-    text += `┃ 🔥 𝐑𝐀𝐂𝐇𝐀: *${user.dailyStreak} Días*\n`;
-    text += `╰━━━━━━━━━━━━⬣\n\n`;
-    text += `┃ 👋 Hola *@${ctx.sender.split("@")[0]}*\n`;
-    text += `┃ 🎉 Base: ${formatMoney(baseReward, ctx)}\n`;
-    text += `┃ ✨ Bono Racha: +${formatMoney(streakBonus, ctx)}\n`;
-    text += `┃ 💰 Total Ganado: *${formatMoney(totalReward, ctx)}*\n`;
-    text += `┃ 💵 Saldo actual: ${formatMoney(user.bolsillo, ctx)}\n\n`;
-    text += `╰〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣`;
+    let text = t("cmd_text_1bb88c91");
+    text += t("cmd_value0_dias_58f878d6", { value0: user.dailyStreak });
+    text += t("cmd_text_bdfd7fa0");
+    text += t("cmd_hola_value0_a30dbb81", { value0: ctx.sender.split("@")[0] });
+    text += t("cmd_base_value0_31949712", { value0: formatMoney(baseReward, ctx) });
+    text += t("cmd_bono_racha_value0_452973ed", { value0: formatMoney(streakBonus, ctx) });
+    text += t("cmd_total_ganado_value0_f4c8c352", { value0: formatMoney(totalReward, ctx) });
+    text += t("cmd_saldo_actual_value0_ffd3e8da", { value0: formatMoney(user.bolsillo, ctx) });
+    text += t("cmd_text_f1df3aed");
     return ctx.reply({ text, mentions: [ctx.sender] });
   },
 };

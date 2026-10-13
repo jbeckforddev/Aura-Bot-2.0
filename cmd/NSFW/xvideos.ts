@@ -8,6 +8,8 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE, SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -42,7 +44,7 @@ function isXvideosUrl(text: string): boolean {
 export default {
   name: ["xv", "xvideos", "xvid"],
   category: "nsfw",
-  description: "Busca videos de XVideos y descarga por enlace.",
+  description: t("cmd_busca_videos_de_xvideos_y_desc_ba1e06ab"),
   premiumOnly: true,
 
   async run(ctx: CommandContext) {
@@ -51,7 +53,7 @@ export default {
 
     if (!query) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA BÚSQUEDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Proporciona una búsqueda o\n┃ > un enlace de XVideos.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_proporciona_una__bdaa745b", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_busqueda_7c18b4d5")), value2: fytBold(t("cmd_system_29d43743")) }),
       });
     }
 
@@ -81,8 +83,8 @@ export default {
 
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "XVIDEOS",
-          icon: "🎥",
+          label: t("cmd_xvideos_63401799"),
+          icon: t("cmd_text_a2865ecb"),
           title,
           author: artist,
           quality: resolution,
@@ -92,7 +94,7 @@ export default {
           showAuthor: true,
           showQuality: true,
           showDuration: Boolean(duration),
-          loadingText: "✅ Video listo",
+          loadingText: t("cmd_video_listo_d647ff77"),
         });
 
         await reply({
@@ -107,7 +109,7 @@ export default {
       } catch (error: unknown) {
         await react("❌");
         return reply({
-          text: `${error instanceof Error ? error.message : "No se pudo descargar el video."}`,
+          text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : "No se pudo descargar el video." }),
         });
       }
       return;
@@ -129,12 +131,12 @@ export default {
 
       const searchCaption = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
-        label: "XVIDEOS SEARCH",
-        icon: "🔞",
+        label: t("cmd_xvideos_search_22e28d9e"),
+        icon: t("cmd_text_174a5aaa"),
         query,
-        engine: "XVideos API",
+        engine: t("cmd_xvideos_api_6b5b2b34"),
         results: results.slice(0, 5).map((result) => ({
-          title: result.title || "Sin título",
+          title: result.title || t("cmd_sin_titulo_fd8beeee"),
           artist: result.artist,
           duration: result.duration,
           url: result.url,
@@ -146,7 +148,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("SIN RESULTADOS")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_value2_value3_569f9d3d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_sin_resultados_aafe1c07")), value2: error instanceof Error ? error.message : `No se encontraron resultados para "${query}".`, value3: fytBold(t("cmd_system_29d43743")) }),
       });
     }
   },

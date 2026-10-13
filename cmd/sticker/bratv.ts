@@ -3,6 +3,8 @@ import { request } from "undici";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { applyStickerMetadata, toSticker } from "../../core/stickerUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 async function getSticker(url: URL): Promise<Buffer> {
   const response = await request(url, {
@@ -31,7 +33,7 @@ async function getSticker(url: URL): Promise<Buffer> {
 export default {
   name: ["bratv", "bratvid", "bratvideo", "bratstickervideo"],
   category: "sticker",
-  description: "Convierte texto en sticker estilo brat.",
+  description: t("cmd_convierte_texto_en_sticker_est_83567fb0"),
   async run({ args, msg, db, sender, react, reply }: CommandContext) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
     const quotedText =
@@ -39,7 +41,7 @@ export default {
     const text = args.join(" ").trim() || quotedText;
     if (!text) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA TEXTO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Escribe un texto o responde a un mensaje.\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_escribe_un_texto_e5c7f80c", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_texto_c2677da2")), value2: fytBold(t("cmd_system_29d43743")) }),
       });
     }
     await react("⏳");
@@ -59,7 +61,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ERROR AL CREAR STICKER\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : String(error) || "No se pudo generar el sticker."}\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_error_al_crear_sticker__fc8ff0d0", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: error instanceof Error ? error.message : String(error) || "No se pudo generar el sticker." }),
       });
     }
   },

@@ -21,6 +21,8 @@ import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -54,11 +56,11 @@ type TikWMVideoResponse = {
 export default {
   name: ["tk", "tt", "ttv", "tiktok", "tkmp4"],
   category: "download",
-  description: "Busca y descarga videos de TikTok en máxima calidad HD.",
+  description: t("cmd_busca_y_descarga_videos_de_tik_fd0719dc"),
   async run(ctx: CommandContext) {
     const { args = [], reply, react, sock, from, msg } = ctx;
     const query = Array.isArray(args) ? args.join(" ").trim() : String(args ?? "").trim();
-    if (!query) return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
+    if (!query) return reply(t("cmd_proporciona_una_busqueda_o_un__4bcc0240"));
     
     await react("⏳").catch(() => undefined);
     
@@ -128,8 +130,8 @@ export default {
 
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "TIKTOK IMAGES",
-          icon: "🖼️",
+          label: t("cmd_tiktok_images_c263451e"),
+          icon: t("cmd_text_91a64201"),
           title,
           author,
           views: formatCount(views),
@@ -143,7 +145,7 @@ export default {
           showLikes: likes !== undefined && likes !== null,
           showComments: comments !== undefined && comments !== null,
           showShares: shares !== undefined && shares !== null,
-          loadingText: "📸 Álbum listo",
+          loadingText: t("cmd_album_listo_458c0141"),
         });
 
         const album = downloadedImages.map((img, index) => ({
@@ -187,8 +189,8 @@ export default {
 
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "TIKTOK VIDEO",
-        icon: "🎥",
+        label: t("cmd_tiktok_video_78e6c154"),
+        icon: t("cmd_text_a2865ecb"),
         title,
         author,
         views: formatCount(views),
@@ -202,7 +204,7 @@ export default {
         showLikes: likes !== undefined && likes !== null,
         showComments: comments !== undefined && comments !== null,
         showShares: shares !== undefined && shares !== null,
-        loadingText: "✅ Listo mi compa",
+        loadingText: t("cmd_listo_mi_compa_f240d06d"),
       });
 
       await reply({
@@ -218,7 +220,7 @@ export default {
     } catch (error: unknown) {
       await react("❌").catch(() => undefined);
       const message = error instanceof Error ? error.message : "No se pudo descargar el video.";
-      await reply({ text: `${message}` }).catch(() => undefined);
+      await reply({ text: t("cmd_value0_bb624cd4", { value0: message }) }).catch(() => undefined);
     } finally {
       for (const file of tempFiles) {
         await rm(file, { force: true }).catch(() => undefined);

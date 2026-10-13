@@ -6,6 +6,8 @@ import { request } from "undici";
 import { fytBold } from "../../core/socketText.ts";
 import { formatDuration } from "../../utils/formatter.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 let cachedClientId: string | null = null;
 let cachedAt = 0;
@@ -44,10 +46,10 @@ async function getClientId(): Promise<string> {
 export default {
   name: ["scsearch", "scbuscar", "scb", "scs"],
   category: "search",
-  description: "Busca canciones de SoundCloud.",
+  description: t("cmd_busca_canciones_de_soundcloud_9d9f75ce"),
   async run({ args, reply, react }: CommandContext) {
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Proporciona palabras clave para SoundCloud.");
+    if (!query) return reply(t("cmd_proporciona_palabras_clave_par_6b620487"));
     await react("🔍");
     try {
       const id = await getClientId();
@@ -62,15 +64,15 @@ export default {
         throw new Error("No se encontraron resultados.");
       const text = SEARCH_RESULTS_TEMPLATE({
         bold: fytBold,
-        label: "SOUNDCLOUD SEARCH",
-        icon: "🎵",
+        label: t("cmd_soundcloud_search_37bb6eaf"),
+        icon: t("cmd_text_71ceeba5"),
         query,
-        engine: "Api Interna",
+        engine: t("cmd_api_interna_eb134630"),
         results: response.collection.slice(0, 10).map((track) => ({
           title: track.title,
-          artist: track.user?.username || "Desconocido",
+          artist: track.user?.username || t("cmd_desconocido_452c8a12"),
           duration: formatDuration(Math.floor(Number(track.duration || 0) / 1000)),
-          url: track.permalink_url || "No disponible",
+          url: track.permalink_url || t("cmd_no_disponible_9def5fe2"),
         })),
       });
       await reply({ text });
@@ -78,7 +80,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ Error: ${error instanceof Error ? error.message : String(error) || "No se pudo buscar en SoundCloud."}`,
+        text: t("cmd_error_value0_a4bb764e", { value0: error instanceof Error ? error.message : String(error) || "No se pudo buscar en SoundCloud." }),
       });
     }
   },

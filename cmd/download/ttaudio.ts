@@ -25,6 +25,8 @@ import {
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const execFileAsync = promisify(execFile);
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -32,12 +34,12 @@ const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 export default {
   name: ["tta", "tka", "ttaudio", "tkmusic", "tiktokaudio"],
   category: "download",
-  description: "Descarga audio de TikTok como Audio.",
+  description: t("cmd_descarga_audio_de_tiktok_como__87218bf5"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Proporciona una búsqueda o enlace de TikTok.");
-    if (!ffmpegPath) return reply("❌ FFmpeg no está disponible.");
+    if (!query) return reply(t("cmd_proporciona_una_busqueda_o_enl_273f67d2"));
+    if (!ffmpegPath) return reply(t("cmd_ffmpeg_no_esta_disponible_d527d549"));
     const dir = process.env.TMPDIR || "./cache";
     const id = randomUUID();
     let input = "";
@@ -93,15 +95,15 @@ export default {
       const shares = data.stats?.share ?? data.share_count ?? searchResult?.stats?.share;
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "TIKTOK AUDIO",
-        icon: "🎵",
+        label: t("cmd_tiktok_audio_6218e8b8"),
+        icon: t("cmd_text_71ceeba5"),
         title,
         author,
         views: formatCount(views),
         likes: formatCount(likes),
         comments: formatCount(comments),
         shares: formatCount(shares),
-        type: "Audio MP3",
+        type: t("cmd_audio_mp3_80f1520d"),
         cost: formatMoney(cost, ctx),
         url,
         showAuthor: true,
@@ -110,8 +112,8 @@ export default {
         showComments: comments !== undefined && comments !== null,
         showShares: shares !== undefined && shares !== null,
         showType: true,
-        loadingText: "Descargando audio...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_audio_b1e6524a"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       await reply({ text: caption });
       await reply({
@@ -128,7 +130,7 @@ export default {
           ? error.message
           : "No se pudo convertir el audio.";
       return reply({
-        text: `${message}`,
+        text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     } finally {
       await unlink(output).catch(() => undefined);

@@ -26,6 +26,8 @@ import type {
   StickerPackDetailResponse,
   StickerPackItem,
 } from "../../types/index.d.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 // Configuración de endpoints MMS nativos de WhatsApp (igual que spack.js)
 MEDIA_PATH_MAP["sticker-pack"] = "/mms/document";
@@ -153,7 +155,7 @@ export default {
   name: ["stickersearch", "buscars", "spack"],
   category: "sticker",
   description:
-    "Busca un pack de stickers y lo envía como paquete nativo de WhatsApp.",
+    t("cmd_busca_un_pack_de_stickers_y_lo_21bd34b0"),
   async run({
     sock,
     msg,
@@ -168,7 +170,7 @@ export default {
     const query = args.join(" ").trim();
     if (!query)
       return reply(
-        `⚠️ Usa el comando con un nombre. Ejemplo: ${usedPrefix}spack gatos`,
+        t("cmd_usa_el_comando_con_un_nombre_e_92433e4d", { value0: usedPrefix }),
       );
     await react("⏳");
     try {
@@ -190,7 +192,7 @@ export default {
         throw new Error("El pack no contiene stickers disponibles.");
 
       await reply({
-        text: `╭〔 📦 ${fytBold("AURA REED")} 〕⬣\n┃ 🏷️ ${fytBold("PROCESANDO PACK")}\n╰━━━━━━━━━━━━⬣\n\n┃ 📌 Pack: ${packInfo?.name || query}\n┃ 🖼️ Stickers: ${rawStickers.length}\n┃ ⏳ Empaquetando como sticker pack nativo...\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_value1_pack_value2_stic_2e6e5148", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_procesando_pack_7b75c475")), value2: packInfo?.name || query, value3: rawStickers.length }),
       });
 
       const results = await Promise.allSettled(
@@ -246,7 +248,7 @@ export default {
       await sendStickerPack(sock, from, {
         name: packName,
         publisher: authorName,
-        description: `${packInfo?.name || query} • Aura Reed Bot`,
+        description: t("cmd_value0_aura_reed_bot_c5b1e6d8", { value0: packInfo?.name || query }),
         stickers,
         cover,
         quoted: msg,
@@ -256,7 +258,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ERROR AL OBTENER PACK\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : String(error) || "Intenta nuevamente."}\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_error_al_obtener_pack_v_f273f74c", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: error instanceof Error ? error.message : String(error) || "Intenta nuevamente." }),
       });
     }
   },

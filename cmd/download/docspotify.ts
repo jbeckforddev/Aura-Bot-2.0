@@ -13,15 +13,17 @@ import {
 } from "../../core/economyConfig.ts";
 import type { CommandContext, SpotifyResponse } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["spotifydoc", "docsplay", "dsp", "dspdl"],
   category: "download",
-  description: "Descarga Spotify como documento MP3.",
+  description: t("cmd_descarga_spotify_como_document_62b1cd61"),
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg, sender } = ctx;
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Ingresa una canción o enlace de Spotify.");
+    if (!query) return reply(t("cmd_ingresa_una_cancion_o_enlace_d_76145d63"));
     await react("🎵");
     try {
       const api = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
@@ -47,19 +49,19 @@ export default {
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "SPOTIFY DOCUMENT",
-        icon: "🎵",
+        label: t("cmd_spotify_document_d91332a9"),
+        icon: t("cmd_text_71ceeba5"),
         title,
         artist: globalThis.DEFAULT_BOT_AUTHOR,
         album: song.album,
-        type: "Documento MP3",
+        type: t("cmd_documento_mp3_f18c11dc"),
         cost: formatMoney(cost, ctx),
         url: originalUrl,
         showArtist: Boolean(song.artist),
         showAlbum: Boolean(song.album),
         showType: true,
-        loadingText: "Descargando documento...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_documento_2572aa2f"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover
@@ -90,7 +92,7 @@ export default {
           ? error.message
           : "No se pudo descargar Spotify.";
       return reply({
-        text: `${message}`,
+        text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     }
   },

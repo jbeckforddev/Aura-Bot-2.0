@@ -2,6 +2,8 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const execAsync = promisify(exec);
 const MAX_OUTPUT_LENGTH = 12000;
@@ -16,14 +18,14 @@ function limitOutput(value: unknown): string {
 export default {
   name: ["r", "run", "exec", "terminal"],
   category: "system",
-  description: "Ejecuta comandos en la terminal del servidor.",
+  description: t("cmd_ejecuta_comandos_en_la_termina_e4ff4900"),
   ownerOnly: true,
 
   async run({ args, usedPrefix, reply, react }: CommandContext) {
     const command = args.join(" ").trim();
     if (!command) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA COMANDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Por favor, escribe el comando de terminal.\n┃ > Ejemplo: *${usedPrefix || "."}r pm2 restart all*\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+        text: t("cmd_value0_value1_por_favor_escrib_f945bf7b", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_comando_fade5335")), value2: usedPrefix || ".", value3: fytBold(t("cmd_system_29d43743")) }),
       });
     }
 
@@ -42,7 +44,7 @@ export default {
 
       await react("✅");
       return reply({
-        text: `╭〔 🖥️ ${fytBold("TERMINAL EXEC")} 〕━⬣\n\n\`\`\`\n${output}\n\`\`\`\n\n╰━━〔 ⚡ ${fytBold("SYSTEM")} 〕━━⬣`,
+        text: t("cmd_value0_value1_value2_7c4207de", { value0: fytBold(t("cmd_terminal_exec_6fef2449")), value1: output, value2: fytBold(t("cmd_system_29d43743")) }),
       });
     } catch (error: unknown) {
       const output =
@@ -59,7 +61,7 @@ export default {
 
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("TERMINAL ERROR")} 〕━⬣\n\n\`\`\`\n${output}\n\`\`\`\n\n╰━━〔 ⚡ ${fytBold("SYSTEM")} 〕━━⬣`,
+        text: t("cmd_value0_value1_value2_375fbdce", { value0: fytBold(t("cmd_terminal_error_3b4139ac")), value1: output, value2: fytBold(t("cmd_system_29d43743")) }),
       });
     }
   },

@@ -1,9 +1,11 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["crime", "crimen"],
   description:
-    "Comete un crimen para ganar monedas, pero cuidado con la policía.",
+    t("cmd_comete_un_crimen_para_ganar_mo_d9699214"),
   title: "🥷 𝐂𝐑𝐈𝐌𝐄𝐍 𝐄𝐗𝐈𝐓𝐎𝐒𝐎",
   icon: "🥷",
   cooldown: 60 * 60 * 1000,

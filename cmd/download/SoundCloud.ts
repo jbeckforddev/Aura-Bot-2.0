@@ -21,6 +21,8 @@ import {
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 let cachedClientId: string | null = null;
 let cachedAt = 0;
@@ -140,7 +142,7 @@ async function resolveTrack(
 
 export default {
   name: ["scplay", "scdl", "sc", "soundcloud"],
-  description: "Descarga canciones de SoundCloud.",
+  description: t("cmd_descarga_canciones_de_soundclo_1c8783da"),
   category: "download",
 
   async run(ctx: CommandContext) {
@@ -148,7 +150,7 @@ export default {
     const query = args.join(" ").trim();
     if (!query) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA BÚSQUEDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Indica un enlace o nombre de SoundCloud.\n\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_value1_indica_un_enlace_0586e305", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_busqueda_7c18b4d5")) }),
       });
     }
 
@@ -188,14 +190,14 @@ export default {
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "SOUNDCLOUD PLAY",
-        icon: "🎵",
-        title: track.title || "Sin título",
+        label: t("cmd_soundcloud_play_df06cead"),
+        icon: t("cmd_text_71ceeba5"),
+        title: track.title || t("cmd_sin_titulo_fd8beeee"),
         artist: track.user?.username,
         duration: formatDuration(Math.floor(Number(track.duration || 0) / 1000)),
         views: formatCount(track.playback_count),
         likes: formatCount(track.likes_count),
-        type: "Audio MP3",
+        type: t("cmd_audio_mp3_80f1520d"),
         cost: formatMoney(cost, ctx),
         url: track.permalink_url || query,
         showArtist: Boolean(track.user?.username),
@@ -203,8 +205,8 @@ export default {
         showViews: track.playback_count !== undefined && track.playback_count !== null,
         showLikes: track.likes_count !== undefined && track.likes_count !== null,
         showType: true,
-        loadingText: "Descargando audio...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_audio_b1e6524a"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
 
       const thumbnail = track.artwork_url?.replace("large", "t500x500");
@@ -250,7 +252,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       await reply({
-        text: `${error instanceof Error ? error.message : String(error) || "No se pudo descargar el audio."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : String(error) || "No se pudo descargar el audio." }),
       });
     }
   },

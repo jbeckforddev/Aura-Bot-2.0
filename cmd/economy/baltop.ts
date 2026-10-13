@@ -4,20 +4,22 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { db } from "../../database/AuraDB.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["baltop", "topbal", "topcoins"],
   category: "economy",
-  description: "Muestra el ranking de usuarios con más monedas.",
+  description: t("cmd_muestra_el_ranking_de_usuarios_8412052c"),
   groupOnly: true,
   async run(ctx: CommandContext) {
     if (!ctx.groupMeta) {
-      return ctx.reply("❌ Este comando solo funciona en grupos.");
+      return ctx.reply(t("cmd_este_comando_solo_funciona_en__9de14eee"));
     }
     const pageSize = 10;
     const requestedPage = Number.parseInt(String(ctx.args?.[0] || "1"), 10);
     if (!Number.isInteger(requestedPage) || requestedPage < 1) {
-      return ctx.reply("⚠️ Indica una página válida. Ejemplo: `.baltop 1`");
+      return ctx.reply(t("cmd_indica_una_pagina_valida_ejemp_6093925c"));
     }
 
     const botJid = String(ctx.sock?.user?.id || "").split(":")[0];
@@ -79,12 +81,12 @@ export default {
       })
       .sort((a, b) => b.total - a.total);
     if (!rows.length)
-      return ctx.reply("⚠️ No hay usuarios con saldo para mostrar.");
+      return ctx.reply(t("cmd_no_hay_usuarios_con_saldo_para_ff21b0ee"));
 
     const totalPages = Math.ceil(rows.length / pageSize);
     if (requestedPage > totalPages) {
       return ctx.reply(
-        `⚠️ Esa página no existe. Hay ${totalPages} página${totalPages === 1 ? "" : "s"}.`,
+        t("cmd_esa_pagina_no_existe_hay_value_26d57c06", { value0: totalPages, value1: totalPages === 1 ? "" : "s" }),
       );
     }
 

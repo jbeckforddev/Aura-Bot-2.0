@@ -5,6 +5,8 @@ import type {
 import type { proto } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function normalizeNumber(value: unknown): string {
   return String(value || "").replace(/\D/g, "");
@@ -36,27 +38,27 @@ function formatResult(number: string, response: WaBanCheckResponse): string {
   const details = result.status_message || "Sin detalles adicionales";
 
   return [
-    `╭〔 ${icon} ${fytBold("CHECK BAN")} 〕⬣`,
-    `┃ 📱 ${fytBold("Número")} › ${number}`,
-    `┃ 📌 ${fytBold("Estado")} › ${status}`,
-    `┃ ⏱️ ${fytBold("Tipo")} › ${result.isPermanent ? "Permanente" : "Temporal o no confirmado"}`,
-    `┃ ⚠️ ${fytBold("Motivo")} › ${violation}`,
-    `┃ ⌛ ${fytBold("Duración")} › ${duration}`,
-    `┃ 📊 ${fytBold("Riesgo")} › ${risk}`,
-    `┃ 💬 ${fytBold("Detalles")} › ${details}`,
-    `╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+    `╭〔 ${icon} ${fytBold(t("cmd_check_ban_c73aa001"))} 〕⬣`,
+    `┃ 📱 ${fytBold(t("cmd_numero_1d91f4b8"))} › ${number}`,
+    `┃ 📌 ${fytBold(t("cmd_estado_87cf2a84"))} › ${status}`,
+    `┃ ⏱️ ${fytBold(t("cmd_tipo_6cc6198d"))} › ${result.isPermanent ? "Permanente" : "Temporal o no confirmado"}`,
+    `┃ ⚠️ ${fytBold(t("cmd_motivo_cbeec536"))} › ${violation}`,
+    `┃ ⌛ ${fytBold(t("cmd_duracion_63ce53f4"))} › ${duration}`,
+    `┃ 📊 ${fytBold(t("cmd_riesgo_f2026263"))} › ${risk}`,
+    `┃ 💬 ${fytBold(t("cmd_detalles_b1bb8ea5"))} › ${details}`,
+    `╰〔 ⚡ ${fytBold(t("cmd_aura_reed_95dcfb15"))} 〕⬣`,
   ].join("\n");
 }
 
 export default {
   name: ["checkban", "checknum"],
   category: "utils",
-  description: "Verifica si un número de WhatsApp está baneado.",
+  description: t("cmd_verifica_si_un_numero_de_whats_3c4ecd4b"),
   async run({ msg, args, usedPrefix, reply, react }: CommandContext) {
     const number = getNumber(msg, args);
     if (!validNumber(number)) {
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("CHECK BAN")} 〕⬣\n┃ ❌ ${fytBold("NÚMERO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Usa un número con código de país.\n┃ > Ejemplo: ${usedPrefix || "."}checkban 525530797879`,
+        text: t("cmd_value0_value1_usa_un_numero_co_5e415640", { value0: fytBold(t("cmd_check_ban_c73aa001")), value1: fytBold(t("cmd_numero_invalido_74d933c2")), value2: usedPrefix || "." }),
       });
     }
 
@@ -76,7 +78,7 @@ export default {
       );
       await react("❌");
       return reply({
-        text: `❌ No se pudo consultar el estado de ${number}. Intenta nuevamente más tarde.`,
+        text: t("cmd_no_se_pudo_consultar_el_estado_1bb2f2bc", { value0: number }),
       });
     }
   },

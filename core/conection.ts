@@ -28,6 +28,8 @@ import type {
   ConnectionOptions,
   GroupCallEvent,
 } from "../types/index.d.ts";
+import { t } from "../src/langs/index.ts";
+
 export type { ConnectionOptions };
 
 export const logger = pino({ level: "silent" });
@@ -816,12 +818,12 @@ sock.ev.on("call", async (calls: unknown[]) => {
           metadata?.desc?.toString() || "Sin descripción";
         const memberCount = metadata?.participants?.length || 0;
         const text = template
-          .replaceAll("{group}", groupName)
-          .replaceAll("{mention}", tags)
-          .replaceAll("@user", tags)
-          .replaceAll("@group", groupName)
-          .replaceAll("@desc", groupDescription)
-          .replaceAll("@count", String(memberCount));
+          .replaceAll(t("core_group_fe6a00b1"), groupName)
+          .replaceAll(t("core_mention_d5b00d52"), tags)
+          .replaceAll(t("core_user_0f23d79d"), tags)
+          .replaceAll(t("core_group_c77112aa"), groupName)
+          .replaceAll(t("core_desc_476f541a"), groupDescription)
+          .replaceAll(t("core_count_7886d3a6"), String(memberCount));
 
         await sock.sendMessage(id, { text, mentions }, { quoted: undefined });
       } catch (error) {

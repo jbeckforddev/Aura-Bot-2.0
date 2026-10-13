@@ -1,5 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function normalizeJid(jid: string): string {
   return String(jid || "").split("@")[0].split(":")[0];
@@ -38,7 +40,7 @@ function matchMutedUser(savedJid: string, targetJid: string): boolean {
 export default {
   name: ["unmute", "desilenciar"],
   category: "group",
-  description: "Quita el silencio a un usuario.",
+  description: t("cmd_quita_el_silencio_a_un_usuario_c607447d"),
   groupOnly: true,
   adminOnly: true,
   botAdmin: true,
@@ -47,7 +49,7 @@ export default {
     const target = context?.mentionedJid?.[0] || context?.participant;
     if (!target)
       return ctx.reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA USUARIO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Etiqueta o responde al usuario que deseas desilenciar.\n\n╰〔 ⚡ ${fytBold("SYSTEM ALERT")} 〕⬣`,
+        text: t("cmd_value0_value1_etiqueta_o_respo_540b6aad", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_usuario_2df40348")), value2: fytBold(t("cmd_system_alert_780bb6b6")) }),
       });
     const group = ctx.db.getGroup(ctx.from);
     const mutedUsers = Array.isArray(group.mutedUsers) ? group.mutedUsers : [];
@@ -60,7 +62,7 @@ export default {
     
     if (!isMuted)
       return ctx.reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ℹ️ El usuario @${target.split("@")[0]} no está silenciado.\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`,
+        text: t("cmd_value0_el_usuario_value1_no_es_f95304c5", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: target.split("@")[0], value2: fytBold(t("cmd_system_info_1a78a0cb")) }),
         mentions: [target],
       });
     ctx.db.setGroup(ctx.from, {
@@ -69,7 +71,7 @@ export default {
       ),
     });
     return ctx.reply({
-      text: `╭〔 🔊 ${fytBold("AURA REED")} 〕⬣\n┃ ✅ ${fytBold("DESILENCIADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El usuario @${target.split("@")[0]} ya puede hablar.\n\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`,
+      text: t("cmd_value0_value1_el_usuario_value_794449e6", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_desilenciado_4f79476c")), value2: target.split("@")[0], value3: fytBold(t("cmd_system_info_1a78a0cb")) }),
       mentions: [target],
     });
   },

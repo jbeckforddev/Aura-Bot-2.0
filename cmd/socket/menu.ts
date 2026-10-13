@@ -10,6 +10,7 @@ import {
 import { getPlugins } from "../../core/cmdLoader.ts";
 import { sendWithRecordingPresence } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 
 type CachedMediaMessage =
   proto.Message.IImageMessage | proto.Message.IVideoMessage;
@@ -34,7 +35,7 @@ function getCommandCategories() {
 
 export default {
   name: ["menu", "help", "h", "menú"],
-  description: "Catalogo de Comandos",
+  description: t("socketMenuDescription"),
   category: "socket",
   ownerOnly: false,
   modOnly: false,
@@ -53,7 +54,7 @@ export default {
     const pushName = msg?.pushName || "Usuario";
     const botName = runtimeDb?.getBot?.(sock.user?.id)?.bot_name || "Aura Reed";
     const botType = sock.isSubBot ? "Sub-Bot" : "Principal";
-    const tituloEstilizado = fytBold(`${String(botName).toUpperCase()}`);
+    const tituloEstilizado = fytBold(t("cmd_value0_bb624cd4", { value0: String(botName).toUpperCase() }));
     const chanellink = "https://aetheryx.xyz/";
     const requested = args && args[0] ? args[0].toLowerCase() : null;
     const AutorBot = globalThis.DEFAULT_BOT_AUTHOR;
@@ -79,15 +80,15 @@ export default {
       requestedCategory = categoryAliases[requested] || requested;
     }
 
-    let textoMenu = `╭━━〔 ${tituloEstilizado} 〕━━⬣\n`;
-    textoMenu += `┃ > ${fytBold("Usuario:")} ${pushName}\n`;
-    textoMenu += `┃ > ${fytBold("Instancia:")} ${botType}\n`;
-    textoMenu += `┃ > ${fytBold("Version:")} 2.5\n`;
-    textoMenu += `┃ > ${fytBold("Owner:")} Jeriel B.\n`;
-    textoMenu += `┃ > ${fytBold("Prefix:")} [ ${activePrefix} ]\n`;
-    textoMenu += `┃ > ${fytBold("Fecha:")} ${new Date().toLocaleDateString("es-CR")}\n`;
-    textoMenu += `┃ > ${fytBold("Url:")} ${chanellink}\n`;
-    textoMenu += `╰━━━━━━━━━━━━━⬣\n\n`;
+    let textoMenu = t("cmd_value0_8aed6a3b", { value0: tituloEstilizado });
+    textoMenu += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("socketMenuUser")), value1: pushName });
+    textoMenu += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("socketMenuInstance")), value1: botType });
+    textoMenu += t("cmd_value0_2_5_ebc54376", { value0: fytBold(t("socketMenuVersion")) });
+    textoMenu += t("cmd_value0_jeriel_b_b207a1a0", { value0: fytBold(t("socketMenuOwner")) });
+    textoMenu += t("cmd_value0_value1_a6fe40aa", { value0: fytBold(t("socketMenuPrefix")), value1: activePrefix });
+    textoMenu += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("socketMenuDate")), value1: new Date().toLocaleDateString("es-CR") });
+    textoMenu += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("socketMenuUrl")), value1: chanellink });
+    textoMenu += t("cmd_text_5710381e");
 
     const pluginMap = getPlugins();
     const plugins = [
@@ -107,12 +108,12 @@ export default {
     const catsToShow = requestedCategory ? [requestedCategory] : categories;
 
     if (requestedCategory && !categories.includes(requestedCategory)) {
-      let textErr = `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n`;
-      textErr += `┃ ❌ ${fytBold("CATEGORÍA NO ENCONTRADA")}\n`;
-      textErr += `╰━━━━━━━━━━━━⬣\n\n`;
-      textErr += `> Categorías disponibles:\n`;
-      textErr += `${categories.join("\n")}\n\n`;
-      textErr += `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+      let textErr = t("cmd_value0_b359fff7", { value0: fytBold(t("cmd_aura_reed_95dcfb15")) });
+      textErr += t("cmd_value0_45769653", { value0: fytBold(t("socketMenuCategoryNotFound")) });
+      textErr += t("cmd_text_bdfd7fa0");
+      textErr += t("cmd_value0_eb512a0e", { value0: t("socketMenuAvailableCategories") });
+      textErr += t("cmd_value0_ffd81da9", { value0: categories.join("\n") });
+      textErr += t("cmd_value0_92601e2c", { value0: fytBold(t("cmd_system_29d43743")) });
       return await sock.sendMessage(
         remoteJid,
         { text: textErr },
@@ -124,7 +125,7 @@ export default {
       const group = pluginsByCategory.get(cat) || [];
       if (!group.length) continue;
 
-      textoMenu += `┏━━〔 ${fytBold(String(cat).charAt(0).toUpperCase() + String(cat).slice(1))} 〕━━⬣\n`;
+      textoMenu += t("cmd_value0_a58a457f", { value0: fytBold(String(cat).charAt(0).toUpperCase() + String(cat).slice(1)) });
 
       for (const cmd of group.sort((a, b) =>
         String(a.name?.[0] ?? "").localeCompare(String(b.name?.[0] ?? "")),
@@ -133,27 +134,27 @@ export default {
         const visibleNames = cmd.showAllNames ? names : names.slice(0, 1);
 
         for (const alias of visibleNames) {
-          textoMenu += `┃ ➪ ${fytBold(`${activePrefix}${String(alias)}`)}\n`;
+          textoMenu += t("cmd_value0_5c5b5a03", { value0: fytBold(t("cmd_value0_value1_6bbfd3cf", { value0: activePrefix, value1: String(alias) })) });
 
           if (Array.isArray(cmd.description)) {
             const description = cmd.description[names.indexOf(alias)];
-            if (description) textoMenu += `┃ ✦ ${description}\n\n`;
+            if (description) textoMenu += t("cmd_value0_d9d88ac0", { value0: description });
           }
         }
 
         if (typeof cmd.description === "string" && cmd.description) {
-          textoMenu += `┃ ✦ ${cmd.description}\n\n`;
+          textoMenu += t("cmd_value0_d9d88ac0", { value0: cmd.description });
         }
       }
     }
 
     if (!requestedCategory) {
-      textoMenu += `┏━━〔 ${fytBold("OTROS COMANDOS")} 〕━━⬣\n`;
-      textoMenu += `┃ ➪ ${fytBold(`${activePrefix}menu <categoría>`)}\n`;
-      textoMenu += `┃ ✦ Muestra el menú de una categoría específica.\n\n`;
+      textoMenu += t("cmd_value0_a58a457f", { value0: fytBold(t("socketMenuOtherCommands")) });
+      textoMenu += t("cmd_value0_5c5b5a03", { value0: fytBold(t("cmd_value0_menu_categoria_804b40c1", { value0: activePrefix })) });
+      textoMenu += t("cmd_value0_d9d88ac0", { value0: t("socketMenuCategoryUsage") });
     }
 
-    textoMenu += `╰〔 ⚡ ${fytBold(String(botName).toUpperCase() + " BOT")} 〕⬣`;
+    textoMenu += t("cmd_value0_92601e2c", { value0: fytBold(String(botName).toUpperCase() + " BOT") });
 
     let bannerPath = path.resolve("./assets/img/BotBanner.jpg");
     let isGif = false;

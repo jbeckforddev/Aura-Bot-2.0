@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { t } from "../../src/langs/index.ts";
+
 
 const execFileAsync = promisify(execFile);
 
@@ -72,7 +74,7 @@ function getMediaCaption(message: proto.IMessage | null | undefined): string {
 export default {
   name: ["toimg", "img", "toimage"],
   category: "utils",
-  description: "Convierte un sticker o GIF en imagen.",
+  description: t("cmd_convierte_un_sticker_o_gif_en__c22b34fd"),
   async run({ sock, msg, from, reply, react }: CommandContext) {
     const context = msg.message?.extendedTextMessage?.contextInfo;
     const quotedMessage = context?.quotedMessage;
@@ -84,7 +86,7 @@ export default {
         !target.documentMessage)
     ) {
       return reply({
-        text: "❌ Responde a un sticker, GIF o imagen de visualización única.",
+        text: t("cmd_responde_a_un_sticker_gif_o_im_cdf21d47"),
       });
     }
     await react("⏳");
@@ -113,7 +115,7 @@ export default {
         },
         message: quotedMessage,
       };
-      const caption = getMediaCaption(target) || "Aquí tienes la imagen";
+      const caption = getMediaCaption(target) || t("cmd_aqui_tienes_la_imagen_00ef3c4b");
       if (
         target.stickerMessage ||
         target.documentMessage?.mimetype === "image/webp"
@@ -151,7 +153,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ No se pudo convertir el medio: ${error instanceof Error ? error.message : String(error) || "error desconocido"}`,
+        text: t("cmd_no_se_pudo_convertir_el_medio__58f6e9c6", { value0: error instanceof Error ? error.message : String(error) || "error desconocido" }),
       });
     }
   },

@@ -1,17 +1,19 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const activeTrials = new Set<string>();
 
 export default {
   name: ["demandar", "juicio", "tribunal"],
   category: "games",
-  description: "Inicia un juicio público contra un miembro del grupo.",
+  description: t("cmd_inicia_un_juicio_publico_contr_7622ab83"),
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg } = ctx;
     const isGroup = from.endsWith("@g.us");
 
-    if (!isGroup) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("SOLO GRUPOS")}\n╰━━━━━━━━━━━━⬣`);
+    if (!isGroup) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_solo_grupos_89f57a2b")) }));
 
     const groupMetadata = await sock.groupMetadata(from).catch(() => null);
     if (!groupMetadata) return;
@@ -20,19 +22,19 @@ export default {
     const botParticipant = groupMetadata.participants.find((p) => p.id === botNumber);
     const isBotAdmin = botParticipant?.admin === "admin" || botParticipant?.admin === "superadmin";
 
-    if (!isBotAdmin) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("NECESITO SER ADMIN")}\n╰━━━━━━━━━━━━⬣`);
+    if (!isBotAdmin) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_necesito_ser_admin_964598c4")) }));
 
     const target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message?.extendedTextMessage?.contextInfo?.participant;
 
-    if (!target) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("MENCIONA AL ACUSADO")}\n╰━━━━━━━━━━━━⬣`);
+    if (!target) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_menciona_al_acusado_fef7b0f8")) }));
 
     const targetParticipant = groupMetadata.participants.find((p) => p.id === target);
     const isTargetAdmin = targetParticipant?.admin === "admin" || targetParticipant?.admin === "superadmin";
 
-    if (isTargetAdmin || target === botNumber) return reply(`╭〔 🛡️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("OBJETIVO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣`);
+    if (isTargetAdmin || target === botNumber) return reply(t("cmd_value0_value1_5f1c8b4a", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_objetivo_invalido_bf51621c")) }));
 
     const trialKey = `${from}-${target}`;
-    if (activeTrials.has(trialKey)) return reply(`╭〔 ⚖️ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("JUICIO EN CURSO")}\n╰━━━━━━━━━━━━⬣`);
+    if (activeTrials.has(trialKey)) return reply(t("cmd_value0_value1_a5bb1617", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_juicio_en_curso_2780fff1")) }));
 
     activeTrials.add(trialKey);
     await react("⚖️").catch(() => undefined);
@@ -43,7 +45,7 @@ export default {
     const votedUsers = new Set<string>();
 
     const trialMsg = await sock.sendMessage(from, {
-      text: `╭〔 ⚖️ ${fytBold("TRIBUNAL AURA")} 〕━⬣\n┃ 👨‍⚖️ Acusado: @${targetName}\n┃ ⏱️ Tiempo: 60 segundos\n┃\n┃ > Respondan a este mensaje con:\n┃ > *culpable* o *inocente*\n╰━━━━━━━━━━━━⬣`,
+      text: t("cmd_value0_acusado_value1_tiempo_6_2acd686b", { value0: fytBold(t("cmd_tribunal_aura_a9e5269e")), value1: targetName }),
       mentions: [target]
     }, { quoted: msg as any }).catch(() => null);
 
@@ -77,18 +79,18 @@ export default {
     activeTrials.delete(trialKey);
 
     if (votesCulpable === 0 && votesInocente === 0) {
-      return sock.sendMessage(from, { text: `╭〔 ⚖️ ${fytBold("TRIBUNAL AURA")} 〕━⬣\n┃ 👨‍⚖️ Caso desestimado.\n┃ 📉 Nadie votó.\n╰━━━━━━━━━━━━⬣` }).catch(() => undefined);
+      return sock.sendMessage(from, { text: t("cmd_value0_caso_desestimado_nadie__c8926ede", { value0: fytBold(t("cmd_tribunal_aura_a9e5269e")) }) }).catch(() => undefined);
     }
 
     if (votesCulpable > votesInocente) {
       await sock.sendMessage(from, {
-        text: `╭〔 ⚖️ ${fytBold("VEREDICTO")} 〕━⬣\n┃ 💀 Culpable: ${votesCulpable}\n┃ 😇 Inocente: ${votesInocente}\n┃\n┃ 💥 @${targetName} ha sido sentenciado.\n╰━━━━━━━━━━━━⬣`,
+        text: t("cmd_value0_culpable_value1_inocent_067dbbff", { value0: fytBold(t("cmd_veredicto_4817a769")), value1: votesCulpable, value2: votesInocente, value3: targetName }),
         mentions: [target]
       }).catch(() => undefined);
       await sock.groupParticipantsUpdate(from, [target], "remove").catch(() => undefined);
     } else {
       await sock.sendMessage(from, {
-        text: `╭〔 ⚖️ ${fytBold("VEREDICTO")} 〕━⬣\n┃ 💀 Culpable: ${votesCulpable}\n┃ 😇 Inocente: ${votesInocente}\n┃\n┃ ✨ @${targetName} ha sido absuelto.\n╰━━━━━━━━━━━━⬣`,
+        text: t("cmd_value0_culpable_value1_inocent_aec7992f", { value0: fytBold(t("cmd_veredicto_4817a769")), value1: votesCulpable, value2: votesInocente, value3: targetName }),
         mentions: [target]
       }).catch(() => undefined);
     }

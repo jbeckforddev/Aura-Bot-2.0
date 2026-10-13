@@ -13,7 +13,6 @@ export interface DatabaseUserData {
   warns?: number;
   aura?: number;
   auraXp?: number;
-  level?: number;
   stickerPackName?: string;
   stickerPackAuthor?: string;
   marry?: string | null;
@@ -50,6 +49,8 @@ export interface DatabaseUser {
   marriedTo?: string | null;
   role: UserRole | string;
   is_banned: number;
+  userLang?: string | null;
+  UserLang?: string | null;
   banned?: boolean;
   self?: number;
   aura?: number;
@@ -92,6 +93,8 @@ export interface DatabaseGroup {
   antiStatus: number;
   onlyAdmin: number;
   prefix: string | null;
+  groupLang?: string | null;
+  GroupLang?: string | null;
   self?: number;
   catBlocked?: string[] | string;
   mutedUsers?: string[] | string;
@@ -172,6 +175,7 @@ export interface UserDbRow {
   description?: string | null;
   aura_points?: number | null;
   aura_level?: number | null;
+  UserLang?: string | null;
   LastEconomyDaily?: number | null;
   LastEconomyWeekly?: number | null;
   LastEconomyMonthly?: number | null;
@@ -202,6 +206,7 @@ export interface GroupDbRow {
   antiStatus: number | null;
   onlyAdmin: number | null;
   prefix: string | null;
+  GroupLang?: string | null;
   self: number | null;
   catBlocked: string | null;
   Muted_Users?: string | null;

@@ -1,6 +1,8 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { updateProfile } from "../../core/profileConfig.ts";
 import { fytBold } from "./../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function validateDateFormat(dateStr: string): boolean {
   const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
@@ -22,38 +24,38 @@ function validateDateFormat(dateStr: string): boolean {
 
 export default {
   name: ["setbirt", "setbirth", "cumple"],
-  description: "Guarda tu cumpleaños.",
+  description: t("cmd_guarda_tu_cumpleanos_4276c1e0"),
   category: "profile",
   async run(ctx: CommandContext) {
-    let textInfo = `╭〔 ⚡ ${fytBold("AURA REED")}〕⬣\n`;
-    textInfo += `┃ ${fytBold("🛠️ COMO DEFINIR TU CUMPLEAÑOS")}\n`;
+    let textInfo = `╭〔 ⚡ ${fytBold(t("cmd_aura_reed_95dcfb15"))}〕⬣\n`;
+    textInfo += `┃ ${fytBold(t("cmd_como_definir_tu_cumpleanos_5522650c"))}\n`;
     textInfo += `╰━━━━━━━━━━━━⬣\n\n`;
-    textInfo += `┃ ${fytBold("🛠️ Uso:")} .setbirt DD/MM/AAAA\n`;
-    textInfo += `┃ ${fytBold("🛠️ Ejemplo:")} .setbirt 07/04/2007\n`;
-    textInfo += `\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`;
+    textInfo += `┃ ${fytBold(t("cmd_uso_45f4f199"))} .setbirt DD/MM/AAAA\n`;
+    textInfo += `┃ ${fytBold(t("cmd_ejemplo_ea39dc79"))} .setbirt 07/04/2007\n`;
+    textInfo += `\n╰〔 ⚡ ${fytBold(t("cmd_system_info_1a78a0cb"))} 〕⬣`;
 
     if (!ctx.text) return ctx.reply(textInfo);
 
     const dateInput = ctx.text.trim();
     
     if (!validateDateFormat(dateInput)) {
-      let textError = `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣\n`;
-      textError += `┃ ❌ ${fytBold("FORMATO NO VÁLIDO")}\n`;
+      let textError = `╭〔 ⚠️ ${fytBold(t("cmd_aura_reed_95dcfb15"))}〕⬣\n`;
+      textError += `┃ ❌ ${fytBold(t("cmd_formato_no_valido_c1ce726a"))}\n`;
       textError += `╰━━━━━━━━━━━━⬣\n\n`;
       textError += `┃ Solo se permite el formato: *DD/MM/AAAA*\n`;
       textError += `┃ Ejemplo: ${ctx.usedPrefix ?? "."}setbirt 07/04/2007\n\n`;
-      textError += `╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`;
+      textError += `╰〔 ⚡ ${fytBold(t("cmd_system_info_1a78a0cb"))} 〕⬣`;
       return ctx.reply(textError);
     }
 
     updateProfile(ctx.sender, { birthDate: dateInput });
 
-    let text = `╭〔 ⚡ ${fytBold("AURA REED")}〕⬣\n`;
-    text += `┃ ✅ ${fytBold("CUMPLE ACTUALIZADO")}\n`;
+    let text = `╭〔 ⚡ ${fytBold(t("cmd_aura_reed_95dcfb15"))}〕⬣\n`;
+    text += `┃ ✅ ${fytBold(t("cmd_cumple_actualizado_87925cf1"))}\n`;
     text += `╰━━━━━━━━━━━━⬣\n\n`;
     text += `┃ 🎂 Tu cumple es el:\n`;
     text += `┃ 📝 *${dateInput}*\n\n`;
-    text += `╰〔 ⚡ ${fytBold("AURA REED")}〕⬣`;
+    text += `╰〔 ⚡ ${fytBold(t("cmd_aura_reed_95dcfb15"))}〕⬣`;
 
     return ctx.reply(text);
   },

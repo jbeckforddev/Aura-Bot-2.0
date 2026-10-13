@@ -1,5 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const createLoveBar = (percent: number): string => {
   const filled = Math.round(percent / 10);
@@ -12,7 +14,7 @@ const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
 export default {
   name: ["pareja", "ship", "amor", "shippear"],
   category: "games",
-  description: "Calcula el porcentaje de amor de forma sarcástica, meme y tóxica.",
+  description: t("cmd_calcula_el_porcentaje_de_amor__8ab9f00d"),
   groupOnly: true,
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg, groupMeta, botJid } = ctx;
@@ -26,7 +28,7 @@ export default {
       ),
     ];
 
-    if (participants.length < 2) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTAN MIEMBROS")}\n╰━━━━━━━━━━━━⬣`);
+    if (participants.length < 2) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_faltan_miembros_68c68ae4")) }));
 
     const user1 = getRandom(participants);
     const otherParticipants = participants.filter((participant) => participant !== user1);
@@ -120,20 +122,13 @@ export default {
 
     const calcMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 💘 ${fytBold("MEDIDOR DE AMOR")} 〕━⬣\n┃ 🔍 Evaluando química cuántica y traumas...\n╰━━━━━━━━━━━━⬣` },
+      { text: t("cmd_value0_evaluando_quimica_cuant_a3ef1266", { value0: fytBold(t("cmd_medidor_de_amor_085c1923")) }) },
       { quoted: msg as any }
     ).catch(() => null);
 
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const text = `╭〔 💘 ${fytBold("MEDIDOR TÓXICO")} 〕━⬣
-┃ 👩‍❤️‍👨 @${user1.split("@")[0]} x @${user2.split("@")[0]}
-┃
-┃ 📊 ${loveBar} ${percentage}%
-┃ 🔮 Estado: ${status} ${emoji}
-┃ 💅 Veredicto: ${veredicto}
-┃ 🚧 Obstáculo: ${randomObstaculo}
-╰━━━━━━━━━━━━⬣`;
+    const text = t("cmd_value0_value1_x_value2_value3__6ec0e6ab", { value0: fytBold(t("cmd_medidor_toxico_a86ea2b2")), value1: user1.split("@")[0], value2: user2.split("@")[0], value3: loveBar, value4: percentage, value5: status, value6: emoji, value7: veredicto, value8: randomObstaculo });
 
     if (calcMsg?.key) {
       await sock.sendMessage(from, { 

@@ -1,8 +1,10 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["work", "trabajar", "w", "job", "empleo"],
-  description: "Trabaja para ganar monedas y experiencia.",
+  description: t("cmd_trabaja_para_ganar_monedas_y_e_9aca0690"),
   title: "💼 𝐉𝐎𝐑𝐍𝐀𝐃𝐀 𝐋𝐀𝐁𝐎𝐑𝐀𝐋",
   icon: "💼",
   cooldown: 3 * 60 * 1000,

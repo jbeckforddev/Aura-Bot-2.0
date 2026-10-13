@@ -12,6 +12,8 @@ import { getActiveSubBots } from "../../core/subbotManager.ts";
 import { getPlugins } from "../../core/cmdLoader.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const mediaCacheMap = new Map<string, any>();
 
@@ -70,7 +72,7 @@ function getMemoryInfo() {
 export default {
   name: ["infobot", "botinfo"],
   category: "system",
-  description: "Muestra información detallada del bot, sesión y sistema.",
+  description: t("cmd_muestra_informacion_detallada__77ed83a2"),
 
   async run(ctx: CommandContext) {
     const { sock, from, msg, db } = ctx;
@@ -95,28 +97,28 @@ export default {
     const uniqueCommands = new Set(pluginsMap.values()).size;
     const activeSubBots = getActiveSubBots().length;
     const chanellink = "https://aetheryx.xyz/";
-    const tituloEstilizado = fytBold(`${botName.toUpperCase()} BOT`);
+    const tituloEstilizado = fytBold(t("cmd_value0_bot_088975d3", { value0: botName.toUpperCase() }));
 
-    let textoInfo = `╭━━〔 ${tituloEstilizado} 〕━━⬣\n`;
-    textoInfo += `┃ > ${fytBold("Usuario: ")} @${pushName}\n`;
-    textoInfo += `┃ > ${fytBold("Bot: ")} ${botType}\n`;
-    textoInfo += `┃ > ${fytBold("Versión: ")} ${botVersion}\n`;
-    textoInfo += `┃ > ${fytBold("Owner: ")} Jeriel B.\n`;
-    textoInfo += `┃ > ${fytBold("Prefix: ")} [ ${ctx.usedPrefix ?? ctx.prefix ?? "."} ]\n`;
-    textoInfo += `┃ > ${fytBold("Fecha: ")} ${new Date().toLocaleDateString("es-CR")}\n`;
-    textoInfo += `┃ > ${fytBold("Sub-Bots: ")} ${activeSubBots}\n`;
-    textoInfo += `┃ > ${fytBold("Url: ")} ${chanellink}\n`;
-    textoInfo += `╰━━━━━━━━━━━━━━━━━━⬣\n\n`;
+    let textoInfo = t("cmd_value0_8aed6a3b", { value0: tituloEstilizado });
+    textoInfo += t("cmd_value0_value1_afc10284", { value0: fytBold(t("cmd_usuario_bad48a23")), value1: pushName });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_bot_e38c4284")), value1: botType });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_version_f3cde000")), value1: botVersion });
+    textoInfo += t("cmd_value0_jeriel_b_b207a1a0", { value0: fytBold(t("cmd_owner_50a94e9c")) });
+    textoInfo += t("cmd_value0_value1_a6fe40aa", { value0: fytBold(t("cmd_prefix_9a21b442")), value1: ctx.usedPrefix ?? ctx.prefix ?? "." });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_fecha_51334726")), value1: new Date().toLocaleDateString("es-CR") });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_sub_bots_7c3aeed5")), value1: activeSubBots });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_url_b7547cc8")), value1: chanellink });
+    textoInfo += t("cmd_text_14518c16");
 
-    textoInfo += `┏━━〔 ${fytBold("INFO DEL SISTEMA")} 〕━━⬣\n`;
-    textoInfo += `┃ ➪ ${fytBold("Servidor / Host: ")} ${serverHost}\n`;
-    textoInfo += `┃ ➪ ${fytBold("Sistema Operativo: ")} ${platform}\n`;
-    textoInfo += `┃ ➪ ${fytBold("Tiempo Activo (Bot): ")} ${formatDuration(process.uptime())}\n`;
-    textoInfo += `┃ ➪ ${fytBold("RAM Servidor: ")} ${formatFileSize(memory.total)} (${ramPercent}%)\n`;
-    textoInfo += `┃ ➪ ${fytBold("RAM Bot: ")} ${formatFileSize(process.memoryUsage().rss)}\n`;
-    textoInfo += `┃ ➪ ${fytBold("Comandos: ")} ${uniqueCommands}\n`;
-    textoInfo += `┃ ➪ ${fytBold("Instancia: ")} ${botType}\n`;
-    textoInfo += `╰〔 ⚡ ${fytBold("REED SYSTEM")} 〕⬣`;
+    textoInfo += t("cmd_value0_a58a457f", { value0: fytBold(t("cmd_info_del_sistema_64dff60c")) });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_servidor_host_f0d7e4b9")), value1: serverHost });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_sistema_operativo_efbd5769")), value1: platform });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_tiempo_activo_bot_caedf41c")), value1: formatDuration(process.uptime()) });
+    textoInfo += t("cmd_value0_value1_value2_125497aa", { value0: fytBold(t("cmd_ram_servidor_caf7accc")), value1: formatFileSize(memory.total), value2: ramPercent });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_ram_bot_ed77971e")), value1: formatFileSize(process.memoryUsage().rss) });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_comandos_c2e2164e")), value1: uniqueCommands });
+    textoInfo += t("cmd_value0_value1_f1c8b5eb", { value0: fytBold(t("cmd_instancia_18cddcba")), value1: botType });
+    textoInfo += t("cmd_value0_92601e2c", { value0: fytBold(t("cmd_reed_system_1fddbc0f")) });
 
     let isGif = false;
     let bannerSourcePath = path.resolve("./assets/img/BotBanner.jpg");

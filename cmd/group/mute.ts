@@ -1,10 +1,12 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["mute", "unmute", "silenciar", "desilenciar"],
   category: "group",
-  description: "Silencia o desilencia a un usuario en el grupo.",
+  description: t("cmd_silencia_o_desilencia_a_un_usu_ffa68009"),
   groupOnly: true,
   adminOnly: true,
   botAdmin: true,
@@ -16,7 +18,7 @@ export default {
     if (isUnmute && args[0] && args[0].toLowerCase() === "all") {
       db.setGroup(from, { mutedUsers: [] });
       await react("🔊").catch(() => undefined);
-      return reply(`╭〔 🔊 ${fytBold("AMNISTÍA GENERAL")} 〕━⬣\n┃ 🔓 Todos los usuarios silenciados\n┃ han sido perdonados.\n╰━━━━━━━━━━━━⬣`);
+      return reply(t("cmd_value0_todos_los_usuarios_sile_169f03c8", { value0: fytBold(t("cmd_amnistia_general_b5b8e406")) }));
     }
 
     const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
@@ -27,7 +29,7 @@ export default {
     }
 
     if (!target) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA OBJETIVO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Etiqueta o responde al usuario\n┃ > que quieres silenciar/desilenciar.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_etiqueta_o_respo_fae115d4", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_objetivo_d2546e73")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
     const groupData = db.getGroup(from) || {};
@@ -39,7 +41,7 @@ export default {
       const isTargetOwner = target.startsWith("573118353868") || db.hasRole?.(target, "owner");
 
       if (isTargetAdmin || isTargetOwner || target === botJid) {
-        return reply(`╭〔 🛡️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("OBJETIVO PROTEGIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > No puedo silenciar a creadores,\n┃ > administradores ni a mí mismo.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+        return reply(t("cmd_value0_value1_no_puedo_silenci_875da1ae", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_objetivo_protegido_4969efc2")), value2: fytBold(t("cmd_system_29d43743")) }));
       }
 
       const joinedArgs = args.join(" ").toLowerCase();
@@ -79,7 +81,7 @@ export default {
 
       await react("🤐").catch(() => undefined);
       return reply({
-        text: `╭〔 🤐 ${fytBold("USUARIO SILENCIADO")} 〕━⬣\n┃ 👤 Objetivo: @${target.split("@")[0]}\n┃ ⏱️ Duración: ${timeMsg}\n┃\n┃ > Cualquier mensaje que envíe será\n┃ > eliminado automáticamente.\n╰━━━━━━━━━━━━⬣`,
+        text: t("cmd_value0_objetivo_value1_duracio_35e87b68", { value0: fytBold(t("cmd_usuario_silenciado_9fe70e68")), value1: target.split("@")[0], value2: timeMsg }),
         mentions: [target]
       });
 
@@ -90,11 +92,11 @@ export default {
         
         await react("🔊").catch(() => undefined);
         return reply({
-          text: `╭〔 🔊 ${fytBold("USUARIO DESILENCIADO")} 〕━⬣\n┃ 👤 Objetivo: @${target.split("@")[0]}\n┃ 🔓 Ya puede hablar de nuevo.\n╰━━━━━━━━━━━━⬣`,
+          text: t("cmd_value0_objetivo_value1_ya_pued_e2109284", { value0: fytBold(t("cmd_usuario_desilenciado_7065ce48")), value1: target.split("@")[0] }),
           mentions: [target]
         });
       } else {
-        return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("NO ESTÁ SILENCIADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Este usuario no se encuentra en\n┃ > la lista de silenciados.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+        return reply(t("cmd_value0_value1_este_usuario_no__5489eca0", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_no_esta_silenciado_9259df08")), value2: fytBold(t("cmd_system_29d43743")) }));
       }
     }
   }

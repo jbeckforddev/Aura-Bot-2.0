@@ -1,6 +1,8 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { formatDate } from "../../utils/formatter.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const GROUP_INVITE_URL =
   /(?:https?:\/\/)?chat\.whatsapp\.com\/([0-9A-Za-z]{22,24})/i;
@@ -8,12 +10,12 @@ const CHANNEL_INVITE_URL =
   /(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([0-9A-Za-z@._-]+)/i;
 
 function formatError(message: string): string {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("INSPECCIÓN FALLIDA")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${message}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+  return `╭〔 ⚠️ ${fytBold(t("cmd_aura_reed_95dcfb15"))} 〕⬣\n┃ ❌ ${fytBold(t("cmd_inspeccion_fallida_2474e763"))}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${message}\n\n╰〔 ⚡ ${fytBold(t("cmd_system_29d43743"))} 〕⬣`;
 }
 
 function formatAvailableDate(value: unknown): string {
   if (value === null || value === undefined || value === "")
-    return "No disponible";
+    return t("cmd_no_disponible_9def5fe2");
   return formatDate(value);
 }
 
@@ -28,7 +30,7 @@ function getTextValue(value: unknown, fallback: string): string {
 
 export default {
   name: ["inspect", "inspeccionar"],
-  description: "Inspecciona un enlace de grupo, comunidad o canal de WhatsApp.",
+  description: t("cmd_inspecciona_un_enlace_de_grupo_7ad2570a"),
   category: "herramientas",
 
   async run({ sock, text, reply }: CommandContext) {
@@ -36,7 +38,7 @@ export default {
     if (!link) {
       return reply(
         formatError(
-          "Proporciona un enlace válido de grupo, comunidad o canal de WhatsApp.",
+          t("cmd_proporciona_un_enlace_valido_d_e30fc425"),
         ),
       );
     }
@@ -46,24 +48,24 @@ export default {
       try {
         const groupMeta = await sock.groupGetInviteInfo(groupMatch[1]);
         const detalles = [
-          `╭〔 🔍 ${fytBold("INSPECCIÓN DE GRUPO")} 〕⬣\n`,
+          `╭〔 🔍 ${fytBold(t("cmd_inspeccion_de_grupo_6b4d6361"))} 〕⬣\n`,
           `┃ ${groupMeta.subject || "Grupo sin nombre"}\n`,
           `╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🆔 ${fytBold("ID")} › ${groupMeta.id}\n`,
-          `┃ 👥 ${fytBold("Participantes")} › ${groupMeta.size ?? "No disponible"}\n`,
-          `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(groupMeta.creation)}\n`,
-          `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
+          `┃ 🆔 ${fytBold(t("cmd_id_89f89c02"))} › ${groupMeta.id}\n`,
+          `┃ 👥 ${fytBold(t("cmd_participantes_5bb68ad1"))} › ${groupMeta.size ?? "No disponible"}\n`,
+          `┃ 💫 ${fytBold(t("cmd_fecha_de_creacion_2a3a94e6"))} › ${formatAvailableDate(groupMeta.creation)}\n`,
+          `┣━━〔 ${fytBold(t("cmd_descripcion_7fda3970"))} 〕━━⬣\n`,
           `┃ ${groupMeta.desc || "No hay descripción"}\n`,
           `\n╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🔗 ${fytBold("Enlace de invitación")} › ${link}\n\n`,
-          `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+          `┃ 🔗 ${fytBold(t("cmd_enlace_de_invitacion_1b1a1130"))} › ${link}\n\n`,
+          `╰〔 ⚡ ${fytBold(t("cmd_system_29d43743"))} 〕⬣`,
         ];
 
         return reply(detalles.join(""));
       } catch {
         return reply(
           formatError(
-            "No se pudo obtener información del grupo. Verifica que el enlace sea válido.",
+            t("cmd_no_se_pudo_obtener_informacion_d30694f0"),
           ),
         );
       }
@@ -79,7 +81,7 @@ export default {
         if (!channelMeta) {
           return reply(
             formatError(
-              "No se encontró el canal. Verifica que el enlace sea válido.",
+              t("cmd_no_se_encontro_el_canal_verifi_a2f6a0f6"),
             ),
           );
         }
@@ -99,11 +101,11 @@ export default {
           channelMeta.creation_time ?? threadMetadata?.creation_time;
         const name = getTextValue(
           channelMeta.name ?? threadMetadata?.name,
-          "Canal sin nombre",
+          t("cmd_canal_sin_nombre_d25edaef"),
         );
         const description = getTextValue(
           channelMeta.description ?? threadMetadata?.description,
-          "No hay descripción",
+          t("cmd_no_hay_descripcion_dd6a8dcd"),
         );
         const subscribers =
           channelMeta.subscribers ??
@@ -117,27 +119,27 @@ export default {
         const verificationText = verification === "UNVERIFIED" ? "❌ No verificado" : verification === "VERIFIED" ? "✅ Verificado" : "No disponible";
 
         const detalles = [
-          `╭〔 🔍 ${fytBold("INSPECCIÓN DE CANAL")} 〕⬣\n`,
-          `┃ ${getTextValue(name, "Canal sin nombre")}\n`,
+          `╭〔 🔍 ${fytBold(t("cmd_inspeccion_de_canal_25034a32"))} 〕⬣\n`,
+          `┃ ${getTextValue(name, t("cmd_canal_sin_nombre_d25edaef"))}\n`,
           `╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🆔 ${fytBold("ID")} › ${channelMeta.id}\n`,
-          `┃ 👥 ${fytBold("Seguidores")} › ${subscribers || "No disponible"}\n`,
-          `┃ 💫 ${fytBold("Fecha de creación")} › ${formatAvailableDate(creationTime)}\n`,
-          `┃ ✏️ ${fytBold("Nombre actualizado")} › ${formatAvailableDate(nameMetadata?.update_time)}\n`,
-          `┃ 📝 ${fytBold("Descripción actualizada")} › ${formatAvailableDate(descriptionMetadata?.update_time)}\n`,
-          `┃ ${fytBold("Verificación")} › ${verificationText}\n`,
-          `┣━━〔 ${fytBold("Descripción")} 〕━━⬣\n`,
+          `┃ 🆔 ${fytBold(t("cmd_id_89f89c02"))} › ${channelMeta.id}\n`,
+          `┃ 👥 ${fytBold(t("cmd_seguidores_3010b39a"))} › ${subscribers || "No disponible"}\n`,
+          `┃ 💫 ${fytBold(t("cmd_fecha_de_creacion_2a3a94e6"))} › ${formatAvailableDate(creationTime)}\n`,
+          `┃ ✏️ ${fytBold(t("cmd_nombre_actualizado_f165521a"))} › ${formatAvailableDate(nameMetadata?.update_time)}\n`,
+          `┃ 📝 ${fytBold(t("cmd_descripcion_actualizada_88f0f2ec"))} › ${formatAvailableDate(descriptionMetadata?.update_time)}\n`,
+          `┃ ${fytBold(t("cmd_verificacion_0780e1eb"))} › ${verificationText}\n`,
+          `┣━━〔 ${fytBold(t("cmd_descripcion_7fda3970"))} 〕━━⬣\n`,
           `┃ ${description}\n`,
           `\n╰━━━━━━━━━━━━⬣\n\n`,
-          `┃ 🔗 ${fytBold("Enlace del canal")} › ${link}\n\n`,
-          `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`,
+          `┃ 🔗 ${fytBold(t("cmd_enlace_del_canal_012c5573"))} › ${link}\n\n`,
+          `╰〔 ⚡ ${fytBold(t("cmd_system_29d43743"))} 〕⬣`,
         ];
 
         return reply(detalles.join(""));
       } catch {
         return reply(
           formatError(
-            "No se pudo obtener información del canal. Verifica que el enlace sea válido.",
+            t("cmd_no_se_pudo_obtener_informacion_afecbffa"),
           ),
         );
       }
@@ -145,7 +147,7 @@ export default {
 
     return reply(
       formatError(
-        "El enlace no tiene un formato reconocido de grupo o canal de WhatsApp.",
+        t("cmd_el_enlace_no_tiene_un_formato__89d71bf8"),
       ),
     );
   },

@@ -1,17 +1,19 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["hd", "remini", "upscale", "enhance"],
   category: "utils",
-  description: "Mejora la calidad de una imagen.",
+  description: t("cmd_mejora_la_calidad_de_una_image_98411212"),
   async run(ctx: CommandContext) {
     const { msg, args, reply, react } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
     const source = msg.message?.imageMessage || quoted?.imageMessage;
     if (!source)
       return reply({
-        text: "❌ Responde a una imagen o envía una imagen con .hd [2 o 4].",
+        text: t("cmd_responde_a_una_imagen_o_envia__027c69b5"),
       });
     const scale = Number(args[0]) === 4 ? 4 : 2;
     await react("⏳");
@@ -55,13 +57,13 @@ export default {
         throw new Error("AlyaCore devolvió una respuesta JSON en vez de una imagen.");
       await reply({
         image: result,
-        caption: `╭━━━━〔 ✨ 𝐈𝐌𝐀𝐆𝐄𝐍 𝐇𝐃 〕━━━⬣\n\n┃ ➥ 𝐄𝐬𝐜𝐚𝐥𝐚 › ${scale}x\n\n╰━━〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 〕━━⬣`,
+        caption: t("cmd_value0_x_d72a94dd", { value0: scale }),
       });
       await react("✅");
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ No se pudo procesar la imagen: ${error instanceof Error ? error.message : String(error) || "error desconocido"}`,
+        text: t("cmd_no_se_pudo_procesar_la_imagen__73d5d0e0", { value0: error instanceof Error ? error.message : String(error) || "error desconocido" }),
       });
     }
   },

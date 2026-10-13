@@ -1,3 +1,5 @@
+import { t } from "../src/langs/index.ts";
+
 export const fytBold = (texto?: string) => {
   const mapa = {
     a: "𝐚",
@@ -67,13 +69,7 @@ export const NOT_CMD_FOUND = ({
   cmdName: string;
   prefix?: string;
 }) => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("COMANDO NO ENCONTRADO")}
-╰━━━━━━━━━━━━⬣
-┃ > El comando \`${cmdName}\` no existe
-┃ > o está mal escrito.
-┃ > Ejecuta \`${prefix}menu\` para ver
-┃ > los comandos disponibles.`;
+  return t("commandNotFound", { cmdName, prefix });
 };
 
 export const ERROR_CMD = ({
@@ -83,122 +79,59 @@ export const ERROR_CMD = ({
   cmdName: string;
   errorDetails: string;
 }) => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("ERROR EN COMANDO")}
-╰━━━━━━━━━━━━⬣
-┃ > Ocurrió un error al ejecutar
-┃ > el comando \`${cmdName}\`.
-
-> Detalles del error:
-\`\`\`
-${errorDetails}
-\`\`\``;
+  return t("commandError", { cmdName, errorDetails });
 };
 
 export const NOT_BOT_ADMIN = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("SIN PERMISOS")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > si el bot es administrador del grupo.`;
+  return t("notBotAdmin");
 };
 
 export const NOT_BOT_USER = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("SIN PERMISOS")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > por el misma instancia del bot.`;
+  return t("notBotUser");
 };
 
 export const NOT_ADMIN = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("SIN PERMISOS")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > por los administradores del grupo.`;
+  return t("notAdmin");
 };
 
 export const NOT_PRIVATE = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("CHAT PRIVADO")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > en chats privados.`;
+  return t("notPrivate");
 };
 
 export const NOT_GROUP = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("CHAT NO GRUPAL")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > en grupos.`;
+  return t("notGroup");
 };
 
 export const NOT_OWNER = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("SIN PERMISOS")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > por el dueño del bot.`;
+  return t("notOwner");
 };
 
 export const NOT_MOD = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("SIN PERMISOS")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > por los moderadores del bot.`;
+  return t("notMod");
 };
 
 export const NOT_PREMIUM = () => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")}〕⬣
-┃ ❌ ${fytBold("BOT NO PREMIUM")}
-╰━━━━━━━━━━━━⬣
-┃ > Este comando solo puede ser usado
-┃ > por los Prem-Bots de Aura Reed.`;
+  return t("notPremium");
 };
 
 export const IS_SUBBOT_ONLINE = ({ prefix }: { prefix?: string }) => {
-  return `╭〔  ${fytBold("AURA REED")}〕⬣
-┃ ✅${fytBold("SUB-BOT EN LÍNEA")}
-╰━━━━━━━━━━━━⬣
-┃ > El sub-bot ya está en línea y conectado a WhatsApp.
-┃ > cuando quieras desvincular escriba \`${prefix}logout\`
-┃ > para cerrar la sesión del sub-bot.`;
+  return t("subbotOnline", { prefix: prefix ?? "." });
 };
 
 export const NOT_HAVE_COINS = ({userBalance, typeMedia, minAmount, currencyName, requiredAmount}) => {
-  return `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣
-┃ 💸 ${fytBold("SIN SALDO")}
-╰━━━━━━━━━━━━⬣
-┃ > Tus ${currencyName} no alcanzan
-┃ > para descargar ${typeMedia}.
-┃ > Debes tener al menos
-┃ > *${requiredAmount || minAmount}*
-┃ > para descargas de ${typeMedia}.
-
-┃ > Tienes *${userBalance}*
-┃ > en la cartera, debes
-┃ > retirar o farmear más.
-┃ > ${currencyName} para descargar
-┃ > más ${typeMedia}
-
-╰━━〔 ${fytBold("AURA ECONOMY")} 〕━━⬣
-`;
+  return t("notEnoughCoins", {
+    userBalance,
+    typeMedia,
+    currencyName,
+    requiredAmount: requiredAmount || minAmount,
+  });
 }
 
 export const PLUGINS_OFF = ({ pluginCategory, prefix }) => {
-  return `╭〔 ⚠️ ${fytBold("SOCKET SYSTEM")} 〕⬣
-┃ ${fytBold("COMANDOS DESACTIVADOS")}
-╰━━━━━━━━━━━━⬣
-
-┃ > Los comandos ${fytBold(String(pluginCategory).toUpperCase())}
-┃ > están desactivados en este grupo.
-┣━━━━━━━━━━━━⬣
-┃ > Un administrador del
-┃ > grupo puede activarlos con
-┃ > \`${prefix}enable ${pluginCategory}\`
-
-╰〔 ⚡ ${fytBold("SYSTEM ALERT")} 〕⬣`;
+  const category = String(pluginCategory);
+  return t("pluginsOff", {
+    pluginCategory: fytBold(category.toUpperCase()),
+    pluginCategoryPlain: category,
+    prefix,
+  });
 };

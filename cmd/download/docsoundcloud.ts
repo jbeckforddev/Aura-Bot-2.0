@@ -14,6 +14,8 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 let cachedClientId = "";
 let cachedAt = 0;
@@ -61,12 +63,12 @@ async function clientId(): Promise<string> {
 export default {
   name: ["dscplay", "dscdl", "dsc", "docsoundcloud"],
   category: "download",
-  description: "Descarga SoundCloud como documento MP3.",
+  description: t("cmd_descarga_soundcloud_como_docum_6c5ad8ff"),
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg, sender } = ctx;
     const query = args.join(" ").trim();
     if (!query)
-      return reply("⚠️ Proporciona una búsqueda o enlace de SoundCloud.");
+      return reply(t("cmd_proporciona_una_busqueda_o_enl_0cbf24b7"));
     await react("🎵");
     try {
       const id = await clientId();
@@ -97,17 +99,17 @@ export default {
       const { cost } = await prepareDownloadCharge(ctx, "document", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "SOUNDCLOUD DOCUMENT",
-        icon: "🎵",
+        label: t("cmd_soundcloud_document_2264d074"),
+        icon: t("cmd_text_71ceeba5"),
         title,
         artist: track.user?.username,
-        type: "Documento MP3",
+        type: t("cmd_documento_mp3_f18c11dc"),
         cost: formatMoney(cost, ctx),
         url,
         showArtist: Boolean(track.user?.username),
         showType: true,
-        loadingText: "Descargando documento...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_documento_2572aa2f"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       const thumbnail = track.artwork_url?.replace("large", "t500x500");
       const hasPreview = thumbnail
@@ -134,7 +136,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : String(error) || "No se pudo descargar SoundCloud."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : String(error) || "No se pudo descargar SoundCloud." }),
       });
     }
   },

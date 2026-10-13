@@ -13,6 +13,8 @@ import {
 } from "../../core/economyConfig.ts";
 import type { CommandContext, SpotifyResponse } from "../../types/index.d.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -20,13 +22,13 @@ const KEY = DL_CONFIG.alya.API_KEY;
 export default {
   name: ["spotify", "splay", "sp", "spdl"],
   category: "download",
-  description: "Descarga canciones de Spotify por enlace o búsqueda.",
+  description: t("cmd_descarga_canciones_de_spotify__71242820"),
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg, sender } = ctx;
     const query = args.join(" ").trim();
     if (!query)
       return reply(
-        "⚠️ Ingresa el nombre de una canción o un enlace de Spotify.",
+        t("cmd_ingresa_el_nombre_de_una_canci_8d2c70c9"),
       );
     await react("🎵");
     try {
@@ -53,21 +55,21 @@ export default {
       const { cost } = await prepareDownloadCharge(ctx, "audio", file);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "SPOTIFY PLAY",
-        icon: "🎵",
+        label: t("cmd_spotify_play_b0a17463"),
+        icon: t("cmd_text_71ceeba5"),
         title,
         artist: song.artist,
         album: song.album,
         duration: song.duration,
-        type: "Audio (MP3)",
+        type: t("cmd_audio_mp3_45a98371"),
         cost: formatMoney(cost, ctx),
         url: originalUrl,
         showArtist: Boolean(song.artist),
         showAlbum: Boolean(song.album),
         showDuration: Boolean(song.duration),
         showType: true,
-        loadingText: "Descargando audio...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_audio_b1e6524a"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       const cover = song.coverHd || song.cover;
       const hasPreview = cover
@@ -98,7 +100,7 @@ export default {
           ? error.message
           : "No se pudo descargar la canción.";
       return reply({
-        text: `${message}`,
+        text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     }
   },

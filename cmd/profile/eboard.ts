@@ -1,17 +1,19 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { getProfile } from "../../core/profileConfig.ts";
 import { db } from "../../database/AuraDB.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["eboard", "auratop"],
-  description: "Clasificación global de Aura.",
+  description: t("cmd_clasificacion_global_de_aura_8b3706fe"),
   category: "profile",
   ownerOnly: true,
   async run(ctx: CommandContext) {
     const pageSize = 10;
     const requestedPage = Number.parseInt(String(ctx.args?.[0] || "1"), 10);
     if (!Number.isInteger(requestedPage) || requestedPage < 1) {
-      return ctx.reply("⚠️ Indica una página válida. Ejemplo: `.eboard 1`");
+      return ctx.reply(t("cmd_indica_una_pagina_valida_ejemp_aa6d2f75"));
     }
 
     const botJid = String(ctx.sock?.user?.id || "").split(":")[0];
@@ -38,12 +40,12 @@ export default {
       );
 
     if (!rows.length)
-      return ctx.reply("⚠️ No hay usuarios registrados para mostrar.");
+      return ctx.reply(t("cmd_no_hay_usuarios_registrados_pa_669ca8c6"));
 
     const totalPages = Math.ceil(rows.length / pageSize);
     if (requestedPage > totalPages) {
       return ctx.reply(
-        `⚠️ Esa página no existe. Hay ${totalPages} página${totalPages === 1 ? "" : "s"}.`,
+        t("cmd_esa_pagina_no_existe_hay_value_26d57c06", { value0: totalPages, value1: totalPages === 1 ? "" : "s" }),
       );
     }
 

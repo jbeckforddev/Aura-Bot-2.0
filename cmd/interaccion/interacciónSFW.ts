@@ -4,6 +4,8 @@ import path from "node:path";
 import type { WAMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { GIF_TO_VIDEO } from "../../utils/converter.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 interface ReactionEntry {
 	react: string;
@@ -91,7 +93,7 @@ export default {
 			await react(entry.react);
 
 			if (!Array.isArray(entry.videos) || entry.videos.length === 0) {
-				return reply({ text: "⚠️ Esta reacción no tiene GIFs disponibles." });
+				return reply({ text: t("cmd_esta_reaccion_no_tiene_gifs_di_ab6e1d6c") });
 			}
 
 			const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
@@ -112,8 +114,8 @@ export default {
 			const isSelf = targetJid === authorJid;
 			const videoUrl = entry.videos[Math.floor(Math.random() * entry.videos.length)];
 			const caption = isSelf
-				? `\`${resolveDisplayName(authorJid, ctx)}\` ${entry.self}`
-				: `\`${resolveDisplayName(authorJid, ctx)}\` ${entry.target} \`${resolveDisplayName(targetJid, ctx)}\``;
+				? t("cmd_value0_value1_fd3a7e3f", { value0: resolveDisplayName(authorJid, ctx), value1: entry.self })
+				: t("cmd_value0_value1_value2_52fedd0c", { value0: resolveDisplayName(authorJid, ctx), value1: entry.target, value2: resolveDisplayName(targetJid, ctx) });
 			videoPath = await GIF_TO_VIDEO(videoUrl);
 
 			await sock.sendMessage(
@@ -131,7 +133,7 @@ export default {
 			console.error("[interacciónSFW]", error);
 			await react("❌");
 			await reply({
-				text: `❌ Error: ${error instanceof Error ? error.message : String(error)}`,
+				text: t("cmd_error_value0_a4bb764e", { value0: error instanceof Error ? error.message : String(error) }),
 			});
 		} finally {
 			if (videoPath) await rm(videoPath, { force: true }).catch(() => undefined);

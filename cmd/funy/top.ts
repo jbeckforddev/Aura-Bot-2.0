@@ -1,16 +1,18 @@
 import type { GroupMetadata, GroupParticipant } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["top"],
   category: "funy",
-  description: "Crea un top 10 aleatorio con un tema.",
+  description: t("cmd_crea_un_top_10_aleatorio_con_u_6de60749"),
   groupOnly: true,
 
   async run(ctx: CommandContext) {
     if (!ctx.groupMeta) {
-      return ctx.reply("❌ Este comando solo funciona en grupos.");
+      return ctx.reply(t("cmd_este_comando_solo_funciona_en__9de14eee"));
     }
     const groupMetadata = ctx.groupMeta;
     const participants = Array.isArray(groupMetadata.participants)
@@ -23,15 +25,15 @@ export default {
       .sort(() => Math.random() - 0.5)
       .slice(0, 10);
 
-    let text = `╭〔 🏆 ${fytBold("TOP 10")} 〕⬣\n`;
-    text += `┃ ${fytBold(topic.toUpperCase())}\n`;
-    text += `╰━━━━━━━━━━━━⬣\n\n`;
+    let text = t("cmd_value0_baa82aee", { value0: fytBold(t("cmd_top_10_63d898ea")) });
+    text += t("cmd_value0_17cf0eab", { value0: fytBold(topic.toUpperCase()) });
+    text += t("cmd_text_bdfd7fa0");
 
     top10.forEach((participant: GroupParticipant, index: number) => {
-      text += `┃ ${index + 1}. @${participant.id.split("@")[0]}\n`;
+      text += t("cmd_value0_value1_f625c3e4", { value0: index + 1, value1: participant.id.split("@")[0] });
     });
 
-    text += `\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`;
+    text += t("cmd_value0_d225103c", { value0: fytBold(t("cmd_aura_reed_95dcfb15")) });
 
     return ctx.reply({
       text,

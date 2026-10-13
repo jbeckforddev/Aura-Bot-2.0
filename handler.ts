@@ -20,7 +20,8 @@ import {
   NOT_HAVE_COINS,
   PLUGINS_OFF
 } from "./core/socketText.ts";
-import { db } from "./database/AuraDB.ts";
+import { db, getCachedUserLanguage, getCachedGroupLanguage } from "./database/AuraDB.ts";
+import { withLocale } from "./src/langs/index.ts";
 import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
 import {
   handleGroupStatus,
@@ -290,7 +291,7 @@ async function matchesConfiguredNumber(
   return false;
 }
 
-export async function handleMessage(
+async function handleMessageInternal(
   sock: ExtendedWASocket,
   rawMsg: proto.IWebMessageInfo,
   botLabel = "MAIN",
@@ -1287,6 +1288,46 @@ export async function handleMessage(
       `handleMessage: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
+}
+
+export async function handleMessage(
+  sock: ExtendedWASocket,
+  rawMsg: proto.IWebMessageInfo,
+  botLabel = "MAIN",
+  mainBotNum: string | null = null,
+  activeBotsLive: ExtendedWASocket[] = [],
+  runtimeOptions: HandlerOptions = {},
+) {
+  const from = rawMsg.key?.remoteJid;
+  const runtimeDb = runtimeOptions.db ?? db;
+  let language = "es";
+
+  if (from && from !== "status@broadcast") {
+    const isGroup = from.endsWith("@g.us");
+    const senderJid = isGroup
+      ? rawMsg.key?.participant || rawMsg.participant || ""
+      : from;
+
+    const userLanguage = senderJid
+      ? getCachedUserLanguage(cleanJid(senderJid)) ?? runtimeDb.getUser(cleanJid(senderJid)).userLang
+      : undefined;
+    const groupLanguage = isGroup
+      ? getCachedGroupLanguage(from) ?? runtimeDb.getGroup(from).groupLang
+      : undefined;
+
+    language = userLanguage || groupLanguage || "es";
+  }
+
+  return withLocale(language, () =>
+    handleMessageInternal(
+      sock,
+      rawMsg,
+      botLabel,
+      mainBotNum,
+      activeBotsLive,
+      runtimeOptions,
+    ),
+  );
 }
 
 function loggerError(log: HandlerLogger | undefined, message: string) {

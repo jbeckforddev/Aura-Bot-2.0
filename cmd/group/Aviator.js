@@ -1,5 +1,5 @@
-import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 
 const buildAviatorPayload = () => {
   const htmlContent = `<style>
@@ -194,17 +194,17 @@ function endGame(win) {
       primitive: {
         __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
         trusted_sources: [],
-        payload: htmlContent
-      }
-    }
+        payload: htmlContent,
+      },
+    },
   };
 };
 
 export default {
   name: ["aviator", "juego", "apostar"],
   category: "games",
-  description: "Abre el minijuego HTML Aviator LuferOS.",
-  async run(ctx: CommandContext) {
+  description: t("cmd_abre_el_minijuego_html_aviator_6c8ba549"),
+  async run(ctx) {
     const { reply, react, sock, from, msg } = ctx;
 
     await react("✈️").catch(() => undefined);
@@ -213,15 +213,21 @@ export default {
       const { AIRich } = require("../../lib/messageBuilder");
 
       const rich = new AIRich(sock)
-        .setTitle("✈️ AVIATOR LUFEROS")
-        .setFooter("LuferOS Aviator • ¡Retira el dinero antes de que el avión vuele!");
+        .setTitle(t("cmd_aviator_luferos_bf11169b"))
+        .setFooter(t("cmd_luferos_aviator_retira_el_dine_ea100d1b"));
 
       rich.addSection(buildAviatorPayload());
 
-      await rich.send(from, { quoted: msg as any });
-    } catch (error: any) {
+      await rich.send(from, { quoted: msg });
+    } catch (error) {
       await react("❌").catch(() => undefined);
-      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR DE RENDERIZADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > No se pudo cargar la interfaz.\n┃ > Asegúrate de tener messageBuilder.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+      await reply(
+        t("cmd_value0_value1_no_se_pudo_carga_608c226d", {
+          value0: fytBold(t("cmd_aura_reed_95dcfb15")),
+          value1: fytBold(t("cmd_error_de_renderizado_eb73af7e")),
+          value2: fytBold(t("cmd_system_29d43743")),
+        }),
+      ).catch(() => undefined);
     }
-  }
+  },
 };

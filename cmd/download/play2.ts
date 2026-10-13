@@ -15,6 +15,8 @@ import {
   type YouTubeSearchVideo,
 } from "../../src/api/YouTubeSearch.ts";
 import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
@@ -64,11 +66,11 @@ function parseDurationToSeconds(value: unknown): number | null {
 export default {
   name: ["ytmp4", "video", "playvideo", "mp4", "ytv", "play2"],
   category: "download",
-  description: "Busca y descarga video de YouTube.",
+  description: t("cmd_busca_y_descarga_video_de_yout_2a84044d"),
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg, sender } = ctx;
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Proporciona el nombre o enlace de un video.");
+    if (!query) return reply(t("cmd_proporciona_el_nombre_o_enlace_5304fbbf"));
     await react("⏳");
     try {
       const id = videoId(query);
@@ -101,12 +103,12 @@ export default {
       const { cost } = prepareDownloadChargeBySize(ctx, "video", video.size);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "YOUTUBE VIDEO",
-        icon: "🎬",
+        label: t("cmd_youtube_video_79419e04"),
+        icon: t("cmd_text_2b02d8d7"),
         title,
         channel,
         duration,
-        type: `Video MP4 (${video.quality})`,
+        type: t("cmd_video_mp4_value0_8a2ac6e8", { value0: video.quality }),
         views: video.views === undefined ? undefined : String(video.views),
         likes: video.likes === undefined ? undefined : String(video.likes),
         cost: formatMoney(cost, ctx),
@@ -118,8 +120,8 @@ export default {
         showLikes: video.likes !== undefined,
         showVideoId: Boolean(video.videoId),
         showSource: true,
-        loadingText: "Enviando video...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_enviando_video_a23e79a0"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       const hasPreview = thumbnail
         ? await sendDownloadPreview({
@@ -147,7 +149,7 @@ export default {
       const message =
         error instanceof Error ? error.message : "No se pudo descargar el video.";
       return reply({
-        text: `${message}\n\nMáximo permitido: 20 minutos de duración para YouTube video normal.`,
+        text: t("cmd_value0_maximo_permitido_20_min_06db8d0e", { value0: message }),
       });
     }
   },

@@ -4,6 +4,8 @@ import path from "node:path";
 import { Agent, interceptors, request } from "undici";
 import { formatCount as baseFormatCount } from "../utils/formatter.ts";
 import type { SearchItem } from "../types/index.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 const REQUEST_AGENT = new Agent().compose(
   interceptors.redirect({ maxRedirections: 1 }),
@@ -234,7 +236,7 @@ export async function downloadToCache(
 }
 
 function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "sin límite";
+  if (!Number.isFinite(bytes) || bytes <= 0) return t("core_sin_limite_141ae2eb");
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
   let unitIndex = 0;

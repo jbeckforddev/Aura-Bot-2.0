@@ -14,6 +14,8 @@ import {
   type YouTubeSearchVideo,
 } from "../../src/api/YouTubeSearch.ts";
 import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const ID =
   /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
@@ -21,11 +23,11 @@ const ID =
 export default {
   name: ["dytmp4", "docvideo", "docplayvideo", "docmp4", "dytv", "docplay2"],
   category: "download",
-  description: "Descarga videos de YouTube como documento.",
+  description: t("cmd_descarga_videos_de_youtube_com_6943316c"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Proporciona una búsqueda o enlace de video.");
+    if (!query) return reply(t("cmd_proporciona_una_busqueda_o_enl_08141711"));
     await react("⏳");
     try {
       let url = query;
@@ -44,14 +46,14 @@ export default {
       );
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "YOUTUBE DOCUMENT",
-        icon: "🎬",
+        label: t("cmd_youtube_document_0d20c17e"),
+        icon: t("cmd_text_2b02d8d7"),
         title,
         channel: video.author,
         duration: video.duration,
         views: video.views === undefined ? undefined : String(video.views),
         likes: video.likes === undefined ? undefined : String(video.likes),
-        type: "Documento MP4",
+        type: t("cmd_documento_mp4_2386c56a"),
         cost: formatMoney(cost, ctx),
         url,
         showChannel: Boolean(video.author),
@@ -61,8 +63,8 @@ export default {
         showVideoId: Boolean(video.videoId),
         showSource: true,
         showType: true,
-        loadingText: "Descargando documento...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_documento_2572aa2f"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       await reply({ text: caption });
       await reply({
@@ -75,7 +77,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : "No se pudo descargar el video."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : "No se pudo descargar el video." }),
       });
     }
   },

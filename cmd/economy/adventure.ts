@@ -1,8 +1,10 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["adventure", "aventura", "explorar"],
-  description: "Embárcate en una misión RPG para conseguir XP y monedas.",
+  description: t("cmd_embarcate_en_una_mision_rpg_pa_b7dbcf5b"),
   title: "🗺️ 𝐌𝐈𝐒𝐈𝐎́𝐍 𝐃𝐄 𝐀𝐕𝐄𝐍𝐓𝐔𝐑𝐀",
   icon: "🗺️",
   cooldown: 2 * 60 * 60 * 1000,

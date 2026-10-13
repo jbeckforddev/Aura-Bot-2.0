@@ -3,6 +3,8 @@ import { fytBold } from "./socketText.ts";
 import { getActiveSubBots } from "./subbotManager.ts";
 import type { proto } from "@whiskeysockets/baileys";
 import type { ExtendedWASocket } from "../types/index.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 export const REPORT_GROUP_JID = "120363410372126705@g.us";
 const REPORT_MARKER = /\[AURA_REPORT:([A-Za-z0-9_-]+)\]/;
@@ -78,25 +80,11 @@ export function getQuotedText(message: proto.IWebMessageInfo): string {
 }
 
 export function reportCaption(data: ReportData, reportText: string): string {
-  return `╭〔 📢 ${fytBold("NUEVO REPORTE")} 〕━⬣
-
-┃ 🆔 ${fytBold("ID")} › ${data.id}
-┃ 👤 ${fytBold("Usuario")} › @${data.senderJid.split("@")[0]}
-┃ 📍 ${fytBold("Chat")} › ${data.originName || data.originJid}
-┃ 🤖 ${fytBold("Bot")} › ${data.botSession || "actual"}
-┃ 🕒 ${fytBold("Fecha")} › ${new Date().toLocaleString("es-CR")}
-
-┣━━━━━━━━━━━━⬣
-
-┃ 📝 ${fytBold("Mensaje")}
-┃ > ${reportText.replace(/\n/g, "\n┃ > ")}
-
-╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣
-[AURA_REPORT:${encodeReportData(data)}]`;
+  return t("core_value0_value1_value2_value3_va_1abe5b70", { value0: fytBold(t("core_nuevo_reporte_f67dd1f5")), value1: fytBold(t("core_id_89f89c02")), value2: data.id, value3: fytBold(t("core_usuario_3f2ecdef")), value4: data.senderJid.split("@")[0], value5: fytBold(t("core_chat_2ced57f1")), value6: data.originName || data.originJid, value7: fytBold(t("core_bot_3a3192e2")), value8: data.botSession || "actual", value9: fytBold(t("core_fecha_bcc47609")), value10: new Date().toLocaleString("es-CR"), value11: fytBold(t("core_mensaje_eb9e23ef")), value12: reportText.replace(/\n/g, "\n┃ > "), value13: fytBold(t("core_system_active_e403484a")), value14: encodeReportData(data) });
 }
 
 export function replyCaption(text: string): string {
-  return `╭〔 💬 ${fytBold("RESPUESTA DE SOPORTE")} 〕⬣\n\n┃ > ${text.replace(/\n/g, "\n")}\n\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+  return t("core_value0_value1_value2_34992875", { value0: fytBold(t("core_respuesta_de_soporte_5a7edfa4")), value1: text.replace(/\n/g, "\n"), value2: fytBold(t("core_system_active_e403484a")) });
 }
 
 export function getSocketCandidates(

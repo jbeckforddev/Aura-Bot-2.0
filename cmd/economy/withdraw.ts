@@ -5,11 +5,13 @@ import {
   saveEconomy,
   formatMoney,
 } from "../../core/economyRuntime.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["withdraw", "retirar", "with"],
   category: "economy",
-  description: "Retira monedas de tu cuenta de banco.",
+  description: t("cmd_retira_monedas_de_tu_cuenta_de_75795884"),
   async run(ctx: CommandContext) {
     const user = economyUser(ctx);
     const raw = String(ctx.args?.[0] ?? "").toLowerCase();
@@ -17,17 +19,17 @@ export default {
       raw === "all" || raw === "todo" ? user.banco : amountArg(raw);
     if (amount <= 0)
       return ctx.reply(
-        "⚠️ Ingresa una cantidad válida. Ejemplo: *.with 100* o *.with all*",
+        t("cmd_ingresa_una_cantidad_valida_ej_38301c25"),
       );
     if (user.banco < amount)
       return ctx.reply(
-        `❌ No tienes suficientes fondos. Tienes *${formatMoney(user.banco, ctx)}*.`,
+        t("cmd_no_tienes_suficientes_fondos_t_0706f4e2", { value0: formatMoney(user.banco, ctx) }),
       );
     user.banco -= amount;
     user.bolsillo += amount;
     saveEconomy(ctx, ctx.sender, user);
-    let text = `╭〔 🏦 𝐁𝐀𝐍𝐂𝐎 〕⬣\n┃ 📤 𝐑𝐄𝐓𝐈𝐑𝐎 𝐄𝐗𝐈𝐓𝐎𝐒𝐎\n╰━━━━━━━━━━━━⬣\n\n`;
-    text += `┃ 📤 Retiraste: ${formatMoney(amount, ctx)}\n┃ 💵 Cartera: ${formatMoney(user.bolsillo, ctx)}\n┃ 🏦 Fondos restantes: ${formatMoney(user.banco, ctx)}\n\n╰〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣`;
+    let text = t("cmd_text_d4f5beda");
+    text += t("cmd_retiraste_value0_cartera_value_10c5c52a", { value0: formatMoney(amount, ctx), value1: formatMoney(user.bolsillo, ctx), value2: formatMoney(user.banco, ctx) });
     return ctx.reply({ text, mentions: [ctx.sender] });
   },
 };

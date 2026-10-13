@@ -4,10 +4,12 @@ import {
   getProfilePictureUrl,
   profileTarget,
 } from "../../core/profileConfig.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["pfp", "foto"],
-  description: "Muestra la foto y el perfil global.",
+  description: t("cmd_muestra_la_foto_y_el_perfil_gl_06a6dc47"),
   category: "profile",
   async run(ctx: CommandContext) {
     const target = await profileTarget(ctx);

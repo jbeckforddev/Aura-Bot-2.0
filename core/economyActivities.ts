@@ -7,6 +7,8 @@ import {
 import { cooldownText } from "./economyConfig.ts";
 import { economyTexts } from "./economyTexts.ts";
 import type { CommandContext } from "../types/commands.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 type EconomyTextsKey = keyof typeof economyTexts;
 
@@ -66,12 +68,12 @@ export function createEconomyActivity(options: ActivityOptions) {
         : options.success;
       const failMessage = failTexts?.length ? failTexts : options.fail;
 
-      let text = `╭〔 ${options.icon} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ${options.title}\n╰━━━━━━━━━━━━⬣\n\n`;
-      text += `┃ 👋 Hola *@${ctx.sender.split("@")[0]}*\n┃ ✨ Aura Ganado: +${xp}\n`;
+      let text = t("core_value0_value1_f5f66371", { value0: options.icon, value1: options.title });
+      text += t("core_hola_value0_aura_ganado_value1_2bc80777", { value0: ctx.sender.split("@")[0], value1: xp });
       text += success
-        ? `┃ ${successMessage[Math.floor(Math.random() * successMessage.length)]} *${formatMoney(reward, ctx)}*\n`
-        : `┃ ${failMessage[Math.floor(Math.random() * failMessage.length)]}\n`;
-      text += `┃ 💵 Saldo actual: ${formatMoney(user.bolsillo, ctx)}\n\n╰〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣`;
+        ? t("core_value0_value1_f333d265", { value0: successMessage[Math.floor(Math.random() * successMessage.length)], value1: formatMoney(reward, ctx) })
+        : t("core_value0_17cf0eab", { value0: failMessage[Math.floor(Math.random() * failMessage.length)] });
+      text += t("core_saldo_actual_value0_babe4597", { value0: formatMoney(user.bolsillo, ctx) });
       return ctx.reply({ text, mentions: [ctx.sender] });
     },
   };

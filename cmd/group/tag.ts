@@ -6,11 +6,13 @@ import {
   type GroupParticipant,
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["tag", "tg"],
   category: "group",
-  description: "Mención invisible para texto y multimedia.",
+  description: t("cmd_mencion_invisible_para_texto_y_9615ae45"),
   groupOnly: true,
   adminOnly: true,
   async run(ctx: CommandContext) {
@@ -73,7 +75,7 @@ export default {
     const finalText = customText || quotedText;
     if (!finalText)
       return ctx.reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ${fytBold("FALTA MENSAJE")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Debes escribir un mensaje o responder a uno existente.\n\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`,
+        text: t("cmd_value0_value1_debes_escribir_u_0b09f3e8", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_mensaje_dba5d803")), value2: fytBold(t("cmd_system_info_1a78a0cb")) }),
       });
     return ctx.reply({ text: finalText, mentions });
   },

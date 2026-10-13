@@ -7,6 +7,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
+import { t } from "../../src/langs/index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -27,16 +28,16 @@ function unwrapAudio(
 export default {
   name: ["setaudio", "setmenuaudio", "menuaudio"],
   category: "socket",
-  description: "Cambia el audio que se envía al abrir el menú.",
+  description: t("socketDescriptionSetAudio"),
   botUserOnly: true,
   async run(ctx: CommandContext) {
-    if (!ffmpegPath) return ctx.reply("❌ FFmpeg no está disponible.");
+    if (!ffmpegPath) return ctx.reply(t("socketSetAudioNoFfmpeg"));
 
     const context = ctx.msg?.message?.extendedTextMessage?.contextInfo;
     const quotedMessage = context?.quotedMessage;
     const target = unwrapAudio(quotedMessage) || unwrapAudio(ctx.msg?.message);
     if (!target)
-      return ctx.reply("⚠️ Responde a un audio para establecerlo en el menú.");
+      return ctx.reply(t("socketSetAudioNeedReply"));
     let input = "";
     let output = "";
     let outputStored = false;
@@ -64,7 +65,7 @@ export default {
           ) => Promise<Parameters<typeof downloadMediaMessage>[0]>,
         },
       );
-      if (!buffer?.length) throw new Error("No se pudo descargar el audio.");
+      if (!buffer?.length) throw new Error(t("socketSetAudioDownloadError"));
 
       await ctx.react("⏳");
       const dir = path.resolve(globalThis.DATA_BASE_DIR || "./data");
@@ -119,11 +120,13 @@ export default {
       outputStored = true;
       await ctx.react("✅");
       return ctx.reply(
-        "✅ Audio del menú actualizado como nota de voz OGG/Opus.",
+        t("socketSetAudioUpdated"),
       );
     } catch (error: unknown) {
       return ctx.reply({
-        text: `❌ No se pudo guardar el audio: ${error instanceof Error ? error.message : String(error) || "error desconocido"}`,
+        text: t("socketSetAudioError", {
+          error: error instanceof Error ? error.message : String(error) || "error desconocido",
+        }),
       });
     } finally {
       if (input) await unlink(input).catch(() => undefined);

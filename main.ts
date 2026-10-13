@@ -7,7 +7,7 @@ import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import { displayBanner, logInfo, connectionLog } from "./core/logger.ts";
-import { checkpointDb } from "./database/AuraDB.ts";
+import { checkpointDb, warmLanguageCaches } from "./database/AuraDB.ts";
 
 const TMP_DIR = path.resolve("./cache");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -86,6 +86,7 @@ startCpuProfile();
 async function mainBot() {
   await displayBanner();
   logInfo("Inicializando bot principal...");
+  warmLanguageCaches();
   await loadPlugins();
   watchPlugins();
   await startSavedSubBots();

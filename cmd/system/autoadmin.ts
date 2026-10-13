@@ -1,10 +1,12 @@
 import type { GroupParticipant } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["autoadmin", "seradmin", "dameadmin"],
-  description: "El bot te da admin del grupo (solo owners).",
+  description: t("cmd_el_bot_te_da_admin_del_grupo_s_8d46524e"),
   category: "system",
   ownerOnly: true, // 🔒 Solo owners (lo valida tu handler.ts)
   groupOnly: true, // Solo funciona en grupos
@@ -35,7 +37,7 @@ export default {
         participant?.admin === "superadmin"
       ) {
         return reply({
-          text: `👑 Ya eres admin de este grupo, no necesitas el comando.`,
+          text: t("cmd_ya_eres_admin_de_este_grupo_no_0f522e23"),
         });
       }
 
@@ -52,13 +54,13 @@ export default {
         sender.split("@")[0];
 
       await reply({
-        text: `👑 \`${senderName}\` ${fytBold("ahora es admin")} del grupo.`,
+        text: t("cmd_value0_value1_del_grupo_3ea299d8", { value0: senderName, value1: fytBold(t("cmd_ahora_es_admin_dc733258")) }),
         mentions: [sender],
       });
     } catch (error: unknown) {
       await react("❌");
       await reply({
-        text: `❌ Error al darte admin: ${error instanceof Error ? error.message : String(error)}`,
+        text: t("cmd_error_al_darte_admin_value0_dc44a79a", { value0: error instanceof Error ? error.message : String(error) }),
       });
     }
   },

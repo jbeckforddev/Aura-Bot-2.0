@@ -1,6 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import type { DatabaseBot } from "../../types/database.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 
 type BotParticipant = {
   id?: string;
@@ -92,13 +93,13 @@ async function resolveBotJid(
 }
 
 function getBotType(bot: DatabaseBot): string {
-  return Number(bot.isMain) === 1 ? "Main-Bot" : "SuB-Bot";
+  return t(Number(bot.isMain) === 1 ? "socketBotsMainType" : "socketBotsSubType");
 }
 
 export default {
   name: ["bots", "btos", "subbots", "lista-bots"],
   category: "socket",
-  description: "Muestra los bots activos y su tipo.",
+  description: t("socketDescriptionBots"),
   ownerOnly: false,
 
   async run({
@@ -130,39 +131,39 @@ export default {
       );
     }
 
-    let text = `╭〔 🔌 ${fytBold("SOCKET SYSTEM")} 〕⬣\n`;
-    text += `┃ 🤖 ${fytBold(isGroup ? "BOTS ACTIVOS EN EL GRUPO" : "BOTS ACTIVOS")}\n`;
-    text += `┣━━━━━━━━━━━━⬣\n`;
-    text += `┃ 📊 ${fytBold("Activos")}: *${bots.length}*\n`;
+    let text = t("socketBotsHeader", {
+      title: fytBold(
+        t(isGroup ? "socketBotsTitleGroup" : "socketBotsTitle"),
+      ),
+      activeCount: bots.length,
+    }) + t("cmd_text_adc83b19");
     if (isGroup) {
-      text += `┃ ⚡ ${fytBold("En este grupo")}: *${visibleBots.length}*\n`;
-      text += `┣━━━━━━━━━━━━⬣\n\n`;
+      text += t("socketBotsGroupCount", { count: visibleBots.length });
     }
-    text += `\n`;
+    text += t("cmd_text_adc83b19");
 
     if (!visibleBots.length) {
       text += isGroup
-        ? `┃ > No hay bots registrados en este grupo.\n`
-        : `┃ > No hay bots registrados.\n`;
+        ? t("socketBotsNoGroup")
+        : t("socketBotsNone");
     } else {
       for (const bot of visibleBots) {
         const jid = await resolveBotJid(bot, participants, resolveLid);
         const number = getBotNumber(bot, jid);
-        const name = String(bot.bot_name || "Sub-Bot").trim();
+        const name = String(bot.bot_name || t("socketBotsSubType")).trim();
 
-        text += `┏━━〔 ${fytBold(getBotType(bot))} 〕━━━⬣\n`;
-        text += `┃ > @${number}\n`;
-        text += `┃ ➪ ${fytBold(name)}\n`;
-        text += `┗━━━━━━━━━━━━⬣\n\n`;
+        text += t("socketBotsEntry", {
+          type: fytBold(getBotType(bot)),
+          number,
+          name: fytBold(name),
+        });
         if (jid) {
           mentions.push(jid);
         }
       }
     }
 
-    text += `\n┣━━━━━━━━━━━━⬣\n`;
-    text += `┃ 💡 Usa ${usedPrefix || "."}code o ${usedPrefix || "."}qr  para ser bot\n`;
-    text += `╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+    text += t("socketBotsFooter", { prefix: usedPrefix || "." });
 
     return reply({ text, mentions });
   },

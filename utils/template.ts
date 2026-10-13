@@ -1,4 +1,5 @@
 import type { DownloadTemplateOptions } from "../types/template.d.ts";
+import { t } from "../src/langs/index.ts";
 
 interface SearchResultItem {
   title: string;
@@ -17,10 +18,10 @@ interface SearchTemplateOptions extends DownloadTemplateOptions {
 function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
   const {
     bold: boldFormatter,
-    title = "Sin título",
-    label = "DOWNLOAD",
+    title = t("template_no_title_44ba2cb7"),
+    label = t("template_download_524d6ef8"),
     icon = "🎵",
-    loadingText = "Descargando archivo...",
+    loadingText = t("template_downloading_file_5b7d8a4e"),
     loadingIcon = "",
     showTitle = true,
     showLoading = true,
@@ -72,28 +73,28 @@ function buildDownloadTemplate(options: DownloadTemplateOptions = {}): string {
   if (showTitle && title) {lines.push(`┃ ➥ ${bold(title)}`)}
   lines.push("");
   lines.push("┣━━━━━━━━━━━━⬣");
-  if (showAuthor && author) {lines.push(`┃ > ${bold("Autor")} › ${author}`)}
-  if (showChannel && channel) {lines.push(`┃ > ${bold("Canal")} › ${channel}`)}
-  if (showArtist && artist) {lines.push(`┃ > ${bold("Artista")} › ${artist}`)}
-  if (showAlbum && album) {lines.push(`┃ > ${bold("Álbum")} › ${album}`)}
-  if (showDuration && duration) {lines.push(`┃ > ${bold("Duración")} › ${duration}`)}
-  if (showViews && views !== undefined && views !== null && views !== "") {lines.push(`┃ > ${bold("Vistas")} › ${views}`)}
-  if (showLikes && likes !== undefined && likes !== null && likes !== "") {lines.push(`┃ > ${bold("Likes")} › ${likes}`);}
-  if (showVideoId && videoId) {lines.push(`┃ > ${bold("ID")} › ${videoId}`);}
-  if (showSource && source) {lines.push(`┃ > ${bold("Motor")} › ${source}`);}
-  if (showComments && comments !== undefined && comments !== null && comments !== "") {lines.push(`┃ > ${bold("Comentarios")} › ${comments}`)}
-  if (showShares && shares !== undefined && shares !== null && shares !== "") {lines.push(`┃ > ${bold("Compartidos")} › ${shares}`)}
-  if (showQuality && quality) {lines.push(`┃ > ${bold("Calidad")} › ${quality}`);}
-  if (showSize && size){lines.push(`┃ > ${bold("Tamaño")} › ${size}`)}
-  if (showType && type) {lines.push(`┃ > ${bold("Tipo")} › ${type}`)}
-  if (showTotal && total !== undefined && total !== null && total !== "") {lines.push(`┃ > ${bold("Total")} › ${total}`)}
-  if (showPackage && packageName) {lines.push(`┃ > ${bold("ID App")} › ${packageName}`)}
-  if (showVersion && version) {lines.push(`┃ > ${bold("Versión")} › ${version}`)}
-  if (showExtension && extension) {lines.push(`┃ > ${bold("Extensión")} › .${String(extension).toUpperCase()}`)}
-  if (showCost && cost !== undefined && cost !== null && cost !== "") {lines.push(`┃ > ${bold("Costo")} › ${cost}`)}
-  if (showUrl && url) {lines.push(`┃ > ${bold("Url")} › ${url}`)}
+  if (showAuthor && author) {lines.push(`┃ > ${bold(t("template_author_b5aa6d2c"))} › ${author}`)}
+  if (showChannel && channel) {lines.push(`┃ > ${bold(t("template_channel_6ef14b8d"))} › ${channel}`)}
+  if (showArtist && artist) {lines.push(`┃ > ${bold(t("template_artist_8a39d56a"))} › ${artist}`)}
+  if (showAlbum && album) {lines.push(`┃ > ${bold(t("template_album_2391d12d"))} › ${album}`)}
+  if (showDuration && duration) {lines.push(`┃ > ${bold(t("template_duration_f6878fc1"))} › ${duration}`)}
+  if (showViews && views !== undefined && views !== null && views !== "") {lines.push(`┃ > ${bold(t("template_views_f73f3d1e"))} › ${views}`)}
+  if (showLikes && likes !== undefined && likes !== null && likes !== "") {lines.push(`┃ > ${bold(t("template_likes_1d3a66d8"))} › ${likes}`);}
+  if (showVideoId && videoId) {lines.push(`┃ > ${bold(t("template_id_1821f5f5"))} › ${videoId}`);}
+  if (showSource && source) {lines.push(`┃ > ${bold(t("template_engine_2fbe8b3a"))} › ${source}`);}
+  if (showComments && comments !== undefined && comments !== null && comments !== "") {lines.push(`┃ > ${bold(t("template_comments_70e3e819"))} › ${comments}`)}
+  if (showShares && shares !== undefined && shares !== null && shares !== "") {lines.push(`┃ > ${bold(t("template_shared_6d54b2d8"))} › ${shares}`)}
+  if (showQuality && quality) {lines.push(`┃ > ${bold(t("template_quality_a174c3a9"))} › ${quality}`);}
+  if (showSize && size){lines.push(`┃ > ${bold(t("template_size_015783b6"))} › ${size}`)}
+  if (showType && type) {lines.push(`┃ > ${bold(t("template_type_8ad5d538"))} › ${type}`)}
+  if (showTotal && total !== undefined && total !== null && total !== "") {lines.push(`┃ > ${bold(t("template_total_127f53c2"))} › ${total}`)}
+  if (showPackage && packageName) {lines.push(`┃ > ${bold(t("template_app_id_3d93b4ca"))} › ${packageName}`)}
+  if (showVersion && version) {lines.push(`┃ > ${bold(t("template_version_16eb8ce9"))} › ${version}`)}
+  if (showExtension && extension) {lines.push(`┃ > ${bold(t("template_extension_7dd1844c"))} › .${String(extension).toUpperCase()}`)}
+  if (showCost && cost !== undefined && cost !== null && cost !== "") {lines.push(`┃ > ${bold(t("template_cost_7a4cf3ab"))} › ${cost}`)}
+  if (showUrl && url) {lines.push(`┃ > ${bold(t("template_url_9d718ced"))} › ${url}`)}
   if (showLoading && loadingText) {lines.push("┣━━━━━━━━━━━━⬣"); const loadingPrefix = loadingIcon ? `${loadingIcon} ` : ""; lines.push(`┃ ${loadingPrefix}${loadingText}`)}
-  lines.push(`╰━━〔 ⚡ ${bold("SYSTEM ACTIVE")} 〕━━⬣`);
+  lines.push(`╰━━〔 ⚡ ${bold(t("template_system_active_48d8a8bf"))} 〕━━⬣`);
   return lines.join("\n");
 }
 
@@ -103,14 +104,14 @@ export const DL_TEMPLATE = (options: DownloadTemplateOptions = {}) =>
 function buildSearchTemplate(options: SearchTemplateOptions = {}): string {
   return buildDownloadTemplate({
     ...options,
-    label: options.label ?? "SEARCH",
+    label: options.label ?? t("template_search_14eb597b"),
     icon: options.icon ?? "🔎",
-    loadingText: options.loadingText ?? "Buscando resultados...",
+    loadingText: options.loadingText ?? t("template_searching_results_2540c40d"),
     showLoading: options.showLoading ?? false,
     showCost: options.showCost ?? false,
     showUrl: options.showUrl ?? false,
     showTitle: options.showTitle ?? true,
-    title: options.title ?? "Búsqueda general",
+    title: options.title ?? t("template_general_search_4c0d509b"),
   });
 }
 
@@ -119,27 +120,27 @@ function buildSearchResultsTemplate(options: SearchTemplateOptions = {}): string
   const bold = (value: string): string => boldFormatter(String(value ?? ""));
   const query = options.query ?? "";
   const engine = options.engine ?? "Api Interna";
-  const label = options.label ?? "SEARCH";
+  const label = options.label ?? t("template_search_14eb597b");
   const icon = options.icon ?? "🔎";
   const results = options.results ?? [];
 
   const lines: string[] = [];
   lines.push(`╭〔 ${icon} ${bold(String(label))} 〕⬣`);
-  if (query) lines.push(`┃ 🔍 ${bold("Búsqueda")} › ${query}`);
-  lines.push(`┃ ⚙️ ${bold("Motor")} › ${engine}`);
+  if (query) lines.push(`┃ 🔍 ${bold(t("template_search_14eb597b"))} › ${query}`);
+  lines.push(`┃ ⚙️ ${bold(t("template_engine_2fbe8b3a"))} › ${engine}`);
   lines.push("╰━━━━━━━━━━━━━━━━⬣");
   lines.push("");
 
   results.forEach((item, index) => {
     lines.push(`┃ ${index + 1}. ${bold(item.title || "Sin título")}`);
-    if (item.artist) lines.push(`┃ ├ 👤 ${bold("Artista")} › ${item.artist}`);
-    if (item.duration) lines.push(`┃ ├ ⏱️ ${bold("Duración")} › ${item.duration}`);
-    if (item.likes) lines.push(`┃ ├ 👍 ${bold("Likes")} › ${item.likes}`);
-    if (item.url) lines.push(`┃ └ 🔗 ${bold("Url")} › ${item.url}`);
+    if (item.artist) lines.push(`┃ ├ 👤 ${bold(t("template_artist_8a39d56a"))} › ${item.artist}`);
+    if (item.duration) lines.push(`┃ ├ ⏱️ ${bold(t("template_duration_f6878fc1"))} › ${item.duration}`);
+    if (item.likes) lines.push(`┃ ├ 👍 ${bold(t("template_likes_1d3a66d8"))} › ${item.likes}`);
+    if (item.url) lines.push(`┃ └ 🔗 ${bold(t("template_url_9d718ced"))} › ${item.url}`);
     lines.push("");
   });
 
-  lines.push(`╰〔 ⚡ ${bold("SYSTEM ACTIVE")} 〕⬣`);
+  lines.push(`╰〔 ⚡ ${bold(t("template_system_active_48d8a8bf"))} 〕⬣`);
   return lines.join("\n");
 }
 

@@ -4,6 +4,8 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
@@ -11,7 +13,7 @@ const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 export default {
   name: ["optimize", "clearram", "clean", "optimizervps"],
   category: "owner",
-  description: "Optimiza la VPS purgando caché y aniquilando procesos atascados.",
+  description: t("cmd_optimiza_la_vps_purgando_cache_b5cc9ffa"),
   async run(ctx: CommandContext) {
     const { reply, react, isOwner } = ctx;
     
@@ -72,7 +74,7 @@ export default {
       processReport = "┃ > No se detectaron subprocesos colgados.\n";
     }
 
-    const text = `╭〔 🚀 ${fytBold("AURA REED OPTIMIZER")} 〕⬣\n┃ 🧠 ${fytBold("MEMORIA RAM")}\n┃ > Gestión: Automática (V8 Engine)\n┃ > RAM Inicial: ${beforeStr}\n┃ > RAM Final: ${afterStr}\n┃ > Liberado: ${freedRam}\n┃\n┃ 🧹 ${fytBold("LIMPIEZA DE CACHÉ")}\n┃ > Archivos eliminados: ${deletedFiles}\n┃ > Caché NPM: Purgada\n┃\n┃ 💀 ${fytBold("CONTROL DE PROCESOS")}\n${processReport}╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+    const text = `╭〔 🚀 ${fytBold(t("cmd_aura_reed_optimizer_b0ff54e4"))} 〕⬣\n┃ 🧠 ${fytBold(t("cmd_memoria_ram_1bb3f287"))}\n┃ > Gestión: Automática (V8 Engine)\n┃ > RAM Inicial: ${beforeStr}\n┃ > RAM Final: ${afterStr}\n┃ > Liberado: ${freedRam}\n┃\n┃ 🧹 ${fytBold(t("cmd_limpieza_de_cache_706d3b46"))}\n┃ > Archivos eliminados: ${deletedFiles}\n┃ > Caché NPM: Purgada\n┃\n┃ 💀 ${fytBold(t("cmd_control_de_procesos_a88a5e2f"))}\n${processReport}╰━━〔 ⚡ ${fytBold(t("cmd_system_active_e403484a"))} 〕━━⬣`;
 
     await reply(text).catch(() => undefined);
     await react("✅").catch(() => undefined);

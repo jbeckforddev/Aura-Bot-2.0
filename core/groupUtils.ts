@@ -1,5 +1,7 @@
 import type { CommandContext } from "../types/index.d.ts";
 import type { DatabaseGroup } from "../types/index.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 export function cleanJid(value: unknown): string {
   return String(value || "")
@@ -19,7 +21,7 @@ export function getTargetJids(ctx: CommandContext): string[] {
 }
 
 export function groupStatus(value: unknown): string {
-  return value ? "✅ Activado" : "❌ Desactivado";
+  return value ? t("core_activado_2e624c72") : t("core_desactivado_7cc5cccc");
 }
 
 export function parseToggle(value: unknown): boolean | null {
@@ -44,9 +46,9 @@ export function saveGroupData(
 }
 
 export function groupFrame(title: string, icon = "⚙️"): string {
-  return `╭〔 ${icon} ${title} 〕⬣\n╰━━━━━━━━━━━━⬣\n\n`;
+  return t("core_value0_value1_5d5b6d7e", { value0: icon, value1: title });
 }
 
 export function groupFooter(label = "SYSTEM INFO"): string {
-  return `\n╰〔 ⚡ ${label} 〕⬣`;
+  return t("core_value0_d225103c", { value0: label });
 }

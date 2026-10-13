@@ -8,6 +8,8 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AuraReedBot/2.0",
@@ -41,11 +43,11 @@ async function resolveMediaFire(
 export default {
   name: ["md", "mf", "mediafire"],
   category: "download",
-  description: "Descarga archivos de MediaFire.",
+  description: t("cmd_descarga_archivos_de_mediafire_b173c95a"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const url = args.join(" ").trim();
-    if (!url) return reply("⚠️ Proporciona un enlace de MediaFire.");
+    if (!url) return reply(t("cmd_proporciona_un_enlace_de_media_3a3d65e9"));
     await react("⏳");
     try {
       const data = await resolveMediaFire(url);
@@ -65,19 +67,19 @@ export default {
           : "application/octet-stream";
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "MEDIAFIRE DL",
-        icon: "📦",
+        label: t("cmd_mediafire_dl_0af010a4"),
+        icon: t("cmd_text_22188772"),
         title: name,
         size: data.size,
         extension,
-        type: "Archivo",
+        type: t("cmd_archivo_6a2262aa"),
         cost: formatMoney(cost, ctx),
         url,
-        showSize: Boolean(data.size && data.size !== "N/A"),
+        showSize: Boolean(data.size && data.size !== t("cmd_n_a_08d2e98e")),
         showExtension: true,
         showType: true,
-        loadingText: "Descargando archivo...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_archivo_c5897964"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       await reply({ text: caption });
       await reply({ document: { url: file }, mimetype: mime, fileName: name });
@@ -90,7 +92,7 @@ export default {
           ? error.message
           : String(error) || "No se pudo descargar el archivo.";
       return reply({
-        text: `${message}\n\nMáximo permitido: 2 GB para MediaFire.`,
+        text: t("cmd_value0_maximo_permitido_2_gb_p_9befd25d", { value0: message }),
       });
     }
   },

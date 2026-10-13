@@ -1,8 +1,10 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["slut", "putear", "prost"],
-  description: "Realiza un trabajo nocturno con riesgo y recompensa.",
+  description: t("cmd_realiza_un_trabajo_nocturno_co_27d1306c"),
   title: "💃 𝐓𝐑𝐀𝐁𝐀𝐉𝐎 𝐍𝐎𝐂𝐓𝐔𝐑𝐍𝐎",
   icon: "💃",
   cooldown: 60 * 60 * 1000,

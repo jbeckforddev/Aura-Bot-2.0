@@ -1,8 +1,10 @@
 import { createEconomyActivity } from "../../core/economyActivities.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default createEconomyActivity({
   names: ["mine", "minar", "chambear"],
-  description: "Mina para conseguir monedas y experiencia.",
+  description: t("cmd_mina_para_conseguir_monedas_y__c588902b"),
   title: "⚒️ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐃𝐄 𝐌𝐈𝐍𝐄𝐑𝐈́𝐀",
   icon: "⚒️",
   cooldown: 30 * 60 * 1000,

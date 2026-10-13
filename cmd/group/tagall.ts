@@ -4,11 +4,13 @@ import {
   type GroupParticipant,
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["all", "todos", "invocar"],
   category: "group",
-  description: "Menciona a todos los integrantes.",
+  description: t("cmd_menciona_a_todos_los_integrant_3f486f5d"),
   groupOnly: true,
   adminOnly: true,
   async run(ctx: CommandContext) {
@@ -25,7 +27,7 @@ export default {
     );
     if (!memberJids.length)
       return ctx.reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ${fytBold("SIN MIEMBROS VÁLIDOS")}\n╰━━━━━━━━━━━━⬣\n\n┃ > No se han encontrado participantes válidos.\n\n╰〔 ⚡ ${fytBold("SYSTEM ALERT")} 〕⬣`,
+        text: t("cmd_value0_value1_no_se_han_encont_35ca2480", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_sin_miembros_validos_73d3f94e")), value2: fytBold(t("cmd_system_alert_780bb6b6")) }),
       });
     const quotedMessage =
       ctx.msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -34,10 +36,10 @@ export default {
       quotedMessage?.extendedTextMessage?.text ||
       "𝐀𝐜𝐭𝐢́𝐯𝐞𝐧𝐬𝐞";
     const customMessage = ctx.args.join(" ") || quotedText;
-    let text = `╭〔 📢 ${fytBold("AURA REED")} 〕⬣\n┃ 🔔 ${fytBold("INVOCANDO AL GRUPO")}\n╰━━━━━━━━━━━━⬣\n\n`;
-    text += `┃ ✨ ${customMessage}\n┃ 👥 ${fytBold("N° de Miembros:")} ${memberJids.length}\n\n┣━━━━━━━━━━━━⬣\n\n`;
-    text += memberJids.map((jid) => `┃ ➪ @${jid.split("@")[0]}`).join("\n");
-    text += `\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`;
+    let text = t("cmd_value0_value1_1b5f5a78", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_invocando_al_grupo_8c02e6b8")) });
+    text += t("cmd_value0_value1_value2_44267d7d", { value0: customMessage, value1: fytBold(t("cmd_n_de_miembros_c29f5eb4")), value2: memberJids.length });
+    text += memberJids.map((jid) => t("cmd_value0_424156a2", { value0: jid.split("@")[0] })).join(t("cmd_text_adc83b19"));
+    text += t("cmd_value0_d8d6cd6a", { value0: fytBold(t("cmd_system_29d43743")) });
     return ctx.reply({ text, mentions: memberJids });
   },
 };

@@ -7,15 +7,17 @@ import {
   applyStickerMetadata,
 } from "../../core/stickerUtils.ts";
 import { request } from "undici";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["emojimix", "ekitchen", "emojikitchen"],
   category: "sticker",
-  description: "Combina dos emojis en un sticker.",
+  description: t("cmd_combina_dos_emojis_en_un_stick_f3a2502c"),
   async run({ args, db, sender, msg, react, reply }: CommandContext) {
     const emojis = extractEmojis(args.join(" "));
     if (emojis.length < 2)
-      return reply("⚠️ Envía dos emojis. Ejemplo: .emojimix 🥺🔥");
+      return reply(t("cmd_envia_dos_emojis_ejemplo_emoji_dfd36335"));
     await react("⏳");
     try {
       const url = new URL("tools/emojimix", DL_CONFIG.alya.BASE_URL);
@@ -42,7 +44,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ERROR AL CREAR STICKER\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : String(error) || "No se pudo combinar esos emojis."}\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_error_al_crear_sticker__fc8ff0d0", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: error instanceof Error ? error.message : String(error) || "No se pudo combinar esos emojis." }),
       });
     }
   },

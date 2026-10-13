@@ -92,7 +92,7 @@ db_instance.exec(`
     LastEconomyRoulete INTEGER DEFAULT 0,
     LastEconomyAura INTEGER DEFAULT 0,
     LastEconomyRob INTEGER DEFAULT 0,
-    UserLang TEXT DEFAULT 'es',
+    UserLang TEXT DEFAULT NULL,
     data TEXT DEFAULT '{}'
   );
 
@@ -112,7 +112,7 @@ db_instance.exec(`
     userWarns TEXT DEFAULT '{}',
     Muted_Users TEXT DEFAULT '[]',
     catBlocked TEXT DEFAULT '["nsfw"]',
-    GroupLang TEXT DEFAULT 'es',
+    GroupLang TEXT DEFAULT NULL,
     data TEXT DEFAULT '{}'
   );
 
@@ -281,7 +281,7 @@ const groupSelectColumns = groupColumns
 const stmts = {
   getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
   insertUser: db_instance.prepare(
-    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateEconomyLastByJid: db_instance.prepare(
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE jid = ?`,
@@ -290,10 +290,10 @@ const stmts = {
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE lid = ?`,
   ),
   updateUser: db_instance.prepare(
-    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
+    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
   ),
   updateUserByLid: db_instance.prepare(
-    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
+    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
     `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
@@ -303,10 +303,10 @@ const stmts = {
     `SELECT ${groupSelectColumns} FROM groups WHERE jid = ?`,
   ),
   insertGroup: db_instance.prepare(
-    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, catBlocked, Muted_Users, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO groups (jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, antiStatus, onlyAdmin, prefix, self, catBlocked, Muted_Users, GroupLang, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateGroup: db_instance.prepare(
-    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, catBlocked = ?, Muted_Users = ?, data = ? WHERE jid = ?",
+    "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, catBlocked = ?, Muted_Users = ?, GroupLang = ?, data = ? WHERE jid = ?",
   ),
   getAllGroups: db_instance.prepare(
     "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, data FROM groups",
@@ -330,6 +330,76 @@ function normalizeJid(input: string) {
     .trim()
     .replace(/@.*$/, "")
     .replace(/:.*/, "");
+}
+
+const userLanguageCache = new Map<string, string | null>();
+const groupLanguageCache = new Map<string, string | null>();
+
+export function warmLanguageCaches(): { users: number; groups: number } {
+  const userRows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
+  for (const row of userRows) {
+    const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
+    const key = normalizeJid(String(row.jid ?? row.lid ?? row.phone_number ?? ""));
+    const value = normalizeLocale(
+      jsonData.userLang ?? row.UserLang ?? row.userLang ?? row.user_lang ?? null,
+    );
+    if (key) userLanguageCache.set(key, value);
+  }
+
+  const groupRows = stmts.getAllGroups.all() as Array<Record<string, unknown>>;
+  for (const row of groupRows) {
+    const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
+    const key = normalizeJid(String(row.jid ?? row.group_id ?? ""));
+    const value = normalizeLocale(
+      jsonData.groupLang ?? row.GroupLang ?? row.groupLang ?? row.group_lang ?? null,
+    );
+    if (key) groupLanguageCache.set(key, value);
+  }
+
+  return {
+    users: userLanguageCache.size,
+    groups: groupLanguageCache.size,
+  };
+}
+
+export function getCachedUserLanguage(jid: string | null | undefined): string | null {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (!normalized) return null;
+  return userLanguageCache.get(normalized) ?? null;
+}
+
+export function getCachedGroupLanguage(jid: string | null | undefined): string | null {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (!normalized) return null;
+  return groupLanguageCache.get(normalized) ?? null;
+}
+
+function normalizeLocale(language: unknown): string | null {
+  if (language == null || language === "") return null;
+  const normalized = String(language).trim().toLowerCase();
+  return normalized === "en" ? "en" : (normalized === "es" ? "es" : null);
+}
+
+function setUserLanguageCache(jid: string | null | undefined, language: unknown): void {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (!normalized) return;
+  userLanguageCache.set(normalized, normalizeLocale(language));
+}
+
+function setGroupLanguageCache(jid: string | null | undefined, language: unknown): void {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (!normalized) return;
+  groupLanguageCache.set(normalized, normalizeLocale(language));
+}
+
+function invalidateUserLanguageCache(jid: string | null | undefined): void {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (normalized) userLanguageCache.delete(normalized);
+}
+
+function invalidateGroupLanguageCache(jid: string | null | undefined): void {
+  const normalized = normalizeJid(String(jid ?? ""));
+  if (normalized) groupLanguageCache.delete(normalized);
 }
 
 function safeJson<T = Record<string, unknown>>(value: unknown): T {
@@ -583,6 +653,7 @@ function getUser(input: string): DatabaseUser {
       phone_number: rawInput.endsWith("@lid") ? null : key,
       role: "user",
       is_banned: 0,
+      userLang: null,
       data: {},
     };
 
@@ -595,9 +666,12 @@ function getUser(input: string): DatabaseUser {
       defaultUser.is_banned,
       100000,
       10000,
+      defaultUser.userLang ?? null,
       JSON.stringify(defaultUser.data),
       ...getUserProfileValues(defaultUser),
     );
+
+    setUserLanguageCache(defaultUser.jid ?? defaultUser.lid, defaultUser.userLang ?? null);
 
     return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
   }
@@ -612,6 +686,8 @@ function getUser(input: string): DatabaseUser {
   );
   const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
   const bank = Number(row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000);
+  const userLang = normalizeLocale(jsonData.userLang ?? row.UserLang ?? null);
+  setUserLanguageCache(row.jid ?? row.lid ?? rawInput, userLang);
 
   return {
     ...jsonData,
@@ -626,6 +702,7 @@ function getUser(input: string): DatabaseUser {
       : (jsonData.phone_number ?? key)) as string | null,
     role: (row.role ?? jsonData.role ?? "user") as string,
     is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
+    userLang,
     coins,
     bank,
     bolsillo: coins,
@@ -642,6 +719,7 @@ function getGroup(jid: string): DatabaseGroup {
     const defaultGroup: DatabaseGroup = {
       group_id: key,
       group_name: null,
+      groupLang: null,
       antilink: 0,
       antiCalls: 0,
       antiToxic: 0,
@@ -676,8 +754,11 @@ function getGroup(jid: string): DatabaseGroup {
       defaultGroup.self,
       JSON.stringify(defaultGroup.catBlocked),
       JSON.stringify(defaultGroup.mutedUsers),
+      defaultGroup.groupLang ?? null,
       JSON.stringify(defaultGroup.data),
     );
+
+    setGroupLanguageCache(key, defaultGroup.groupLang ?? null);
 
     return defaultGroup;
   }
@@ -693,11 +774,14 @@ function getGroup(jid: string): DatabaseGroup {
       row.mutedUsers ??
       row.medUsers,
   );
+  const groupLang = normalizeLocale(jsonData.groupLang ?? row.GroupLang ?? null);
+  setGroupLanguageCache(row.jid ?? key, groupLang);
   return {
     ...jsonData,
     group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
     group_name: (jsonData.group_name ?? row.group_name ?? null) as
       string | null,
+    groupLang,
     antilink: Number(jsonData.antilink ?? row.antilink ?? 0),
     antiCalls: Number(jsonData.antiCalls ?? row.antiCalls ?? 0),
     antiToxic: Number(jsonData.antiToxic ?? row.antiToxic ?? 0),
@@ -856,6 +940,16 @@ export const db: IDatabase = {
       lid: rawLid || merged.lid || null,
     };
 
+    const explicitUserLang = Object.prototype.hasOwnProperty.call(dataObject, "userLang")
+      ? dataObject.userLang
+      : undefined;
+    const nextUserLang = normalizeLocale(
+      Object.prototype.hasOwnProperty.call(dataObject, "userLang")
+        ? dataObject.userLang
+        : (merged.userLang ?? payload.userLang ?? currentData?.userLang ?? null),
+    );
+    setUserLanguageCache(rawJid ?? key, nextUserLang);
+
     delete payload.data;
 
     let row = getUserRow(rawJid ?? key, rawLid);
@@ -876,6 +970,11 @@ export const db: IDatabase = {
         Number(Boolean(merged.is_banned ?? 0)),
         coins,
         bank,
+        normalizeLocale(
+          Object.prototype.hasOwnProperty.call(dataObject, "userLang")
+            ? dataObject.userLang
+            : (merged.userLang ?? payload.userLang ?? currentData?.userLang ?? null),
+        ),
         JSON.stringify(payload),
         ...getUserProfileValues(merged),
       );
@@ -899,6 +998,7 @@ export const db: IDatabase = {
         Number(Boolean(merged.is_banned ?? row.is_banned ?? 0)),
         coins,
         bank,
+        normalizeLocale(merged.userLang ?? row.UserLang ?? payload.userLang ?? null),
         JSON.stringify(payload),
         ...getUserProfileValues(
           merged,
@@ -915,6 +1015,7 @@ export const db: IDatabase = {
         Number(Boolean(merged.is_banned ?? row.is_banned ?? 0)),
         coins,
         bank,
+        normalizeLocale(merged.userLang ?? row.UserLang ?? payload.userLang ?? null),
         JSON.stringify(payload),
         ...getUserProfileValues(
           merged,
@@ -946,10 +1047,20 @@ export const db: IDatabase = {
       mutedUsers,
     };
 
+    const explicitGroupLang = Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
+      ? dataObject.groupLang
+      : undefined;
+
     delete payload.data;
     delete (payload as Record<string, unknown>).topMsgUsers;
 
     const row = stmts.getGroup.get(key) as Record<string, unknown> | undefined;
+    const nextGroupLang = normalizeLocale(
+      Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
+        ? dataObject.groupLang
+        : (merged.groupLang ?? row?.GroupLang ?? payload.groupLang ?? null),
+    );
+    setGroupLanguageCache(key, nextGroupLang);
     if (!row) {
       stmts.insertGroup.run(
         key,
@@ -967,6 +1078,11 @@ export const db: IDatabase = {
           Array.isArray(merged.catBlocked) ? merged.catBlocked : ["nsfw"],
         ),
         JSON.stringify(mutedUsers),
+        normalizeLocale(
+          Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
+            ? dataObject.groupLang
+            : (merged.groupLang ?? row?.GroupLang ?? payload.groupLang ?? null),
+        ),
         JSON.stringify(payload),
       );
       return;
@@ -989,6 +1105,11 @@ export const db: IDatabase = {
           : safeJsonArray((row.catBlocked as string | undefined) ?? '["nsfw"]'),
       ),
       JSON.stringify(mutedUsers),
+      normalizeLocale(
+        Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
+          ? dataObject.groupLang
+          : (merged.groupLang ?? row.GroupLang ?? payload.groupLang ?? null),
+      ),
       JSON.stringify(payload),
       key,
     );
@@ -1248,7 +1369,7 @@ export const db: IDatabase = {
 
       if (!current) {
         const phone = canonicalJid ? normalizeJid(canonicalJid) : null;
-        stmts.insertUser.run(
+          stmts.insertUser.run(
           canonicalJid,
           lid,
           null,
@@ -1257,6 +1378,7 @@ export const db: IDatabase = {
           0,
           100000,
           10000,
+          null,
           JSON.stringify({ jid: canonicalJid, lid, role }),
           ...getUserProfileValues({}),
         );
@@ -1286,12 +1408,21 @@ export const db: IDatabase = {
         lid,
         role,
       };
+      const userLangValue = normalizeLocale(
+        (current as UserDbRow).UserLang ??
+          (payload as Record<string, unknown>).userLang ??
+          null,
+      );
+
       if (current.jid === null && lid) {
         stmts.updateUserByLid.run(
           current.username ?? null,
           canonicalJid ? normalizeJid(canonicalJid) : null,
           role,
           Number(current.is_banned ?? 0),
+          current.coins ?? 100000,
+          current.bank ?? 10000,
+          userLangValue,
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           lid,
@@ -1303,8 +1434,9 @@ export const db: IDatabase = {
           canonicalJid ? normalizeJid(canonicalJid) : null,
           role,
           Number(current.is_banned ?? 0),
-          current.coins ?? 100000, // <--- Faltaba coins
-          current.bank ?? 10000,   // <--- Faltaba bank
+          current.coins ?? 100000,
+          current.bank ?? 10000,
+          userLangValue,
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           current.jid,
@@ -1335,3 +1467,4 @@ export function checkpointDb() {
 }
 
 db.syncDefaultUserRoles();
+warmLanguageCaches();

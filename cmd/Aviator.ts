@@ -1,3 +1,4 @@
+import { t } from "../src/langs/index.ts";
 const { AIRich, createCtx } = require('../lib/messageBuilder');
 
 function buildAviatorPayload() {
@@ -241,7 +242,7 @@ const aviatorCommand = async (sock, chatId, msg, args) => {
         await rich.send(ctx.chatId, { quoted: ctx.msg });
     } catch (error) {
         console.error('LuferOS Aviator Error:', error?.message || error);
-        await ctx.reply('⚠️ Imposible abrir LuferOS Aviator.');
+        await ctx.reply(t("cmd_imposible_abrir_luferos_aviato_18df84bf"));
     }
 };
 

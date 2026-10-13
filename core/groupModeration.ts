@@ -10,6 +10,8 @@ import type {
   GroupCallEvent,
 } from "../types/index.d.ts";
 import type { BadWordLevel } from "../types/media.d.ts";
+import { t } from "../src/langs/index.ts";
+
 
 const badWordsData = JSON.parse(
   readFileSync(new URL("../database/badWords.json", import.meta.url), "utf8"),
@@ -220,7 +222,7 @@ export async function handleGroupToxic(
     const count = addWarning(db, groupJid, userJid, `Toxicidad: ${toxicMatch.reason}`);
     
     await actionSock.sendMessage(groupJid, {
-      text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ 🚫 ${fytBold("ANTI-TOXIC SYSTEM")}\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Usuario: @${userJid.split("@")[0]}\n┃ 📊 Warns: [ ${count}/${(group.data as Record<string, unknown> | undefined)?.warnLimit || 3} ]\n┃ 🛡️ Admin: ${fytBold("SYSTEM")} ⚡\n┃ 📌 Acción: Llamada de atención\n┃ 📝 Razón: ${toxicMatch.reason}\n┃ ⏰ Fecha: ${new Date().toLocaleDateString("es-CR", { timeZone: "America/Costa_Rica" })}\n\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ⚠️ Se ha añadido una\n┃ ⚠️ advertencia al usuario.\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ❗ El mensaje infractor\n┃ ❗ ha sido eliminado.\n\n╰〔 ${fytBold("SYSTEM ACTIVE")} 〕⬣`,
+      text: `╭〔 ⚠️ ${fytBold(t("core_aura_reed_95dcfb15"))} 〕⬣\n┃ 🚫 ${fytBold(t("core_anti_toxic_system_384ef390"))}\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Usuario: @${userJid.split("@")[0]}\n┃ 📊 Warns: [ ${count}/${(group.data as Record<string, unknown> | undefined)?.warnLimit || 3} ]\n┃ 🛡️ Admin: ${fytBold(t("core_system_29d43743"))} ⚡\n┃ 📌 Acción: Llamada de atención\n┃ 📝 Razón: ${toxicMatch.reason}\n┃ ⏰ Fecha: ${new Date().toLocaleDateString("es-CR", { timeZone: "America/Costa_Rica" })}\n\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ⚠️ Se ha añadido una\n┃ ⚠️ advertencia al usuario.\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ❗ El mensaje infractor\n┃ ❗ ha sido eliminado.\n\n╰〔 ${fytBold(t("core_system_active_e403484a"))} 〕⬣`,
       mentions: [userJid],
     });
     

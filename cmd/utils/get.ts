@@ -1,6 +1,8 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { readFile, stat } from "node:fs/promises";
 import { downloadToCache, safeFileName } from "../../core/downloadUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_CODE_MESSAGE_SIZE = 12000;
@@ -106,12 +108,12 @@ function isCode(mime: string, name: string): boolean {
 export default {
   name: ["get", "fetch", "download"],
   category: "utils",
-  description: "Descarga y envía contenido desde una URL.",
+  description: t("cmd_descarga_y_envia_contenido_des_fbc1ca27"),
   async run({ args, reply, react }: CommandContext) {
     const url = args.join(" ").trim();
     if (!/^https?:\/\//i.test(url))
       return reply({
-        text: "❌ Proporciona una URL válida. Ejemplo: .get https://sitio.com/archivo",
+        text: t("cmd_proporciona_una_url_valida_eje_c2dd8ec7"),
       });
     await react("⬇️");
     try {
@@ -137,7 +139,7 @@ export default {
         .toLowerCase();
       const fileName = fileNameFromResponse(
         url,
-        response?.headers.get("content-disposition") || null,
+        response?.headers.get(t("cmd_content_disposition_911721d6")) || null,
         extensionFromMime(headerMime),
       );
       const mimeType =
@@ -169,7 +171,7 @@ export default {
       );
       await react("❌");
       return reply({
-        text: `❌ No se pudo descargar el contenido: ${error instanceof Error ? error.message : String(error) || "respuesta inválida"}`,
+        text: t("cmd_no_se_pudo_descargar_el_conten_4fccb4df", { value0: error instanceof Error ? error.message : String(error) || "respuesta inválida" }),
       });
     }
   },

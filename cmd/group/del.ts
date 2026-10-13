@@ -1,10 +1,12 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["dmsg", "forcedel", "ownerdel"],
   category: "owner",
-  description: "Fuerza la eliminación de cualquier mensaje (Bypass de permisos).",
+  description: t("cmd_fuerza_la_eliminacion_de_cualq_3ea5b232"),
   groupOnly: true,
   ownerOnly: true,
   async run(ctx: CommandContext) {
@@ -13,7 +15,7 @@ export default {
     const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
     
     if (!contextInfo || !contextInfo.stanzaId) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA MENSAJE")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde al mensaje que\n┃ > deseas eliminar forzosamente.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_responde_al_mens_0a474b8d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_mensaje_dba5d803")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
     const quotedId = contextInfo.stanzaId;
@@ -34,7 +36,7 @@ export default {
       await react("✅").catch(() => undefined);
     } catch {
       await react("❌").catch(() => undefined);
-      await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR INTERNO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > No se pudo borrar el mensaje.\n┃ > Puede que sea muy antiguo.\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+      await reply(t("cmd_value0_value1_no_se_pudo_borra_5837cd41", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_interno_6dc10549")), value2: fytBold(t("cmd_system_29d43743")) })).catch(() => undefined);
     }
   }
 };

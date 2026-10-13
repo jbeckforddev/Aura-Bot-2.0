@@ -3,6 +3,8 @@ import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
 import { identifySong } from "../../src/api/shazamScraper.js";
 import { fytBold } from "../../core/socketText.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function unwrap(
   message: proto.IMessage | null | undefined,
@@ -20,14 +22,14 @@ function unwrap(
 export default {
   name: ["shazam", "whatsong", "findsong", "find"],
   category: "search",
-  description: "Identifica una canción desde un audio o video citado.",
+  description: t("cmd_identifica_una_cancion_desde_u_3a6a4a38"),
   async run(ctx: CommandContext) {
     const context = ctx.msg?.message?.extendedTextMessage?.contextInfo;
     const quoted = context?.quotedMessage;
     const target = unwrap(quoted) ?? unwrap(ctx.msg?.message);
     if (!target)
       return ctx.reply(
-        `❗ Responde a un audio/video con ${ctx.usedPrefix ?? "."}shazam.`,
+        t("cmd_responde_a_un_audio_video_con__ae487fb8", { value0: ctx.usedPrefix ?? "." }),
       );
     await ctx.react("⏳");
     try {
@@ -50,7 +52,7 @@ export default {
         },
       );
       const track = await identifySong(buffer);
-      let text = `╭〔 🔍 ${fytBold("SHAZAM RESULT")} 〕━⬣\n\n┃ ➥ ${track.title || "Desconocido"}\n\n┣━━━━━━━━━━━━⬣\n┃ > ${fytBold("Artista")} › ${track.artist || "Desconocido"}\n┃ > ${fytBold("Álbum")} › ${track.album || "Desconocido"}\n┃ > ${fytBold("Género")} › ${track.genre || "Desconocido"}\n┃ > ${fytBold("Fecha")} › ${track.releaseDate || "Desconocida"}\n┃ > ${fytBold("Sello")} › ${track.label || "Desconocida"}\n\n╰━━〔 ⚡ ${fytBold("SYSTEM ACTIVE")} 〕━━⬣`;
+      let text = t("cmd_value0_value1_value2_value3_va_3cf13772", { value0: fytBold(t("cmd_shazam_result_bc8b9ab8")), value1: track.title || "Desconocido", value2: fytBold(t("cmd_artista_745d1fb2")), value3: track.artist || "Desconocido", value4: fytBold(t("cmd_album_2c64db89")), value5: track.album || "Desconocido", value6: fytBold(t("cmd_genero_71354153")), value7: track.genre || "Desconocido", value8: fytBold(t("cmd_fecha_bcc47609")), value9: track.releaseDate || "Desconocida", value10: fytBold(t("cmd_sello_27991800")), value11: track.label || "Desconocida", value12: fytBold(t("cmd_system_active_e403484a")) });
       const title = track.title || "Canción identificada";
       const link = `https://www.google.com/search?q=${encodeURIComponent(`${title} ${track.artist || ""}`)}`;
       const hasPreview = track.coverArt
@@ -71,7 +73,7 @@ export default {
     } catch (error: unknown) {
       await ctx.react("❌");
       return ctx.reply({
-        text: `❌ Error al identificar: ${error instanceof Error ? error.message : String(error) || "Sin coincidencias."}`,
+        text: t("cmd_error_al_identificar_value0_c42a943c", { value0: error instanceof Error ? error.message : String(error) || "Sin coincidencias." }),
       });
     }
   },

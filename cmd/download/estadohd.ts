@@ -7,6 +7,8 @@ import { randomBytes } from "node:crypto";
 import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
@@ -39,13 +41,13 @@ const createProgressBar = (percent: number): string => {
 export default {
   name: ["estadohd", "eshd", "hd"],
   category: "system",
-  description: "Convierte lote de documentos/zips a HD rápido y con calidad original.",
+  description: t("cmd_convierte_lote_de_documentos_z_4dbad9c2"),
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
     if (!quoted || !quoted.documentMessage) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA ARCHIVO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde a un archivo en modo\n┃ > documento (Video, Imagen o ZIP).\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_responde_a_un_ar_c6cdb101", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_archivo_bb82df11")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
     const docMsg = quoted.documentMessage;
@@ -57,21 +59,21 @@ export default {
     const isZip = mime.includes("zip") || fileName.endsWith(".zip");
 
     if (!isVideo && !isImage && !isZip) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FORMATO INVÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > El documento debe ser un video,\n┃ > imagen o archivo .zip\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`);
+      return reply(t("cmd_value0_value1_el_documento_deb_b72e3462", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_formato_invalido_6deee6ba")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
     await react("⏳").catch(() => undefined);
 
     const progressMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ⏳ Estado: Preparando entorno...\n╰━━━━━━━━━━━━⬣` },
+      { text: t("cmd_value0_estado_preparando_entor_0c868d85", { value0: fytBold(t("cmd_estado_hd_fae48c7d")) }) },
       { quoted: msg as any }
     ).catch(() => null);
 
     const updateStatus = async (status: string) => {
       if (progressMsg?.key) {
         await sock.sendMessage(from, { 
-          text: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n${status}\n╰━━━━━━━━━━━━⬣`, 
+          text: t("cmd_value0_value1_db810e84", { value0: fytBold(t("cmd_estado_hd_fae48c7d")), value1: status }),
           edit: progressMsg.key 
         }).catch(() => undefined);
       }
@@ -205,13 +207,13 @@ export default {
         if (type === 'video') {
           await sock.sendMessage(from, {
             video: { url: pFile },
-            caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Video optimizado ${total > 1 ? `(${currentCount}/${total})` : ""}\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+            caption: t("cmd_value0_video_optimizado_value1_2df0d884", { value0: fytBold(t("cmd_estado_hd_fae48c7d")), value1: total > 1 ? `(${currentCount}/${total})` : "", value2: fytBold(t("cmd_aura_reed_95dcfb15")) }),
             mimetype: "video/mp4"
           }, { quoted: msg as any });
         } else {
           await sock.sendMessage(from, {
             image: { url: pFile },
-            caption: `╭〔 📱 ${fytBold("ESTADO HD")} 〕━⬣\n┃ ➥ Imagen optimizada ${total > 1 ? `(${currentCount}/${total})` : ""}\n╰〔 ⚡ ${fytBold("AURA REED")} 〕⬣`,
+            caption: t("cmd_value0_imagen_optimizada_value_42902841", { value0: fytBold(t("cmd_estado_hd_fae48c7d")), value1: total > 1 ? `(${currentCount}/${total})` : "", value2: fytBold(t("cmd_aura_reed_95dcfb15")) }),
             mimetype: "image/jpeg"
           }, { quoted: msg as any });
         }
@@ -230,7 +232,7 @@ export default {
       if (progressMsg?.key) {
         await updateStatus(`┃ ⚠️ Estado: Error de procesamiento\n┃ ❌ Fallo: ${errorMsg.slice(0, 80)}...`);
       } else {
-        await reply(`╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ${fytBold("ERROR REAL")}\n╰━━━━━━━━━━━━⬣\n\n┃ > ${errorMsg.slice(0, 500)}\n\n╰〔 ⚡ ${fytBold("SYSTEM")} 〕⬣`).catch(() => undefined);
+        await reply(t("cmd_value0_value1_value2_value3_569f9d3d", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_error_real_17ee0baf")), value2: errorMsg.slice(0, 500), value3: fytBold(t("cmd_system_29d43743")) })).catch(() => undefined);
       }
     } finally {
       await rm(inputP, { force: true }).catch(() => undefined);

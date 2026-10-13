@@ -2,6 +2,8 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 function unwrapMessage(
   message: proto.IMessage | null | undefined,
@@ -35,14 +37,14 @@ function getMediaCaption(message: proto.IMessage | null | undefined): string {
 export default {
   name: ["read"],
   category: "utils",
-  description: "Extrae y reenvía medios de visualización única.",
+  description: t("cmd_extrae_y_reenvia_medios_de_vis_cb89e41c"),
   async run({ sock, msg, from, reply, react }: CommandContext) {
     const context = msg.message?.extendedTextMessage?.contextInfo;
     const quotedMessage = context?.quotedMessage;
     const target = unwrapMessage(quotedMessage);
     if (!target)
       return reply({
-        text: `╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTA MENSAJE VÁLIDO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Responde a una imagen o video de visualización única.`,
+        text: t("cmd_value0_value1_responde_a_una_i_d291d4e7", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_mensaje_valido_cefa950d")) }),
       });
     await react("⏳");
     try {
@@ -72,7 +74,7 @@ export default {
       const originalCaption = getMediaCaption(target);
       const caption =
         originalCaption ||
-        `🔁 ${fytBold(target.imageMessage ? "Aquí tienes la imagen" : "Aquí tienes el video")}`;
+        t("cmd_value0_8255ee52", { value0: fytBold(target.imageMessage ? "Aquí tienes la imagen" : "Aquí tienes el video") });
       if (target.imageMessage)
         await sendMessageWithRateLimit(
           sock,
@@ -92,7 +94,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ ${error instanceof Error ? error.message : String(error) || "No pude extraer el medio."}`,
+        text: t("cmd_value0_6b94fc8b", { value0: error instanceof Error ? error.message : String(error) || "No pude extraer el medio." }),
       });
     }
   },

@@ -8,14 +8,16 @@ import { fytBold } from "../../core/socketText.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
 import { searchYouTubeVideos } from "../../src/api/YouTubeSearch.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["ytsearch", "yts", "plays"],
   category: "search",
-  description: "Busca videos en YouTube.",
+  description: t("cmd_busca_videos_en_youtube_25e3a1f2"),
   async run({ args, reply, react, sock, from, msg, sender }: CommandContext) {
     const query = args.join(" ").trim();
-    if (!query) return reply("⚠️ Debes especificar qué buscar.");
+    if (!query) return reply(t("cmd_debes_especificar_que_buscar_4a8954a4"));
     await react("🔍");
     try {
       const searchResults = await searchYouTubeVideos(query);
@@ -71,7 +73,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `❌ Error: ${error instanceof Error ? error.message : String(error) || "No se pudo buscar en YouTube."}`,
+        text: t("cmd_error_value0_a4bb764e", { value0: error instanceof Error ? error.message : String(error) || "No se pudo buscar en YouTube." }),
       });
     }
   },

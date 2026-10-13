@@ -11,18 +11,20 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
+import { t } from "../../src/langs/index.ts";
+
 const INSTAGRAM_URL =
   /(?:instagram\.com|instagr\.am)\/(?:reels?|p|tv|stories)\//i;
 
 export default {
   name: ["ig", "instagram"],
   category: "download",
-  description: "Descarga videos o imágenes de Instagram.",
+  description: t("cmd_descarga_videos_o_imagenes_de__23a7e153"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
     const url = args.join(" ").trim();
     if (!url || !INSTAGRAM_URL.test(url))
-      return reply("⚠️ Proporciona un enlace válido de Instagram.");
+      return reply(t("cmd_proporciona_un_enlace_valido_d_6c6eb77e"));
     await react("⏳");
     try {
       const response = await requestJson<InstagramDownloadResponse>(
@@ -45,11 +47,11 @@ export default {
         const { cost } = await prepareDownloadCharge(ctx, mediaType, file);
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "INSTAGRAM VIDEO",
-          icon: "📸",
-          title: data?.caption || "Sin título",
-          total: "1 video",
-          type: "Video MP4",
+          label: t("cmd_instagram_video_50270846"),
+          icon: t("cmd_text_c6b09845"),
+          title: data?.caption || t("cmd_sin_titulo_fd8beeee"),
+          total: t("cmd_1_video_9fa45ef1"),
+          type: t("cmd_video_mp4_1275e211"),
           cost: formatMoney(cost, ctx),
           url,
           showTotal: true,
@@ -72,11 +74,11 @@ export default {
         }
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "INSTAGRAM POST",
-          icon: "📸",
-          title: data?.caption || "Sin título",
-          total: `${images.length} imágenes`,
-          type: "Imágenes",
+          label: t("cmd_instagram_post_93a5d9fb"),
+          icon: t("cmd_text_c6b09845"),
+          title: data?.caption || t("cmd_sin_titulo_fd8beeee"),
+          total: t("cmd_value0_imagenes_b7d4804f", { value0: images.length }),
+          type: t("cmd_imagenes_072d8942"),
           cost: formatMoney(cost, ctx),
           url,
           showTotal: true,
@@ -95,7 +97,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `${error instanceof Error ? error.message : "No se pudo descargar Instagram."}`,
+        text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : "No se pudo descargar Instagram." }),
       });
     }
   },

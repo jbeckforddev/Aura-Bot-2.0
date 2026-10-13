@@ -1,10 +1,12 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["ruleta", "rr"],
   category: "games",
-  description: "Juego de ruleta rusa. 1 de 6 probabilidades de expulsión.",
+  description: t("cmd_juego_de_ruleta_rusa_1_de_6_pr_63648697"),
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg } = ctx;
     
@@ -12,7 +14,7 @@ export default {
     const isGroup = from.endsWith("@g.us");
 
     if (!isGroup || !sender) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("SOLO GRUPOS")}\n╰━━━━━━━━━━━━⬣`);
+      return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_solo_grupos_89f57a2b")) }));
     }
 
     const groupMetadata = await sock.groupMetadata(from).catch(() => null);
@@ -26,18 +28,18 @@ export default {
     const isSenderAdmin = senderParticipant?.admin === "admin" || senderParticipant?.admin === "superadmin";
 
     if (!isBotAdmin) {
-      return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("NECESITO SER ADMIN")}\n╰━━━━━━━━━━━━⬣`);
+      return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_necesito_ser_admin_964598c4")) }));
     }
 
     if (isSenderAdmin) {
-      return reply(`╭〔 🛡️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("ADMINS INMUNES")}\n╰━━━━━━━━━━━━⬣`);
+      return reply(t("cmd_value0_value1_5f1c8b4a", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_admins_inmunes_1eb5c768")) }));
     }
 
     await react("🔫").catch(() => undefined);
 
     const initMsg = await sock.sendMessage(
       from,
-      { text: `╭〔 💀 ${fytBold("RULETA RUSA")} 〕━⬣\n┃ 🔄 Girando el tambor...\n╰━━━━━━━━━━━━⬣` },
+      { text: t("cmd_value0_girando_el_tambor_c95ca2bd", { value0: fytBold(t("cmd_ruleta_rusa_81877e42")) }) },
       { quoted: msg as any }
     ).catch(() => null);
 
@@ -48,7 +50,7 @@ export default {
     if (isDead) {
       if (initMsg?.key) {
         await sock.sendMessage(from, { 
-          text: `╭〔 💀 ${fytBold("RULETA RUSA")} 〕━⬣\n┃ 💥 ¡BAM! Te volaste la cabeza.\n╰━━━━━━━━━━━━⬣`, 
+          text: t("cmd_value0_bam_te_volaste_la_cabez_4d7d3f17", { value0: fytBold(t("cmd_ruleta_rusa_81877e42")) }),
           edit: initMsg.key 
         }).catch(() => undefined);
       }
@@ -56,7 +58,7 @@ export default {
     } else {
       if (initMsg?.key) {
         await sock.sendMessage(from, { 
-          text: `╭〔 😅 ${fytBold("RULETA RUSA")} 〕━⬣\n┃ 💨 *Click*... Te salvaste esta vez.\n╰━━━━━━━━━━━━⬣`, 
+          text: t("cmd_value0_click_te_salvaste_esta__8397637f", { value0: fytBold(t("cmd_ruleta_rusa_81877e42")) }),
           edit: initMsg.key 
         }).catch(() => undefined);
       }

@@ -1,15 +1,16 @@
 import type { CommandContext, CommandPlugin } from "../../types/index.d.ts";
 import { forgetActiveSubBot } from "../../core/subbotManager.ts";
+import { t } from "../../src/langs/index.ts";
 
 export default {
   name: ["logout", "cerrar", "cerrarsesion", "desconectar"],
-  description: "Cierra la sesión del bot desde su propio número.",
+  description: t("socketDescriptionLogout"),
   category: "socket",
   botUserOnly: true,
   privateOnly: true,
 
   async run({ reply, sock, db }: CommandContext) {
-    await reply({ text: "⏳ Cerrando la sesión de este bot..." });
+    await reply({ text: t("socketLogoutClosing") });
     sock.manualLogout = true;
     forgetActiveSubBot(String(sock.sessionName || ""));
 
@@ -21,9 +22,9 @@ export default {
         status: "offline",
       });
       const message =
-        error instanceof Error ? error.message : "Error desconocido";
+        error instanceof Error ? error.message : t("socketUnknownError");
       await reply({
-        text: `❌ No se pudo cerrar la sesión: ${message}`,
+        text: t("socketLogoutError", { error: message }),
       });
     }
   },

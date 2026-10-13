@@ -20,6 +20,8 @@ import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
 import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
@@ -51,12 +53,12 @@ type TikWMVideoResponse = {
 export default {
   name: ["dtk", "dtt", "dttv", "doctiktok", "dtkmp4", "tt2"],
   category: "download",
-  description: "Busca y descarga videos de TikTok como documento.",
+  description: t("cmd_busca_y_descarga_videos_de_tik_ba512c51"),
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, from, msg } = ctx;
     const query = args.join(" ").trim();
     if (!query)
-      return reply("⚠️ Proporciona una búsqueda o un enlace válido de TikTok.");
+      return reply(t("cmd_proporciona_una_busqueda_o_un__4bcc0240"));
     await react("⏳");
     let convertedFile = "";
     try {
@@ -102,8 +104,8 @@ export default {
         const AUDIO = data.data.music_info.play;
         const caption = DL_TEMPLATE({
           bold: fytBold,
-          label: "TIKTOK IMAGES",
-          icon: "🖼️",
+          label: t("cmd_tiktok_images_c263451e"),
+          icon: t("cmd_text_91a64201"),
           title,
           author,
           views: formatCount(views),
@@ -117,7 +119,7 @@ export default {
           showLikes: likes !== undefined && likes !== null,
           showComments: comments !== undefined && comments !== null,
           showShares: shares !== undefined && shares !== null,
-          loadingText: "📸 Álbum listo",
+          loadingText: t("cmd_album_listo_458c0141"),
         });
         const album = files.map((file, index) => ({
           image: { url: file },
@@ -157,8 +159,8 @@ export default {
       const URL_VIDEO = `https://www.tiktok.com/@${data.data.author.unique_id}/video/${data.data.id}`
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: "TIKTOK DOCUMENT",
-        icon: "🎥",
+        label: t("cmd_tiktok_document_82fb2560"),
+        icon: t("cmd_text_a2865ecb"),
         title,
         author,
         views: formatCount(views),
@@ -172,8 +174,8 @@ export default {
         showLikes: likes !== undefined && likes !== null,
         showComments: comments !== undefined && comments !== null,
         showShares: shares !== undefined && shares !== null,
-        loadingText: "Descargando video...",
-        loadingIcon: "⏳",
+        loadingText: t("cmd_descargando_video_e3c0869f"),
+        loadingIcon: t("cmd_text_7a2ad7a6"),
       });
       await reply({
         document: { url: convertedFile },
@@ -190,7 +192,7 @@ export default {
           ? error.message
           : "No se pudo descargar el video.";
       return reply({
-        text: `${message}`,
+        text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     } finally {
       if (convertedFile)

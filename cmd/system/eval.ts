@@ -1,5 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { inspect } from "node:util";
+import { t } from "../../src/langs/index.ts";
+
 
 const AsyncFunction = Object.getPrototypeOf(async function () {})
   .constructor as {
@@ -38,14 +40,14 @@ function getMessageContext(message: Record<string, unknown>) {
 
 export default {
   name: ["eval", "ev", ">"],
-  description: "Evalúa código con todo el contexto del handler.",
+  description: t("cmd_evalua_codigo_con_todo_el_cont_835d270f"),
   category: "system",
-  ownerOnly: true,
+  modOnly: true,
   async run(ctx: CommandContext) {
     const code = String(ctx.text || ctx.args?.join(" ") || "").trim();
     if (!code)
       return ctx.reply(
-        "⚠️ Escribe una expresión o bloque de código para evaluar.",
+        t("cmd_escribe_una_expresion_o_bloque_fbf76626"),
       );
     const m = getMessageContext({ ...ctx.msg, body: ctx.body });
 
@@ -90,10 +92,10 @@ export default {
       }
 
       const output = formatResult(result);
-      return ctx.reply(`✅ Resultado:\n${output.slice(0, 6000)}`);
+      return ctx.reply(t("cmd_resultado_value0_6b9075d7", { value0: output.slice(0, 6000) }));
     } catch (error: unknown) {
       return ctx.reply(
-        `❌ ${(error instanceof Error ? error.stack || error.message : String(error)).slice(0, 6000)}`,
+        t("cmd_value0_6b94fc8b", { value0: (error instanceof Error ? error.stack || error.message : String(error)).slice(0, 6000) }),
       );
     }
   },

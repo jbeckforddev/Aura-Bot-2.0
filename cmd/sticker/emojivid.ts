@@ -9,11 +9,13 @@ import {
   toSticker,
   applyStickerMetadata,
 } from "../../core/stickerUtils.ts";
+import { t } from "../../src/langs/index.ts";
+
 
 export default {
   name: ["emojivid", "emoji", "emoji-video", "emojivideo"],
   category: "sticker",
-  description: "Genera un sticker animado a partir de un emoji.",
+  description: t("cmd_genera_un_sticker_animado_a_pa_85cea90e"),
   async run({
     args,
     db,
@@ -25,7 +27,7 @@ export default {
   }: CommandContext) {
     const emoji = extractEmojis(args.join(" ").trim())[0];
     if (!emoji)
-      return reply(`⚠️ Envía un emoji. Ejemplo: ${usedPrefix}emojivid ❤️`);
+      return reply(t("cmd_envia_un_emoji_ejemplo_value0__8f6b4dcf", { value0: usedPrefix }));
     await react("⏳");
     try {
       const url = `${DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "")}/whatsapp/emoji?emoji=${encodeURIComponent(emoji)}&key=${DL_CONFIG.alya.API_KEY}`;
@@ -42,7 +44,7 @@ export default {
     } catch (error: unknown) {
       await react("❌");
       return reply({
-        text: `╭〔 ❌ ${fytBold("AURA REED")} 〕⬣\n┃ ⚠️ ERROR AL CREAR STICKER\n╰━━━━━━━━━━━━⬣\n\n┃ > ${error instanceof Error ? error.message : String(error) || "Intenta nuevamente."}\n╰〔 ⚡ SYSTEM 〕⬣`,
+        text: t("cmd_value0_error_al_crear_sticker__fc8ff0d0", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: error instanceof Error ? error.message : String(error) || "Intenta nuevamente." }),
       });
     }
   },
