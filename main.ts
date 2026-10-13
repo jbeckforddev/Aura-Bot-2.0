@@ -1,5 +1,6 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
 import inspector from "node:inspector";
 import "./config.ts";
 import { connectToWhatsApp } from "./core/conection.ts";
@@ -8,42 +9,38 @@ import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import { displayBanner, logInfo, connectionLog } from "./core/logger.ts";
 import { checkpointDb } from "./database/AuraDB.ts";
 
-
 const TMP_DIR = path.resolve("./cache");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 process.env.TMPDIR = TMP_DIR;
 
-for (const file of fs.readdirSync(TMP_DIR)) {
+async function cleanCache(maxAgeMs: number = 0) {
   try {
-    fs.unlinkSync(path.join(TMP_DIR, file));
-  } catch {
-    // Ignora archivos que ya no estén disponibles al limpiar el caché.
-  }
+    const files = await fsp.readdir(TMP_DIR);
+    for (const file of files) {
+      const filePath = path.join(TMP_DIR, file);
+      try {
+        const stat = await fsp.stat(filePath);
+        if (Date.now() - stat.mtimeMs >= maxAgeMs) {
+          await fsp.unlink(filePath);
+        }
+      } catch {}
+    }
+  } catch {}
 }
 
-// Limpieza periódica de archivos temporales cada 15 minutos para evitar saturar la RAM
-setInterval(
-  () => {
-    if (fs.existsSync(TMP_DIR)) {
-      for (const file of fs.readdirSync(TMP_DIR)) {
-        try {
-          const filePath = path.join(TMP_DIR, file);
-          const stat = fs.statSync(filePath);
-          if (Date.now() - stat.mtimeMs > 30 * 60 * 1000) {
-            fs.unlinkSync(filePath);
-          }
-        } catch {
-          // Ignora entradas no válidas durante la limpieza del caché.
-        }
-      }
-    }
-    checkpointDb();
-    if (global.gc) global.gc();
-  },
-  15 * 60 * 1000,
-);
+cleanCache(0);
+
+setInterval(() => {
+  cleanCache(30 * 60 * 1000);
+  checkpointDb();
+  if (typeof (global as any).gc === "function") {
+    (global as any).gc();
+  }
+}, 15 * 60 * 1000);
 
 function startCpuProfile() {
+  if (process.env.AURA_DEBUG_PROFILE !== "true") return;
+
   const session = new inspector.Session();
   session.connect();
 
@@ -71,7 +68,7 @@ function startCpuProfile() {
 
           try {
             const profileDir = path.join(TMP_DIR, "profiles");
-            fs.mkdirSync(profileDir, { recursive: true });
+            if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
             const profilePath = path.join(profileDir, `cpu-${Date.now()}.cpuprofile`);
             fs.writeFileSync(profilePath, JSON.stringify(result.profile));
             connectionLog(`Perfil CPU guardado en ${profilePath}`, "alert");
