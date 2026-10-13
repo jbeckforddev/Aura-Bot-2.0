@@ -260,6 +260,7 @@ export interface IDatabase {
   deleteBot(jid: string): void;
   getAllUsers(): DatabaseUser[];
   getAllBots(): DatabaseBot[];
+  hasRoles(jid: string, roles: string[]): Record<string, boolean>;
   hasRole(jid: string, role: UserRole | string): boolean;
   setRole(jid: string, role: UserRole | string): void;
   syncDefaultUserRoles(): void;

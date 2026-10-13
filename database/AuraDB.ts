@@ -258,6 +258,15 @@ for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
 
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
+function hasRoleLevel(userRole: string | null | undefined, role: string) {
+  const currentIndex = hierarchy.indexOf(
+    (userRole ?? "user") as (typeof hierarchy)[number],
+  );
+  const targetIndex = hierarchy.indexOf(role as (typeof hierarchy)[number]);
+
+  return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
+}
+
 const groupColumns = db_instance
   .prepare("PRAGMA table_info('groups')")
   .all() as Array<{ name: string }>;
@@ -1197,14 +1206,15 @@ export const db: IDatabase = {
     });
   },
 
-  hasRole(jid: string, role: string) {
-    const user = getUser(jid);
-    const currentIndex = hierarchy.indexOf(
-      (user?.role ?? "user") as (typeof hierarchy)[number],
-    );
-    const targetIndex = hierarchy.indexOf(role as (typeof hierarchy)[number]);
+  hasRoles(jid: string, roles: string[]) {
+    const userRole = getUser(jid)?.role;
+    return Object.fromEntries(
+      roles.map((role) => [role, hasRoleLevel(userRole, role)]),
+    ) as Record<string, boolean>;
+  },
 
-    return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
+  hasRole(jid: string, role: string) {
+    return hasRoleLevel(getUser(jid)?.role, role);
   },
 
   setRole(jid: string, role: string) {

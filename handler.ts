@@ -574,10 +574,20 @@ export async function handleMessage(
       rawSenderLid,
       sock,
     );
-    const isOwner = configuredOwner || runtimeDb.hasRole(sender, "owner");
-    const isCoOwner = configuredCoOwner || runtimeDb.hasRole(sender, "coowner");
-    const isMod = isOwner || isCoOwner || runtimeDb.hasRole(sender, "mod");
-    const isPremium = isMod || runtimeDb.hasRole(senderNum, "premium");
+    const senderRoles = runtimeDb.hasRoles(sender, [
+      "owner",
+      "coowner",
+      "mod",
+      "premium",
+    ]);
+    const isOwner = configuredOwner || senderRoles.owner;
+    const isCoOwner = configuredCoOwner || senderRoles.coowner;
+    const isMod = isOwner || isCoOwner || senderRoles.mod;
+    const isPremium =
+      isMod ||
+      (sender.endsWith("@lid")
+        ? runtimeDb.hasRole(senderNum, "premium")
+        : senderRoles.premium);
 
     const botTypeLabel = String(
       storedBot?.bot_type ||
