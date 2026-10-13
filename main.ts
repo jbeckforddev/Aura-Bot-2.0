@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import inspector from "node:inspector";
 import "./config.ts";
 import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
@@ -41,6 +42,49 @@ setInterval(
   },
   15 * 60 * 1000,
 );
+
+function startCpuProfile() {
+  const session = new inspector.Session();
+  session.connect();
+
+  session.post("Profiler.enable", (enableError) => {
+    if (enableError) {
+      session.disconnect();
+      connectionLog(`No se pudo habilitar el perfil CPU: ${enableError.message}`, "error");
+      return;
+    }
+
+    session.post("Profiler.start", (startError) => {
+      if (startError) {
+        session.disconnect();
+        connectionLog(`No se pudo iniciar el perfil CPU: ${startError.message}`, "error");
+        return;
+      }
+
+      setTimeout(() => {
+        session.post("Profiler.stop", (stopError, result) => {
+          session.disconnect();
+          if (stopError) {
+            connectionLog(`No se pudo guardar el perfil CPU: ${stopError.message}`, "error");
+            return;
+          }
+
+          try {
+            const profileDir = path.join(TMP_DIR, "profiles");
+            fs.mkdirSync(profileDir, { recursive: true });
+            const profilePath = path.join(profileDir, `cpu-${Date.now()}.cpuprofile`);
+            fs.writeFileSync(profilePath, JSON.stringify(result.profile));
+            connectionLog(`Perfil CPU guardado en ${profilePath}`, "alert");
+          } catch (error) {
+            connectionLog(`No se pudo escribir el perfil CPU: ${String(error)}`, "error");
+          }
+        });
+      }, 45_000);
+    });
+  });
+}
+
+startCpuProfile();
 
 async function mainBot() {
   await displayBanner();
