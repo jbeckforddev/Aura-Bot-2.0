@@ -1,5 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
+  Browsers,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
@@ -262,7 +263,7 @@ export async function connectToWhatsApp(
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     printQRInTerminal: false,
-    browser: ["Aura Reed", "Chrome", "111.0.0.0"],
+    browser: Browsers.ubuntu("Chrome"),
     logger,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
@@ -283,10 +284,62 @@ export async function connectToWhatsApp(
 
   // Debounce de guardado de credenciales (Optimización I/O)
   let saveTimer: NodeJS.Timeout | null = null;
+  let credentialsDirty = false;
+  let authStateClosing = false;
+  let authStateClosePromise: Promise<void> | null = null;
+  let credentialsWriteQueue: Promise<void> = Promise.resolve();
+
+  const persistCredentials = () => {
+    if (!credentialsDirty) return credentialsWriteQueue;
+    credentialsDirty = false;
+    credentialsWriteQueue = credentialsWriteQueue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await saveCreds();
+        } catch (error) {
+          credentialsDirty = true;
+          throw error;
+        }
+      });
+    return credentialsWriteQueue;
+  };
+
+  const closeAuthStateSafely = () => {
+    if (authStateClosePromise) return authStateClosePromise;
+    authStateClosing = true;
+    authStateClosePromise = (async () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+
+      try {
+        await persistCredentials();
+      } catch (error) {
+        connectionLog(`Error al guardar credenciales antes del cierre: ${String(error)}`, "error");
+      }
+
+      try {
+        closeAuthState();
+      } catch (error) {
+        connectionLog(`Error al cerrar el almacén de credenciales: ${String(error)}`, "error");
+      }
+    })();
+    return authStateClosePromise;
+  };
+
   extendedSock.ev.on("creds.update", () => {
+    if (authStateClosing) return;
+    credentialsDirty = true;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
-      await saveCreds();
+      saveTimer = null;
+      try {
+        await persistCredentials();
+      } catch (error) {
+        connectionLog(`Error al guardar credenciales: ${String(error)}`, "error");
+      }
     }, 3000);
   });
 
@@ -318,9 +371,7 @@ export async function connectToWhatsApp(
         extendedSock.ws?.close();
       } catch {}
 
-      try {
-        closeAuthState();
-      } catch {}
+      await closeAuthStateSafely();
 
       const authBase = isSubBot
         ? (globalThis.subBotSession ?? "./sessions/subs")
@@ -454,7 +505,7 @@ export async function connectToWhatsApp(
         ).removeAllListeners();
         (extendedSock.ev as unknown as { destroy?: () => void }).destroy?.();
         void extendedSock.end?.(undefined);
-        closeAuthState();
+        await closeAuthStateSafely();
       } catch {}
 
       const authBase = isSubBot
@@ -501,11 +552,7 @@ export async function connectToWhatsApp(
       connectionLog(`Aviso al limpiar socket desconectado: ${String(cleanupErr)}`, "warn");
     }
 
-    try {
-      closeAuthState();
-    } catch (closeError) {
-      connectionLog(`Error al cerrar sesión: ${String(closeError)}`, "error");
-    }
+    await closeAuthStateSafely();
 
     connectionLog(
       `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}`,

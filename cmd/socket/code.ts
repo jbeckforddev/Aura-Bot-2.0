@@ -9,6 +9,20 @@ export default {
   ownerOnly: false,
 
   async run({ args, sender, reply, copy }: CommandContext) {
+    const requiresManualPhone = sender.endsWith("@lid");
+    const senderPhone = sender.split("@")[0].split(":")[0].replace(/\D/g, "");
+    const phoneNumber = String(
+      args[0] || (requiresManualPhone ? "" : senderPhone),
+    ).replace(/\D/g, "");
+    if (!/^[1-9]\d{7,14}$/.test(phoneNumber)) {
+      await reply({
+        text: requiresManualPhone
+          ? "Tu identificador es @lid. Indica manualmente el número de WhatsApp con código de país. Ejemplo: .code 50612345678"
+          : "No pude obtener automáticamente tu número. Indícalo con código de país. Ejemplo: .code 50612345678",
+      });
+      return;
+    }
+
     let paringCodeText = `╭〔 📲 𝐈𝐍𝐒𝐓𝐑𝐔𝐂𝐂𝐈𝐎𝐍𝐄𝐒 〕⬣\n┃ 1. Sal a tu menú de chats\n┃ 2. Toca el botón \`⋮\`\n┃ 3. Ve a \`dispositivos\`\n┃ 4. Toca \`vincular dispositivo\`\n┃ 5. Toca \`vincular con código\`\n┃ 6. Espera y confirma conexión\n╰━━━━━━━━━━━━⬣
     `;
     const tagUser = sender.includes("@") ? sender.split("@")[0] : sender;
@@ -20,7 +34,7 @@ export default {
     await requestSubBotLink({
       requester: sender,
       method: "code",
-      phoneNumber: args[0],
+      phoneNumber,
       onPairingCode: async (code) => {
         const messageText =
           paringCodeText +
