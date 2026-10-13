@@ -17,16 +17,20 @@ export default {
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg, groupMeta, botJid } = ctx;
 
-    const participants = groupMeta?.participants.filter(p => p.id !== botJid) || [];
-    
+    const participants = [
+      ...new Set(
+        (groupMeta?.participants || [])
+          .filter((participant) => participant.id !== botJid)
+          .map((participant) => participant.id)
+          .filter(Boolean),
+      ),
+    ];
+
     if (participants.length < 2) return reply(`╭〔 ⚠️ ${fytBold("AURA REED")} 〕⬣\n┃ ❌ ${fytBold("FALTAN MIEMBROS")}\n╰━━━━━━━━━━━━⬣`);
 
-    const user1 = participants[Math.floor(Math.random() * participants.length)].id;
-    let user2 = participants[Math.floor(Math.random() * participants.length)].id;
-
-    while (user1 === user2) {
-      user2 = participants[Math.floor(Math.random() * participants.length)].id;
-    }
+    const user1 = getRandom(participants);
+    const otherParticipants = participants.filter((participant) => participant !== user1);
+    const user2 = getRandom(otherParticipants);
 
     const percentage = Math.floor(Math.random() * 101);
     

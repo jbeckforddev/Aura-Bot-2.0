@@ -857,8 +857,6 @@ export async function handleMessage(
     }
 
     let commandPresenceActive = false;
-    let commandPresenceStartedAt = 0;
-    const minTypingDurationMs = 700;
     const ctx = {
       sock,
       db: runtimeDb,
@@ -893,7 +891,6 @@ export async function handleMessage(
       reply: async (content: ReplyContent) => {
         const managesPresence = !commandPresenceActive;
         if (managesPresence) {
-          commandPresenceStartedAt = Date.now();
           try {
             await sock.sendPresenceUpdate("composing", from);
           } catch (error: unknown) {
@@ -901,13 +898,6 @@ export async function handleMessage(
               `[${botLabel}] no se pudo activar composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
             );
           }
-        }
-        const remainingTypingMs =
-          minTypingDurationMs - (Date.now() - commandPresenceStartedAt);
-        if (remainingTypingMs > 0) {
-          await new Promise<void>((resolve) =>
-            setTimeout(resolve, remainingTypingMs),
-          );
         }
         const sendable =
           typeof content === "string" ? { text: content } : { ...content };
@@ -1208,7 +1198,6 @@ export async function handleMessage(
 
     const start = Date.now();
     try {
-      commandPresenceStartedAt = Date.now();
       try {
         await sock.sendPresenceUpdate("composing", from);
       } catch (error: unknown) {

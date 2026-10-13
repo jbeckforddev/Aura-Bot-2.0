@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import sharp from "sharp";
 import "./config.ts";
 import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
@@ -8,9 +7,6 @@ import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import { displayBanner, logInfo, connectionLog } from "./core/logger.ts";
 import { checkpointDb } from "./database/AuraDB.ts";
 
-// Desactivar caché de memoria nativa de sharp (libvips)
-sharp.cache(false);
-sharp.concurrency(1);
 
 const TMP_DIR = path.resolve("./cache");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
