@@ -2,7 +2,7 @@ import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
@@ -10,7 +10,6 @@ import { request } from "undici";
 
 const execFileAsync = promisify(execFile);
 const FFMPEG_MAX_BUFFER = 64 * 1024 * 1024; 
-const UMBRAL_60MB = 60 * 1024 * 1024;
 
 export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
@@ -70,53 +69,31 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
   const outputPath = path.join(cacheDir, `${id}.mp4`);
 
   try {
-    const fileStats = await stat(inputPath);
-    const isLargeFile = fileStats.size > UMBRAL_60MB;
-
-    // Base de argumentos para garantizar compatibilidad con Estados y Reenvíos de WhatsApp
-    const baseArgs = [
+    const encodeArgs = [
       "-nostats",
       "-loglevel", "error",
       "-y",
       "-i", inputPath,
-      "-map_metadata", "-1", 
+      "-map_metadata", "-1", // Obligatorio para que WhatsApp no rechace el archivo
       "-map", "0:v:0",
       "-map", "0:a?",
       "-c:v", "libx264",
       "-threads", "2",
-      "-profile:v", "main",
-      "-level:v", "4.0",
+      "-profile:v", "high",  // Perfil alto para retener detalles en juegos y cielos oscuros
+      "-level:v", "4.1",     // Soporte óptimo para alta resolución y FPS
+      "-preset", "fast",     // Equilibrio perfecto de velocidad sin arruinar la imagen
+      "-crf", "17",          // Calidad visualmente idéntica al original (Sin pérdida)
       "-pix_fmt", "yuv420p",
       "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
       "-c:a", "aac",
       "-b:a", "128k",
       "-ar", "44100",
-      "-movflags", "+faststart"
+      "-movflags", "+faststart",
+      outputPath
     ];
-
-    let qualityArgs: string[];
-
-    if (isLargeFile) {
-      // > 60MB: Presets rápidos pero forzando bitrate alto para evitar pixelación
-      qualityArgs = [
-        "-preset", "ultrafast",
-        "-crf", "18",
-        "-maxrate", "8M",
-        "-bufsize", "16M",
-        outputPath
-      ];
-    } else {
-      // < 60MB: Calidad visual sin pérdida (Transparente al ojo humano)
-      qualityArgs = [
-        "-preset", "fast",
-        "-crf", "17",
-        outputPath
-      ];
-    }
-
-    const encodeArgs = [...baseArgs, ...qualityArgs];
     
-    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 180000, maxBuffer: FFMPEG_MAX_BUFFER });
+    // Timeout subido a 5 minutos por si un video 4k muy pesado toma unos segundos extra
+    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 300000, maxBuffer: FFMPEG_MAX_BUFFER });
 
     return outputPath;
 
