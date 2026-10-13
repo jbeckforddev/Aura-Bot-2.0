@@ -1,5 +1,3 @@
-import { access, readdir } from "node:fs/promises";
-import path from "node:path";
 import { connectToWhatsApp, type ConnectionOptions } from "./conection.ts";
 import { db } from "../database/AuraDB.ts";
 import type { ExtendedWASocket, SubBotLinkRequest } from "../types/index.d.ts";
@@ -85,27 +83,15 @@ export async function requestSubBotLink(request: LinkRequest) {
 }
 
 export async function startSavedSubBots() {
-  const sessionsDirectory = globalThis.subBotSession ?? "./sessions/subs";
-  let sessionDirectories: Awaited<ReturnType<typeof readdir>>;
-  try {
-    sessionDirectories = await readdir(sessionsDirectory, {
-      withFileTypes: true,
-    });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-
-  for (const entry of sessionDirectories) {
-    if (!entry.isDirectory() || activeSubBots.has(entry.name)) continue;
-
-    try {
-      await access(path.join(sessionsDirectory, entry.name, "session.db"));
-    } catch {
+  const bots = db.getAllBots();
+  for (const bot of bots) {
+    if (String(bot.jid || "").startsWith("sub-")) {
+      db.deleteBot(bot.jid);
       continue;
     }
 
-    const sessionName = entry.name;
+    const sessionName = (bot.data as Record<string, unknown> | undefined)?.sessionName as string | undefined;
+    if (bot.isMain || !sessionName || activeSubBots.has(sessionName)) continue;
 
     const connection = await connectToWhatsApp(sessionName, true, {
       allowPairing: false,

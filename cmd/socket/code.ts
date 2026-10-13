@@ -4,55 +4,40 @@ import type { CommandContext } from "../../types/index.d.ts";
 
 export default {
   name: ["code", "pairingcode", "vincularcode"],
-  description: "Vincula un subbot mediante código de 8 dígitos.",
+  description: "Vincula un subbot mediante código.",
   category: "socket",
   ownerOnly: false,
 
-  async run(ctx: CommandContext) {
-    const { args, sender, reply, copy, react } = ctx;
-
-    // Extracción inteligente: Si no pasa args, usa su propio número JID
-    const inputNumber = args.join("");
-    const phoneNumber = inputNumber ? inputNumber.replace(/\D/g, "") : sender.split("@")[0];
-
-    await react("⏳").catch(() => undefined);
-
-    const paringCodeText = `╭〔 📲 ${fytBold("INSTRUCCIONES")} 〕⬣
-┃ 1. Abre WhatsApp en el celular a vincular
-┃ 2. Toca los 3 puntos \`⋮\` (Arriba a la derecha)
-┃ 3. Ve a \`Dispositivos vinculados\`
-┃ 4. Toca \`Vincular un dispositivo\`
-┃ 5. Toca \`Vincular con el número de teléfono\`
-┃ 6. Ingresa el siguiente código:
-╰━━━━━━━━━━━━⬣`;
+  async run({ args, sender, reply, copy }: CommandContext) {
+    let paringCodeText = `╭〔 📲 𝐈𝐍𝐒𝐓𝐑𝐔𝐂𝐂𝐈𝐎𝐍𝐄𝐒 〕⬣\n┃ 1. Sal a tu menú de chats\n┃ 2. Toca el botón \`⋮\`\n┃ 3. Ve a \`dispositivos\`\n┃ 4. Toca \`vincular dispositivo\`\n┃ 5. Toca \`vincular con código\`\n┃ 6. Espera y confirma conexión\n╰━━━━━━━━━━━━⬣
+    `;
+    const tagUser = sender.includes("@") ? sender.split("@")[0] : sender;
 
     await reply({
-      text: `╭〔 ⚡ ${fytBold("PREPARACIÓN")} 〕⬣\n┃ 🚀 Solicitando código para:\n┃ 📱 +${phoneNumber}\n╰━━━━━━━━━━━━⬣`,
+      text: `╭〔 ⚡ 𝐏𝐑𝐄𝐏𝐀𝐑𝐀𝐂𝐈𝐎́𝐍 〕⬣\n┃ Hola @${tagUser}\n┃ ya casi recibes el\n┃ código de vinculación\n╰━━━━━━━━━━━━⬣`,
+      mentions: [sender],
     });
-
     await requestSubBotLink({
       requester: sender,
       method: "code",
-      phoneNumber: phoneNumber,
+      phoneNumber: args[0],
       onPairingCode: async (code) => {
-        await react("✅").catch(() => undefined);
-        const messageText = paringCodeText + `\n\n╭〔 🔑 ${fytBold("CÓDIGO SECRETO")} 〕⬣\n┃ ${code}\n╰━━━━━━━━━━━━⬣`;
+        const messageText =
+          paringCodeText +
+          `\n╭〔 🔑 ${fytBold("TU CODIGO")} 〕⬣\n┃ ${code}\n╰━━━━━━━━━━━━⬣`;
+
         await copy(messageText, code, "📋 Copiar código");
       },
-      onConnected: async () => {
-        await reply({ text: IS_SUBBOT_ONLINE({ prefix: "." }) });
-      },
-      onPairingError: async (error) => {
-        await react("❌").catch(() => undefined);
-        await reply({
-          text: `╭〔 ❌ ${fytBold("ERROR DE RED")} 〕⬣\n┃ ⚠️ Meta rechazó la solicitud.\n┃ 📝 Motivo: ${error.message}\n╰━━━━━━━━━━━━⬣`,
-        });
-      },
-      onPairingExpired: async () => {
-        await reply({
-          text: `╭〔 ⌛ ${fytBold("TIEMPO AGOTADO")} 〕⬣\n┃ ⚠️ El código de 8 dígitos expiró.\n┃ 🔄 Vuelve a usar el comando para generar\n┃ uno nuevo.\n╰━━━━━━━━━━━━⬣`,
-        });
-      },
+      onConnected: () =>
+        void reply({ text: IS_SUBBOT_ONLINE({ prefix: "." }) }),
+      onPairingError: (error) =>
+        void reply({
+          text: `❌ WhatsApp rechazó la solicitud del código: ${error.message}`,
+        }),
+      onPairingExpired: () =>
+        void reply({
+          text: "⌛ El código expiró después de 1 minuto. El subbot quedó offline; solicita otro código para volver a intentarlo.",
+        }),
     });
   },
 };
