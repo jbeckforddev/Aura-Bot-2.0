@@ -16,8 +16,7 @@ const TARGET_VIDEO_SIZE = 94 * 1024 * 1024;
 export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
 
-  const cacheDir =
-    process.env.GLOBAL_CUSTOM_TMP || process.env.TMPDIR || path.resolve("./cache");
+  const cacheDir = process.env.GLOBAL_CUSTOM_TMP || process.env.TMPDIR || path.resolve("./cache");
   await mkdir(cacheDir, { recursive: true });
   const id = randomUUID();
   const inputPath = path.join(cacheDir, `${id}.gif`);
@@ -28,11 +27,13 @@ export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
       signal: AbortSignal.timeout(20000),
       headers: { "User-Agent": "AuraReedBot/2.0" },
     });
+    
     if (mediaResponse.statusCode < 200 || mediaResponse.statusCode >= 300) {
       throw new Error(`GIF HTTP ${mediaResponse.statusCode}`);
     }
 
     await pipeline(mediaResponse.body, createWriteStream(inputPath));
+    
     await execFileAsync(
       ffmpegPath,
       [
@@ -46,6 +47,8 @@ export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
         "libx264",
         "-preset",
         "ultrafast",
+        "-threads",
+        "2", // <-- Aceleración multihilo
         "-movflags",
         "+faststart",
         "-pix_fmt",
@@ -67,10 +70,9 @@ export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
 }
 
 export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
-  if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
+  if (!ffmpegPath) return inputPath; // Fallback instantáneo
 
-  const cacheDir =
-    process.env.GLOBAL_CUSTOM_TMP || process.env.TMPDIR || path.resolve("./cache");
+  const cacheDir = process.env.GLOBAL_CUSTOM_TMP || process.env.TMPDIR || path.resolve("./cache");
   await mkdir(cacheDir, { recursive: true });
   const id = randomUUID();
   const outputPath = path.join(cacheDir, `${id}.mp4`);
@@ -78,32 +80,29 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
   try {
     const inputSize = (await stat(inputPath)).size;
     let metadata = "";
+    
     try {
       await execFileAsync(ffmpegPath, ["-hide_banner", "-i", inputPath], {
         timeout: 30000,
         maxBuffer: FFMPEG_MAX_BUFFER,
       });
     } catch (error) {
-      metadata =
-        error && typeof error === "object" && "stderr" in error
-          ? String(error.stderr)
-          : "";
+      metadata = error && typeof error === "object" && "stderr" in error ? String(error.stderr) : "";
     }
+    
     const codec = metadata.match(/Video:\s*([a-z0-9_]+)/i)?.[1]?.toLowerCase();
-    const durationMatch = metadata.match(
-      /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/i,
-    );
-    if (!codec || !durationMatch)
-      throw new Error("No se pudo detectar el codec o la duración del video.");
+    const durationMatch = metadata.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/i);
+    
+    if (!codec || !durationMatch) {
+      console.warn("[converter] No se detectó codec, enviando original.");
+      return inputPath;
+    }
 
-    const duration =
-      Number(durationMatch[1]) * 3600 +
-      Number(durationMatch[2]) * 60 +
-      Number(durationMatch[3]);
-    if (!Number.isFinite(duration) || duration <= 0)
-      throw new Error("La duración del video no es válida.");
+    const duration = Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3]);
+    if (!Number.isFinite(duration) || duration <= 0) return inputPath;
 
     let shouldLimitSize: boolean;
+    
     if (codec === "hevc" && inputSize <= MAX_VIDEO_SIZE) {
       shouldLimitSize = false;
     } else if (codec === "h264" && inputSize > MAX_VIDEO_SIZE) {
@@ -126,9 +125,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
             "-map",
             "0:a?",
             "-c",
-            "preset",
-            "ultrafast",
-            "copy",
+            "copy", // <-- Corregido el error sintáctico de "-c preset ultrafast copy"
             "-movflags",
             "+faststart",
             outputPath,
@@ -145,22 +142,15 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
     }
 
     const audioBitrate = 128000;
-    const sizeLimitedBitrate = Math.floor(
-      (TARGET_VIDEO_SIZE * 8) / duration - audioBitrate,
-    );
+    const sizeLimitedBitrate = Math.floor((TARGET_VIDEO_SIZE * 8) / duration - audioBitrate);
     const sourceBitrate = Math.floor((inputSize * 8) / duration);
-    let videoBitrate = Math.max(
-      50000,
-      Math.min(sizeLimitedBitrate, sourceBitrate - audioBitrate),
-    );
+    let videoBitrate = Math.max(50000, Math.min(sizeLimitedBitrate, sourceBitrate - audioBitrate));
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const encodeArgs = [
         "-nostats",
         "-loglevel",
         "error",
-        "-filter_threads",
-        "1",
         "-y",
         "-i",
         inputPath,
@@ -171,19 +161,16 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
         "-c:v",
         "libx264",
         "-threads",
-        "1",
+        "2", // <-- Aceleración multihilo (sube el rendimiento en Pterodactyl)
         "-profile:v",
         "high",
         "-level:v",
         "4.0",
         ...(shouldLimitSize
           ? [
-              "-b:v",
-              String(videoBitrate),
-              "-maxrate",
-              String(videoBitrate),
-              "-bufsize",
-              String(videoBitrate * 2),
+              "-b:v", String(videoBitrate),
+              "-maxrate", String(videoBitrate),
+              "-bufsize", String(videoBitrate * 2),
             ]
           : ["-crf", "18"]),
         "-preset",
@@ -200,24 +187,24 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
         "+faststart",
         outputPath,
       ];
-      await execFileAsync(
-        ffmpegPath,
-        encodeArgs,
-        { timeout: 600000, maxBuffer: FFMPEG_MAX_BUFFER },
-      );
+      
+      await execFileAsync(ffmpegPath, encodeArgs, { timeout: 600000, maxBuffer: FFMPEG_MAX_BUFFER });
 
       const outputSize = (await stat(outputPath)).size;
       if (outputSize < MAX_VIDEO_SIZE) return outputPath;
+      
       shouldLimitSize = true;
-      videoBitrate = Math.max(
-        20000,
-        Math.floor(videoBitrate * (TARGET_VIDEO_SIZE / outputSize) * 0.9),
-      );
+      videoBitrate = Math.max(20000, Math.floor(videoBitrate * (TARGET_VIDEO_SIZE / outputSize) * 0.9));
     }
 
-    throw new Error("No se pudo comprimir el video por debajo de 100 MB.");
+    // Si aún supera los 100MB tras dos intentos, envía el original sin crashear.
+    console.warn(`[converter] El archivo sigue siendo grande tras comprimir, usando original.`);
+    return inputPath;
+
   } catch (error) {
+    // FALLBACK DE SEGURIDAD MÁXIMA: Si FFmpeg explota, se devuelve el archivo original.
+    console.error("[converter] Error fatal en FFmpeg, abortando conversión y usando archivo original.");
     await rm(outputPath, { force: true }).catch(() => undefined);
-    throw error;
+    return inputPath;
   }
 }
