@@ -13,7 +13,7 @@ export default {
     }
 
     const value = String(ctx.args?.[0] ?? "").trim();
-    if (value && (value.length > 20 || /\s/.test(value))) {
+    if (value && (value.length > 3 || /\s/.test(value))) {
       return ctx.reply(
         "❌ El prefijo debe tener entre 1 y 3 caracteres y no puede contener espacios.",
       );

@@ -443,18 +443,26 @@ export async function handleMessage(
                                       : "Otro";
 
     const groupPrefix = groupData?.prefix;
-    const activePrefixes = groupPrefix
+    const hasGroupPrefix = Boolean(groupPrefix);
+    const useFactoryPrefixes = groupPrefix === "";
+    const factoryPrefixes = [...new Set(prefixes.filter(Boolean))].sort(
+      (left, right) => right.length - left.length,
+    );
+    const activePrefixes = hasGroupPrefix
       ? [groupPrefix]
-      : modPrefix
-        ? [modPrefix]
-        : [...new Set(prefixes.filter(Boolean))].sort(
-            (left, right) => right.length - left.length,
-          );
+      : useFactoryPrefixes
+        ? factoryPrefixes
+        : modPrefix
+          ? [modPrefix]
+          : factoryPrefixes;
     const usedPrefix =
       activePrefixes.find((p: string) => body.startsWith(p)) ?? null;
     const isCmd = !!usedPrefix;
     const isModPrefixCommand = Boolean(
-      !groupPrefix && modPrefix && usedPrefix === modPrefix,
+      !hasGroupPrefix &&
+        !useFactoryPrefixes &&
+        modPrefix &&
+        usedPrefix === modPrefix,
     );
 
     if (msg.key?.fromMe && !isCmd) return;

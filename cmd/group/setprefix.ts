@@ -9,9 +9,9 @@ export default {
   adminOnly: true,
   async run(ctx: CommandContext) {
     if (["delprefix", "deleteprefix"].includes(ctx.cmdName)) {
-      ctx.db.setGroup(ctx.from, { prefix: null });
+      ctx.db.setGroup(ctx.from, { prefix: "" });
       return ctx.reply({
-        text: `╭〔 ✅ ${fytBold("AURA REED")} 〕⬣\n┃ ${fytBold("PREFIJO ELIMINADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Se usarán los prefijos globales.\n\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`,
+        text: `╭〔 ✅ ${fytBold("AURA REED")} 〕⬣\n┃ ${fytBold("PREFIJO ELIMINADO")}\n╰━━━━━━━━━━━━⬣\n\n┃ > Se usarán los prefijos de fábrica.\n\n╰〔 ⚡ ${fytBold("SYSTEM INFO")} 〕⬣`,
       });
     }
 
@@ -22,11 +22,11 @@ export default {
       });
     }
 
-    ctx.db.setGroup(ctx.from, { prefix: value || null });
+    ctx.db.setGroup(ctx.from, { prefix: value || "" });
     return ctx.reply(
       value
         ? `✅ Prefijo del grupo actualizado a: ${value}`
-        : "✅ El grupo volverá a usar los prefijos globales.",
+        : "✅ El grupo volverá a usar los prefijos de fábrica.",
     );
   },
 };
