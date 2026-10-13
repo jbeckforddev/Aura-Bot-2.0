@@ -74,26 +74,14 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       "-loglevel", "error",
       "-y",
       "-i", inputPath,
-      "-map_metadata", "-1", // Obligatorio para que WhatsApp no rechace el archivo
-      "-map", "0:v:0",
-      "-map", "0:a?",
-      "-c:v", "libx264",
-      "-threads", "2",
-      "-profile:v", "high",  // Perfil alto para retener detalles en juegos y cielos oscuros
-      "-level:v", "4.1",     // Soporte óptimo para alta resolución y FPS
-      "-preset", "fast",     // Equilibrio perfecto de velocidad sin arruinar la imagen
-      "-crf", "17",          // Calidad visualmente idéntica al original (Sin pérdida)
-      "-pix_fmt", "yuv420p",
-      "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-ar", "44100",
-      "-movflags", "+faststart",
+      "-map_metadata", "-1", // Elimina las etiquetas corruptas que rompen WhatsApp
+      "-c:v", "copy",        // COPIA EXACTA: Cero compresión, 100% calidad original
+      "-c:a", "copy",        // COPIA EXACTA: Cero pérdida de audio
+      "-movflags", "+faststart", // Mueve el inicio para que cargue rápido en chat
       outputPath
     ];
     
-    // Timeout subido a 5 minutos por si un video 4k muy pesado toma unos segundos extra
-    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 300000, maxBuffer: FFMPEG_MAX_BUFFER });
+    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 60000, maxBuffer: FFMPEG_MAX_BUFFER });
 
     return outputPath;
 
