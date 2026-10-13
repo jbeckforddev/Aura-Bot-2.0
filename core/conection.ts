@@ -642,11 +642,12 @@ export async function connectToWhatsApp(
 
   const knownGroupJids = new Set<string>();
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    if (!Array.isArray(messages) || messages.length === 0) return;
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0)
+      return;
 
     for (const msg of messages) {
-      if (!msg) continue;
+      if (!msg?.message) continue;
       
       // --- AGREGAR ESTA VALIDACIÓN ---
       // Si el mensaje se envió antes de que el bot se encendiera, se ignora
