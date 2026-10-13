@@ -34,6 +34,7 @@ type TikWMVideoResponse = {
     title?: string;
     play?: string;
     wmplay?: string;
+    hdplay?: string; // <-- Agregado soporte HD
     images?: string[];
     music_info?: {
       play?: string;
@@ -53,7 +54,7 @@ type TikWMVideoResponse = {
 export default {
   name: ["tk", "tt", "ttv", "tiktok", "tkmp4"],
   category: "download",
-  description: "Busca y descarga videos de TikTok a máxima velocidad.",
+  description: "Busca y descarga videos de TikTok en máxima calidad HD.",
   async run(ctx: CommandContext) {
     const { args = [], reply, react, sock, from, msg } = ctx;
     const query = Array.isArray(args) ? args.join(" ").trim() : String(args ?? "").trim();
@@ -61,7 +62,6 @@ export default {
     
     await react("⏳").catch(() => undefined);
     
-    // Rastreador estricto para evitar fugas de almacenamiento
     const tempFiles = new Set<string>();
 
     try {
@@ -102,7 +102,6 @@ export default {
         const URL_PICTURES = `https://www.tiktok.com/@${data.data.author?.unique_id}/photo/${data.data.id}`;
         const AUDIO_URL = data.data.music_info?.play || "";
 
-        // Descarga paralela (Imágenes + Audio al mismo tiempo)
         const imagePromises = imageUrls.slice(0, 20).map(async (imageUrl) => {
           const file = await downloadToCache(imageUrl, 60000);
           tempFiles.add(file);
@@ -172,7 +171,8 @@ export default {
       }
 
       // --- MODO: VIDEO ESTÁNDAR ---
-      const videoUrl = data.data.play || data.data.wmplay;
+      // Priorizamos hdplay antes que las demás versiones
+      const videoUrl = data.data.hdplay || data.data.play || data.data.wmplay;
       if (!videoUrl) throw new Error("La API no devolvió un video descargable.");
 
       const URL_VIDEO = `https://www.tiktok.com/@${data.data.author?.unique_id}/video/${data.data.id}`;
