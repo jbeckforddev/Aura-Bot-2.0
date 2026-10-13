@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { request } from "undici";
 
 const execFileAsync = promisify(execFile);
-const FFMPEG_MAX_BUFFER = 64 * 1024 * 1024; 
+const FFMPEG_MAX_BUFFER = 512 * 1024 * 1024; // 512MB para manejar videos pesados 4K sin crashear
 
 export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible en este entorno");
@@ -74,14 +74,26 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       "-loglevel", "error",
       "-y",
       "-i", inputPath,
-      "-map_metadata", "-1", // Elimina las etiquetas corruptas que rompen WhatsApp
-      "-c:v", "copy",        // COPIA EXACTA: Cero compresión, 100% calidad original
-      "-c:a", "copy",        // COPIA EXACTA: Cero pérdida de audio
-      "-movflags", "+faststart", // Mueve el inicio para que cargue rápido en chat
+      "-map", "0:v:0",       // Tomar solo el flujo de video principal
+      "-map", "0:a?",        // Tomar el flujo de audio si existe
+      "-map_metadata", "-1", // Eliminar metadata de TikTok para evitar rechazos de WhatsApp
+      "-c:v", "libx264",     // Forzar H.264 para engañar a WhatsApp y que no recomprima
+      "-threads", "2",
+      "-profile:v", "high",  // Perfil High para retener todos los colores y detalles
+      "-level:v", "4.2",     // Nivel 4.2 necesario para 1080p a 60FPS reales
+      "-preset", "superfast",// Rápido, el peso será alto pero la calidad intacta
+      "-crf", "15",          // Calidad de estudio casi sin pérdida (Lossless visual)
+      "-pix_fmt", "yuv420p", // Formato de color estándar de móviles
+      "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", // Evita crasheos por resoluciones impares
+      "-c:a", "aac",
+      "-b:a", "192k",        // Audio en alta fidelidad
+      "-ar", "44100",
+      "-movflags", "+faststart",
       outputPath
     ];
     
-    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 60000, maxBuffer: FFMPEG_MAX_BUFFER });
+    // Timeout de 10 minutos para videos 4K pesados sin abortar el proceso
+    await execFileAsync(ffmpegPath, encodeArgs, { timeout: 600000, maxBuffer: FFMPEG_MAX_BUFFER });
 
     return outputPath;
 
