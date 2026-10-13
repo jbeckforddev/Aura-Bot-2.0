@@ -565,9 +565,21 @@ export async function connectToWhatsApp(
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
     if (disconnectedBotJid) {
       activeSubBots.delete(disconnectedBotJid);
-      if (!isNotRegistered && hasConnected) {
-        db.setBot(disconnectedBotJid, { status: "offline" });
+      if (hasConnected) db.setBot(disconnectedBotJid, { status: "offline" });
+    }
+
+    if (statusCode === DisconnectReason.loggedOut) {
+      const reconnectTimer = reconnectTimers.get(sessionName);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimers.delete(sessionName);
       }
+      resetReconnectAttempts(sessionName);
+      connectionLog(
+        "La sesión fue desvinculada de WhatsApp.",
+        "alert",
+      );
+      return;
     }
 
     if (isSubBot && isNotRegistered) {
