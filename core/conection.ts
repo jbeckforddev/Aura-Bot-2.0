@@ -17,6 +17,7 @@ import { handleMessage, invalidateGroupCache } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
 import { connectionLog, pairingLog } from "./logger.ts";
 import { db } from "../database/AuraDB.ts";
+import { resolveBotType } from "./botType.ts";
 import {
   handleAntilink,
   handleGroupCall,
@@ -460,6 +461,12 @@ export async function connectToWhatsApp(
       const botLid = cleanLid(botId);
       const botGroups = await getBotGroups(extendedSock);
       const previousBot = db.getBot(botJid);
+      const previousBotType = resolveBotType(previousBot?.bot_type);
+      const botType = isSubBot
+        ? "Sub-Bot"
+        : previousBotType === "Prem-Bot"
+          ? "Prem-Bot"
+          : "Principal";
       const botName =
         previousBot?.data?.customBotName && previousBot.bot_name
           ? previousBot.bot_name
@@ -473,6 +480,7 @@ export async function connectToWhatsApp(
         lid: botLid,
         groups: botGroups,
         isMain: isSubBot ? 0 : 1,
+        bot_type: botType,
         status: "active",
         sessionName,
       });

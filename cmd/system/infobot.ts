@@ -9,6 +9,7 @@ import {
 } from "@whiskeysockets/baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { getActiveSubBots } from "../../core/subbotManager.ts";
+import { resolveBotType } from "../../core/botType.ts";
 import { getPlugins } from "../../core/cmdLoader.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
@@ -80,11 +81,10 @@ export default {
     const pushName = msg?.pushName || "Usuario";
     const botRecord = db.getBot?.(sock.user?.id || "");
     const botName = String(botRecord?.bot_name || "Aura Reed").trim() || "Aura Reed";
-    const botType = sock.isSubBot
-      ? "Sub-Bot"
-      : String(botRecord?.bot_type ?? String(botRecord?.data?.bot_type ?? "")).toLowerCase().includes("prem")
-        ? "Prem-Bot"
-        : "Principal";
+    const botType = resolveBotType(
+      botRecord?.bot_type ?? botRecord?.data?.bot_type,
+      sock.isSubBot,
+    );
     
     const botVersion = "2.5";
     const serverHost = getServerName();
