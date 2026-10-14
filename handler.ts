@@ -1315,7 +1315,11 @@ export async function handleMessage(
       ? getCachedGroupLanguage(from) ?? runtimeDb.getGroup(from).groupLang
       : undefined;
 
-    language = userLanguage || groupLanguage || "es";
+    if (isGroup) {
+      language = userLanguage ?? groupLanguage ?? "es";
+    } else {
+      language = userLanguage ?? "es";
+    }
   }
 
   return withLocale(language, () =>

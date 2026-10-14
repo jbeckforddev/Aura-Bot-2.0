@@ -1,6 +1,7 @@
 import DataBase from "better-sqlite3";
 import { mkdirSync, existsSync } from "fs";
 import "../config.ts";
+import { SUPPORTED_LANGUAGES } from "../src/langs/index.ts";
 import type {
   IDatabase,
   DatabaseUser,
@@ -296,7 +297,7 @@ const stmts = {
     "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
-    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
+    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
 
   getGroup: db_instance.prepare(
@@ -309,7 +310,7 @@ const stmts = {
     "UPDATE groups SET group_id = ?, group_name = ?, antilink = ?, antiCalls = ?, antiToxic = ?, antiSpam = ?, antiStatus = ?, onlyAdmin = ?, prefix = ?, self = ?, catBlocked = ?, Muted_Users = ?, GroupLang = ?, data = ? WHERE jid = ?",
   ),
   getAllGroups: db_instance.prepare(
-    "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, data FROM groups",
+    "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, GroupLang, data FROM groups",
   ),
 
   getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
@@ -332,6 +333,68 @@ function normalizeJid(input: string) {
     .replace(/:.*/, "");
 }
 
+function normalizeLocaleCacheKey(input: string | null | undefined): string | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/:.*/, "").trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+function makeUserLocaleCacheKey(jid: string | null | undefined): string | null {
+  const raw = normalizeLocaleCacheKey(jid);
+  if (!raw) return null;
+  if (raw.includes("@")) return raw;
+  if (raw.endsWith("@lid")) return raw;
+  return `${raw}@s.whatsapp.net`;
+}
+
+function makeGroupLocaleCacheKey(jid: string | null | undefined): string | null {
+  const raw = normalizeLocaleCacheKey(jid);
+  if (!raw) return null;
+  if (raw.includes("@")) return raw;
+  return `${raw}@g.us`;
+}
+
+function setCachedLocaleValue(
+  cache: Map<string, string | null>,
+  input: string | null | undefined,
+  value: string | null,
+  builder: (jid: string | null | undefined) => string | null,
+) {
+  const key = builder(input);
+  if (!key) return;
+  cache.set(key, value);
+}
+
+function getCachedLocaleValue(
+  cache: Map<string, string | null>,
+  input: string | null | undefined,
+  builder: (jid: string | null | undefined) => string | null,
+): string | null {
+  const key = builder(input);
+  if (!key) return null;
+
+  if (cache.has(key)) return cache.get(key) ?? null;
+
+  const normalized = normalizeLocaleCacheKey(input);
+  if (!normalized) return null;
+
+  const candidates = [
+    normalized,
+    normalized.includes("@") ? normalized : `${normalized}@s.whatsapp.net`,
+    normalized.includes("@") && normalized.endsWith("@lid") ? normalized.replace(/@lid$/, "@s.whatsapp.net") : null,
+    normalized.includes("@") && normalized.endsWith("@s.whatsapp.net") ? normalized.replace(/@s\.whatsapp\.net$/, "@lid") : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    const value = cache.get(candidate);
+    if (value !== undefined) return value;
+  }
+
+  return null;
+}
+
 const userLanguageCache = new Map<string, string | null>();
 const groupLanguageCache = new Map<string, string | null>();
 
@@ -339,20 +402,20 @@ export function warmLanguageCaches(): { users: number; groups: number } {
   const userRows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
   for (const row of userRows) {
     const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
-    const key = normalizeJid(String(row.jid ?? row.lid ?? row.phone_number ?? ""));
     const value = normalizeLocale(
       jsonData.userLang ?? row.UserLang ?? row.userLang ?? row.user_lang ?? null,
     );
+    const key = makeUserLocaleCacheKey(String(row.jid ?? row.lid ?? row.phone_number ?? ""));
     if (key) userLanguageCache.set(key, value);
   }
 
   const groupRows = stmts.getAllGroups.all() as Array<Record<string, unknown>>;
   for (const row of groupRows) {
     const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
-    const key = normalizeJid(String(row.jid ?? row.group_id ?? ""));
     const value = normalizeLocale(
       jsonData.groupLang ?? row.GroupLang ?? row.groupLang ?? row.group_lang ?? null,
     );
+    const key = makeGroupLocaleCacheKey(String(row.jid ?? row.group_id ?? ""));
     if (key) groupLanguageCache.set(key, value);
   }
 
@@ -363,43 +426,35 @@ export function warmLanguageCaches(): { users: number; groups: number } {
 }
 
 export function getCachedUserLanguage(jid: string | null | undefined): string | null {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (!normalized) return null;
-  return userLanguageCache.get(normalized) ?? null;
+  return getCachedLocaleValue(userLanguageCache, jid, makeUserLocaleCacheKey);
 }
 
 export function getCachedGroupLanguage(jid: string | null | undefined): string | null {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (!normalized) return null;
-  return groupLanguageCache.get(normalized) ?? null;
+  return getCachedLocaleValue(groupLanguageCache, jid, makeGroupLocaleCacheKey);
 }
 
 function normalizeLocale(language: unknown): string | null {
   if (language == null || language === "") return null;
   const normalized = String(language).trim().toLowerCase();
-  return normalized === "en" ? "en" : (normalized === "es" ? "es" : null);
+  return (SUPPORTED_LANGUAGES as string[]).includes(normalized) ? normalized : null;
 }
 
 function setUserLanguageCache(jid: string | null | undefined, language: unknown): void {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (!normalized) return;
-  userLanguageCache.set(normalized, normalizeLocale(language));
+  setCachedLocaleValue(userLanguageCache, jid, normalizeLocale(language), makeUserLocaleCacheKey);
 }
 
 function setGroupLanguageCache(jid: string | null | undefined, language: unknown): void {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (!normalized) return;
-  groupLanguageCache.set(normalized, normalizeLocale(language));
+  setCachedLocaleValue(groupLanguageCache, jid, normalizeLocale(language), makeGroupLocaleCacheKey);
 }
 
 function invalidateUserLanguageCache(jid: string | null | undefined): void {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (normalized) userLanguageCache.delete(normalized);
+  const key = makeUserLocaleCacheKey(jid);
+  if (key) userLanguageCache.delete(key);
 }
 
 function invalidateGroupLanguageCache(jid: string | null | undefined): void {
-  const normalized = normalizeJid(String(jid ?? ""));
-  if (normalized) groupLanguageCache.delete(normalized);
+  const key = makeGroupLocaleCacheKey(jid);
+  if (key) groupLanguageCache.delete(key);
 }
 
 function safeJson<T = Record<string, unknown>>(value: unknown): T {
@@ -671,7 +726,7 @@ function getUser(input: string): DatabaseUser {
       ...getUserProfileValues(defaultUser),
     );
 
-    setUserLanguageCache(defaultUser.jid ?? defaultUser.lid, defaultUser.userLang ?? null);
+    setUserLanguageCache(defaultUser.jid ?? defaultUser.lid ?? rawInput, defaultUser.userLang ?? null);
 
     return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
   }
@@ -687,7 +742,7 @@ function getUser(input: string): DatabaseUser {
   const coins = Number(row.coins ?? jsonData.coins ?? jsonData.bolsillo ?? 100000);
   const bank = Number(row.bank ?? jsonData.bank ?? jsonData.banco ?? 10000);
   const userLang = normalizeLocale(jsonData.userLang ?? row.UserLang ?? null);
-  setUserLanguageCache(row.jid ?? row.lid ?? rawInput, userLang);
+  setUserLanguageCache(rawInput || row.jid || row.lid, userLang);
 
   return {
     ...jsonData,
@@ -758,7 +813,7 @@ function getGroup(jid: string): DatabaseGroup {
       JSON.stringify(defaultGroup.data),
     );
 
-    setGroupLanguageCache(key, defaultGroup.groupLang ?? null);
+    setGroupLanguageCache(jid, defaultGroup.groupLang ?? null);
 
     return defaultGroup;
   }
@@ -775,7 +830,7 @@ function getGroup(jid: string): DatabaseGroup {
       row.medUsers,
   );
   const groupLang = normalizeLocale(jsonData.groupLang ?? row.GroupLang ?? null);
-  setGroupLanguageCache(row.jid ?? key, groupLang);
+  setGroupLanguageCache(jid, groupLang);
   return {
     ...jsonData,
     group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
@@ -1060,7 +1115,7 @@ export const db: IDatabase = {
         ? dataObject.groupLang
         : (merged.groupLang ?? row?.GroupLang ?? payload.groupLang ?? null),
     );
-    setGroupLanguageCache(key, nextGroupLang);
+    setGroupLanguageCache(jid, nextGroupLang);
     if (!row) {
       stmts.insertGroup.run(
         key,
