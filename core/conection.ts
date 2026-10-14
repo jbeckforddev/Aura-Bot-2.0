@@ -206,7 +206,7 @@ export async function connectToWhatsApp(
   connectionsInProgress.delete(sessionName);
 
   const isRegistered = Boolean(
-    state.creds && (state.creds.registered || state.creds.me),
+    state.creds?.registered || (state.creds?.me && !state.creds?.pairingCode),
   );
 
   if (isSubBot && !isRegistered && options.allowPairing === false) {
@@ -561,7 +561,9 @@ export async function connectToWhatsApp(
       statusCode === 0 ? "warn" : "error",
     );
 
-    const currentIsRegistered = Boolean(state.creds && (state.creds.registered || state.creds.me));
+    const currentIsRegistered = Boolean(
+      state.creds?.registered || (state.creds?.me && !state.creds?.pairingCode),
+    );
     const isNotRegistered = !currentIsRegistered;
 
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
@@ -570,7 +572,7 @@ export async function connectToWhatsApp(
       if (hasConnected) db.setBot(disconnectedBotJid, { status: "offline" });
     }
 
-    if (statusCode === DisconnectReason.loggedOut) {
+    if (statusCode === DisconnectReason.loggedOut && !isNotRegistered) {
       const reconnectTimer = reconnectTimers.get(sessionName);
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
