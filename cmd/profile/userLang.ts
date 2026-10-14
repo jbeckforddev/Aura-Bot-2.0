@@ -1,7 +1,7 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { t } from "../../src/langs/index.ts";
+import { t, SUPPORTED_LANGUAGES } from "../../src/langs/index.ts";
 
-const validLanguages = new Set(["es", "en"]);
+const validLanguages = new Set<string>(SUPPORTED_LANGUAGES);
 
 export default {
   name: ["userlang", "setuserlang", "mylang", "idioma"],

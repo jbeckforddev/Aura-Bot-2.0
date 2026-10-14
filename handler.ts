@@ -20,7 +20,7 @@ import {
   NOT_HAVE_COINS,
   PLUGINS_OFF
 } from "./core/socketText.ts";
-import { db, getCachedUserLanguage, getCachedGroupLanguage } from "./database/AuraDB.ts";
+import { db, lookupUserLanguage, lookupGroupLanguage } from "./database/AuraDB.ts";
 import { withLocale } from "./src/langs/index.ts";
 import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
 import {
@@ -1309,10 +1309,10 @@ export async function handleMessage(
       : from;
 
     const userLanguage = senderJid
-      ? getCachedUserLanguage(cleanJid(senderJid)) ?? runtimeDb.getUser(cleanJid(senderJid)).userLang
+      ? lookupUserLanguage(cleanJid(senderJid))
       : undefined;
     const groupLanguage = isGroup
-      ? getCachedGroupLanguage(from) ?? runtimeDb.getGroup(from).groupLang
+      ? lookupGroupLanguage(from)
       : undefined;
 
     if (isGroup) {

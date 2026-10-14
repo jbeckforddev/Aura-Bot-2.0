@@ -299,6 +299,12 @@ const stmts = {
   getAllUsers: db_instance.prepare(
     `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
+  getUserLang: db_instance.prepare(
+    "SELECT jid, lid, UserLang, data FROM users WHERE jid = ?",
+  ),
+  getUserLangByLid: db_instance.prepare(
+    "SELECT jid, lid, UserLang, data FROM users WHERE lid = ?",
+  ),
 
   getGroup: db_instance.prepare(
     `SELECT ${groupSelectColumns} FROM groups WHERE jid = ?`,
@@ -311,6 +317,9 @@ const stmts = {
   ),
   getAllGroups: db_instance.prepare(
     "SELECT jid, group_id, group_name, antilink, antiCalls, antiToxic, antiSpam, onlyAdmin, prefix, self, GroupLang, data FROM groups",
+  ),
+  getGroupLang: db_instance.prepare(
+    "SELECT jid, GroupLang, data FROM groups WHERE jid = ?",
   ),
 
   getBot: db_instance.prepare("SELECT * FROM bots WHERE jid = ?"),
@@ -431,6 +440,54 @@ export function getCachedUserLanguage(jid: string | null | undefined): string | 
 
 export function getCachedGroupLanguage(jid: string | null | undefined): string | null {
   return getCachedLocaleValue(groupLanguageCache, jid, makeGroupLocaleCacheKey);
+}
+
+/**
+ * Looks up a user's language without creating the user if they don't exist.
+ * Priority: in-memory cache → UserLang column → data JSON field.
+ * Returns null if the user has no language preference set.
+ */
+export function lookupUserLanguage(jid: string | null | undefined): string | null {
+  const cached = getCachedLocaleValue(userLanguageCache, jid, makeUserLocaleCacheKey);
+  if (cached !== null) return cached;
+
+  const raw = String(jid ?? "").trim();
+  if (!raw) return null;
+
+  // Try jid, then lid
+  const normalizedJid = makeUserLocaleCacheKey(raw);
+  const row =
+    (normalizedJid ? stmts.getUserLang.get(normalizedJid) as Record<string, unknown> | undefined : undefined) ??
+    (raw.endsWith("@lid") ? stmts.getUserLangByLid.get(raw) as Record<string, unknown> | undefined : undefined);
+
+  if (!row) return null;
+
+  const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
+  const lang = normalizeLocale(jsonData.userLang ?? row.UserLang ?? null);
+  // Populate cache so next lookup is free
+  setUserLanguageCache(String(row.jid ?? row.lid ?? raw), lang);
+  return lang;
+}
+
+/**
+ * Looks up a group's language without creating the group if it doesn't exist.
+ * Priority: in-memory cache → GroupLang column → data JSON field.
+ * Returns null if the group has no language configured.
+ */
+export function lookupGroupLanguage(jid: string | null | undefined): string | null {
+  const cached = getCachedLocaleValue(groupLanguageCache, jid, makeGroupLocaleCacheKey);
+  if (cached !== null) return cached;
+
+  const raw = String(jid ?? "").trim();
+  if (!raw) return null;
+
+  const row = stmts.getGroupLang.get(raw) as Record<string, unknown> | undefined;
+  if (!row) return null;
+
+  const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
+  const lang = normalizeLocale(jsonData.groupLang ?? row.GroupLang ?? null);
+  setGroupLanguageCache(String(row.jid ?? raw), lang);
+  return lang;
 }
 
 function normalizeLocale(language: unknown): string | null {
