@@ -1,6 +1,9 @@
 import { fetch } from "undici";
 import { createDecipheriv } from "crypto";
-import type { YouTubeSearchVideo } from "./YouTubeSearch.ts";
+import {
+  searchYouTubeVideo,
+  type YouTubeSearchVideo,
+} from "./YouTubeSearch.ts";
 
 function getID(url: string): string | null {
   const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -71,6 +74,66 @@ const CONTENT_QUALITIES = {
   audio: audio_q,
   video: video_q,
 } as const;
+const ALYACORE_KEY = "AURA-BOT-JERIELB";
+
+type AlyaCoreData = {
+  title?: string;
+  author?: string;
+  duration?: string;
+  thumbnail?: string;
+  quality?: string;
+  size?: number;
+  dl?: string;
+};
+
+async function getAlyaCoreAudio(link: string): Promise<AlyaCoreData & { dl: string }> {
+  const encodedUrl = encodeURIComponent(link);
+  const endpoints = [
+    `https://api.alyacore.xyz/dl/fastytmp3?url=${encodedUrl}&key=${ALYACORE_KEY}`,
+    `https://api.alyacore.xyz/dl/ytmp3converter?url=${encodedUrl}&key=${ALYACORE_KEY}`,
+    `https://api.alyacore.xyz/dl/youtubeplayv2?query=${encodedUrl}&type=mp3&quality=auto&key=${ALYACORE_KEY}`,
+  ];
+  const controller = new AbortController();
+  const signal = AbortSignal.any([
+    controller.signal,
+    AbortSignal.timeout(15000),
+  ]);
+
+  try {
+    return await Promise.any(
+      endpoints.map(async (endpoint) => {
+        const response = await fetch(endpoint, { signal });
+        if (!response.ok) {
+          throw new Error(`AlyaCore respondió HTTP ${response.status}`);
+        }
+
+        const payload = (await response.json()) as {
+          status?: boolean;
+          data?: AlyaCoreData;
+        };
+        const downloadUrl = payload.data?.dl;
+        if (payload.status !== true || typeof downloadUrl !== "string") {
+          throw new Error("AlyaCore no devolvió un enlace de descarga");
+        }
+
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(downloadUrl);
+        } catch {
+          throw new Error("AlyaCore devolvió un enlace inválido");
+        }
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+          throw new Error("AlyaCore devolvió un enlace inválido");
+        }
+
+        controller.abort();
+        return { ...payload.data, dl: downloadUrl };
+      }),
+    );
+  } catch {
+    throw new Error("Ningún endpoint de AlyaCore pudo generar el audio.");
+  }
+}
 
 const decode = (enc: string) => {
   try {
@@ -287,6 +350,7 @@ async function savetube(
   link: string,
   quality: number,
   value: "audio" | "video",
+  searchResult?: YouTubeSearchVideo,
 ): Promise<
   | {
       creator: string;
@@ -306,6 +370,7 @@ async function savetube(
         thumbnail: string;
         dl_url: string;
         size: number;
+        quality?: string;
       }>;
     }
   | {
@@ -342,77 +407,96 @@ async function savetube(
   }
 
   try {
-    const cdnResponse = await fetch("https://media.savetube.vip/api/random-cdn");
-    const cdnData = (await cdnResponse.json()) as { cdn?: string };
-    if (!cdnData.cdn) {
-      throw new Error("No se obtuvo un CDN disponible");
-    }
+    let info: Record<string, any>;
+    let finalUrl: string;
+    let providerQuality: string | undefined;
+    let providerSize: number | undefined;
 
-    const cdn = cdnData.cdn;
-    const infoResponse = await fetch(`https://${cdn}/v2/info`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-        Referer: "https://save-tube.com/",
-      },
-      body: JSON.stringify({ url: link }),
-    });
-
-    if (!infoResponse.ok) {
-      throw new Error(`No se pudo obtener la información del video: ${infoResponse.status}`);
-    }
-
-    const infoget = (await infoResponse.json()) as { data?: string };
-    if (!infoget.data) {
-      throw new Error("No se recibió la información cifrada del video");
-    }
-
-    const info = decode(infoget.data);
-    const downloadResponse = await fetch(`https://${cdn}/download`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-        Referer: "https://save-tube.com/",
-      },
-      body: JSON.stringify({
-        downloadType: value,
-        quality: String(quality),
-        key: info.key,
-      }),
-    });
-
-    const response = (await downloadResponse.json()) as {
-      data?: { downloadUrl?: string } | null;
-      message?: string;
-      status?: boolean;
-    };
-    const finalUrl = response.data?.downloadUrl;
-    if (
-      !downloadResponse.ok ||
-      response.status === false ||
-      typeof finalUrl !== "string" ||
-      !finalUrl.trim()
-    ) {
-      throw new Error(
-        response.message ||
-          `No se pudo generar el enlace de descarga: ${downloadResponse.status}`,
-      );
-    }
-    try {
-      const parsedUrl = new URL(finalUrl);
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        throw new Error();
+    if (value === "audio") {
+      const providerData = await getAlyaCoreAudio(link);
+      info = providerData;
+      finalUrl = providerData.dl;
+      providerQuality = providerData.quality;
+      providerSize = providerData.size;
+    } else {
+      const cdnResponse = await fetch("https://media.savetube.vip/api/random-cdn");
+      const cdnData = (await cdnResponse.json()) as { cdn?: string };
+      if (!cdnData.cdn) {
+        throw new Error("No se obtuvo un CDN disponible");
       }
-    } catch {
-      throw new Error("El proveedor devolvió un enlace de descarga inválido");
+
+      const cdn = cdnData.cdn;
+      const infoResponse = await fetch(`https://${cdn}/v2/info`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
+          Referer: "https://save-tube.com/",
+        },
+        body: JSON.stringify({ url: link }),
+      });
+
+      if (!infoResponse.ok) {
+        throw new Error(`No se pudo obtener la información del video: ${infoResponse.status}`);
+      }
+
+      const infoget = (await infoResponse.json()) as { data?: string };
+      if (!infoget.data) {
+        throw new Error("No se recibió la información cifrada del video");
+      }
+
+      info = decode(infoget.data);
+      const downloadResponse = await fetch(`https://${cdn}/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
+          Referer: "https://save-tube.com/",
+        },
+        body: JSON.stringify({
+          downloadType: value,
+          quality: String(quality),
+          key: info.key,
+        }),
+      });
+
+      const response = (await downloadResponse.json()) as {
+        data?: { downloadUrl?: string } | null;
+        message?: string;
+        status?: boolean;
+      };
+      const downloadUrl = response.data?.downloadUrl;
+      if (
+        !downloadResponse.ok ||
+        response.status === false ||
+        typeof downloadUrl !== "string" ||
+        !downloadUrl.trim()
+      ) {
+        throw new Error(
+          response.message ||
+            `No se pudo generar el enlace de descarga: ${downloadResponse.status}`,
+        );
+      }
+      try {
+        const parsedUrl = new URL(downloadUrl);
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+          throw new Error();
+        }
+      } catch {
+        throw new Error("El proveedor devolvió un enlace de descarga inválido");
+      }
+      finalUrl = downloadUrl;
     }
 
     const directMeta = await getDirectLinkMetadata(finalUrl, quality, value);
-    const videoId = getID(link) || makeId(11);
+    const videoId = getID(link) || searchResult?.videoId || makeId(11);
+    const ytsMeta =
+      searchResult ||
+      (value === "audio"
+        ? await searchYouTubeVideo(videoId).catch(() => null)
+        : null);
     const youtubeMeta = await getYouTubeVideoMetadata(videoId).catch(() => null);
 
     const channelId =
@@ -426,10 +510,12 @@ async function savetube(
       (channelId ? `https://www.youtube.com/channel/${channelId}` : "https://www.youtube.com/");
     const result = {
       id: videoId,
-      title: youtubeMeta?.title || info.title || "Sin título",
-      channel: youtubeMeta?.channel || info.author || info.channel || "Desconocido",
-      duration: youtubeMeta?.duration || info.duration || "0s",
+      title: ytsMeta?.title || youtubeMeta?.title || info.title || "Sin título",
+      channel:
+        ytsMeta?.author || youtubeMeta?.channel || info.author || info.channel || "Desconocido",
+      duration: ytsMeta?.duration || youtubeMeta?.duration || info.duration || "0s",
       views:
+        ytsMeta?.views ||
         youtubeMeta?.views ||
         (typeof info.views === "number"
           ? info.views.toString()
@@ -439,6 +525,7 @@ async function savetube(
               ? info.views
               : "0"),
       likes:
+        ytsMeta?.likes ||
         youtubeMeta?.likes ||
         (typeof info.likes === "number"
           ? info.likes.toString()
@@ -449,9 +536,11 @@ async function savetube(
               : "0"),
       url: `https://youtu.be/${videoId}`,
       channel_url: channelUrl,
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      thumbnail:
+        ytsMeta?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       dl_url: directMeta.url,
-      size: directMeta.size,
+      size: providerSize || directMeta.size,
+      quality: providerQuality || directMeta.quality,
     };
 
     return {
@@ -481,7 +570,7 @@ export async function downloadYouTube(
   quality: number,
   searchResult?: YouTubeSearchVideo,
 ) {
-  const response = await savetube(url, quality, mediaType);
+  const response = await savetube(url, quality, mediaType, searchResult);
   if (response.status !== "success") throw new Error(response.error);
 
   const video = response.data[0];
@@ -494,7 +583,10 @@ export async function downloadYouTube(
     title: video.title || searchResult?.title || "Sin título",
     author: video.channel || searchResult?.author || "Desconocido",
     duration: video.duration || searchResult?.duration || "0s",
-    quality: response.type === "audio" ? `${quality}kbps` : `${quality}p`,
+    quality:
+      response.type === "audio"
+        ? video.quality || `${quality}kbps`
+        : `${quality}p`,
     views: video.views || searchResult?.views || "0",
     likes: video.likes || searchResult?.likes,
     thumbnail: video.thumbnail || searchResult?.thumbnail,
