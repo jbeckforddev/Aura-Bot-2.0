@@ -7,36 +7,57 @@ import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import { displayBanner, logInfo, connectionLog } from "./core/logger.ts";
-import { checkpointDb, warmLanguageCaches } from "./database/AuraDB.ts";
+import * as AuraDB from "./database/AuraDB.ts";
 
 const TMP_DIR = path.resolve("./cache");
+const PROFILES_DIR = path.join(TMP_DIR, "profiles");
+
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 process.env.TMPDIR = TMP_DIR;
+process.env.GLOBAL_CUSTOM_TMP = TMP_DIR;
+
+let isCleaningCache = false;
 
 async function cleanCache(maxAgeMs: number = 0) {
+  if (isCleaningCache) return;
+  isCleaningCache = true;
+
   try {
-    const files = await fsp.readdir(TMP_DIR);
-    for (const file of files) {
-      const filePath = path.join(TMP_DIR, file);
-      try {
-        const stat = await fsp.stat(filePath);
-        if (Date.now() - stat.mtimeMs >= maxAgeMs) {
-          await fsp.unlink(filePath);
+    const entries = await fsp.readdir(TMP_DIR, { withFileTypes: true });
+    const now = Date.now();
+
+    await Promise.allSettled(
+      entries.map(async (entry) => {
+        if (entry.name === "profiles") return;
+        const fullPath = path.join(TMP_DIR, entry.name);
+
+        if (maxAgeMs <= 0) {
+          await fsp.rm(fullPath, { recursive: true, force: true });
+          return;
         }
-      } catch {}
-    }
-  } catch {}
+
+        const stat = await fsp.stat(fullPath);
+        if (now - stat.mtimeMs >= maxAgeMs) {
+          await fsp.rm(fullPath, { recursive: true, force: true });
+        }
+      }),
+    );
+  } catch {} finally {
+    isCleaningCache = false;
+  }
 }
 
-cleanCache(0);
-
-setInterval(() => {
-  cleanCache(30 * 60 * 1000);
-  checkpointDb();
-  if (typeof (global as any).gc === "function") {
-    (global as any).gc();
+const maintenanceInterval = setInterval(() => {
+  void cleanCache(30 * 60 * 1000);
+  AuraDB.checkpointDb();
+  if (typeof (globalThis as any).gc === "function") {
+    try {
+      (globalThis as any).gc();
+    } catch {}
   }
 }, 15 * 60 * 1000);
+
+maintenanceInterval.unref?.();
 
 function startCpuProfile() {
   if (process.env.AURA_DEBUG_PROFILE !== "true") return;
@@ -58,8 +79,8 @@ function startCpuProfile() {
         return;
       }
 
-      setTimeout(() => {
-        session.post("Profiler.stop", (stopError, result) => {
+      const timer = setTimeout(() => {
+        session.post("Profiler.stop", async (stopError, result) => {
           session.disconnect();
           if (stopError) {
             connectionLog(`No se pudo guardar el perfil CPU: ${stopError.message}`, "error");
@@ -67,31 +88,75 @@ function startCpuProfile() {
           }
 
           try {
-            const profileDir = path.join(TMP_DIR, "profiles");
-            if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
-            const profilePath = path.join(profileDir, `cpu-${Date.now()}.cpuprofile`);
-            fs.writeFileSync(profilePath, JSON.stringify(result.profile));
+            await fsp.mkdir(PROFILES_DIR, { recursive: true });
+            const profilePath = path.join(PROFILES_DIR, `cpu-${Date.now()}.cpuprofile`);
+            await fsp.writeFile(profilePath, JSON.stringify(result.profile));
             connectionLog(`Perfil CPU guardado en ${profilePath}`, "alert");
           } catch (error) {
             connectionLog(`No se pudo escribir el perfil CPU: ${String(error)}`, "error");
           }
         });
       }, 45_000);
+
+      timer.unref?.();
     });
   });
 }
 
-startCpuProfile();
+let isShuttingDown = false;
+
+function handleShutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  try {
+    connectionLog(`Señal ${signal} recibida. Guardando base de datos...`, "alert");
+    AuraDB.checkpointDb();
+  } catch {}
+  process.exit(0);
+}
+
+process.on("SIGINT", () => handleShutdown("SIGINT"));
+process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+process.on("exit", () => {
+  try {
+    AuraDB.checkpointDb();
+  } catch {}
+});
+
+process.on("unhandledRejection", (reason) => {
+  connectionLog(`Promesa rechazada no controlada: ${String(reason)}`, "error");
+});
+
+process.on("uncaughtException", (error) => {
+  connectionLog(`Excepción crítica capturada: ${error.message}`, "error");
+  try {
+    AuraDB.checkpointDb();
+  } catch {}
+});
 
 async function mainBot() {
-  await displayBanner();
+  await cleanCache(0);
+  startCpuProfile();
+
+  await Promise.all([
+    displayBanner(),
+    (async () => {
+      try {
+        (AuraDB as Record<string, unknown> & { warmLanguageCaches?: () => void }).warmLanguageCaches?.();
+      } catch {}
+      await loadPlugins();
+    })(),
+  ]);
+
   logInfo("Inicializando bot principal...");
-  warmLanguageCaches();
-  await loadPlugins();
   watchPlugins();
-  await startSavedSubBots();
+
   connectionLog("Conectando a WhatsApp...");
   await connectToWhatsApp("main", false);
+
+  void startSavedSubBots().catch((error) => {
+    connectionLog(`Error al iniciar subbots guardados: ${String(error)}`, "error");
+  });
 }
 
 void mainBot();
