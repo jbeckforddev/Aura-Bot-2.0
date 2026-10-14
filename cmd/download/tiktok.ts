@@ -23,10 +23,10 @@ import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
 import { t } from "../../src/langs/index.ts";
 
-
 const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
+const CACHE_TTL = 300_000;
 
 type TikWMVideoResponse = {
   code?: number;
@@ -36,7 +36,7 @@ type TikWMVideoResponse = {
     title?: string;
     play?: string;
     wmplay?: string;
-    hdplay?: string; // <-- Agregado soporte HD
+    hdplay?: string;
     images?: string[];
     music_info?: {
       play?: string;
@@ -53,6 +53,17 @@ type TikWMVideoResponse = {
   };
 };
 
+const searchCache = new Map<string, { url: string; exp: number }>();
+const metaCache = new Map<string, { data: TikWMVideoResponse; exp: number }>();
+
+function pruneCache<T>(cache: Map<string, { exp: number } & T>) {
+  if (cache.size <= 150) return;
+  const now = Date.now();
+  for (const [key, value] of cache.entries()) {
+    if (value.exp <= now) cache.delete(key);
+  }
+}
+
 export default {
   name: ["tk", "tt", "ttv", "tiktok", "tkmp4"],
   category: "download",
@@ -61,34 +72,59 @@ export default {
     const { args = [], reply, react, sock, from, msg } = ctx;
     const query = Array.isArray(args) ? args.join(" ").trim() : String(args ?? "").trim();
     if (!query) return reply(t("cmd_proporciona_una_busqueda_o_un__4bcc0240"));
-    
-    await react("⏳").catch(() => undefined);
-    
+
+    void react("⏳").catch(() => undefined);
+
     const tempFiles = new Set<string>();
 
     try {
       const formattedUrl = tiktokUrlFormatter(query);
       let url: string;
-      
+      const now = Date.now();
+
       if (isTikTokUrl(formattedUrl)) {
         url = formattedUrl;
       } else {
-        const search = await requestJson<TikTokSearchResponse>(
-          `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
-        ).catch(() => null);
-        const result = pickSearchResult(search?.data, query);
-        if (!result?.url) throw new Error("No se encontró ningún video para esa búsqueda.");
-        url = result.url;
+        const cachedKey = query.toLowerCase();
+        const cachedSearch = searchCache.get(cachedKey);
+
+        if (cachedSearch && cachedSearch.exp > now) {
+          url = cachedSearch.url;
+        } else {
+          const search = await requestJson<TikTokSearchResponse>(
+            `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
+          ).catch(() => null);
+          const result = pickSearchResult(search?.data, query);
+          if (!result?.url) throw new Error("No se encontró ningún video para esa búsqueda.");
+          url = result.url;
+          pruneCache(searchCache);
+          searchCache.set(cachedKey, { url, exp: now + CACHE_TTL });
+        }
       }
 
-      const data = await requestJson<TikWMVideoResponse>(
-        `${TIKWM_API}/?url=${encodeURIComponent(url)}`,
-        60000,
-      );
+      let data: TikWMVideoResponse | undefined;
+      const cachedMeta = metaCache.get(url);
+
+      if (cachedMeta && cachedMeta.exp > now) {
+        data = cachedMeta.data;
+      } else {
+        data = await requestJson<TikWMVideoResponse>(
+          `${TIKWM_API}/?url=${encodeURIComponent(url)}&hd=1`,
+          45000,
+        );
+        if (data?.data) {
+          pruneCache(metaCache);
+          metaCache.set(url, { data, exp: now + CACHE_TTL });
+        }
+      }
 
       if (!data?.data) throw new Error("La API no devolvió datos válidos.");
 
-      const author = data.data.author?.nickname || data.data.author?.fullname || data.data.author?.unique_id || "Desconocido";
+      const author =
+        data.data.author?.nickname ||
+        data.data.author?.fullname ||
+        data.data.author?.unique_id ||
+        "Desconocido";
       const title = data.data.title || "TikTok";
       const views = data.data.play_count;
       const likes = data.data.digg_count;
@@ -96,37 +132,40 @@ export default {
       const shares = data.data.share_count;
 
       const imageUrls = Array.isArray(data.data.images)
-        ? data.data.images.filter((image): image is string => typeof image === "string" && /^https?:\/\//.test(image))
+        ? data.data.images.filter(
+            (image): image is string =>
+              typeof image === "string" && /^https?:\/\//.test(image),
+          )
         : [];
 
-      // --- MODO: ÁLBUM DE IMÁGENES ---
       if (imageUrls.length > 0) {
         const URL_PICTURES = `https://www.tiktok.com/@${data.data.author?.unique_id}/photo/${data.data.id}`;
         const AUDIO_URL = data.data.music_info?.play || "";
 
         const imagePromises = imageUrls.slice(0, 20).map(async (imageUrl) => {
-          const file = await downloadToCache(imageUrl, 60000);
+          const file = await downloadToCache(imageUrl, 45000);
           tempFiles.add(file);
           const charge = await prepareDownloadCharge(ctx, "image", file);
           return { file, cost: charge.cost };
         });
 
-        let audioPromise = Promise.resolve({ file: "", cost: 0 });
-        if (AUDIO_URL) {
-          audioPromise = (async () => {
-            const file = await downloadToCache(AUDIO_URL, 120000);
-            tempFiles.add(file);
-            const charge = await prepareDownloadCharge(ctx, "document", file);
-            return { file, cost: charge.cost };
-          })();
-        }
+        const audioPromise = AUDIO_URL
+          ? (async () => {
+              const file = await downloadToCache(AUDIO_URL, 90000);
+              tempFiles.add(file);
+              const charge = await prepareDownloadCharge(ctx, "document", file);
+              return { file, cost: charge.cost };
+            })()
+          : Promise.resolve({ file: "", cost: 0 });
 
         const [downloadedImages, audioResult] = await Promise.all([
           Promise.all(imagePromises),
-          audioPromise
+          audioPromise,
         ]);
 
-        const totalCost = downloadedImages.reduce((sum, img) => sum + img.cost, 0) + audioResult.cost;
+        const totalCost =
+          downloadedImages.reduce((sum, img) => sum + img.cost, 0) +
+          audioResult.cost;
 
         const caption = DL_TEMPLATE({
           bold: fytBold,
@@ -153,39 +192,53 @@ export default {
           caption: index === 0 ? caption : "",
         }));
 
+        const sendTasks: Promise<unknown>[] = [];
+
         if (audioResult.file) {
-          await reply({
-            audio: { url: audioResult.file },
-            mimetype: "audio/mpeg",
-            fileName: `${safeFileName(title, "tiktok")}.mp3`,
-          });
+          sendTasks.push(
+            reply({
+              audio: { url: audioResult.file },
+              mimetype: "audio/mpeg",
+              fileName: `${safeFileName(title, "tiktok")}.mp3`,
+            }),
+          );
         }
 
         if (album.length === 1) {
-          await reply(album[0]);
+          sendTasks.push(reply(album[0]));
         } else {
-          await sendAlbumMessage(sock, from, album, msg as any);
+          sendTasks.push(sendAlbumMessage(sock, from, album, msg as any));
         }
 
+        await Promise.all(sendTasks);
         confirmDownloadCharge(ctx);
-        await react("✅").catch(() => undefined);
+        void react("✅").catch(() => undefined);
         return;
       }
 
-      // --- MODO: VIDEO ESTÁNDAR ---
-      // Priorizamos hdplay antes que las demás versiones
-      const videoUrl = data.data.hdplay || data.data.play || data.data.wmplay;
-      if (!videoUrl) throw new Error("La API no devolvió un video descargable.");
+      const primaryVideoUrl = data.data.hdplay || data.data.play || data.data.wmplay;
+      const fallbackVideoUrl = data.data.play || data.data.wmplay;
+      if (!primaryVideoUrl) throw new Error("La API no devolvió un video descargable.");
 
       const URL_VIDEO = `https://www.tiktok.com/@${data.data.author?.unique_id}/video/${data.data.id}`;
-      
-      const file = await downloadToCache(videoUrl, 180000);
+
+      let file = "";
+      try {
+        file = await downloadToCache(primaryVideoUrl, 150000);
+      } catch {
+        if (fallbackVideoUrl && fallbackVideoUrl !== primaryVideoUrl) {
+          file = await downloadToCache(fallbackVideoUrl, 150000);
+        } else {
+          throw new Error("No se pudo descargar el video desde el servidor de origen.");
+        }
+      }
       tempFiles.add(file);
 
-      const convertedFile = await CONVERT_TO_AVC(file);
+      const [convertedFile, { cost }] = await Promise.all([
+        CONVERT_TO_AVC(file),
+        prepareDownloadCharge(ctx, "video", file),
+      ]);
       tempFiles.add(convertedFile);
-
-      const { cost } = await prepareDownloadCharge(ctx, "video", convertedFile);
 
       const caption = DL_TEMPLATE({
         bold: fytBold,
@@ -215,15 +268,19 @@ export default {
       });
 
       confirmDownloadCharge(ctx);
-      await react("✅").catch(() => undefined);
-
+      void react("✅").catch(() => undefined);
     } catch (error: unknown) {
-      await react("❌").catch(() => undefined);
-      const message = error instanceof Error ? error.message : "No se pudo descargar el video.";
-      await reply({ text: t("cmd_value0_bb624cd4", { value0: message }) }).catch(() => undefined);
+      void react("❌").catch(() => undefined);
+      const message =
+        error instanceof Error ? error.message : "No se pudo descargar el video.";
+      await reply({ text: t("cmd_value0_bb624cd4", { value0: message }) }).catch(
+        () => undefined,
+      );
     } finally {
-      for (const file of tempFiles) {
-        await rm(file, { force: true }).catch(() => undefined);
+      if (tempFiles.size > 0) {
+        void Promise.allSettled(
+          Array.from(tempFiles, (file) => rm(file, { force: true })),
+        );
       }
     }
   },
