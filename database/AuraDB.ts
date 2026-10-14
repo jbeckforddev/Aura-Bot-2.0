@@ -13,6 +13,7 @@ import type {
   GroupDbRow,
   BotDbRow,
 } from "../types/index";
+import type { BotType } from "../core/botType.ts";
 
 const ECONOMY_LAST_COLUMNS = {
   lastDaily: "LastEconomyDaily",
@@ -333,6 +334,9 @@ const stmts = {
   getAllBots: db_instance.prepare(
     "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
   ),
+  updateBotType: db_instance.prepare(
+    "UPDATE bots SET bot_type = ?, data = ? WHERE jid = ?",
+  ),
   deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?"),
 };
 
@@ -341,6 +345,30 @@ function normalizeJid(input: string) {
     .trim()
     .replace(/@.*$/, "")
     .replace(/:.*/, "");
+}
+
+const botTypeCache = new Map<string, BotType>();
+
+export function invalidateBotTypeCache(jid?: string): void {
+  if (jid === undefined) {
+    botTypeCache.clear();
+    return;
+  }
+
+  botTypeCache.delete(normalizeJid(jid));
+}
+
+function getCachedBotType(
+  jid: string,
+  input: Record<string, unknown>,
+): BotType {
+  const key = normalizeJid(jid);
+  const cached = botTypeCache.get(key);
+  if (cached) return cached;
+
+  const botType = resolveBotTypeLabel(input);
+  botTypeCache.set(key, botType);
+  return botType;
 }
 
 function normalizeLocaleCacheKey(input: string | null | undefined): string | null {
@@ -921,18 +949,44 @@ function getGroup(jid: string): DatabaseGroup {
   };
 }
 
-function resolveBotTypeLabel(input: Record<string, unknown> = {}): string {
+function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
   const data =
     input.data && typeof input.data === "object"
       ? (input.data as Record<string, unknown>)
       : {};
-  const botType =
-    input.bot_type ?? data.bot_type ?? data.botType;
   const sessionName = String(input.sessionName ?? data.sessionName ?? "");
+  const normalizedSessionName = sessionName.trim().toLowerCase();
   const isSubBot =
-    input.isSubBot === true || sessionName.toLowerCase().startsWith("sub-");
+    input.isSubBot === true ||
+    normalizedSessionName.startsWith("sub-") ||
+    String(input.jid ?? "").toLowerCase().startsWith("sub-");
 
-  return resolveBotType(botType, isSubBot);
+  if (isSubBot) return "Sub-Bot";
+
+  const candidates = [
+    input.bot_type,
+    data.bot_type,
+    data.botType,
+  ];
+  for (const candidate of candidates) {
+    if (resolveBotType(candidate) === "Sub-Bot") return "Sub-Bot";
+  }
+
+  for (const candidate of candidates) {
+    const resolvedType = resolveBotType(candidate);
+    if (resolvedType === "Prem-Bot") return resolvedType;
+  }
+
+  if (
+    normalizedSessionName.startsWith("prem-") ||
+    (sessionName.trim() && Number(input.isMain ?? data.isMain) === 0)
+  ) {
+    return normalizedSessionName.startsWith("prem-")
+      ? "Prem-Bot"
+      : "Sub-Bot";
+  }
+
+  return "Principal";
 }
 
 function getBot(jid: string): DatabaseBot {
@@ -977,6 +1031,7 @@ function getBot(jid: string): DatabaseBot {
       defaultBot.currentAudio,
       JSON.stringify(defaultBot.data),
     );
+    botTypeCache.set(key, "Principal");
 
     return defaultBot;
   }
@@ -984,11 +1039,12 @@ function getBot(jid: string): DatabaseBot {
   const jsonData = safeJson<Record<string, unknown>>(
     row.data as string | undefined,
   );
-  const normalizedBotType = resolveBotTypeLabel({
+  const normalizedBotType = getCachedBotType(key, {
     ...jsonData,
     ...row,
     isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
-    bot_type: (row.bot_type ?? jsonData.bot_type ?? "Principal") as string | null,
+    bot_type: row.bot_type,
+    data: jsonData,
   });
 
   return {
@@ -1019,6 +1075,35 @@ function getBot(jid: string): DatabaseBot {
       | null,
     data: jsonData,
   };
+}
+
+function migrateBotTypes(): void {
+  const rows = stmts.getAllBots.all() as Array<Record<string, unknown>>;
+  const migrate = db_instance.transaction(() => {
+    for (const row of rows) {
+      const jsonData = safeJson<Record<string, unknown>>(
+        row.data as string | undefined,
+      );
+      const botType = resolveBotTypeLabel({
+        ...jsonData,
+        ...row,
+        data: jsonData,
+        isMain: Number(row.isMain ?? jsonData.isMain ?? 0),
+        bot_type: row.bot_type ?? jsonData.bot_type ?? jsonData.botType,
+      });
+
+      if (
+        row.bot_type !== botType ||
+        jsonData.bot_type !== botType
+      ) {
+        jsonData.bot_type = botType;
+        stmts.updateBotType.run(botType, JSON.stringify(jsonData), row.jid);
+      }
+    }
+  });
+
+  invalidateBotTypeCache();
+  migrate();
 }
 
 export const db: IDatabase = {
@@ -1249,10 +1334,15 @@ export const db: IDatabase = {
       "AuraCoins";
     const currencySymbol =
       String(merged.currencySymbol ?? row?.currencySymbol ?? "₡").trim() || "₡";
+    const botTypeData =
+      dataObject.bot_type === undefined
+        ? merged.data
+        : { ...merged.data, bot_type: dataObject.bot_type };
     const botType = resolveBotTypeLabel({
       ...merged,
       isMain: Number(Boolean(merged.isMain ?? row?.isMain ?? 0)),
-      bot_type: String(merged.bot_type ?? row?.bot_type ?? "Principal").trim() || "Principal",
+      bot_type: dataObject.bot_type ?? row?.bot_type,
+      data: botTypeData,
     });
     payload.currency = currency;
     payload.currencySymbol = currencySymbol;
@@ -1276,9 +1366,12 @@ export const db: IDatabase = {
         currentAudio,
         JSON.stringify(payload),
       );
+      invalidateBotTypeCache(key);
+      botTypeCache.set(key, botType);
       return;
     }
 
+    invalidateBotTypeCache(key);
     stmts.updateBot.run(
       merged.bot_id ?? key,
       merged.bot_name ?? row.bot_name ?? null,
@@ -1303,6 +1396,7 @@ export const db: IDatabase = {
       JSON.stringify(payload),
       key,
     );
+    botTypeCache.set(key, botType);
   },
 
   setPushName(jid: string, pushName: string) {
@@ -1353,7 +1447,9 @@ export const db: IDatabase = {
   },
 
   deleteBot(jid: string) {
-    stmts.deleteBot.run(normalizeJid(jid));
+    const key = normalizeJid(jid);
+    stmts.deleteBot.run(key);
+    invalidateBotTypeCache(key);
   },
 
   getAllUsers(): DatabaseUser[] {
@@ -1396,11 +1492,12 @@ export const db: IDatabase = {
       const jsonData = safeJson<Record<string, unknown>>(
         row.data as string | undefined,
       );
-      const botType = resolveBotTypeLabel({
+      const botType = getCachedBotType(String(row.jid), {
         ...jsonData,
         ...row,
         isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
-        bot_type: (row.bot_type ?? jsonData.bot_type ?? "Principal") as string | null,
+        bot_type: row.bot_type,
+        data: jsonData,
       });
 
       return {
@@ -1574,5 +1671,6 @@ export function checkpointDb() {
   }
 }
 
+migrateBotTypes();
 db.syncDefaultUserRoles();
 warmLanguageCaches();
