@@ -1,6 +1,7 @@
 import DataBase from "better-sqlite3";
 import { mkdirSync, existsSync } from "fs";
 import "../config.ts";
+import { resolveBotType } from "../core/botType.ts";
 import { SUPPORTED_LANGUAGES } from "../src/langs/index.ts";
 import type {
   IDatabase,
@@ -925,18 +926,13 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): string {
     input.data && typeof input.data === "object"
       ? (input.data as Record<string, unknown>)
       : {};
+  const botType =
+    input.bot_type ?? data.bot_type ?? data.botType;
+  const sessionName = String(input.sessionName ?? data.sessionName ?? "");
+  const isSubBot =
+    input.isSubBot === true || sessionName.toLowerCase().startsWith("sub-");
 
-  const normalized = String(
-    (input.bot_type as string | undefined) ??
-      (data.bot_type as string | undefined) ??
-      (data.botType as string | undefined) ??
-      "Principal",
-  ).trim();
-  const botType = normalized.toLowerCase();
-
-  if (botType.includes("sub")) return "Sub-Bot";
-  if (botType.includes("prem") || botType.includes("premium")) return "Prem-Bot";
-  return "Principal";
+  return resolveBotType(botType, isSubBot);
 }
 
 function getBot(jid: string): DatabaseBot {
@@ -992,7 +988,7 @@ function getBot(jid: string): DatabaseBot {
     ...jsonData,
     ...row,
     isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
-    bot_type: (jsonData.bot_type ?? row.bot_type ?? "Principal") as string | null,
+    bot_type: (row.bot_type ?? jsonData.bot_type ?? "Principal") as string | null,
   });
 
   return {
@@ -1404,7 +1400,7 @@ export const db: IDatabase = {
         ...jsonData,
         ...row,
         isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
-        bot_type: (jsonData.bot_type ?? row.bot_type ?? "Principal") as string | null,
+        bot_type: (row.bot_type ?? jsonData.bot_type ?? "Principal") as string | null,
       });
 
       return {

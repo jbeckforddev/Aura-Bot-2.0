@@ -21,6 +21,7 @@ import {
   PLUGINS_OFF
 } from "./core/socketText.ts";
 import { db, lookupUserLanguage, lookupGroupLanguage } from "./database/AuraDB.ts";
+import { resolveBotType } from "./core/botType.ts";
 import { withLocale } from "./src/langs/index.ts";
 import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
 import {
@@ -598,15 +599,9 @@ async function handleMessageInternal(
         ? runtimeDb.hasRole(senderNum, "premium")
         : senderRoles.premium);
 
-    const botTypeLabel = String(
-      storedBot?.bot_type ||
-        (sock.isSubBot ? "Sub-Bot" : "Principal") ||
-        "Principal",
-    ).trim();
-    const botTypeLower = botTypeLabel.toLowerCase();
-    const isSubBotInstance = Boolean(sock.isSubBot || botTypeLower.includes("sub"));
-    const isPremBotInstance =
-      botTypeLower.includes("prem") || botTypeLower.includes("premium");
+    const botType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
+    const isSubBotInstance = botType === "Sub-Bot";
+    const isPremBotInstance = botType === "Prem-Bot";
     const isMainBotInstance = !isSubBotInstance && !isPremBotInstance;
 
     if (isModPrefixCommand && !isMod && !isBotUser) return;

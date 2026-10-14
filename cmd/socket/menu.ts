@@ -8,6 +8,7 @@ import {
   generateWAMessageFromContent,
 } from "@whiskeysockets/baileys";
 import { getPlugins } from "../../core/cmdLoader.ts";
+import { resolveBotType } from "../../core/botType.ts";
 import { sendWithRecordingPresence } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
@@ -52,8 +53,9 @@ export default {
       prefix ?? usedPrefix ?? globalThis.DEFAULT_PREFIXES?.[0] ?? ".";
     const remoteJid = from;
     const pushName = msg?.pushName || "Usuario";
-    const botName = runtimeDb?.getBot?.(sock.user?.id)?.bot_name || "Aura Reed";
-    const botType = sock.isSubBot ? "Sub-Bot" : "Principal";
+    const botRecord = runtimeDb?.getBot?.(sock.user?.id);
+    const botName = botRecord?.bot_name || "Aura Reed";
+    const botType = resolveBotType(botRecord?.bot_type, sock.isSubBot);
     const tituloEstilizado = fytBold(t("cmd_value0_bb624cd4", { value0: String(botName).toUpperCase() }));
     const chanellink = "https://aetheryx.xyz/";
     const requested = args && args[0] ? args[0].toLowerCase() : null;
@@ -159,7 +161,6 @@ export default {
     let bannerPath = path.resolve("./assets/img/BotBanner.jpg");
     let isGif = false;
 
-    const botRecord = runtimeDb?.getBot?.(sock.user?.id);
     const dataDir = path.resolve(globalThis.DATA_BASE_DIR || "./data");
     const bannerFileName = String(
       botRecord?.currentBanner || botRecord?.data?.currentBanner || "",
