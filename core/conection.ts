@@ -38,6 +38,7 @@ const MAX_MAIN_RECONNECT_ATTEMPTS = 2;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
+const pairingRetryAttempts = new Map<string, number>();
 const connectionsInProgress = new Set<string>();
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
@@ -206,7 +207,7 @@ export async function connectToWhatsApp(
   connectionsInProgress.delete(sessionName);
 
   const isRegistered = Boolean(
-    state.creds?.registered || (state.creds?.me && !state.creds?.pairingCode),
+    state.creds && (state.creds.registered || state.creds.me),
   );
 
   if (isSubBot && !isRegistered && options.allowPairing === false) {
@@ -486,6 +487,7 @@ export async function connectToWhatsApp(
       resetReconnectAttempts(sessionName);
       connectionLog(`WhatsApp conectado correctamente. JID: ${mainNum}`, "alert");
       await options.onConnected?.();
+      pairingRetryAttempts.delete(sessionName);
       return;
     }
 
@@ -561,9 +563,7 @@ export async function connectToWhatsApp(
       statusCode === 0 ? "warn" : "error",
     );
 
-    const currentIsRegistered = Boolean(
-      state.creds?.registered || (state.creds?.me && !state.creds?.pairingCode),
-    );
+    const currentIsRegistered = Boolean(state.creds && (state.creds.registered || state.creds.me));
     const isNotRegistered = !currentIsRegistered;
 
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
@@ -572,16 +572,41 @@ export async function connectToWhatsApp(
       if (hasConnected) db.setBot(disconnectedBotJid, { status: "offline" });
     }
 
-    if (statusCode === DisconnectReason.loggedOut && !isNotRegistered) {
+    if (statusCode === DisconnectReason.loggedOut) {
       const reconnectTimer = reconnectTimers.get(sessionName);
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimers.delete(sessionName);
       }
       resetReconnectAttempts(sessionName);
+      const retryAttempts = pairingRetryAttempts.get(sessionName) ?? 0;
+      const authBase = isSubBot
+        ? (globalThis.subBotSession ?? "./sessions/subs")
+        : (globalThis.mainBotSession ?? "./sessions");
+      const authFolder = path.join(authBase, sessionName);
+      try {
+        fs.rmSync(authFolder, { recursive: true, force: true });
+      } catch (cleanupError) {
+        connectionLog(`Error al limpiar la sesión desvinculada: ${String(cleanupError)}`, "error");
+      }
+
+      if (retryAttempts < 1) {
+        pairingRetryAttempts.set(sessionName, retryAttempts + 1);
+        connectionLog(
+          "Sesión rechazada (401). Se limpió la carpeta y se intentará vincular una vez más con llaves nuevas.",
+          "alert",
+        );
+        scheduleReconnect(3000, sessionName, isSubBot, options);
+        return;
+      }
+
+      pairingRetryAttempts.delete(sessionName);
       connectionLog(
-        "La sesión fue desvinculada de WhatsApp.",
+        "WhatsApp volvió a rechazar la sesión (401). Espera antes de volver a intentar.",
         "alert",
+      );
+      await options.onPairingError?.(
+        new Error("WhatsApp volvió a rechazar el emparejamiento (401). Espera antes de volver a intentar."),
       );
       return;
     }
