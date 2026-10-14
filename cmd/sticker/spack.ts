@@ -195,20 +195,28 @@ export default {
         text: t("cmd_value0_value1_pack_value2_stic_2e6e5148", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_procesando_pack_7b75c475")), value2: packInfo?.name || query, value3: rawStickers.length }),
       });
 
-      const results = await Promise.allSettled(
-        rawStickers.map(async (sticker: StickerPackItem) => {
-          const url = sticker.imageUrl || sticker.url || sticker.image;
-          if (!url) throw new Error("Sticker sin url.");
-          const buffer = await readFile(await downloadToCache(url));
-          const animated =
-            Boolean(sticker.isAnimated || sticker.animated) ||
-            isAnimatedWebp(buffer);
-          const webp = isWebp(buffer)
-            ? buffer
-            : await imageToWebp(buffer, animated);
-          return { sticker: webp, isAnimated: animated, emojis: ["🎭"] };
-        }),
-      );
+      const results: PromiseSettledResult<{
+        sticker: Buffer;
+        isAnimated: boolean;
+        emojis: string[];
+      }>[] = [];
+      for (let index = 0; index < rawStickers.length; index += 2) {
+        const batchResults = await Promise.allSettled(
+          rawStickers.slice(index, index + 2).map(async (sticker: StickerPackItem) => {
+            const url = sticker.imageUrl || sticker.url || sticker.image;
+            if (!url) throw new Error("Sticker sin url.");
+            const buffer = await readFile(await downloadToCache(url));
+            const animated =
+              Boolean(sticker.isAnimated || sticker.animated) ||
+              isAnimatedWebp(buffer);
+            const webp = isWebp(buffer)
+              ? buffer
+              : await imageToWebp(buffer, animated);
+            return { sticker: webp, isAnimated: animated, emojis: ["🎭"] };
+          }),
+        );
+        results.push(...batchResults);
+      }
       const stickers = results
         .filter(
           (
