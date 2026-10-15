@@ -40,7 +40,7 @@ export type { ConnectionOptions };
 
 export const logger = pino({ level: "silent" });
 
-const MAX_MAIN_RECONNECT_ATTEMPTS = 2;
+const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const HIBERNATION_INACTIVITY_MS = 6 * 60 * 60 * 1000;
 const HIBERNATION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -335,12 +335,12 @@ export async function connectToWhatsApp(
     logger,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
+    keepAliveIntervalMs: 25000,
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
     retryRequestDelayMs: 250,
-    maxMsgRetryCount: 2,
+    maxMsgRetryCount: 3,
   });
 
   const extendedSock = sock as ExtendedWASocket;
@@ -681,6 +681,9 @@ export async function connectToWhatsApp(
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
       DisconnectReason.connectionReplaced,
+      408,
+      428,
+      515,
     ];
 
     const shouldResetSession =
@@ -692,13 +695,13 @@ export async function connectToWhatsApp(
       ].includes(statusCode) || isNotRegistered;
 
     const isTransientDisconnect =
-      transientDisconnectCodes.includes(statusCode) && !isNotRegistered;
+      transientDisconnectCodes.includes(statusCode as any) || !isNotRegistered;
 
-    if (isTransientDisconnect) {
+    if (isTransientDisconnect && !shouldResetSession) {
       const retryCount = registerReconnectAttempt(sessionName);
-      const delayMs = Math.min(5000 * retryCount, 20000);
+      const delayMs = Math.min(2000 * retryCount, 10000);
       connectionLog(
-        "Desconexión temporal detectada. Reintentando sin borrar la sesión actual...",
+        `Desconexión temporal detectada (Código: ${statusCode}). Reconectando socket automáticamente...`,
         "warn",
       );
       scheduleReconnect(delayMs, sessionName, isSubBot, options);
@@ -729,10 +732,10 @@ export async function connectToWhatsApp(
     }
 
     connectionLog(
-      `Conexión interrumpida. Reconectando en 5 segundos... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
+      `Conexión interrumpida. Reconectando en 3 segundos... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
       "warn",
     );
-    scheduleReconnect(5000, sessionName, isSubBot, options);
+    scheduleReconnect(3000, sessionName, isSubBot, options);
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
