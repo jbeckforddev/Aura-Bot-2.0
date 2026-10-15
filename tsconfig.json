@@ -1,23 +1,47 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "lib": ["ESNext"],
     "allowJs": true,
     "checkJs": false,
     "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./cache/.tsbuildinfo",
     "strict": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "useDefineForClassFields": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
-  "include": ["**/*", "**/.*"],
-  "exclude": ["node_modules", "dist", ".git", "src/libs/**", "cache/**"]
+  "include": [
+    "main.ts",
+    "handler.ts",
+    "config.ts",
+    "cmd/**/*.ts",
+    "core/**/*.ts",
+    "database/**/*.ts",
+    "src/**/*.ts",
+    "types/**/*.ts",
+    "utils/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".git",
+    "cache",
+    "data",
+    "assets",
+    "patches",
+    "tests",
+    "src/libs/**"
+  ]
 }
