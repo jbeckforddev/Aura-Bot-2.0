@@ -19,7 +19,7 @@ export default {
     const now = Date.now();
     const getRemaining = (key: string, duration: number) => {
       const remaining = duration - (now - Number(user[key] ?? 0));
-      if (remaining <= 0) return "✅ Disponible";
+      if (remaining <= 0) return t("economyAvailable");
 
       const time = formatDuration(Math.max(0, Math.floor(remaining / 1000)));
       return `⏳ _${time || cooldownText(remaining)}_`;
