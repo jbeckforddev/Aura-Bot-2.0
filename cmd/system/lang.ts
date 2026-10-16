@@ -1,14 +1,11 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { t } from "../../src/langs/index.ts";
+import { getLanguageMetadata, SUPPORTED_LANGUAGES, t } from "../../src/langs/index.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-const validLanguages = new Set(["es", "en"]);
+const validLanguages = new Set<string>(SUPPORTED_LANGUAGES);
 
 function getLanguageMeta(language: string | null | undefined) {
-  const normalized = validLanguages.has(String(language ?? "")) ? String(language) : "es";
-  const label = normalized === "es" ? t("cmd_lang_ui_spanish_7a2d3a8c") : t("cmd_lang_ui_english_1639d4f2");
-  const flag = normalized === "es" ? "🇪🇦" : "🇺🇸";
-  return { normalized, label, flag };
+  return getLanguageMetadata(language);
 }
 
 export default {
@@ -27,6 +24,10 @@ export default {
     const currentGroupLanguage = ctx.from ? ctx.db.getGroup(ctx.from)?.groupLang ?? "es" : "es";
     const currentUserMeta = getLanguageMeta(currentUserLanguage);
     const currentGroupMeta = getLanguageMeta(currentGroupLanguage);
+    const languageOptions = SUPPORTED_LANGUAGES.map((language) => {
+      const { label, flag } = getLanguageMetadata(language);
+      return `┃ > ${language.toUpperCase()}: ${label} ${flag}`;
+    });
 
     const requestedLanguage = validLanguages.has(firstArg) ? firstArg : null;
     const requestedScope = ["group", "g", "grupo"].includes(firstArg)
@@ -46,17 +47,16 @@ export default {
           `┃ > ${t("cmd_lang_ui_your_preferred_1b9ec5d6")}: ${currentUserMeta.label} ${currentUserMeta.flag}`,
           `┃ > ${t("cmd_lang_ui_group_language_17e4d963")}: ${currentGroupMeta.label} ${currentGroupMeta.flag}`,
           "",
-          `┃ > EN: ${t("cmd_lang_english_8b7d2d1a")} 🇺🇸`,
-          `┃ > ES: ${t("cmd_lang_spanish_6d32c120")} 🇪🇦`,
+          ...languageOptions,
           "",
           `┣〔 ${fytBold(t("cmd_lang_config_5e8da5a7"))} 〕⬣`,
           "",
           `┣━〔 ${fytBold(t("cmd_lang_group_title_03d7a6f8"))} 〕━⬣`,
-          `┃ > ${prefix}grouplang <en|es>`,
+          `┃ > ${prefix}grouplang <código>`,
           "┣━━━━━━━━━━━━⬣",
           "",
           `┣━〔 ${fytBold(t("cmd_lang_user_title_2c7f449b"))} 〕━⬣`,
-          `┃ > ${prefix}mylang <es|en>`,
+          `┃ > ${prefix}mylang <código>`,
           "╰━━━━━━━━━━━━⬣",
         ].join("\n");
         return ctx.reply({ text: template });
@@ -68,8 +68,7 @@ export default {
         }
         ctx.db.setGroup(ctx.from, { groupLang: language });
 
-        const groupLabel = language === "es" ? t("cmd_lang_ui_spanish_7a2d3a8c") : t("cmd_lang_ui_english_1639d4f2");
-        const groupFlag = language === "es" ? "🇪🇦" : "🇺🇸";
+        const { label: groupLabel, flag: groupFlag } = getLanguageMeta(language);
         const groupTemplate = [
           `╭〔 ${fytBold(t("cmd_lang_ui_header_6a6277d1"))} 〕━⬣`,
           `┃ ${groupFlag} ${fytBold(t("cmd_lang_ui_updated_88d7a09b"))}`,
@@ -85,8 +84,7 @@ export default {
 
       ctx.db.setUser(ctx.sender, { userLang: language });
 
-      const userLabel = language === "es" ? t("cmd_lang_ui_spanish_7a2d3a8c") : t("cmd_lang_ui_english_1639d4f2");
-      const userFlag = language === "es" ? "🇪🇦" : "🇺🇸";
+      const { label: userLabel, flag: userFlag } = getLanguageMeta(language);
       const userTemplate = [
         `╭〔 ${fytBold(t("cmd_lang_ui_header_6a6277d1"))} 〕━⬣`,
         `┃ ${userFlag} ${fytBold(t("cmd_lang_ui_updated_88d7a09b"))}`,
@@ -103,8 +101,7 @@ export default {
     if (requestedLanguage) {
       ctx.db.setUser(ctx.sender, { userLang: requestedLanguage });
 
-      const preferredLabel = requestedLanguage === "es" ? t("cmd_lang_ui_spanish_7a2d3a8c") : t("cmd_lang_ui_english_1639d4f2");
-      const preferredFlag = requestedLanguage === "es" ? "🇪🇦" : "🇺🇸";
+      const { label: preferredLabel, flag: preferredFlag } = getLanguageMeta(requestedLanguage);
       const preferredTemplate = [
         `╭〔 ${fytBold(t("cmd_lang_ui_header_6a6277d1"))} 〕━⬣`,
         `┃ ${preferredFlag} ${fytBold(t("cmd_lang_ui_updated_88d7a09b"))}`,
@@ -124,8 +121,7 @@ export default {
       }
       ctx.db.setGroup(ctx.from, { groupLang: secondArg });
 
-      const groupLabel2 = secondArg === "es" ? t("cmd_lang_ui_spanish_7a2d3a8c") : t("cmd_lang_ui_english_1639d4f2");
-      const groupFlag2 = secondArg === "es" ? "🇪🇦" : "🇺🇸";
+      const { label: groupLabel2, flag: groupFlag2 } = getLanguageMeta(secondArg);
       const groupTemplate2 = [
         `╭〔 ${fytBold(t("cmd_lang_ui_header_6a6277d1"))} 〕━⬣`,
         `┃ ${groupFlag2} ${fytBold(t("cmd_lang_ui_updated_88d7a09b"))}`,
@@ -144,8 +140,7 @@ export default {
       `┃ ${fytBold(t("cmd_lang_available_74d57cfe"))}`,
       "╰━━━━━━━━━━━━⬣",
       "",
-      `┃ > EN: ${t("cmd_lang_english_8b7d2d1a")} 🇺🇸`,
-      `┃ > ES: ${t("cmd_lang_spanish_6d32c120")} 🇪🇦`,
+      ...languageOptions,
       "",
       `╭〔 ${fytBold(t("core_lang_group_1f3f3fe0f0ab"))} 〕━⬣`,
       `┃ > ${currentGroupMeta.label} ${currentGroupMeta.flag}`,
@@ -156,10 +151,10 @@ export default {
       `┣〔 ${fytBold(t("cmd_lang_config_5e8da5a7"))} 〕⬣`,
       "",
       `┣━〔 ${fytBold(t("cmd_lang_group_title_03d7a6f8"))} 〕━⬣`,
-      `┃ > ${prefix}grouplang <en|es>`,
+      `┃ > ${prefix}grouplang <código>`,
       "",
       `┣━〔 ${fytBold(t("cmd_lang_user_title_2c7f449b"))} 〕━⬣`,
-      `┃ > ${prefix}mylang <es|en>`,
+      `┃ > ${prefix}mylang <código>`,
       "╰━━━━━━━━━━━━⬣",
     ].join("\n");
 

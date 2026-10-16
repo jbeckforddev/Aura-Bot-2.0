@@ -1,10 +1,52 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import en from "./en.lang.json" with { type: "json" };
 import es from "./es.lang.json" with { type: "json" };
+import br from "./br.lang.json" with { type: "json" };
+import cn from "./cn.lang.json" with { type: "json" };
+import cz from "./cz.lang.json" with { type: "json" };
+import de from "./de.lang.json" with { type: "json" };
+import fr from "./fr.lang.json" with { type: "json" };
+import gr from "./gr.lang.json" with { type: "json" };
+import hi from "./hi.lang.json" with { type: "json" };
+import hu from "./hu.lang.json" with { type: "json" };
+import id from "./id.lang.json" with { type: "json" };
+import it from "./it.lang.json" with { type: "json" };
+import jp from "./jp.lang.json" with { type: "json" };
+import kr from "./kr.lang.json" with { type: "json" };
+import nl from "./nl.lang.json" with { type: "json" };
+import ph from "./ph.lang.json" with { type: "json" };
+import pl from "./pl.lang.json" with { type: "json" };
+import ro from "./ro.lang.json" with { type: "json" };
+import ru from "./ru.lang.json" with { type: "json" };
+import sv from "./sv.lang.json" with { type: "json" };
+import th from "./th.lang.json" with { type: "json" };
+import uk from "./uk.lang.json" with { type: "json" };
+import vn from "./vn.lang.json" with { type: "json" };
 
 const LANGUAGES = {
   en,
   es,
+  br,
+  cn,
+  cz,
+  de,
+  fr,
+  gr,
+  hi,
+  hu,
+  id,
+  it,
+  jp,
+  kr,
+  nl,
+  ph,
+  pl,
+  ro,
+  ru,
+  sv,
+  th,
+  uk,
+  vn,
 } as const;
 
 export type Language = keyof typeof LANGUAGES;
@@ -12,6 +54,39 @@ export type TranslationKey = keyof (typeof LANGUAGES)["es"];
 
 export const SUPPORTED_LANGUAGES = Object.keys(LANGUAGES) as Language[];
 export const DEFAULT_LANGUAGE: Language = "es";
+export const LANGUAGE_METADATA = {
+  en: { label: "English", flag: "🇺🇸" },
+  es: { label: "Español", flag: "🇪🇸" },
+  br: { label: "Português (Brasil)", flag: "🇧🇷" },
+  cn: { label: "中文 (简体)", flag: "🇨🇳" },
+  cz: { label: "Čeština", flag: "🇨🇿" },
+  de: { label: "Deutsch", flag: "🇩🇪" },
+  fr: { label: "Français", flag: "🇫🇷" },
+  gr: { label: "Ελληνικά", flag: "🇬🇷" },
+  hi: { label: "हिन्दी", flag: "🇮🇳" },
+  hu: { label: "Magyar", flag: "🇭🇺" },
+  id: { label: "Bahasa Indonesia", flag: "🇮🇩" },
+  it: { label: "Italiano", flag: "🇮🇹" },
+  jp: { label: "日本語", flag: "🇯🇵" },
+  kr: { label: "한국어", flag: "🇰🇷" },
+  nl: { label: "Nederlands", flag: "🇳🇱" },
+  ph: { label: "Filipino", flag: "🇵🇭" },
+  pl: { label: "Polski", flag: "🇵🇱" },
+  ro: { label: "Română", flag: "🇷🇴" },
+  ru: { label: "Русский", flag: "🇷🇺" },
+  sv: { label: "Svenska", flag: "🇸🇪" },
+  th: { label: "ไทย", flag: "🇹🇭" },
+  uk: { label: "Українська", flag: "🇺🇦" },
+  vn: { label: "Tiếng Việt", flag: "🇻🇳" },
+} satisfies Record<Language, { label: string; flag: string }>;
+
+export function getLanguageMetadata(language: unknown) {
+  const normalized =
+    typeof language === "string" && language in LANGUAGE_METADATA
+      ? (language as Language)
+      : DEFAULT_LANGUAGE;
+  return { normalized, ...LANGUAGE_METADATA[normalized] };
+}
 
 type TranslationValues = Record<string, unknown>;
 const localeStorage = new AsyncLocalStorage<Language>();
