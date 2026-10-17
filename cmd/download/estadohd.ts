@@ -9,7 +9,6 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 
-
 const execAsync = promisify(exec);
 const tmpDir = process.env.AURA_DOWNLOAD_CACHE || join(process.cwd(), "cache");
 
@@ -144,46 +143,92 @@ export default {
         const fileIsVid = currentExt.endsWith(".mp4");
         const fileIsImg = /\.(jpg|jpeg|png)$/.test(currentExt);
         
-        const outFile = join(tmpDir, `hd_${id}_out_${currentIndex}${fileIsVid ? ".mp4" : ".jpg"}`);
-        let finalPath = file;
-
         if (fileIsVid) {
-          await updateStatus(`┃ 🗜️ Estado: Procesando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Leyendo códec base...`);
-          const sizeMB = statSync(finalPath).size / (1024 * 1024);
+          await updateStatus(`┃ ⏱️ Estado: Analizando duración (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Comprobando límites de WhatsApp...`);
           
+          let duration = 0;
           try {
-            if (sizeMB > 60) {
-              await updateStatus(`┃ ⚙️ Estado: Renderizando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
-              await execAsync(
-                `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
-                { maxBuffer: 1024 * 1024 * 50 }
-              );
-              finalPath = outFile;
-            } else {
-              const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
-              const codec = codecInfo.trim().toLowerCase();
-
-              if (codec === "h264") {
-                await updateStatus(`┃ ⚙️ Estado: Clonando flujo (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Bypass directo (0% pérdida)...`);
-                await execAsync(
-                  `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outFile}"`,
-                  { maxBuffer: 1024 * 1024 * 50 }
-                );
-              } else {
-                await updateStatus(`┃ ⚙️ Estado: Re-codificando formato (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
-                await execAsync(
-                  `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
-                  { maxBuffer: 1024 * 1024 * 50 }
-                );
-              }
-              finalPath = outFile;
-            }
+            const { stdout: durOutput } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${file}"`);
+            duration = parseFloat(durOutput.trim()) || 0;
           } catch {
-            finalPath = file;
+            duration = 0;
           }
-          processedFiles.push({ path: finalPath, type: 'video' });
+
+          // Si el video dura más de 90 segundos (1:30), lo seccionamos en partes exactas
+          if (duration > 90) {
+            const partDuration = 90; // 1 minuto y 30 segundos
+            const totalParts = Math.ceil(duration / partDuration);
+            
+            await updateStatus(`┃ ✂️ Estado: Segmentando video largo (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Dividiendo en ${totalParts} partes de 1:30...`);
+
+            for (let part = 0; part < totalParts; part++) {
+              const startTime = part * partDuration;
+              const partOutFile = join(tmpDir, `hd_${id}_out_${currentIndex}_part${part + 1}.mp4`);
+              
+              try {
+                // Corte ultrarrápido por fotogramas clave sin recodificar en el split
+                await execAsync(
+                  `ffmpeg -y -ss ${startTime} -i "${file}" -t ${partDuration} -c copy -avoid_negative_ts make_zero "${partOutFile}"`,
+                  { maxBuffer: 1024 * 1024 * 50 }
+                );
+
+                // Aplicar optimización final de códec/movflags a la partición generada
+                const optimizedPartFile = join(tmpDir, `hd_${id}_out_${currentIndex}_part${part + 1}_opt.mp4`);
+                await execAsync(
+                  `ffmpeg -y -i "${partOutFile}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${optimizedPartFile}"`,
+                  { maxBuffer: 1024 * 1024 * 50 }
+                );
+
+                processedFiles.push({ path: optimizedPartFile, type: 'video' });
+                await rm(partOutFile, { force: true }).catch(() => undefined);
+              } catch {
+                // Fallback si falla el corte por segmentos, se añade el original completo
+                processedFiles.push({ path: file, type: 'video' });
+              }
+            }
+          } else {
+            // Video menor o igual a 1:30 (Procesamiento normal optimizado)
+            const outFile = join(tmpDir, `hd_${id}_out_${currentIndex}.mp4`);
+            let finalPath = file;
+            const sizeMB = statSync(finalPath).size / (1024 * 1024);
+            
+            try {
+              if (sizeMB > 60) {
+                await updateStatus(`┃ ⚙️ Estado: Renderizando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
+                await execAsync(
+                  `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
+                  { maxBuffer: 1024 * 1024 * 50 }
+                );
+                finalPath = outFile;
+              } else {
+                const { stdout: codecInfo } = await execAsync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${finalPath}"`);
+                const codec = codecInfo.trim().toLowerCase();
+
+                if (codec === "h264") {
+                  await updateStatus(`┃ ⚙️ Estado: Clonando flujo (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Bypass directo (0% pérdida)...`);
+                  await execAsync(
+                    `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outFile}"`,
+                    { maxBuffer: 1024 * 1024 * 50 }
+                  );
+                } else {
+                  await updateStatus(`┃ ⚙️ Estado: Re-codificando formato (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
+                  await execAsync(
+                    `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
+                    { maxBuffer: 1024 * 1024 * 50 }
+                  );
+                }
+                finalPath = outFile;
+              }
+            } catch {
+              finalPath = file;
+            }
+            processedFiles.push({ path: finalPath, type: 'video' });
+          }
           
         } else if (fileIsImg) {
+          const outFile = join(tmpDir, `hd_${id}_out_${currentIndex}.jpg`);
+          let finalPath = file;
+          
           await updateStatus(`┃ 🗜️ Estado: Procesando imagen (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Optimizando...`);
           try {
             await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outFile}"`, { maxBuffer: 1024 * 1024 * 50 });
@@ -197,7 +242,7 @@ export default {
         currentIndex++;
       }
 
-      await updateStatus(`┃ 📤 Estado: Transmitiendo lote\n┃ 📦 Cantidad: ${processedFiles.length} archivo(s)`);
+      await updateStatus(`┃ 📤 Estado: Transmitiendo lote\n┃ 📦 Cantidad total: ${processedFiles.length} archivo(s) (Segmentado si aplica)`);
 
       for (let i = 0; i < processedFiles.length; i++) {
         const { path: pFile, type } = processedFiles[i];
@@ -241,6 +286,10 @@ export default {
       for (let i = 1; i <= (mediaFiles.length || 10); i++) {
         await rm(join(tmpDir, `hd_${id}_out_${i}.mp4`), { force: true }).catch(() => undefined);
         await rm(join(tmpDir, `hd_${id}_out_${i}.jpg`), { force: true }).catch(() => undefined);
+        for (let p = 1; p <= 10; p++) {
+          await rm(join(tmpDir, `hd_${id}_out_${i}_part${p}.mp4`), { force: true }).catch(() => undefined);
+          await rm(join(tmpDir, `hd_${id}_out_${i}_part${p}_opt.mp4`), { force: true }).catch(() => undefined);
+        }
       }
     }
   }
