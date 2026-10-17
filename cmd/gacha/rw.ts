@@ -1,5 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { getGachaOwnership, saveGachaDraw } from "../../database/gachaDB.ts";
+import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t, type TranslationKey } from "../../src/langs/index.ts";
@@ -19,6 +20,7 @@ const RARITY_TRANSLATIONS: Record<string, TranslationKey> = {
 export default {
 	name: ["rw", "randomdraw", "random", "gacha", "rollwaifu"],
 	category: "gacha",
+	cooldown: GACHA_COOLDOWNS.rw,
 	description: t("gacha_rw_description"),
 	groupOnly: true,
 

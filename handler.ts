@@ -32,10 +32,12 @@ import {
 import {
   checkDownloadCoins,
   chargeDownloadCost,
+  cooldownText,
   formatMoney,
   getBotCurrency,
   type DownloadMediaType,
 } from "./core/economyConfig.ts";
+import { t } from "./src/langs/index.ts";
 
 import type {
   GroupMetadata,
@@ -80,6 +82,8 @@ const configuredLidCache = new LRUCache<string, string | null>({
   max: 200,
   ttl: 30 * 60 * 1000,
 });
+
+const commandCooldowns = new LRUCache<string, number>({ max: 20_000 });
 
 function stripDeviceSuffixFromJid(jid?: string | null): string | null {
   if (!jid || typeof jid !== "string") return null;
@@ -1208,6 +1212,27 @@ async function handleMessageInternal(
           currencyName
         })});
       }
+    }
+
+    const cooldown = Number(plugin.cooldown);
+    if (Number.isFinite(cooldown) && cooldown > 0) {
+      const commandName = Array.isArray(plugin.name)
+        ? plugin.name[0]
+        : plugin.name;
+      const cooldownKey = `${from}:${sender}:${String(commandName).toLowerCase()}`;
+      const now = Date.now();
+      const lastUsedAt = commandCooldowns.get(cooldownKey) ?? 0;
+      const remaining = cooldown - (now - lastUsedAt);
+
+      if (remaining > 0) {
+        return ctx.reply({
+          text: t("cmd_espera_value0_para_volver_a_ju_6c3501cc", {
+            value0: cooldownText(remaining),
+          }),
+        });
+      }
+
+      commandCooldowns.set(cooldownKey, now);
     }
 
     const start = Date.now();

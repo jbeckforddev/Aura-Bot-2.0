@@ -2,11 +2,12 @@ import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { request } from "undici";
+import { downloadToCache } from "../core/downloadUtils.ts";
 
 const execFileAsync = promisify(execFile);
 const FFMPEG_MAX_BUFFER = 512 * 1024 * 1024;
@@ -129,12 +130,17 @@ export async function GIF_TO_VIDEO(gifUrl: string): Promise<string> {
 export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
   if (!ffmpegPath) return inputPath;
 
+  const isRemoteUrl = /^https?:\/\//i.test(inputPath);
+  const sourcePath = isRemoteUrl
+    ? await downloadToCache(inputPath, 600000)
+    : inputPath;
+
   await ensureCacheDir();
   const id = randomUUID();
   const outputPath = path.join(CACHE_DIR, `${id}.mp4`);
 
   try {
-    const { hasEvenDimensions, isAacAudio } = await probeMedia(inputPath);
+    const { hasEvenDimensions, isAacAudio } = await probeMedia(sourcePath);
 
     const buildArgs = (copyAudio: boolean) => [
       "-nostats",
@@ -142,7 +148,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       "-threads", "2",
       "-thread_type", "frame+slice",
       "-y",
-      "-i", inputPath,
+      "-i", sourcePath,
       "-map", "0:v:0",
       "-map", "0:a?",
       "-map_metadata", "-1",
@@ -181,9 +187,26 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       }
     });
 
+    let size = 0;
+    try {
+      const outputInfo = await stat(outputPath);
+      size = outputInfo.size;
+    } catch {
+      throw new Error("La conversión no generó un archivo de salida válido.");
+    }
+
+    if (!Number.isFinite(size) || size <= 0) {
+      throw new Error("La conversión no generó contenido válido.");
+    }
+
     return outputPath;
-  } catch {
+  } catch (error) {
     await rm(outputPath, { force: true }).catch(() => undefined);
-    return inputPath;
+    if (isRemoteUrl) {
+      await rm(sourcePath, { force: true }).catch(() => undefined);
+    }
+    throw error instanceof Error
+      ? error
+      : new Error("No se pudo convertir el video a un formato compatible.");
   }
 }

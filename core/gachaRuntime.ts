@@ -100,6 +100,15 @@ function loadCharacters(): GachaCharacter[] {
 
 const CHARACTERS = loadCharacters();
 
+export function getGachaCatalogStats() {
+  const series = new Set(
+    CHARACTERS.map((character) => character.source.trim().toLowerCase()).filter(
+      Boolean,
+    ),
+  );
+  return { characters: CHARACTERS.length, series: series.size };
+}
+
 export function drawRandomCharacter(): GachaCharacter {
   if (CHARACTERS.length === 0) {
     throw new Error("El catálogo gacha no contiene personajes con imágenes válidas.");
@@ -159,3 +168,8 @@ export function getQuotedMessageId(
     ? contextInfo.stanzaId
     : null;
 }
+
+export const GACHA_COOLDOWNS = {
+  claim: 5 * 60 * 1000, // 5 Minutos
+  rw: 10 * 60 * 1000, // 10 Minutos
+} as const;

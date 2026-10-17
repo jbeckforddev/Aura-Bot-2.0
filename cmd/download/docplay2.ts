@@ -15,6 +15,7 @@ import {
 } from "../../src/api/YouTubeSearch.ts";
 import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 import { t } from "../../src/langs/index.ts";
+import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 
 
 const ID =
@@ -38,6 +39,7 @@ export default {
       } else url = `https://youtu.be/${query.match(ID)?.[1]}`;
       if (!url) throw new Error("No se encontró ningún video.");
       const video = await downloadYouTube(url, "video", 1080, searchResult);
+      const VIDEO_READY = await CONVERT_TO_AVC(video.dl_url);
       const title = video.title || "Video de YouTube";
       const { cost } = prepareDownloadChargeBySize(
         ctx,
@@ -68,7 +70,7 @@ export default {
       });
       await reply({ text: caption });
       await reply({
-        document: { url: video.dl_url },
+        document: { url: VIDEO_READY },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "youtube")}.mp4`,
       });

@@ -145,6 +145,34 @@ export function saveGachaDraw(
     .run(groupId, messageId, userId, characterId, imageId, Date.now());
 }
 
+export function getLastGachaDrawAt(
+  groupId: string,
+  userId: string,
+): number | null {
+  const result = db_instance
+    .prepare(
+      "SELECT MAX(created_at) AS last_draw_at FROM GachaDraws WHERE group_id = ? AND user_id = ?",
+    )
+    .get(groupId, userId) as { last_draw_at: number | null };
+  return result.last_draw_at;
+}
+
+export function getLastGachaClaimAt(
+  groupId: string,
+  userId: string,
+): number | null {
+  const result = db_instance
+    .prepare(
+      `SELECT MAX(claimed_at) AS last_claim_at FROM (
+         SELECT claimed_at FROM GachaImageOwnership WHERE group_id = ? AND user_id = ?
+         UNION ALL
+         SELECT claimed_at FROM GachaOwnership WHERE group_id = ? AND user_id = ?
+       )`,
+    )
+    .get(groupId, userId, groupId, userId) as { last_claim_at: number | null };
+  return result.last_claim_at;
+}
+
 export type GachaClaimResult =
   | { status: "claimed"; owner: GachaOwnership }
   | { status: "already_owned"; owner: GachaOwnership }

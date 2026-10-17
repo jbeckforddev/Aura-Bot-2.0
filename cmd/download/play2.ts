@@ -1,6 +1,7 @@
 import { fytBold } from "../../core/socketText.ts";
 import { safeFileName } from "../../core/downloadUtils.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
+import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import {
   prepareDownloadChargeBySize,
   confirmDownloadCharge,
@@ -89,6 +90,7 @@ export default {
       const thumbnail = video.thumbnail;
       const duration = video.duration;
       const durationSeconds = parseDurationToSeconds(duration);
+      const VIDEO_READY = await CONVERT_TO_AVC(video.dl_url);
 
       if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
         throw new Error(
@@ -138,7 +140,7 @@ export default {
         : false;
       if (!hasPreview) await reply({ text: caption });
       await reply({
-        video: { url: video.dl_url },
+        video: { url: VIDEO_READY },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "youtube")}.mp4`,
       });

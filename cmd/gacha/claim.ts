@@ -1,11 +1,13 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { claimGachaDraw } from "../../database/gachaDB.ts";
+import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { getQuotedMessageId } from "../../core/gachaRuntime.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
 	name: ["claim", "c"],
 	category: "gacha",
+	cooldown: GACHA_COOLDOWNS.claim,
 	description: t("gacha_claim_description"),
 	groupOnly: true,
 
