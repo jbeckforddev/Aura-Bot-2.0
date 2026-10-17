@@ -1,0 +1,51 @@
+{
+  "Nino Nakano": {
+    "name": "Nino Nakano",
+    "rarity": "Legendary",
+    "type": "Balance",
+    "source": "Gotoubun no Hanayome",
+    "value": 8000,
+    "img": [
+      {
+        "id": 11,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/1.jpg"
+      },
+      {
+        "id": 12,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/2.jpg"
+      },
+      {
+        "id": 13,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/3.webp"
+      },
+      {
+        "id": 14,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/4.png"
+      },
+      {
+        "id": 15,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/5.jpg"
+      },
+      {
+        "id": 16,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/6.jpeg"
+      },
+      {
+        "id": 17,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/7.jpeg"
+      },
+      {
+        "id": 18,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/8.jpg"
+      },
+      {
+        "id": 19,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/9.jpg"
+      },
+      {
+        "id": 20,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/10.webp"
+      }
+    ]
+  }
+}

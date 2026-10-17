@@ -50,7 +50,46 @@ const LANGUAGES = {
 } as const;
 
 export type Language = keyof typeof LANGUAGES;
-export type TranslationKey = keyof (typeof LANGUAGES)["es"];
+type GachaTranslationKey =
+  | "gacha_rw_description"
+  | "gacha_claim_description"
+  | "gacha_catalog_unavailable"
+  | "gacha_rarity_label"
+  | "gacha_type_label"
+  | "gacha_value_label"
+  | "gacha_status_label"
+  | "gacha_status_free"
+  | "gacha_status_claimed_by"
+  | "gacha_rw_claim_instruction"
+  | "gacha_rw_save_failed"
+  | "gacha_claim_reply_required"
+  | "gacha_claim_not_found"
+  | "gacha_claim_only_drawer"
+  | "gacha_claim_expired"
+  | "gacha_claim_already_owned"
+  | "gacha_claim_already_resolved_owner"
+  | "gacha_claim_already_resolved"
+  | "gacha_claim_success"
+  | "gacha_rarity_special"
+  | "gacha_rarity_super_special"
+  | "gacha_rarity_epic"
+  | "gacha_rarity_mythic"
+  | "gacha_rarity_legendary"
+  | "gacha_source_label"
+  | "gacha_id_label"
+  | "gacha_type_support"
+  | "gacha_harem_description"
+  | "gacha_harem_empty"
+  | "gacha_harem_title"
+  | "gacha_harem_page"
+  | "gacha_harem_item"
+  | "gacha_harem_value"
+  | "gacha_harem_total"
+  | "gacha_harem_page_invalid"
+  | "gacha_harem_page_out_of_range";
+export type TranslationKey =
+  | keyof (typeof LANGUAGES)["es"]
+  | GachaTranslationKey;
 
 export const SUPPORTED_LANGUAGES = Object.keys(LANGUAGES) as Language[];
 export const DEFAULT_LANGUAGE: Language = "es";

@@ -38,7 +38,7 @@ export default {
             }
           }
         },
-        { quoted: msg as any }
+        {}
       );
 
       const tempId2 = await sock.relayMessage(

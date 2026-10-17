@@ -32,7 +32,7 @@ export default {
       return reply(t("cmd_value0_value1_etiqueta_o_respo_fae115d4", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_falta_objetivo_d2546e73")), value2: fytBold(t("cmd_system_29d43743")) }));
     }
 
-    const groupData = db.getGroup(from) || {};
+    const groupData = db.getGroup(from);
     let mutedUsers: string[] = Array.isArray(groupData.mutedUsers) ? [...groupData.mutedUsers] : [];
 
     if (!isUnmute) {
@@ -71,7 +71,7 @@ export default {
       }
 
       setTimeout(() => {
-        const currentGroupData = db.getGroup(from) || {};
+        const currentGroupData = db.getGroup(from);
         let currentMuted = Array.isArray(currentGroupData.mutedUsers) ? [...currentGroupData.mutedUsers] : [];
         if (currentMuted.includes(target!)) {
           currentMuted = currentMuted.filter(jid => jid !== target);

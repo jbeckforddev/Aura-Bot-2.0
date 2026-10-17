@@ -1,0 +1,51 @@
+{
+  "Mumen Rider": {
+    "name": "Mumen Rider",
+    "rarity": "Super Special",
+    "type": "Defensor",
+    "source": "One Punch Man",
+    "value": 2500,
+    "img": [
+      {
+        "id": 41,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/1.jpeg"
+      },
+      {
+        "id": 42,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/2.jpeg"
+      },
+      {
+        "id": 43,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/3.jpeg"
+      },
+      {
+        "id": 44,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/4.jpeg"
+      },
+      {
+        "id": 45,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/5.jpeg"
+      },
+      {
+        "id": 46,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/6.jpeg"
+      },
+      {
+        "id": 47,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/7.jpeg"
+      },
+      {
+        "id": 48,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/8.jpeg"
+      },
+      {
+        "id": 49,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/9.jpeg"
+      },
+      {
+        "id": 50,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/10.jpeg"
+      }
+    ]
+  }
+}

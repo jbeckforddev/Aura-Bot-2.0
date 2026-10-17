@@ -20,11 +20,14 @@ export default {
     await react("👁️").catch(() => undefined);
 
     const snipedMsg = groupDeleted[groupDeleted.length - 1];
+    if (!snipedMsg.key) {
+      return reply(t("cmd_value0_value1_no_se_han_detect_546a93cf", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_nada_que_mostrar_db7c3fa6")), value2: fytBold(t("cmd_system_29d43743")) }));
+    }
     const sender = snipedMsg.key.participant || snipedMsg.key.remoteJid || "Desconocido";
 
     await sock.sendMessage(
       from,
-      { forward: snipedMsg },
+      { forward: snipedMsg as import("@whiskeysockets/baileys").WAMessage },
       { quoted: msg as any }
     ).catch(() => undefined);
 

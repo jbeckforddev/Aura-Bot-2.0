@@ -100,7 +100,7 @@ export default {
 
       for await (const chunk of stream) {
         if (!writer.write(chunk)) {
-          await new Promise((resolve) => writer.once("drain", resolve));
+          await new Promise<void>((resolve) => writer.once("drain", resolve));
         }
         downloaded += chunk.length;
         const now = Date.now();
@@ -112,7 +112,7 @@ export default {
       }
       
       writer.end();
-      await new Promise((resolve) => writer.once("close", resolve));
+      await new Promise<void>((resolve) => writer.once("close", resolve));
 
       if (isZip) {
         await react("📦").catch(() => undefined);

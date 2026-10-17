@@ -1,0 +1,51 @@
+{
+  "Miku Nakano": {
+    "name": "Miku Nakano",
+    "rarity": "Mitic",
+    "type": "Support",
+    "source": "Gotoubun no Hanayome",
+    "value": 4500,
+    "img": [
+      {
+        "id": 21,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images.jpeg"
+      },
+      {
+        "id": 22,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(3).jpeg"
+      },
+      {
+        "id": 23,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(2).jpeg"
+      },
+      {
+        "id": 24,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(7).jpeg"
+      },
+      {
+        "id": 25,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(5).jpeg"
+      },
+      {
+        "id": 26,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(1).jpeg"
+      },
+      {
+        "id": 27,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(4).jpeg"
+      },
+      {
+        "id": 28,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(8).jpeg"
+      },
+      {
+        "id": 29,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(9).jpeg"
+      },
+      {
+        "id": 30,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(6).jpeg"
+      }
+    ]
+  }
+}
