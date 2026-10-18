@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Halaga: {{value}}",
   "gacha_harem_total": "Kabuuang halaga ng harem: {{value}}",
   "gacha_harem_page_invalid": "Maglagay ng wastong numero ng pahina.",
-  "gacha_harem_page_out_of_range": "Wala ang pahinang iyon. May {{totalPages}} pahina."
+  "gacha_harem_page_out_of_range": "Wala ang pahinang iyon. May {{totalPages}} pahina.",
+  "cmdst_description": "Iugnay ang sticker sa personal na command shortcut.",
+  "cmdst_usage": "cmdst <command> [mga argumento] (mag-reply sa sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐘𝐎𝐔𝐑 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓𝐒 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Wala ka pang mga shortcut.",
+  "cmdst_help": "╭〔 💡 𝐏𝐀𝐀𝐍𝐎 𝐆𝐔𝐌𝐀𝐌𝐈𝐓 〕⬣\n┃ Mag-reply sa sticker gamit ang:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Pagkatapos, ipadala ang sticker para\n┃ patakbuhin ang command kasama ang mga argumento.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐇𝐈𝐍𝐃𝐈 𝐖𝐀𝐒𝐓𝐎𝐍𝐆 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 〕⬣\n┃ Mga letra, numero, gitling, at underscore\n┃ lamang ang gamitin.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐇𝐈𝐍𝐃𝐈 𝐏𝐖𝐄𝐃𝐄 〕⬣\n┃ Hindi maaaring iugnay ang sticker\n┃ sa registration command.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐖𝐀𝐋𝐀𝐍𝐆 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 〕⬣\n┃ Walang command na `{{command}}`.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐊𝐀𝐈𝐋𝐀𝐍𝐆𝐀𝐍 𝐀𝐍𝐆 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 〕⬣\n┃ Direktang mag-reply sa sticker\n┃ na gusto mong iugnay.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐇𝐈𝐍𝐃𝐈 𝐍𝐀𝐈𝐒𝐀𝐕𝐄 〕⬣\n┃ Hindi naiugnay ang command sa sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐍𝐀𝐈𝐒𝐀𝐕𝐄 𝐀𝐍𝐆 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Personal ang shortcut na ito; gagana pa rin\n┃ ang mga pahintulot ng command.\n╰━━━━━━━━━━━━⬣"
 }

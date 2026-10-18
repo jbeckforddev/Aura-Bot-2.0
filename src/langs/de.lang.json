@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Wert: {{value}}",
   "gacha_harem_total": "Gesamtwert des Harems: {{value}}",
   "gacha_harem_page_invalid": "Gib eine gültige Seitennummer ein.",
-  "gacha_harem_page_out_of_range": "Diese Seite gibt es nicht. Es gibt {{totalPages}} Seiten."
+  "gacha_harem_page_out_of_range": "Diese Seite gibt es nicht. Es gibt {{totalPages}} Seiten.",
+  "cmdst_description": "Verknüpfe einen Sticker mit einem persönlichen Befehls-Kurzbefehl.",
+  "cmdst_usage": "cmdst <Befehl> [Argumente] (auf einen Sticker antworten)",
+  "cmdst_list_title": "╭〔 🎴 𝐃𝐄𝐈𝐍𝐄 𝐒𝐓𝐈𝐂𝐊𝐄𝐑-𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋𝐄 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Du hast noch keine Kurzbefehle.",
+  "cmdst_help": "╭〔 💡 𝐒𝐎 𝐅𝐔𝐍𝐊𝐓 𝐄𝐒 〕⬣\n┃ Antworte auf einen Sticker mit:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Sende den Sticker anschließend, um\n┃ den Befehl mit Argumenten auszuführen.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐔𝐍𝐆𝐔̈𝐋𝐓𝐈𝐆𝐄𝐑 𝐁𝐄𝐅𝐄𝐇𝐋 〕⬣\n┃ Erlaubt sind Buchstaben, Zahlen,\n┃ Bindestriche und Unterstriche.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐊𝐓𝐈𝐎𝐍 𝐍𝐈𝐂𝐇𝐓 𝐄𝐑𝐋𝐀𝐔𝐁𝐓 〕⬣\n┃ Der Registrierungsbefehl kann nicht\n┃ mit einem Sticker verknüpft werden.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐁𝐄𝐅𝐄𝐇𝐋 𝐍𝐈𝐂𝐇𝐓 𝐆𝐄𝐅𝐔𝐍𝐃𝐄𝐍 〕⬣\n┃ Der Befehl `{{command}}` existiert nicht.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐅𝐄𝐇𝐋𝐓 〕⬣\n┃ Antworte direkt auf den Sticker,\n┃ den du verknüpfen möchtest.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐒𝐏𝐄𝐈𝐂𝐇𝐄𝐑𝐍 𝐅𝐄𝐇𝐋𝐆𝐄𝐒𝐂𝐇𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ Der Befehl konnte nicht mit diesem\n┃ Sticker verknüpft werden.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋 𝐆𝐄𝐒𝐏𝐄𝐈𝐂𝐇𝐄𝐑𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Dieser Kurzbefehl ist persönlich; die\n┃ Befehlsberechtigungen bleiben aktiv.\n╰━━━━━━━━━━━━⬣"
 }

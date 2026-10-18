@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Wartość: {{value}}",
   "gacha_harem_total": "Łączna wartość haremu: {{value}}",
   "gacha_harem_page_invalid": "Wpisz prawidłowy numer strony.",
-  "gacha_harem_page_out_of_range": "Ta strona nie istnieje. Łącznie stron: {{totalPages}}."
+  "gacha_harem_page_out_of_range": "Ta strona nie istnieje. Łącznie stron: {{totalPages}}.",
+  "cmdst_description": "Połącz naklejkę z osobistym skrótem polecenia.",
+  "cmdst_usage": "cmdst <polecenie> [argumenty] (odpowiedz na naklejkę)",
+  "cmdst_list_title": "╭〔 🎴 𝐓𝐖𝐎𝐉𝐄 𝐒𝐊𝐑𝐎́𝐓𝐘 𝐍𝐀𝐊𝐋𝐄𝐉𝐄𝐊 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Nie masz jeszcze żadnych skrótów.",
+  "cmdst_help": "╭〔 💡 𝐉𝐀𝐊 𝐔𝐙̇𝐘𝐖𝐀𝐂́ 〕⬣\n┃ Odpowiedz na naklejkę, wpisując:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Następnie wyślij naklejkę, aby uruchomić\n┃ polecenie z tymi argumentami.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐍𝐈𝐄𝐏𝐑𝐀𝐖𝐈𝐃Ł𝐎𝐖𝐀 𝐍𝐀𝐙𝐖𝐀 〕⬣\n┃ Używaj tylko liter, cyfr, myślników\n┃ i podkreśleń.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐍𝐈𝐄𝐃𝐎𝐙𝐖𝐎𝐋𝐎𝐍𝐄 〕⬣\n┃ Nie można połączyć naklejki\n┃ z poleceniem rejestracji.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐍𝐈𝐄 𝐙𝐍𝐀𝐋𝐄𝐙𝐈𝐎𝐍𝐎 〕⬣\n┃ Polecenie `{{command}}` nie istnieje.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐖𝐘𝐌𝐀𝐆𝐀𝐍𝐀 𝐍𝐀𝐊𝐋𝐄𝐉𝐊𝐀 〕⬣\n┃ Odpowiedz bezpośrednio na naklejkę,\n┃ którą chcesz połączyć.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐙𝐀𝐏𝐈𝐒 𝐒𝐈𝐄̨ 𝐍𝐈𝐄 𝐏𝐎𝐖𝐈𝐎́𝐃Ł 〕⬣\n┃ Nie udało się połączyć polecenia\n┃ z tą naklejką.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐙𝐀𝐏𝐈𝐒𝐀𝐍𝐘 〕⬣\n┃ 🎴 Naklejka → `{{prefix}}{{shortcut}}`\n┃ Skrót jest osobisty; uprawnienia\n┃ polecenia nadal obowiązują.\n╰━━━━━━━━━━━━⬣"
 }

@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Érték: {{value}}",
   "gacha_harem_total": "A gyűjtemény összértéke: {{value}}",
   "gacha_harem_page_invalid": "Adj meg egy érvényes oldalszámot.",
-  "gacha_harem_page_out_of_range": "Ez az oldal nem létezik. Összesen {{totalPages}} oldal van."
+  "gacha_harem_page_out_of_range": "Ez az oldal nem létezik. Összesen {{totalPages}} oldal van.",
+  "cmdst_description": "Kapcsolj egy matricát személyes parancsikonhoz.",
+  "cmdst_usage": "cmdst <parancs> [argumentumok] (válaszolj egy matricára)",
+  "cmdst_list_title": "╭〔 🎴 𝐌𝐀𝐓𝐑𝐈𝐂𝐀 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓𝐉𝐀𝐈𝐃 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Még nincsenek parancsikonjaid.",
+  "cmdst_help": "╭〔 💡 𝐇𝐀𝐒𝐙𝐍𝐀́𝐋𝐀𝐓 〕⬣\n┃ Válaszolj egy matricára ezzel:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Ezután küldd el a matricát a parancs\n┃ argumentumokkal való futtatásához.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐄́𝐑𝐕𝐄́𝐍𝐘𝐓𝐄𝐋𝐄𝐍 𝐏𝐀𝐑𝐀𝐍𝐂𝐒 〕⬣\n┃ Csak betűket, számokat, kötőjelet\n┃ és aláhúzást használj.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐍𝐄𝐌 𝐄𝐍𝐆𝐄𝐃𝐄́𝐋𝐘𝐄𝐙𝐄𝐓𝐓 〕⬣\n┃ A matricát nem kapcsolhatod össze\n┃ a regisztrációs paranccsal.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒 𝐍𝐄𝐌 𝐓𝐀𝐋𝐀́𝐋𝐇𝐀𝐓𝐎́ 〕⬣\n┃ A(z) `{{command}}` parancs nem létezik.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐌𝐀𝐓𝐑𝐈𝐂𝐀 𝐒𝐙𝐔̈𝐊𝐒𝐄́𝐆𝐄𝐒 〕⬣\n┃ Közvetlenül arra a matricára válaszolj,\n┃ amelyet társítani szeretnél.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐌𝐄𝐍𝐓𝐄́𝐒𝐈 𝐇𝐈𝐁𝐀 〕⬣\n┃ Nem sikerült a parancsot ehhez\n┃ a matricához kapcsolni.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐌𝐄𝐍𝐓𝐕𝐄 〕⬣\n┃ 🎴 Matrica → `{{prefix}}{{shortcut}}`\n┃ Ez a parancsikon személyes; a parancs\n┃ jogosultságai továbbra is érvényesek.\n╰━━━━━━━━━━━━⬣"
 }

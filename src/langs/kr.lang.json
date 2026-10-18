@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "가치: {{value}}",
   "gacha_harem_total": "컬렉션 총 가치: {{value}}",
   "gacha_harem_page_invalid": "올바른 페이지 번호를 입력하세요.",
-  "gacha_harem_page_out_of_range": "해당 페이지는 없습니다. 총 {{totalPages}}페이지입니다."
+  "gacha_harem_page_out_of_range": "해당 페이지는 없습니다. 총 {{totalPages}}페이지입니다.",
+  "cmdst_description": "스티커를 개인 명령 바로 가기에 연결합니다.",
+  "cmdst_usage": "cmdst <명령> [인수] (스티커에 답장)",
+  "cmdst_list_title": "╭〔 🎴 𝐍𝐀𝐄 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > 아직 등록된 바로 가기가 없습니다.",
+  "cmdst_help": "╭〔 💡 𝐒𝐀𝐘𝐎𝐍 𝐁𝐀𝐍𝐁𝐄𝐎𝐁 〕⬣\n┃ 스티커에 답장하며 입력하세요:\n┃ `{{prefix}}cmdst play Tusa`\n┃ 그다음 스티커를 보내면 인수와 함께\n┃ 명령이 실행됩니다.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐉𝐀𝐋𝐌𝐎𝐓𝐃𝐄𝐍 𝐌𝐘𝐄𝐎𝐍𝐆𝐑𝐘𝐄𝐎𝐍𝐆 〕⬣\n┃ 영문자, 숫자, 하이픈, 밑줄만\n┃ 사용할 수 있습니다.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐒𝐀𝐘𝐎𝐍 𝐁𝐔𝐋𝐆𝐀 〕⬣\n┃ 등록 명령에는 스티커를 연결할 수 없습니다.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐌𝐘𝐄𝐎𝐍𝐆𝐑𝐘𝐄𝐎𝐍𝐆 𝐄𝐎𝐁𝐒𝐄𝐔𝐌 〕⬣\n┃ `{{command}}` 명령을 찾을 수 없습니다.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐏𝐈𝐋𝐘𝐎 〕⬣\n┃ 연결할 스티커에 직접 답장하세요.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐃𝐄𝐔𝐍𝐆𝐑𝐎𝐊 𝐒𝐈𝐋𝐏𝐀𝐄 〕⬣\n┃ 이 스티커에 명령을 연결할 수 없습니다.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 𝐃𝐄𝐔𝐍𝐆𝐑𝐎𝐊 〕⬣\n┃ 🎴 스티커 → `{{prefix}}{{shortcut}}`\n┃ 개인 바로 가기이며 명령 권한 검사는\n┃ 그대로 적용됩니다.\n╰━━━━━━━━━━━━⬣"
 }

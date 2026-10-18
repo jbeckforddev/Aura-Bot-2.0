@@ -96,6 +96,7 @@ db_instance.exec(`
     LastEconomyAura INTEGER DEFAULT 0,
     LastEconomyRob INTEGER DEFAULT 0,
     UserLang TEXT DEFAULT NULL,
+    CmdSticker TEXT DEFAULT '{}',
     data TEXT DEFAULT '{}'
   );
 
@@ -165,6 +166,7 @@ for (const column of [
   ["aura_level", "INTEGER DEFAULT 1"],
   ["stickerPackAuthor", "TEXT DEFAULT NULL"],
   ["stickerPackName", "TEXT DEFAULT NULL"],
+  ["CmdSticker", "TEXT DEFAULT '{}'"],
 ] as const) {
   const exists = db_instance
     .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?")
@@ -284,7 +286,7 @@ const groupSelectColumns = groupColumns
 const stmts = {
   getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
   insertUser: db_instance.prepare(
-    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, CmdSticker, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
   updateEconomyLastByJid: db_instance.prepare(
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE jid = ?`,
@@ -293,13 +295,13 @@ const stmts = {
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE lid = ?`,
   ),
   updateUser: db_instance.prepare(
-    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
+    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
   ),
   updateUserByLid: db_instance.prepare(
-    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
+    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
-    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
+    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, CmdSticker, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
   getUserLang: db_instance.prepare(
     "SELECT jid, lid, UserLang, data FROM users WHERE jid = ?",
@@ -795,6 +797,7 @@ function getUser(input: string): DatabaseUser {
       role: "user",
       is_banned: 0,
       userLang: null,
+      CmdSticker: "{}",
       data: {},
     };
 
@@ -808,6 +811,7 @@ function getUser(input: string): DatabaseUser {
       100000,
       10000,
       defaultUser.userLang ?? null,
+      defaultUser.CmdSticker ?? "{}",
       JSON.stringify(defaultUser.data),
       ...getUserProfileValues(defaultUser),
     );
@@ -844,6 +848,7 @@ function getUser(input: string): DatabaseUser {
     role: (row.role ?? jsonData.role ?? "user") as string,
     is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
     userLang,
+    CmdSticker: String(row.CmdSticker ?? jsonData.CmdSticker ?? "{}"),
     coins,
     bank,
     bolsillo: coins,
@@ -1168,6 +1173,7 @@ export const db: IDatabase = {
             ? dataObject.userLang
             : (merged.userLang ?? payload.userLang ?? currentData?.userLang ?? null),
         ),
+        String(merged.CmdSticker ?? "{}"),
         JSON.stringify(payload),
         ...getUserProfileValues(merged),
       );
@@ -1192,6 +1198,7 @@ export const db: IDatabase = {
         coins,
         bank,
         normalizeLocale(merged.userLang ?? row.UserLang ?? payload.userLang ?? null),
+        String(merged.CmdSticker ?? row.CmdSticker ?? "{}"),
         JSON.stringify(payload),
         ...getUserProfileValues(
           merged,
@@ -1209,6 +1216,7 @@ export const db: IDatabase = {
         coins,
         bank,
         normalizeLocale(merged.userLang ?? row.UserLang ?? payload.userLang ?? null),
+        String(merged.CmdSticker ?? row.CmdSticker ?? "{}"),
         JSON.stringify(payload),
         ...getUserProfileValues(
           merged,
@@ -1584,6 +1592,7 @@ export const db: IDatabase = {
           100000,
           10000,
           null,
+          "{}",
           JSON.stringify({ jid: canonicalJid, lid, role }),
           ...getUserProfileValues({}),
         );
@@ -1628,6 +1637,7 @@ export const db: IDatabase = {
           current.coins ?? 100000,
           current.bank ?? 10000,
           userLangValue,
+          String(current.CmdSticker ?? "{}"),
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           lid,
@@ -1642,6 +1652,7 @@ export const db: IDatabase = {
           current.coins ?? 100000,
           current.bank ?? 10000,
           userLangValue,
+          String(current.CmdSticker ?? "{}"),
           JSON.stringify(payload),
           ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
           current.jid,

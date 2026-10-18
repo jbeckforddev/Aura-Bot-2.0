@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Hodnota: {{value}}",
   "gacha_harem_total": "Celková hodnota haremu: {{value}}",
   "gacha_harem_page_invalid": "Zadejte platné číslo stránky.",
-  "gacha_harem_page_out_of_range": "Tato stránka neexistuje. Celkem {{totalPages}} stran."
+  "gacha_harem_page_out_of_range": "Tato stránka neexistuje. Celkem {{totalPages}} stran.",
+  "cmdst_description": "Přiřaďte nálepce osobní zástupce příkazu.",
+  "cmdst_usage": "cmdst <příkaz> [argumenty] (odpovězte na nálepku)",
+  "cmdst_list_title": "╭〔 🎴 𝐕𝐀𝐒̌𝐄 𝐍𝐀́𝐋𝐄𝐏𝐊𝐎𝐕𝐄́ 𝐙𝐊𝐑𝐀𝐓𝐊𝐘 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Zatím nemáte žádné zkratky.",
+  "cmdst_help": "╭〔 💡 𝐉𝐀𝐊 𝐍𝐀 𝐓𝐎 〕⬣\n┃ Odpovězte na nálepku příkazem:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Potom odešlete nálepku a příkaz se\n┃ spustí s těmito argumenty.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐍𝐄𝐏𝐋𝐀𝐓𝐍𝐘́ 𝐏𝐑̌𝐈́𝐊𝐀𝐙 〕⬣\n┃ Použijte jen písmena, čísla, pomlčky\n┃ nebo podtržítka.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐍𝐄𝐏𝐎𝐕𝐎𝐋𝐄𝐍𝐀́ 𝐀𝐊𝐂𝐄 〕⬣\n┃ Nálepku nelze přiřadit registračnímu\n┃ příkazu.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐑̌𝐈́𝐊𝐀𝐙 𝐍𝐄𝐍𝐀𝐋𝐄𝐙𝐄𝐍 〕⬣\n┃ Příkaz `{{command}}` neexistuje.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐂𝐇𝐘𝐁𝐈́ 𝐍𝐀́𝐋𝐄𝐏𝐊𝐀 〕⬣\n┃ Odpovězte přímo na nálepku,\n┃ kterou chcete přiřadit.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐈́ 𝐒𝐄 𝐍𝐄𝐙𝐃𝐀𝐑̌𝐈𝐋𝐎 〕⬣\n┃ Příkaz se nepodařilo přiřadit\n┃ k této nálepce.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐀 〕⬣\n┃ 🎴 Nálepka → `{{prefix}}{{shortcut}}`\n┃ Zkratka je osobní; oprávnění příkazu\n┃ se nadále kontrolují.\n╰━━━━━━━━━━━━⬣"
 }

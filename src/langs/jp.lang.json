@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "価値：{{value}}",
   "gacha_harem_total": "コレクションの合計価値：{{value}}",
   "gacha_harem_page_invalid": "有効なページ番号を入力してください。",
-  "gacha_harem_page_out_of_range": "このページはありません。全{{totalPages}}ページです。"
+  "gacha_harem_page_out_of_range": "このページはありません。全{{totalPages}}ページです。",
+  "cmdst_description": "ステッカーを個人用コマンドショートカットに登録します。",
+  "cmdst_usage": "cmdst <コマンド> [引数]（ステッカーに返信）",
+  "cmdst_list_title": "╭〔 🎴 𝐘𝐎𝐔𝐑 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓𝐒 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > 登録されたショートカットはありません。",
+  "cmdst_help": "╭〔 💡 𝐔𝐒𝐀𝐆𝐄 〕⬣\n┃ ステッカーに返信して入力：\n┃ `{{prefix}}cmdst play Tusa`\n┃ そのステッカーを送信すると、引数付き\n┃ コマンドが実行されます。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐈𝐍𝐕𝐀𝐋𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 〕⬣\n┃ 英数字、ハイフン、アンダースコア\n┃ のみ使用できます。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐍𝐎𝐓 𝐀𝐋𝐋𝐎𝐖𝐄𝐃 〕⬣\n┃ 登録コマンドにステッカーを\n┃ 割り当てることはできません。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃 〕⬣\n┃ コマンド `{{command}}` はありません。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐑𝐄𝐃 〕⬣\n┃ 登録したいステッカーに直接\n┃ 返信してください。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ ステッカーにコマンドを登録できません。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 ステッカー → `{{prefix}}{{shortcut}}`\n┃ 個人用ショートカットです。コマンドの\n┃ 権限チェックは引き続き適用されます。\n╰━━━━━━━━━━━━⬣"
 }

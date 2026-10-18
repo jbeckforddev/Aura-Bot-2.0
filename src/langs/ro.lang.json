@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Valoare: {{value}}",
   "gacha_harem_total": "Valoarea totală a haremului: {{value}}",
   "gacha_harem_page_invalid": "Introdu un număr valid de pagină.",
-  "gacha_harem_page_out_of_range": "Această pagină nu există. Sunt {{totalPages}} pagini."
+  "gacha_harem_page_out_of_range": "Această pagină nu există. Sunt {{totalPages}} pagini.",
+  "cmdst_description": "Asociază un sticker cu o comandă rapidă personală.",
+  "cmdst_usage": "cmdst <comandă> [argumente] (răspunde la un sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐈𝐋𝐄 𝐓𝐀𝐋𝐄 𝐂𝐔 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐄 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Nu ai încă scurtături configurate.",
+  "cmdst_help": "╭〔 💡 𝐂𝐔𝐌 𝐒𝐄 𝐅𝐎𝐋𝐎𝐒𝐄𝐒̦𝐓𝐄 〕⬣\n┃ Răspunde la un sticker cu:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Apoi trimite stickerul pentru a rula\n┃ comanda cu acele argumente.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐀̆ 𝐍𝐄𝐕𝐀𝐋𝐈𝐃𝐀̆ 〕⬣\n┃ Folosește doar litere, cifre, cratime\n┃ sau caractere de subliniere.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐂𝐓̦𝐈𝐔𝐍𝐄 𝐍𝐄𝐏𝐄𝐑𝐌𝐈𝐒𝐀̆ 〕⬣\n┃ Nu poți asocia un sticker cu\n┃ comanda de înregistrare.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐀̆ 𝐍𝐄𝐆𝐀̆𝐒𝐈𝐓𝐀̆ 〕⬣\n┃ Comanda `{{command}}` nu există.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐍𝐄𝐂𝐄𝐒𝐀𝐑 〕⬣\n┃ Răspunde direct la stickerul\n┃ pe care vrei să-l asociezi.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐄𝐑𝐎𝐀𝐑𝐄 𝐋𝐀 𝐒𝐀𝐋𝐕𝐀𝐑𝐄 〕⬣\n┃ Comanda nu a putut fi asociată\n┃ cu acest sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀̆ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Scurtătura este personală; permisiunile\n┃ comenzii rămân active.\n╰━━━━━━━━━━━━⬣"
 }

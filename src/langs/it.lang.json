@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Valore: {{value}}",
   "gacha_harem_total": "Valore totale dell'harem: {{value}}",
   "gacha_harem_page_invalid": "Inserisci un numero di pagina valido.",
-  "gacha_harem_page_out_of_range": "Questa pagina non esiste. Ci sono {{totalPages}} pagine."
+  "gacha_harem_page_out_of_range": "Questa pagina non esiste. Ci sono {{totalPages}} pagine.",
+  "cmdst_description": "Collega uno sticker a una scorciatoia personale per un comando.",
+  "cmdst_usage": "cmdst <comando> [argomenti] (rispondi a uno sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐋𝐄 𝐓𝐔𝐄 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐄 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Non hai ancora scorciatoie.",
+  "cmdst_help": "╭〔 💡 𝐂𝐎𝐌𝐄 𝐔𝐒𝐀𝐑𝐋𝐎 〕⬣\n┃ Rispondi a uno sticker con:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Poi invialo per eseguire il comando\n┃ con questi argomenti.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎𝐍 𝐕𝐀𝐋𝐈𝐃𝐎 〕⬣\n┃ Usa solo lettere, numeri, trattini\n┃ o trattini bassi.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐙𝐈𝐎𝐍𝐄 𝐍𝐎𝐍 𝐂𝐎𝐍𝐒𝐄𝐍𝐓𝐈𝐓𝐀 〕⬣\n┃ Non puoi collegare uno sticker\n┃ al comando di registrazione.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎𝐍 𝐓𝐑𝐎𝐕𝐀𝐓𝐎 〕⬣\n┃ Il comando `{{command}}` non esiste.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐈𝐂𝐇𝐈𝐄𝐒𝐓𝐎 〕⬣\n┃ Rispondi direttamente allo sticker\n┃ che vuoi collegare.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀𝐆𝐆𝐈𝐎 𝐍𝐎𝐍 𝐑𝐈𝐔𝐒𝐂𝐈𝐓𝐎 〕⬣\n┃ Impossibile collegare il comando\n┃ a questo sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐒𝐀𝐋𝐕𝐀𝐓𝐀 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ La scorciatoia è personale; i permessi\n┃ del comando restano attivi.\n╰━━━━━━━━━━━━⬣"
 }

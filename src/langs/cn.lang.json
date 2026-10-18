@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "价值：{{value}}",
   "gacha_harem_total": "收藏总价值：{{value}}",
   "gacha_harem_page_invalid": "请输入有效的页码。",
-  "gacha_harem_page_out_of_range": "该页不存在。共 {{totalPages}} 页。"
+  "gacha_harem_page_out_of_range": "该页不存在。共 {{totalPages}} 页。",
+  "cmdst_description": "将贴纸关联到个人命令快捷方式。",
+  "cmdst_usage": "cmdst <命令> [参数]（回复贴纸）",
+  "cmdst_list_title": "╭〔 🎴 𝐘𝐎𝐔𝐑 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓𝐒 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > 你还没有设置快捷方式。",
+  "cmdst_help": "╭〔 💡 𝐔𝐒𝐀𝐆𝐄 〕⬣\n┃ 回复贴纸并发送：\n┃ `{{prefix}}cmdst play Tusa`\n┃ 之后发送贴纸即可运行该命令\n┃ 及其参数。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐈𝐍𝐕𝐀𝐋𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 〕⬣\n┃ 命令只能包含字母、数字、连字符\n┃ 或下划线。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐍𝐎𝐓 𝐀𝐋𝐋𝐎𝐖𝐄𝐃 〕⬣\n┃ 不能将贴纸关联到注册命令。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃 〕⬣\n┃ 命令 `{{command}}` 不存在。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐑𝐄𝐃 〕⬣\n┃ 请直接回复要关联的贴纸。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ 无法将命令关联到此贴纸。\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 贴纸 → `{{prefix}}{{shortcut}}`\n┃ 此快捷方式仅属于你；命令权限\n┃ 仍会照常检查。\n╰━━━━━━━━━━━━⬣"
 }

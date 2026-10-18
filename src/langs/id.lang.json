@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Nilai: {{value}}",
   "gacha_harem_total": "Total nilai harem: {{value}}",
   "gacha_harem_page_invalid": "Masukkan nomor halaman yang valid.",
-  "gacha_harem_page_out_of_range": "Halaman itu tidak ada. Total ada {{totalPages}} halaman."
+  "gacha_harem_page_out_of_range": "Halaman itu tidak ada. Total ada {{totalPages}} halaman.",
+  "cmdst_description": "Hubungkan stiker ke pintasan perintah pribadimu.",
+  "cmdst_usage": "cmdst <perintah> [argumen] (balas sebuah stiker)",
+  "cmdst_list_title": "╭〔 🎴 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐒𝐓𝐈𝐊𝐄𝐑𝐌𝐔 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Kamu belum memiliki pintasan.",
+  "cmdst_help": "╭〔 💡 𝐂𝐀𝐑𝐀 𝐏𝐀𝐊𝐀𝐈 〕⬣\n┃ Balas stiker dengan:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Lalu kirim stikernya untuk menjalankan\n┃ perintah beserta argumen tersebut.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐍𝐀𝐌𝐀 𝐏𝐄𝐑𝐈𝐍𝐓𝐀𝐇 𝐓𝐈𝐃𝐀𝐊 𝐕𝐀𝐋𝐈𝐃 〕⬣\n┃ Gunakan hanya huruf, angka, tanda hubung,\n┃ atau garis bawah.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐓𝐈𝐍𝐃𝐀𝐊𝐀𝐍 𝐓𝐈𝐃𝐀𝐊 𝐃𝐈𝐈𝐙𝐈𝐍𝐊𝐀𝐍 〕⬣\n┃ Stiker tidak dapat dihubungkan ke\n┃ perintah pendaftaran.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐄𝐑𝐈𝐍𝐓𝐀𝐇 𝐓𝐈𝐃𝐀𝐊 𝐃𝐈𝐓𝐄𝐌𝐔𝐊𝐀𝐍 〕⬣\n┃ Perintah `{{command}}` tidak ditemukan.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐁𝐔𝐓𝐔𝐇 𝐒𝐓𝐈𝐊𝐄𝐑 〕⬣\n┃ Balas langsung stiker yang ingin\n┃ kamu hubungkan.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐆𝐀𝐆𝐀𝐋 𝐌𝐄𝐍𝐘𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ Perintah tidak dapat dihubungkan\n┃ ke stiker ini.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐓𝐄𝐑𝐒𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ 🎴 Stiker → `{{prefix}}{{shortcut}}`\n┃ Pintasan ini bersifat pribadi; izin\n┃ perintah tetap diberlakukan.\n╰━━━━━━━━━━━━⬣"
 }

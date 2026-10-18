@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Värde: {{value}}",
   "gacha_harem_total": "Haremsvärde totalt: {{value}}",
   "gacha_harem_page_invalid": "Ange ett giltigt sidnummer.",
-  "gacha_harem_page_out_of_range": "Sidan finns inte. Det finns {{totalPages}} sidor."
+  "gacha_harem_page_out_of_range": "Sidan finns inte. Det finns {{totalPages}} sidor.",
+  "cmdst_description": "Koppla ett klistermärke till en personlig kommandogenväg.",
+  "cmdst_usage": "cmdst <kommando> [argument] (svara på ett klistermärke)",
+  "cmdst_list_title": "╭〔 🎴 𝐃𝐈𝐍𝐀 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐆𝐄𝐍𝐕𝐀̈𝐆𝐀𝐑 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Du har inga genvägar ännu.",
+  "cmdst_help": "╭〔 💡 𝐒𝐀̊ 𝐇𝐀̈𝐑 𝐀𝐍𝐕𝐀̈𝐍𝐃𝐒 𝐃𝐄𝐓 〕⬣\n┃ Svara på ett klistermärke med:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Skicka sedan klistermärket för att köra\n┃ kommandot med argumenten.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐎𝐆𝐈𝐋𝐓𝐈𝐆𝐓 𝐊𝐎𝐌𝐌𝐀𝐍𝐃𝐎 〕⬣\n┃ Använd bara bokstäver, siffror, bindestreck\n┃ eller understreck.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀̊𝐓𝐆𝐀̈𝐑𝐃 𝐈𝐍𝐓𝐄 𝐓𝐈𝐋𝐋𝐀̊𝐓𝐄𝐍 〕⬣\n┃ Klistermärken kan inte kopplas till\n┃ registreringskommandot.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐊𝐎𝐌𝐌𝐀𝐍𝐃𝐎𝐓 𝐇𝐈𝐓𝐓𝐀𝐃𝐄𝐒 𝐈𝐍𝐓𝐄 〕⬣\n┃ Kommandot `{{command}}` finns inte.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐊𝐋𝐈𝐒𝐓𝐄𝐑𝐌𝐀̈𝐑𝐊𝐄 𝐊𝐑𝐀̈𝐕𝐒 〕⬣\n┃ Svara direkt på klistermärket\n┃ du vill koppla.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐊𝐔𝐍𝐃𝐄 𝐈𝐍𝐓𝐄 𝐒𝐏𝐀𝐑𝐀 〕⬣\n┃ Kommandot kunde inte kopplas\n┃ till klistermärket.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐒𝐏𝐀𝐑𝐀𝐃 〕⬣\n┃ 🎴 Klistermärke → `{{prefix}}{{shortcut}}`\n┃ Genvägen är personlig; kommandots\n┃ behörigheter gäller fortfarande.\n╰━━━━━━━━━━━━⬣"
 }

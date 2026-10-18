@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Valeur : {{value}}",
   "gacha_harem_total": "Valeur totale du harem : {{value}}",
   "gacha_harem_page_invalid": "Saisissez un numéro de page valide.",
-  "gacha_harem_page_out_of_range": "Cette page n'existe pas. Il y a {{totalPages}} pages."
+  "gacha_harem_page_out_of_range": "Cette page n'existe pas. Il y a {{totalPages}} pages.",
+  "cmdst_description": "Associez un sticker à un raccourci de commande personnel.",
+  "cmdst_usage": "cmdst <commande> [arguments] (répondez à un sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐕𝐎𝐒 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈𝐒 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐒 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Vous n'avez pas encore de raccourci.",
+  "cmdst_help": "╭〔 💡 𝐂𝐎𝐌𝐌𝐄𝐍𝐓 𝐋'𝐔𝐓𝐈𝐋𝐈𝐒𝐄𝐑 〕⬣\n┃ Répondez à un sticker avec :\n┃ `{{prefix}}cmdst play Tusa`\n┃ Envoyez ensuite le sticker pour lancer\n┃ la commande avec ses arguments.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐄 𝐈𝐍𝐕𝐀𝐋𝐈𝐃𝐄 〕⬣\n┃ Utilisez uniquement des lettres, chiffres,\n┃ tirets ou tirets bas.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐂𝐓𝐈𝐎𝐍 𝐈𝐍𝐓𝐄𝐑𝐃𝐈𝐓𝐄 〕⬣\n┃ Le sticker ne peut pas être associé\n┃ à la commande d'enregistrement.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐄 𝐈𝐍𝐓𝐑𝐎𝐔𝐕𝐀𝐁𝐋𝐄 〕⬣\n┃ La commande `{{command}}` n'existe pas.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐒 〕⬣\n┃ Répondez directement au sticker\n┃ que vous voulez associer.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐄́𝐂𝐇𝐄𝐂 𝐃'𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄𝐌𝐄𝐍𝐓 〕⬣\n┃ Impossible d'associer la commande\n┃ à ce sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄́ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Ce raccourci est personnel ; les droits\n┃ de la commande restent appliqués.\n╰━━━━━━━━━━━━⬣"
 }

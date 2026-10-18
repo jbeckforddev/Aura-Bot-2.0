@@ -51,6 +51,7 @@ export interface DatabaseUser {
   is_banned: number;
   userLang?: string | null;
   UserLang?: string | null;
+  CmdSticker?: string;
   banned?: boolean;
   self?: number;
   aura?: number;
@@ -176,6 +177,7 @@ export interface UserDbRow {
   aura_points?: number | null;
   aura_level?: number | null;
   UserLang?: string | null;
+  CmdSticker?: string | null;
   LastEconomyDaily?: number | null;
   LastEconomyWeekly?: number | null;
   LastEconomyMonthly?: number | null;

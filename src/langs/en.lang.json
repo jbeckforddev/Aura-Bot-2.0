@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Value: {{value}}",
   "gacha_harem_total": "Total harem value: {{value}}",
   "gacha_harem_page_invalid": "Enter a valid page number.",
-  "gacha_harem_page_out_of_range": "That page doesn't exist. There are {{totalPages}} pages."
+  "gacha_harem_page_out_of_range": "That page doesn't exist. There are {{totalPages}} pages.",
+  "cmdst_description": "Link a sticker to a personal command shortcut.",
+  "cmdst_usage": "cmdst <command> [arguments] (reply to a sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐘𝐎𝐔𝐑 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓𝐒 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > You don't have any shortcuts yet.",
+  "cmdst_help": "╭〔 💡 𝐇𝐎𝐖 𝐓𝐎 𝐔𝐒𝐄 𝐈𝐓 〕⬣\n┃ Reply to a sticker with:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Then send it to run the command\n┃ with those arguments.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐈𝐍𝐕𝐀𝐋𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 〕⬣\n┃ Use only letters, numbers, hyphens,\n┃ or underscores.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐂𝐓𝐈𝐎𝐍 𝐍𝐎𝐓 𝐀𝐋𝐋𝐎𝐖𝐄𝐃 〕⬣\n┃ You can't link a sticker to\n┃ the registration command.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃 〕⬣\n┃ The command `{{command}}` doesn't exist.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐑𝐄𝐃 〕⬣\n┃ Reply directly to the sticker\n┃ you want to link.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ Couldn't link the command\n┃ to this sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ This shortcut is personal; command\n┃ permissions are still enforced.\n╰━━━━━━━━━━━━⬣"
 }

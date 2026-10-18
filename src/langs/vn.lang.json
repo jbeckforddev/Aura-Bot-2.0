@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Giá trị: {{value}}",
   "gacha_harem_total": "Tổng giá trị bộ sưu tập: {{value}}",
   "gacha_harem_page_invalid": "Vui lòng nhập số trang hợp lệ.",
-  "gacha_harem_page_out_of_range": "Trang này không tồn tại. Có {{totalPages}} trang."
+  "gacha_harem_page_out_of_range": "Trang này không tồn tại. Có {{totalPages}} trang.",
+  "cmdst_description": "Liên kết sticker với lối tắt lệnh cá nhân.",
+  "cmdst_usage": "cmdst <lệnh> [đối số] (trả lời sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐂𝐔̉𝐀 𝐁𝐀̣𝐍 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Bạn chưa thiết lập lối tắt nào.",
+  "cmdst_help": "╭〔 💡 𝐂𝐀́𝐂𝐇 𝐒𝐔̛̉ 𝐃𝐔̣𝐍𝐆 〕⬣\n┃ Trả lời sticker bằng:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Sau đó gửi sticker để chạy lệnh\n┃ cùng các đối số đó.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐓𝐄̂𝐍 𝐋𝐄̣̂𝐍𝐇 𝐊𝐇𝐎̂𝐍𝐆 𝐇𝐎̛̣𝐏 𝐋𝐄̣̂ 〕⬣\n┃ Chỉ dùng chữ cái, chữ số, dấu gạch nối\n┃ hoặc dấu gạch dưới.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐊𝐇𝐎̂𝐍𝐆 Đ𝐔̛𝐎̛̣𝐂 𝐏𝐇𝐄́𝐏 〕⬣\n┃ Không thể liên kết sticker với\n┃ lệnh đăng ký.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐊𝐇𝐎̂𝐍𝐆 𝐓𝐈̀𝐌 𝐓𝐇𝐀̂́𝐘 𝐋𝐄̣̂𝐍𝐇 〕⬣\n┃ Lệnh `{{command}}` không tồn tại.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐂𝐀̂̀𝐍 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 〕⬣\n┃ Hãy trả lời trực tiếp sticker\n┃ bạn muốn liên kết.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐋𝐔̛𝐔 𝐊𝐇𝐎̂𝐍𝐆 𝐓𝐇𝐀̀𝐍𝐇 𝐂𝐎̂𝐍𝐆 〕⬣\n┃ Không thể liên kết lệnh với sticker này.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐃𝐀̃ 𝐋𝐔̛𝐔 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Lối tắt này là cá nhân; quyền của lệnh\n┃ vẫn được kiểm tra như bình thường.\n╰━━━━━━━━━━━━⬣"
 }

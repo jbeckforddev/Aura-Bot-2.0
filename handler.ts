@@ -38,6 +38,7 @@ import {
   type DownloadMediaType,
 } from "./core/economyConfig.ts";
 import { t } from "./src/langs/index.ts";
+import { getStickerCommand, getStickerHash } from "./utils/cmdRegisterForStiker.ts";
 
 import type {
   GroupMetadata,
@@ -388,7 +389,7 @@ async function handleMessageInternal(
       : true;
     const modPrefix = String(botRecord.modPrefix ?? "").trim();
 
-    const body =
+    let body =
       msg.message?.conversation ||
       msg.message?.extendedTextMessage?.text ||
       msg.message?.imageMessage?.caption ||
@@ -461,6 +462,12 @@ async function handleMessageInternal(
         : modPrefix
           ? [modPrefix]
           : factoryPrefixes;
+    const stickerCommand = !msg.key?.fromMe
+      ? getStickerCommand(runtimeDb, sender, getStickerHash(msg.message))
+      : null;
+    if (stickerCommand) {
+      body = `${activePrefixes[0] ?? prefixes[0] ?? "."}${stickerCommand}`;
+    }
     const usedPrefix =
       activePrefixes.find((p: string) => body.startsWith(p)) ?? null;
     const isCmd = !!usedPrefix;

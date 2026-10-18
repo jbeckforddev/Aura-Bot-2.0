@@ -1309,5 +1309,17 @@
   "gacha_harem_value": "Waarde: {{value}}",
   "gacha_harem_total": "Totale waarde van de harem: {{value}}",
   "gacha_harem_page_invalid": "Voer een geldig paginanummer in.",
-  "gacha_harem_page_out_of_range": "Die pagina bestaat niet. Er zijn {{totalPages}} pagina's."
+  "gacha_harem_page_out_of_range": "Die pagina bestaat niet. Er zijn {{totalPages}} pagina's.",
+  "cmdst_description": "Koppel een sticker aan een persoonlijke opdracht-snelkoppeling.",
+  "cmdst_usage": "cmdst <opdracht> [argumenten] (reageer op een sticker)",
+  "cmdst_list_title": "╭〔 🎴 𝐉𝐎𝐔𝐖 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐍 〕⬣",
+  "cmdst_list_item": "┃ 🧷 .{{command}}",
+  "cmdst_list_empty": "┃ > Je hebt nog geen snelkoppelingen.",
+  "cmdst_help": "╭〔 💡 𝐆𝐄𝐁𝐑𝐔𝐈𝐊 〕⬣\n┃ Reageer op een sticker met:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Stuur daarna de sticker om de opdracht\n┃ met die argumenten uit te voeren.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_invalid_name": "╭〔 ⚠️ 𝐎𝐍𝐆𝐄𝐋𝐃𝐈𝐆𝐄 𝐎𝐏𝐃𝐑𝐀𝐂𝐇𝐓 〕⬣\n┃ Gebruik alleen letters, cijfers,\n┃ streepjes en underscores.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐂𝐓𝐈𝐄 𝐍𝐈𝐄𝐓 𝐓𝐎𝐄𝐆𝐄𝐒𝐓𝐀𝐀𝐍 〕⬣\n┃ Je kunt geen sticker koppelen aan\n┃ de registratieopdracht.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_command_not_found": "╭〔 ⚠️ 𝐎𝐏𝐃𝐑𝐀𝐂𝐇𝐓 𝐍𝐈𝐄𝐓 𝐆𝐄𝐕𝐎𝐍𝐃𝐄𝐍 〕⬣\n┃ De opdracht `{{command}}` bestaat niet.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐕𝐄𝐑𝐄𝐈𝐒𝐓 〕⬣\n┃ Reageer rechtstreeks op de sticker\n┃ die je wilt koppelen.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_save_failed": "╭〔 ❌ 𝐎𝐏𝐒𝐋𝐀𝐀𝐍 𝐌𝐈𝐒𝐋𝐔𝐊𝐓 〕⬣\n┃ De opdracht kon niet aan deze sticker\n┃ worden gekoppeld.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐎𝐏𝐆𝐄𝐒𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Deze snelkoppeling is persoonlijk; de\n┃ opdrachtrechten blijven van kracht.\n╰━━━━━━━━━━━━⬣"
 }
