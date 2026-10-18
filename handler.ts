@@ -466,8 +466,19 @@ async function handleMessageInternal(
         : modPrefix
           ? [modPrefix]
           : factoryPrefixes;
+    const stickerHash = getStickerHash(msg.message);
+    let stickerSender = sender;
+    if (stickerHash && sender.endsWith("@lid")) {
+      const stickerGroupMeta = isGroup
+        ? GROUP_METADATA_CACHE.get(from) ?? (await getGroupMetadata(from, sock))
+        : null;
+      stickerSender = await resolveLid(sender, stickerGroupMeta, sock);
+    }
     const stickerCommand = !msg.key?.fromMe
-      ? getStickerCommand(runtimeDb, sender, getStickerHash(msg.message))
+      ? getStickerCommand(runtimeDb, stickerSender, stickerHash) ??
+        (stickerSender !== sender
+          ? getStickerCommand(runtimeDb, sender, stickerHash)
+          : null)
       : null;
     if (stickerCommand) {
       body = `${activePrefixes[0] ?? prefixes[0] ?? "."}${stickerCommand}`;
