@@ -18,11 +18,10 @@ import {
 import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 import { t } from "../../src/langs/index.ts";
 
-
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
 const ql = "360p";
-const MAX_VIDEO_DURATION_SECONDS = 20 * 60;
-const MAX_DIRECT_VIDEO_SIZE = 100 * 1024 * 1024;
+const MAX_VIDEO_DURATION_SECONDS = 15 * 60; // 15 minutos máximo para usuarios
+const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024; // 200 MB máximo absoluto
 
 function videoId(value: string): string | null {
   return value.match(YOUTUBE_ID)?.[1] || null;
@@ -69,9 +68,10 @@ export default {
   category: "download",
   description: t("cmd_busca_y_descarga_video_de_yout_2a84044d"),
   async run(ctx: CommandContext) {
-    const { args, reply, react, sock, from, msg, sender } = ctx;
+    const { args, reply, react, sock, from, msg, sender, isOwner, isMod } = ctx;
     const query = args.join(" ").trim();
     if (!query) return reply(t("cmd_proporciona_el_nombre_o_enlace_5304fbbf"));
+    
     await react("⏳");
     try {
       const id = videoId(query);
@@ -79,28 +79,45 @@ export default {
       const url = id
         ? `https://youtu.be/${id}`
         : ((searchResult = await searchYouTubeVideo(query)).url);
+
+      // Verificación previa de duración mediante metadatos de búsqueda si están disponibles
+      if (searchResult && searchResult.duration) {
+        const searchDurationSec = parseDurationToSeconds(searchResult.duration);
+        if (typeof searchDurationSec === "number" && searchDurationSec > MAX_VIDEO_DURATION_SECONDS && !isOwner && !isMod) {
+          await react("❌");
+          return reply({
+            text: `⚠️ *Límite excedido*\n\nEl video dura más de 15 minutos (${searchResult.duration}). Por seguridad y rendimiento del servidor, está prohibido descargar videos tan largos. (Solo Owners/Mods pueden omitir esta regla).`,
+          });
+        }
+      }
+
       const video = await downloadYouTube(
         url,
         "video",
         Number.parseInt(ql, 10),
         searchResult,
       );
+
       const title = video.title || "Video de YouTube";
       const channel = video.author || "YouTube";
       const thumbnail = video.thumbnail;
       const duration = video.duration;
       const durationSeconds = parseDurationToSeconds(duration);
-      const VIDEO_READY = await CONVERT_TO_AVC(video.dl_url);
 
-      if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
+      // Control inteligente estricto de duración
+      if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS && !isOwner && !isMod) {
         throw new Error(
-          `El video excede la duración máxima permitida (20 minutos).`,
+          `El video excede la duración máxima permitida de 15 minutos (Duración detectada: ${duration}).`,
         );
       }
 
-      if (video.size > MAX_DIRECT_VIDEO_SIZE) {
-        throw new Error("El video supera el límite de 100 MB para envío directo.");
+      // Control inteligente estricto de peso en bytes (200 MB)
+      if (video.size > MAX_VIDEO_SIZE_BYTES && !isOwner && !isMod) {
+        const sizeMB = (video.size / (1024 * 1024)).toFixed(1);
+        throw new Error(`El video pesa ${sizeMB} MB y supera el límite permitido de 200 MB para usuarios.`);
       }
+
+      const VIDEO_READY = await CONVERT_TO_AVC(video.dl_url);
 
       const { cost } = prepareDownloadChargeBySize(ctx, "video", video.size);
       const caption = DL_TEMPLATE({
@@ -125,6 +142,7 @@ export default {
         loadingText: t("cmd_enviando_video_a23e79a0"),
         loadingIcon: t("cmd_text_7a2ad7a6"),
       });
+
       const hasPreview = thumbnail
         ? await sendDownloadPreview({
             sock,
@@ -138,12 +156,15 @@ export default {
             sender,
           })
         : false;
+
       if (!hasPreview) await reply({ text: caption });
+
       await reply({
         video: { url: VIDEO_READY },
         mimetype: "video/mp4",
         fileName: `${safeFileName(title, "youtube")}.mp4`,
       });
+
       confirmDownloadCharge(ctx);
       await react("✅");
     } catch (error: unknown) {
