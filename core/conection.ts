@@ -3,7 +3,7 @@ import makeWASocket, {
   Browsers,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
-  useMultiFileAuthState,
+  useSQLiteAuthState,
   jidNormalizedUser,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
@@ -245,7 +245,7 @@ export async function connectToWhatsApp(
 
   connectionsInProgress.add(sessionName);
 
-  let authState: Awaited<ReturnType<typeof useMultiFileAuthState>>;
+  let authState: Awaited<ReturnType<typeof useSQLiteAuthState>>;
 
   try {
     const baseSessionDir = isSubBot
@@ -254,7 +254,7 @@ export async function connectToWhatsApp(
 
     const sessionDir = path.join(baseSessionDir, sessionName);
     await mkdir(sessionDir, { recursive: true });
-    authState = await useMultiFileAuthState(sessionDir);
+    authState = await useSQLiteAuthState(sessionDir);
   } catch (error) {
     connectionsInProgress.delete(sessionName);
     throw error;
