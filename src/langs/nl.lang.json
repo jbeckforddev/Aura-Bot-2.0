@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐎𝐏𝐃𝐑𝐀𝐂𝐇𝐓 𝐍𝐈𝐄𝐓 𝐆𝐄𝐕𝐎𝐍𝐃𝐄𝐍 〕⬣\n┃ De opdracht `{{command}}` bestaat niet.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐕𝐄𝐑𝐄𝐈𝐒𝐓 〕⬣\n┃ Reageer rechtstreeks op de sticker\n┃ die je wilt koppelen.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐎𝐏𝐒𝐋𝐀𝐀𝐍 𝐌𝐈𝐒𝐋𝐔𝐊𝐓 〕⬣\n┃ De opdracht kon niet aan deze sticker\n┃ worden gekoppeld.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐎𝐏𝐆𝐄𝐒𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Deze snelkoppeling is persoonlijk; de\n┃ opdrachtrechten blijven van kracht.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐎𝐏𝐆𝐄𝐒𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Deze snelkoppeling is persoonlijk; de\n┃ opdrachtrechten blijven van kracht.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐆𝐄𝐄𝐍 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 〕⬣\n┃ Er is geen opdracht aan deze sticker\n┃ gekoppeld voor jouw account.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐕𝐄𝐑𝐖𝐈𝐉𝐃𝐄𝐑𝐃 〕⬣\n┃ Deze sticker voert geen persoonlijke\n┃ opdracht meer uit.\n╰━━━━━━━━━━━━⬣"
 }

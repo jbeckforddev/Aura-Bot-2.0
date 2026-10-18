@@ -1320,15 +1320,17 @@
   "gacha_harem_page_invalid": "Ingresa un número de página válido.",
   "gacha_harem_page_out_of_range": "Esa página no existe. Hay {{totalPages}} páginas.",
   "cmdst_description": "Asocia un sticker con un comando personal.",
-  "cmdst_usage": "cmdst <comando> [argumentos] (responde a un sticker)",
+  "cmdst_usage": "cmdst <comando> [argumentos] o cmdst borrar (responde a un sticker)",
   "cmdst_list_title": "╭〔 🎴 𝐓𝐔𝐒 𝐀𝐓𝐀𝐉𝐎𝐒 𝐂𝐎𝐍 𝐒𝐓𝐈𝐂𝐊𝐄𝐑𝐒 〕⬣",
   "cmdst_list_item": "┃ 🧷 .{{command}}",
   "cmdst_list_empty": "┃ > Aún no tienes atajos configurados.",
-  "cmdst_help": "╭〔 💡 𝐂𝐎́𝐌𝐎 𝐔𝐒𝐀𝐑𝐋𝐎 〕⬣\n┃ Responde a un sticker con:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Luego envíalo para ejecutar el comando\n┃ con esos argumentos.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_help": "╭〔 💡 𝐂𝐎́𝐌𝐎 𝐔𝐒𝐀𝐑𝐋𝐎 〕⬣\n┃ Responde a un sticker con:\n┃ `{{prefix}}cmdst play Tusa`\n┃ Para quitar su atajo, responde con:\n┃ `{{prefix}}cmdst borrar`\n╰━━━━━━━━━━━━⬣",
   "cmdst_invalid_name": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎 𝐕𝐀́𝐋𝐈𝐃𝐎 〕⬣\n┃ Usa solo letras, números, guiones\n┃ o guiones bajos.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reserved_command": "╭〔 ⚠️ 𝐀𝐂𝐂𝐈𝐎́𝐍 𝐍𝐎 𝐏𝐄𝐑𝐌𝐈𝐓𝐈𝐃𝐀 〕⬣\n┃ No puedes asociar un sticker\n┃ al comando de registro.\n╰━━━━━━━━━━━━⬣",
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎 〕⬣\n┃ El comando `{{command}}` no existe.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐅𝐀𝐋𝐓𝐀 𝐄𝐋 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 〕⬣\n┃ Responde directamente al sticker\n┃ que quieres asociar.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐍𝐎 𝐒𝐄 𝐆𝐔𝐀𝐑𝐃𝐎́ 〕⬣\n┃ No se pudo asociar el comando\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐀𝐓𝐀𝐉𝐎 𝐆𝐔𝐀𝐑𝐃𝐀𝐃𝐎 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Este atajo es personal; se mantienen\n┃ los permisos del comando.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐀𝐓𝐀𝐉𝐎 𝐆𝐔𝐀𝐑𝐃𝐀𝐃𝐎 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Este atajo es personal; se mantienen\n┃ los permisos del comando.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐒𝐈𝐍 𝐀𝐓𝐀𝐉𝐎 〕⬣\n┃ No tienes un comando asociado\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐀𝐓𝐀𝐉𝐎 𝐄𝐋𝐈𝐌𝐈𝐍𝐀𝐃𝐎 〕⬣\n┃ El sticker ya no ejecutará\n┃ ningún comando personal.\n╰━━━━━━━━━━━━⬣"
 }

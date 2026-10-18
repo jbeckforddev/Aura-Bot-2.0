@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐊𝐇𝐎̂𝐍𝐆 𝐓𝐈̀𝐌 𝐓𝐇𝐀̂́𝐘 𝐋𝐄̣̂𝐍𝐇 〕⬣\n┃ Lệnh `{{command}}` không tồn tại.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐂𝐀̂̀𝐍 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 〕⬣\n┃ Hãy trả lời trực tiếp sticker\n┃ bạn muốn liên kết.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐋𝐔̛𝐔 𝐊𝐇𝐎̂𝐍𝐆 𝐓𝐇𝐀̀𝐍𝐇 𝐂𝐎̂𝐍𝐆 〕⬣\n┃ Không thể liên kết lệnh với sticker này.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐃𝐀̃ 𝐋𝐔̛𝐔 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Lối tắt này là cá nhân; quyền của lệnh\n┃ vẫn được kiểm tra như bình thường.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐃𝐀̃ 𝐋𝐔̛𝐔 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Lối tắt này là cá nhân; quyền của lệnh\n┃ vẫn được kiểm tra như bình thường.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐂𝐇𝐔̛𝐀 𝐂𝐎́ 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ Bạn chưa liên kết lệnh nào\n┃ với sticker này.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐃𝐀̃ 𝐗𝐎́𝐀 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ Sticker này sẽ không chạy lệnh\n┃ cá nhân nữa.\n╰━━━━━━━━━━━━⬣"
 }

@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐀̃𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎 〕⬣\n┃ O comando `{{command}}` não existe.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐍𝐄𝐂𝐄𝐒𝐒𝐀́𝐑𝐈𝐎 〕⬣\n┃ Responda diretamente ao sticker\n┃ que deseja associar.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐍𝐀̃𝐎 𝐅𝐎𝐈 𝐒𝐀𝐋𝐕𝐎 〕⬣\n┃ Não foi possível associar o comando\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐒𝐀𝐋𝐕𝐎 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Este atalho é pessoal; as permissões\n┃ do comando continuam valendo.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐒𝐀𝐋𝐕𝐎 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Este atalho é pessoal; as permissões\n┃ do comando continuam valendo.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐍𝐀̃𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎 〕⬣\n┃ Você não tem um comando associado\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐑𝐄𝐌𝐎𝐕𝐈𝐃𝐎 〕⬣\n┃ Este sticker não executará mais\n┃ nenhum comando pessoal.\n╰━━━━━━━━━━━━⬣"
 }

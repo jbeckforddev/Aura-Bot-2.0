@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒 𝐍𝐄𝐌 𝐓𝐀𝐋𝐀́𝐋𝐇𝐀𝐓𝐎́ 〕⬣\n┃ A(z) `{{command}}` parancs nem létezik.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐌𝐀𝐓𝐑𝐈𝐂𝐀 𝐒𝐙𝐔̈𝐊𝐒𝐄́𝐆𝐄𝐒 〕⬣\n┃ Közvetlenül arra a matricára válaszolj,\n┃ amelyet társítani szeretnél.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐌𝐄𝐍𝐓𝐄́𝐒𝐈 𝐇𝐈𝐁𝐀 〕⬣\n┃ Nem sikerült a parancsot ehhez\n┃ a matricához kapcsolni.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐌𝐄𝐍𝐓𝐕𝐄 〕⬣\n┃ 🎴 Matrica → `{{prefix}}{{shortcut}}`\n┃ Ez a parancsikon személyes; a parancs\n┃ jogosultságai továbbra is érvényesek.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐌𝐄𝐍𝐓𝐕𝐄 〕⬣\n┃ 🎴 Matrica → `{{prefix}}{{shortcut}}`\n┃ Ez a parancsikon személyes; a parancs\n┃ jogosultságai továbbra is érvényesek.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐈𝐍𝐂𝐒 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 〕⬣\n┃ Ehhez a matricához nincs parancs\n┃ társítva a fiókodban.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐓𝐎̈𝐑𝐎̈𝐋𝐕𝐄 〕⬣\n┃ Ez a matrica többé nem futtat\n┃ személyes parancsot.\n╰━━━━━━━━━━━━⬣"
 }

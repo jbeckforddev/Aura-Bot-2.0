@@ -13,7 +13,8 @@ function findStickerMessage(
 		return record.stickerMessage as Record<string, unknown>;
 	}
 
-	for (const child of Object.values(record)) {
+	for (const [key, child] of Object.entries(record)) {
+		if (key === "contextInfo" || key === "quotedMessage") continue;
 		const found = findStickerMessage(child, depth + 1);
 		if (found) return found;
 	}
@@ -42,6 +43,15 @@ function normalizeStickerHash(value: unknown): string | null {
 export function getStickerHash(message: proto.IMessage | null | undefined) {
 	const sticker = findStickerMessage(message);
 	return normalizeStickerHash(sticker?.fileSha256);
+}
+
+export function getStickerContextInfo(
+	message: proto.IMessage | null | undefined,
+): proto.IContextInfo | undefined {
+	const contextInfo = findStickerMessage(message)?.contextInfo;
+	return contextInfo && typeof contextInfo === "object"
+		? (contextInfo as proto.IContextInfo)
+		: undefined;
 }
 
 export function getQuotedStickerHash(message: proto.IWebMessageInfo) {
@@ -85,6 +95,21 @@ export function addStickerCommand(
 		...readStickerCommands(db, userJid),
 		[stickerHash]: command,
 	};
+	db.setUser(userJid, { [STICKER_COMMANDS_FIELD]: JSON.stringify(commands) });
+	return true;
+}
+
+export function removeStickerCommand(
+	db: IDatabase,
+	userJid: string,
+	stickerHash: string,
+): boolean {
+	if (!stickerHash) return false;
+
+	const commands = readStickerCommands(db, userJid);
+	if (!Object.hasOwn(commands, stickerHash)) return false;
+
+	delete commands[stickerHash];
 	db.setUser(userJid, { [STICKER_COMMANDS_FIELD]: JSON.stringify(commands) });
 	return true;
 }

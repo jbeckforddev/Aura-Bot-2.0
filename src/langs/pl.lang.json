@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐍𝐈𝐄 𝐙𝐍𝐀𝐋𝐄𝐙𝐈𝐎𝐍𝐎 〕⬣\n┃ Polecenie `{{command}}` nie istnieje.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐖𝐘𝐌𝐀𝐆𝐀𝐍𝐀 𝐍𝐀𝐊𝐋𝐄𝐉𝐊𝐀 〕⬣\n┃ Odpowiedz bezpośrednio na naklejkę,\n┃ którą chcesz połączyć.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐙𝐀𝐏𝐈𝐒 𝐒𝐈𝐄̨ 𝐍𝐈𝐄 𝐏𝐎𝐖𝐈𝐎́𝐃Ł 〕⬣\n┃ Nie udało się połączyć polecenia\n┃ z tą naklejką.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐙𝐀𝐏𝐈𝐒𝐀𝐍𝐘 〕⬣\n┃ 🎴 Naklejka → `{{prefix}}{{shortcut}}`\n┃ Skrót jest osobisty; uprawnienia\n┃ polecenia nadal obowiązują.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐙𝐀𝐏𝐈𝐒𝐀𝐍𝐘 〕⬣\n┃ 🎴 Naklejka → `{{prefix}}{{shortcut}}`\n┃ Skrót jest osobisty; uprawnienia\n┃ polecenia nadal obowiązują.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐁𝐑𝐀𝐊 𝐒𝐊𝐑𝐎́𝐓𝐔 〕⬣\n┃ Nie masz polecenia przypisanego\n┃ do tej naklejki.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐔𝐒𝐔𝐍𝐈𝐄̨𝐓𝐘 〕⬣\n┃ Ta naklejka nie będzie już uruchamiać\n┃ osobistego polecenia.\n╰━━━━━━━━━━━━⬣"
 }

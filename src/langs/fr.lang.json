@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐄 𝐈𝐍𝐓𝐑𝐎𝐔𝐕𝐀𝐁𝐋𝐄 〕⬣\n┃ La commande `{{command}}` n'existe pas.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐒 〕⬣\n┃ Répondez directement au sticker\n┃ que vous voulez associer.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐄́𝐂𝐇𝐄𝐂 𝐃'𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄𝐌𝐄𝐍𝐓 〕⬣\n┃ Impossible d'associer la commande\n┃ à ce sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄́ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Ce raccourci est personnel ; les droits\n┃ de la commande restent appliqués.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄́ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Ce raccourci est personnel ; les droits\n┃ de la commande restent appliqués.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐀𝐔𝐂𝐔𝐍 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 〕⬣\n┃ Aucune commande n'est associée\n┃ à ce sticker pour votre compte.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐒𝐔𝐏𝐏𝐑𝐈𝐌𝐄́ 〕⬣\n┃ Ce sticker ne lancera plus\n┃ de commande personnelle.\n╰━━━━━━━━━━━━⬣"
 }

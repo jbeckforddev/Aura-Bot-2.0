@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃 〕⬣\n┃ The command `{{command}}` doesn't exist.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐄𝐐𝐔𝐈𝐑𝐄𝐃 〕⬣\n┃ Reply directly to the sticker\n┃ you want to link.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ Couldn't link the command\n┃ to this sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ This shortcut is personal; command\n┃ permissions are still enforced.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ This shortcut is personal; command\n┃ permissions are still enforced.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐎 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 〕⬣\n┃ You don't have a command linked\n┃ to this sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ This sticker will no longer run\n┃ a personal command.\n╰━━━━━━━━━━━━⬣"
 }

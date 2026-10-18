@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎𝐍 𝐓𝐑𝐎𝐕𝐀𝐓𝐎 〕⬣\n┃ Il comando `{{command}}` non esiste.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐑𝐈𝐂𝐇𝐈𝐄𝐒𝐓𝐎 〕⬣\n┃ Rispondi direttamente allo sticker\n┃ che vuoi collegare.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀𝐆𝐆𝐈𝐎 𝐍𝐎𝐍 𝐑𝐈𝐔𝐒𝐂𝐈𝐓𝐎 〕⬣\n┃ Impossibile collegare il comando\n┃ a questo sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐒𝐀𝐋𝐕𝐀𝐓𝐀 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ La scorciatoia è personale; i permessi\n┃ del comando restano attivi.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐒𝐀𝐋𝐕𝐀𝐓𝐀 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ La scorciatoia è personale; i permessi\n┃ del comando restano attivi.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐄𝐒𝐒𝐔𝐍𝐀 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 〕⬣\n┃ Non hai associato alcun comando\n┃ a questo sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐑𝐈𝐌𝐎𝐒𝐒𝐀 〕⬣\n┃ Questo sticker non eseguirà più\n┃ alcun comando personale.\n╰━━━━━━━━━━━━⬣"
 }

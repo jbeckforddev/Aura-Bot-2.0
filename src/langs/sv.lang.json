@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐊𝐎𝐌𝐌𝐀𝐍𝐃𝐎𝐓 𝐇𝐈𝐓𝐓𝐀𝐃𝐄𝐒 𝐈𝐍𝐓𝐄 〕⬣\n┃ Kommandot `{{command}}` finns inte.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐊𝐋𝐈𝐒𝐓𝐄𝐑𝐌𝐀̈𝐑𝐊𝐄 𝐊𝐑𝐀̈𝐕𝐒 〕⬣\n┃ Svara direkt på klistermärket\n┃ du vill koppla.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐊𝐔𝐍𝐃𝐄 𝐈𝐍𝐓𝐄 𝐒𝐏𝐀𝐑𝐀 〕⬣\n┃ Kommandot kunde inte kopplas\n┃ till klistermärket.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐒𝐏𝐀𝐑𝐀𝐃 〕⬣\n┃ 🎴 Klistermärke → `{{prefix}}{{shortcut}}`\n┃ Genvägen är personlig; kommandots\n┃ behörigheter gäller fortfarande.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐒𝐏𝐀𝐑𝐀𝐃 〕⬣\n┃ 🎴 Klistermärke → `{{prefix}}{{shortcut}}`\n┃ Genvägen är personlig; kommandots\n┃ behörigheter gäller fortfarande.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐈𝐍𝐆𝐄𝐍 𝐆𝐄𝐍𝐕𝐀̈𝐆 〕⬣\n┃ Inget kommando är kopplat till\n┃ det här klistermärket.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐁𝐎𝐑𝐓𝐓𝐀𝐆𝐄𝐍 〕⬣\n┃ Klistermärket kör inte längre\n┃ något personligt kommando.\n╰━━━━━━━━━━━━⬣"
 }

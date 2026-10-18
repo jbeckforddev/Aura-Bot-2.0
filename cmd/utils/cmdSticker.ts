@@ -3,6 +3,7 @@ import {
 	addStickerCommand,
 	getQuotedStickerHash,
 	listStickerCommands,
+	removeStickerCommand,
 } from "../../utils/cmdRegisterForStiker.ts";
 import { t } from "../../src/langs/index.ts";
 
@@ -38,6 +39,19 @@ export default {
 
 		if (["cmdst", "agregarcmdsticker"].includes(command)) {
 			return reply({ text: t("cmdst_reserved_command") });
+		}
+
+		if (command === "borrar") {
+			const stickerHash = getQuotedStickerHash(msg);
+			if (!stickerHash) {
+				return reply({ text: t("cmdst_reply_required") });
+			}
+			if (!removeStickerCommand(db, sender, stickerHash)) {
+				return reply({ text: t("cmdst_remove_not_found") });
+			}
+
+			await react("🗑️");
+			return reply({ text: t("cmdst_removed") });
 		}
 
 		if (!getPlugins().has(command)) {

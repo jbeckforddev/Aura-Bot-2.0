@@ -38,7 +38,11 @@ import {
   type DownloadMediaType,
 } from "./core/economyConfig.ts";
 import { t } from "./src/langs/index.ts";
-import { getStickerCommand, getStickerHash } from "./utils/cmdRegisterForStiker.ts";
+import {
+  getStickerCommand,
+  getStickerContextInfo,
+  getStickerHash,
+} from "./utils/cmdRegisterForStiker.ts";
 
 import type {
   GroupMetadata,
@@ -882,10 +886,26 @@ async function handleMessageInternal(
     }
 
     let commandPresenceActive = false;
+    const stickerContextInfo = stickerCommand
+      ? getStickerContextInfo(msg.message)
+      : undefined;
+    const commandMsg = stickerContextInfo && msg.message
+      ? {
+          ...msg,
+          message: {
+            ...msg.message,
+            extendedTextMessage: {
+              ...msg.message.extendedTextMessage,
+              text: body,
+              contextInfo: stickerContextInfo,
+            },
+          },
+        }
+      : msg;
     const ctx = {
       sock,
       db: runtimeDb,
-      msg,
+      msg: commandMsg,
       from,
       sender,
       senderNum,

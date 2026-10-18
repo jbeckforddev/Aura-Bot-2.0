@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐑̌𝐈́𝐊𝐀𝐙 𝐍𝐄𝐍𝐀𝐋𝐄𝐙𝐄𝐍 〕⬣\n┃ Příkaz `{{command}}` neexistuje.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐂𝐇𝐘𝐁𝐈́ 𝐍𝐀́𝐋𝐄𝐏𝐊𝐀 〕⬣\n┃ Odpovězte přímo na nálepku,\n┃ kterou chcete přiřadit.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐈́ 𝐒𝐄 𝐍𝐄𝐙𝐃𝐀𝐑̌𝐈𝐋𝐎 〕⬣\n┃ Příkaz se nepodařilo přiřadit\n┃ k této nálepce.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐀 〕⬣\n┃ 🎴 Nálepka → `{{prefix}}{{shortcut}}`\n┃ Zkratka je osobní; oprávnění příkazu\n┃ se nadále kontrolují.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐀 〕⬣\n┃ 🎴 Nálepka → `{{prefix}}{{shortcut}}`\n┃ Zkratka je osobní; oprávnění příkazu\n┃ se nadále kontrolují.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐍𝐄𝐍𝐈́ 〕⬣\n┃ K této nálepce nemáte přiřazený\n┃ žádný příkaz.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐎𝐃𝐒𝐓𝐑𝐀𝐍𝐄̌𝐍𝐀 〕⬣\n┃ Tato nálepka už nebude spouštět\n┃ žádný osobní příkaz.\n╰━━━━━━━━━━━━⬣"
 }

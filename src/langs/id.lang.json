@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐏𝐄𝐑𝐈𝐍𝐓𝐀𝐇 𝐓𝐈𝐃𝐀𝐊 𝐃𝐈𝐓𝐄𝐌𝐔𝐊𝐀𝐍 〕⬣\n┃ Perintah `{{command}}` tidak ditemukan.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐁𝐔𝐓𝐔𝐇 𝐒𝐓𝐈𝐊𝐄𝐑 〕⬣\n┃ Balas langsung stiker yang ingin\n┃ kamu hubungkan.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐆𝐀𝐆𝐀𝐋 𝐌𝐄𝐍𝐘𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ Perintah tidak dapat dihubungkan\n┃ ke stiker ini.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐓𝐄𝐑𝐒𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ 🎴 Stiker → `{{prefix}}{{shortcut}}`\n┃ Pintasan ini bersifat pribadi; izin\n┃ perintah tetap diberlakukan.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐓𝐄𝐑𝐒𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ 🎴 Stiker → `{{prefix}}{{shortcut}}`\n┃ Pintasan ini bersifat pribadi; izin\n┃ perintah tetap diberlakukan.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐓𝐈𝐃𝐀𝐊 𝐀𝐃𝐀 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 〕⬣\n┃ Tidak ada perintah yang terhubung\n┃ ke stiker ini di akunmu.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐃𝐈𝐇𝐀𝐏𝐔𝐒 〕⬣\n┃ Stiker ini tidak akan menjalankan\n┃ perintah pribadi lagi.\n╰━━━━━━━━━━━━⬣"
 }

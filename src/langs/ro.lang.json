@@ -1321,5 +1321,7 @@
   "cmdst_command_not_found": "╭〔 ⚠️ 𝐂𝐎𝐌𝐀𝐍𝐃𝐀̆ 𝐍𝐄𝐆𝐀̆𝐒𝐈𝐓𝐀̆ 〕⬣\n┃ Comanda `{{command}}` nu există.\n╰━━━━━━━━━━━━⬣",
   "cmdst_reply_required": "╭〔 🎴 𝐒𝐓𝐈𝐂𝐊𝐄𝐑 𝐍𝐄𝐂𝐄𝐒𝐀𝐑 〕⬣\n┃ Răspunde direct la stickerul\n┃ pe care vrei să-l asociezi.\n╰━━━━━━━━━━━━⬣",
   "cmdst_save_failed": "╭〔 ❌ 𝐄𝐑𝐎𝐀𝐑𝐄 𝐋𝐀 𝐒𝐀𝐋𝐕𝐀𝐑𝐄 〕⬣\n┃ Comanda nu a putut fi asociată\n┃ cu acest sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀̆ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Scurtătura este personală; permisiunile\n┃ comenzii rămân active.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀̆ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Scurtătura este personală; permisiunile\n┃ comenzii rămân active.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐔 𝐄𝐗𝐈𝐒𝐓𝐀̆ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 〕⬣\n┃ Nu ai nicio comandă asociată\n┃ cu acest sticker.\n╰━━━━━━━━━━━━⬣",
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒̦𝐓𝐄𝐀𝐑𝐒𝐀̆ 〕⬣\n┃ Acest sticker nu va mai executa\n┃ nicio comandă personală.\n╰━━━━━━━━━━━━⬣"
 }
