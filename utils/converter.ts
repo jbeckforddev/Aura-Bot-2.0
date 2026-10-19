@@ -26,7 +26,7 @@ function ensureCacheDir() {
   return cacheDirReady;
 }
 
-const MAX_CONCURRENT_JOBS = 1;
+const MAX_CONCURRENT_JOBS = 2;
 let activeJobs = 0;
 const jobQueue: Array<() => void> = [];
 
@@ -158,7 +158,7 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
       "-threads", "2",
       "-profile:v", "high",
       "-level:v", "4.2",
-      "-preset", "fast",
+      "-preset", "ultrafast",
       "-crf", "18",
       "-maxrate", "8M",
       "-bufsize", "16M",
