@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "ВІДСУТНИЙ ТЕКСТ",
   "cmd_error_de_protocolo_8d956d20": "ПОМИЛКА ПРОТОКОЛУ",
   "cmd_admins_inmunes_1eb5c768": "АДМІНІСТРАТИ ЗАХИЩЕНІ",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ ЗАБОРОНЕНА ДІЯ\n╰━━━━━━━━━━━━⬣\n\n┃ > Ви не можете видалити\n┃ > адміністратора групи.",
   "cmd_ruleta_rusa_81877e42": "РОСІЙСЬКА РУЛЕТКА",
   "cmd_admin_system_19c2cc22": "СИСТЕМА АДМІНІСТРУВАННЯ",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",

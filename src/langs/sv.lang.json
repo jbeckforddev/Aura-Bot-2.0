@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "TEXT SAKNAS",
   "cmd_error_de_protocolo_8d956d20": "PROTOKOLLFEL",
   "cmd_admins_inmunes_1eb5c768": "ADMINS ÄR IMMUN",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ FÖRBJUDEN ÅTGÄRD\n╰━━━━━━━━━━━━⬣\n\n┃ > Du kan inte ta bort\n┃ > en gruppadministratör.",
   "cmd_ruleta_rusa_81877e42": "RYSK ROULETT",
   "cmd_admin_system_19c2cc22": "ADMIN SYSTEM",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕\n",

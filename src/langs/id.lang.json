@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "TEXT HILANG",
   "cmd_error_de_protocolo_8d956d20": "PROTOCOL ERROR",
   "cmd_admins_inmunes_1eb5c768": "ADMIN KEBAL",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ TINDAKAN DILARANG\n╰━━━━━━━━━━━━⬣\n\n┃ > Anda tidak dapat mengeluarkan\n┃ > admin grup.",
   "cmd_ruleta_rusa_81877e42": "ROULETTE RUSIA",
   "cmd_admin_system_19c2cc22": "SISTEM ADMIN",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",

@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "VĂN BẢN THIẾU",
   "cmd_error_de_protocolo_8d956d20": "LỖI GIAO THỨC",
   "cmd_admins_inmunes_1eb5c768": "QUẢN TRỊ VIÊN MIỄN PHÍ",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ HÀNH ĐỘNG BỊ CẤM\n╰━━━━━━━━━━━━⬣\n\n┃ > Bạn không thể xóa\n┃ > quản trị viên nhóm.",
   "cmd_ruleta_rusa_81877e42": "ROULETTE NGA",
   "cmd_admin_system_19c2cc22": "HỆ THỐNG QUẢN TRỊ",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",

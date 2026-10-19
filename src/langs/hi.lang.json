@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "टेक्स्ट गुम",
   "cmd_error_de_protocolo_8d956d20": "प्रोटोकॉल त्रुटि",
   "cmd_admins_inmunes_1eb5c768": "व्यवस्थापक प्रतिरक्षित हैं",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ निषिद्ध कार्रवाई\n╰━━━━━━━━━━━━⬣\n\n┃ > आप समूह के एडमिन\n┃ > को नहीं निकाल सकते।",
   "cmd_ruleta_rusa_81877e42": "रूसी रूलेट",
   "cmd_admin_system_19c2cc22": "व्यवस्थापक प्रणाली",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",

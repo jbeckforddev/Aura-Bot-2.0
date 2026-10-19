@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "FALTA TEXTO",
   "cmd_error_de_protocolo_8d956d20": "ERROR DE PROTOCOLO",
   "cmd_admins_inmunes_1eb5c768": "ADMINS INMUNES",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ ACCIÓN PROHIBIDA\n╰━━━━━━━━━━━━⬣\n\n┃ > No puedes expulsar\n┃ > a un admin del grupo.",
   "cmd_ruleta_rusa_81877e42": "RULETA RUSA",
   "cmd_admin_system_19c2cc22": "ADMIN SYSTEM",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",

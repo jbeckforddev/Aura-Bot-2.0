@@ -684,6 +684,7 @@
   "cmd_falta_texto_c2677da2": "ΛΕΙΠΕΙ ΚΕΙΜΕΝΟ",
   "cmd_error_de_protocolo_8d956d20": "ΣΦΑΛΜΑ ΠΡΩΤΟΚΟΛΛΟΥ {{ZXZQBOUNDARY}4",
   "cmd_admins_inmunes_1eb5c768": "ΟΙ ΔΙΑΧΕΙΡΙΣΤΕΣ ΕΙΝΑΙ ΑΝΟΣΙΑ",
+  "cmd_kick_admin_prohibited": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ❌ ΑΠΑΓΟΡΕΥΜΕΝΗ ΕΝΕΡΓΕΙΑ\n╰━━━━━━━━━━━━⬣\n\n┃ > Δεν μπορείς να αποβάλεις\n┃ > διαχειριστή της ομάδας.",
   "cmd_ruleta_rusa_81877e42": "ΡΩΣΙΚΗ ΡΟΥΛΕΤΑ",
   "cmd_admin_system_19c2cc22": "ΣΥΣΤΗΜΑ ΔΙΑΧΕΙΡΙΣΤΗ",
   "cmd_value0_d9d20cb1": "╭〔 ⚙️ {{value0}} 〕⬣\n",
