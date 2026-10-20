@@ -28,6 +28,7 @@ function getCommandCategories() {
     .map((entry) => entry.name.toLowerCase());
 
   const pluginCategories = [...getPlugins().values()]
+    .filter((plugin) => !plugin.hideCmd)
     .map((plugin) => String(plugin?.category || "general").toLowerCase())
     .filter(Boolean);
 
@@ -97,7 +98,10 @@ export default {
       ...new Map(
         [...pluginMap.values()].map((plugin) => [plugin, plugin]),
       ).values(),
-    ].filter((plugin) => plugin && typeof plugin.run === "function");
+    ].filter(
+      (plugin) =>
+        plugin && !plugin.hideCmd && typeof plugin.run === "function",
+    );
 
     const pluginsByCategory = new Map<string, CommandPlugin[]>();
     for (const plugin of plugins) {

@@ -88,6 +88,7 @@ export interface CommandPlugin {
   name: string | string[];
   category?: string;
   description?: string | string[];
+  hideCmd?: boolean;
   usage?: string;
   tags?: string[];
   cooldown?: number;
