@@ -4,6 +4,7 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clearMenuMediaCache } from "./menu.ts";
+import { clearInfoBotMediaCache } from "../system/infobot.ts";
 import { t } from "../../src/langs/index.ts";
 
 function unwrapMedia(
@@ -107,6 +108,7 @@ export default {
         },
       });
       clearMenuMediaCache();
+      clearInfoBotMediaCache();
       return ctx.reply(t("socketSetBannerUpdated"));
     } catch (error: unknown) {
       return ctx.reply({

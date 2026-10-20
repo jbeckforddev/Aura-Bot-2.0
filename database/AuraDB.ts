@@ -535,6 +535,29 @@ function setGroupLanguageCache(jid: string | null | undefined, language: unknown
   setCachedLocaleValue(groupLanguageCache, jid, normalizeLocale(language), makeGroupLocaleCacheKey);
 }
 
+function refreshUserLanguageCache(
+  jid: string | null | undefined,
+  lid: string | null | undefined,
+  language: unknown,
+  previousJid?: string | null,
+  previousLid?: string | null,
+): void {
+  invalidateUserLanguageCache(jid);
+  invalidateUserLanguageCache(lid);
+  invalidateUserLanguageCache(previousJid);
+  invalidateUserLanguageCache(previousLid);
+  setUserLanguageCache(jid, language);
+  setUserLanguageCache(lid, language);
+}
+
+function refreshGroupLanguageCache(
+  jid: string | null | undefined,
+  language: unknown,
+): void {
+  invalidateGroupLanguageCache(jid);
+  setGroupLanguageCache(jid, language);
+}
+
 function invalidateUserLanguageCache(jid: string | null | undefined): void {
   const key = makeUserLocaleCacheKey(jid);
   if (key) userLanguageCache.delete(key);
@@ -1146,7 +1169,6 @@ export const db: IDatabase = {
         ? dataObject.userLang
         : (merged.userLang ?? payload.userLang ?? currentData?.userLang ?? null),
     );
-    setUserLanguageCache(rawJid ?? key, nextUserLang);
 
     delete payload.data;
 
@@ -1179,6 +1201,13 @@ export const db: IDatabase = {
       );
       if (result.changes > 0) {
         persistEconomyLasts(rawJid ?? key, rawLid, payload);
+        refreshUserLanguageCache(
+          rawJid ?? key,
+          rawLid,
+          nextUserLang,
+          currentData.jid,
+          currentData.lid,
+        );
         return;
       }
       row = getUserRow(rawJid ?? key, rawLid);
@@ -1226,6 +1255,13 @@ export const db: IDatabase = {
       );
     }
     persistEconomyLasts(rawJid ?? key, rawLid, payload);
+    refreshUserLanguageCache(
+      rawJid ?? key,
+      storedLid,
+      nextUserLang,
+      currentData.jid,
+      currentData.lid,
+    );
   },
 
   setGroup(
@@ -1261,7 +1297,6 @@ export const db: IDatabase = {
         ? dataObject.groupLang
         : (merged.groupLang ?? row?.GroupLang ?? payload.groupLang ?? null),
     );
-    setGroupLanguageCache(jid, nextGroupLang);
     if (!row) {
       stmts.insertGroup.run(
         key,
@@ -1286,6 +1321,7 @@ export const db: IDatabase = {
         ),
         JSON.stringify(payload),
       );
+      refreshGroupLanguageCache(jid, nextGroupLang);
       return;
     }
 
@@ -1314,6 +1350,7 @@ export const db: IDatabase = {
       JSON.stringify(payload),
       key,
     );
+    refreshGroupLanguageCache(jid, nextGroupLang);
   },
 
   setBot(

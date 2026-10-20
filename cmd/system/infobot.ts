@@ -18,6 +18,10 @@ import { t } from "../../src/langs/index.ts";
 
 const mediaCacheMap = new Map<string, any>();
 
+export function clearInfoBotMediaCache(): void {
+  mediaCacheMap.clear();
+}
+
 function getServerName(): string {
   const envName =
     process.env.SERVER_NAME ||
