@@ -219,7 +219,7 @@ async function buscarYouTube(
         duration: formatDuration(video.lengthText.simpleText || "--:--"),
         views: formatYouTubeCount(video.viewCountText?.simpleText),
         url: `https://youtu.be/${video.videoId}`,
-        thumbnail: `https://i.ytimg.com/vi/${video.videoId}/maxresdefault.jpg`,
+        thumbnail: `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
       });
       if (results.length >= limit) return results;
     }
