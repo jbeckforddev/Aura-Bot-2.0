@@ -47,5 +47,152 @@
         "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ichika%20Nakano/Ichika%20Nakano/10.jpg"
       }
     ]
+  },
+  "Yotsuba Nakano": {
+    "name": "Yotsuba Nakano",
+    "rarity": "Epic",
+    "type": "Soporte",
+    "source": "Gotoubun no Hanayome",
+    "value": 4000,
+    "img": [
+      {
+        "id": 51,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/1.jpeg"
+      },
+      {
+        "id": 52,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/2.jpeg"
+      },
+      {
+        "id": 53,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/3.jpg"
+      },
+      {
+        "id": 54,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/4.jpeg"
+      },
+      {
+        "id": 55,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/5.avif"
+      },
+      {
+        "id": 56,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/6.webp"
+      },
+      {
+        "id": 57,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/7.webp"
+      },
+      {
+        "id": 58,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/8.jpg"
+      },
+      {
+        "id": 59,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/9.jpeg"
+      },
+      {
+        "id": 60,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Yotsuba%20Nakano/Yotsuba%20Nakano/10.jpg"
+      }
+    ]
+  },
+  "Itsuki Nakano": {
+    "name": "Itsuki Nakano",
+    "rarity": "Epic",
+    "type": "Defensor",
+    "source": "Gotoubun no Hanayome",
+    "value": 4000,
+    "img": [
+      {
+        "id": 61,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/1.jpeg"
+      },
+      {
+        "id": 62,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/2.jpeg"
+      },
+      {
+        "id": 63,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/3.webp"
+      },
+      {
+        "id": 64,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/4.webp"
+      },
+      {
+        "id": 65,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/5.jpg"
+      },
+      {
+        "id": 66,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/6.jpg"
+      },
+      {
+        "id": 67,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/7.jpeg"
+      },
+      {
+        "id": 68,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/8.jpeg"
+      },
+      {
+        "id": 69,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/9.jpeg"
+      },
+      {
+        "id": 70,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Itsuki%20Nakano/Itsuki%20Nakano/10.jpeg"
+      }
+    ]
+  },
+  "Ochaco Uraraka": {
+    "name": "Ochaco Uraraka",
+    "rarity": "Epic",
+    "type": "Asesina",
+    "source": "My Hero Academia",
+    "value": 4000,
+    "img": [
+      {
+        "id": 71,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/1.jpg"
+      },
+      {
+        "id": 72,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/2.jpeg"
+      },
+      {
+        "id": 73,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/3.jpeg"
+      },
+      {
+        "id": 74,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/4.jpg"
+      },
+      {
+        "id": 75,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/5.jpeg"
+      },
+      {
+        "id": 76,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/6.jpeg"
+      },
+      {
+        "id": 77,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/7.jpeg"
+      },
+      {
+        "id": 78,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/8.jpeg"
+      },
+      {
+        "id": 79,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/9.jpeg"
+      },
+      {
+        "id": 80,
+        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Ochaco%20Uraraka/Ochaco%20Uraraka/10.jpeg"
+      }
+    ]
   }
 }

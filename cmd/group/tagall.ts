@@ -2,7 +2,7 @@ import type { CommandContext } from "../../types/index.d.ts";
 import {
   jidNormalizedUser,
   type GroupParticipant,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 

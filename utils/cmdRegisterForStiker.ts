@@ -1,4 +1,4 @@
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import type { IDatabase } from "../types/database.d.ts";
 
 const STICKER_COMMANDS_FIELD = "CmdSticker";

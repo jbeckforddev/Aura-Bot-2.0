@@ -5,7 +5,7 @@ import { economyUser } from "./economyRuntime.ts";
 import { sendDownloadPreview } from "./downloadPreview.ts";
 import { LRUCache } from "lru-cache";
 import { formatCount } from "./downloadUtils.ts"
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { Profile, PendingProfileAction } from "../types/index.d.ts";
 import type { CommandContext } from "../types/commands.d.ts";
 import type { ExtendedWASocket } from "../types/socket.d.ts";

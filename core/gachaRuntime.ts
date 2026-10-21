@@ -1,5 +1,5 @@
-import charactersJson from "../src/GachaCharacters/index.ts";
-import type { proto } from "@whiskeysockets/baileys";
+import { GachaCharacters } from "../src/GachaCharacters/index.ts";
+import type { proto } from "baileys";
 
 export type GachaRarity =
   | "Especial"
@@ -56,7 +56,7 @@ function normalizeRarity(value: unknown): GachaRarity {
 }
 
 function loadCharacters(): GachaCharacter[] {
-  const entries = Object.entries(charactersJson as Record<string, unknown>);
+  const entries = Object.entries(GachaCharacters as Record<string, unknown>);
   return entries.flatMap(([id, value]) => {
     if (!value || typeof value !== "object") return [];
     const character = value as Record<string, unknown>;

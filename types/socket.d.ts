@@ -1,4 +1,4 @@
-import type { WASocket, proto } from "@whiskeysockets/baileys";
+import type { WASocket, proto } from "baileys";
 import type { IDatabase } from "./database.d.ts";
 import type { CommandPlugin } from "./commands.d.ts";
 

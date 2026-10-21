@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import { downloadMediaMessage } from "baileys";
 import { t } from "../../src/langs/index.ts";
 
 
@@ -22,12 +22,12 @@ export default {
         ? { key: msg.key, message: { imageMessage: quoted.imageMessage } }
         : msg;
       const buffer = await downloadMediaMessage(
-        mediaMessage as unknown as import("@whiskeysockets/baileys").WAMessage,
+        mediaMessage as unknown as import("baileys").WAMessage,
         "buffer",
         {},
         {
           logger: console as unknown as Parameters<
-            typeof import("@whiskeysockets/baileys").downloadMediaMessage
+            typeof import("baileys").downloadMediaMessage
           >[3]["logger"],
           reuploadRequest: ctx.sock.updateMediaMessage,
         },

@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import type { CommandPlugin } from "../../types/commands.d.ts";
 import type { CommandContext } from "../../types/commands.d.ts";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { getPlugins } from "../../core/cmdLoader.ts";
 import { resolveBotType } from "../../core/botType.ts";
 import { sendWithRecordingPresence } from "../../core/mediaSendUtils.ts";

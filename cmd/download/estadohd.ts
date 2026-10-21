@@ -4,7 +4,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { downloadContentFromMessage } from "@whiskeysockets/baileys";
+import { downloadContentFromMessage } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";

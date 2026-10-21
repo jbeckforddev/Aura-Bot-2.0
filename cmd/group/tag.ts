@@ -4,7 +4,7 @@ import {
   type MediaType,
   type AnyMessageContent,
   type GroupParticipant,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 

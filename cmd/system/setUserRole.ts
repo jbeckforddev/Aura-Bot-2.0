@@ -1,6 +1,6 @@
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
-import { jidNormalizedUser } from "@whiskeysockets/baileys";
+import { jidNormalizedUser } from "baileys";
 import { db } from "../../database/AuraDB.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";

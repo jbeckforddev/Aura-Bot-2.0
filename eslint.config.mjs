@@ -39,6 +39,7 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      "no-empty": ["error", { allowEmptyCatch: true }],
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
         "warn",

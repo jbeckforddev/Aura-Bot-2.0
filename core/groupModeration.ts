@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { LRUCache } from "lru-cache";
 import { fytBold } from "./socketText.ts";
 import { getActiveSubBots } from "./subbotManager.ts";
-import type { GroupMetadata, proto } from "@whiskeysockets/baileys";
+import type { GroupMetadata, proto } from "baileys";
 import type {
   ExtendedWASocket,
   IDatabase,

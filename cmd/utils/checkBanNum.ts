@@ -2,7 +2,7 @@ import type {
   CommandContext,
   WaBanCheckResponse,
 } from "../../types/index.d.ts";
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { t } from "../../src/langs/index.ts";

@@ -5,11 +5,10 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   useSQLiteAuthState,
   jidNormalizedUser,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import pino from "pino";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import fs from "node:fs";
 import readline from "node:readline";
 import qrcodeTerminal from "qrcode-terminal";
 import { Boom } from "@hapi/boom";

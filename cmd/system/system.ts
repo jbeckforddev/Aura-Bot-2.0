@@ -1,4 +1,4 @@
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import os from "node:os";
 import process from "node:process";

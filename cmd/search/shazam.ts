@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, type proto } from "baileys";
 import { identifySong } from "../../src/api/shazamScraper.js";
 import { fytBold } from "../../core/socketText.ts";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
@@ -41,7 +41,7 @@ export default {
         {
           key: mediaKey,
           message: target,
-        } as import("@whiskeysockets/baileys").WAMessage,
+        } as import("baileys").WAMessage,
         "buffer",
         {},
         {

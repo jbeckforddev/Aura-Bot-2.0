@@ -1,4 +1,4 @@
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 
 export const messageCache = new Map<string, proto.IWebMessageInfo>();
 export const deletedMessages = new Map<string, proto.IWebMessageInfo[]>();

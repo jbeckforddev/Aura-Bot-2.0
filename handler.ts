@@ -4,7 +4,7 @@ import {
   generateWAMessageFromContent,
   jidNormalizedUser,
   proto,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { cmdLog } from "./core/logger.ts";
 import {
   NOT_CMD_FOUND,
@@ -48,7 +48,7 @@ import type {
   GroupMetadata,
   GroupParticipant,
   WAMessage,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import type {
   ExtendedWASocket,
   CommandPlugin,

@@ -158,7 +158,7 @@ async function sendGame(
       headerType: 4,
     },
     {
-      quoted: ctx.msg as unknown as import("@whiskeysockets/baileys").WAMessage,
+      quoted: ctx.msg as unknown as import("baileys").WAMessage,
     },
   );
   if (!ended) game.lastMessageId = sentMessage?.key?.id;

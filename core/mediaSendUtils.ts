@@ -7,7 +7,7 @@ import {
   type AnyMessageContent,
   type MiscMessageGenerationOptions,
   type WAMessage,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import type {
   ExtendedWASocket,
   AlbumItem,

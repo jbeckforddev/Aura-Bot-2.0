@@ -1,10 +1,10 @@
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import {
   downloadMediaMessage,
   generateWAMessageContent,
   generateWAMessageFromContent,
   jidNormalizedUser,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import type { CommandContext } from "../../types/commands.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
@@ -151,7 +151,7 @@ export default {
               fromMe: quotedCtx.participant === sock.user?.id,
             },
             message: quotedMsg,
-          } as unknown as import("@whiskeysockets/baileys").WAMessage;
+          } as unknown as import("baileys").WAMessage;
 
           const buffer = await downloadMediaMessage(
             quotedMessage,

@@ -1,4 +1,4 @@
-import type { proto, AnyMessageContent } from "@whiskeysockets/baileys";
+import type { proto, AnyMessageContent } from "baileys";
 import type { ButtonItem } from "./buttons.d.ts";
 
 export type SendMessageContent =

@@ -1,9 +1,9 @@
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { SEARCH_RESULTS_TEMPLATE } from "../../utils/template.ts";
@@ -57,7 +57,7 @@ export default {
         link: videos[0].url,
         author: videos[0].author || "YouTube",
         title: videos[0].title,
-        banner: preparedMedia.imageMessage as import("@whiskeysockets/baileys").proto.Message.IImageMessage,
+        banner: preparedMedia.imageMessage as import("baileys").proto.Message.IImageMessage,
         mentionedJid: sender ? [sender] : [],
         isForwarded: false,
         forwardingScore: 0,

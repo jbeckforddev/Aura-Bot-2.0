@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { GIF_TO_VIDEO } from "../../utils/converter.ts";
 import { t } from "../../src/langs/index.ts";

@@ -1,4 +1,4 @@
-import type { GroupMetadata, GroupParticipant } from "@whiskeysockets/baileys";
+import type { GroupMetadata, GroupParticipant } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { formatDuration } from "../../utils/formatter.ts";

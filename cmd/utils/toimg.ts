@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, type proto } from "baileys";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
 import sharp from "sharp";
 import ffmpegPath from "ffmpeg-static";
@@ -95,7 +95,7 @@ export default {
         {
           key: msg.key,
           message: target,
-        } as import("@whiskeysockets/baileys").WAMessage,
+        } as import("baileys").WAMessage,
         "buffer",
         {},
         {

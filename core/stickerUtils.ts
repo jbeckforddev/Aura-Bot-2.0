@@ -1,4 +1,4 @@
-import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, type proto } from "baileys";
 import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -68,7 +68,7 @@ export async function downloadTargetMedia(
     : message;
   return Buffer.from(
     await downloadMediaMessage(
-      target as import("@whiskeysockets/baileys").WAMessage,
+      target as import("baileys").WAMessage,
       "buffer",
       {},
       {
@@ -76,10 +76,10 @@ export async function downloadTargetMedia(
           typeof downloadMediaMessage
         >[3]["logger"],
         reuploadRequest: async (
-          mediaMessage: import("@whiskeysockets/baileys").WAMessage,
+          mediaMessage: import("baileys").WAMessage,
         ) =>
           (sock?.updateMediaMessage?.(mediaMessage) ||
-            mediaMessage) as import("@whiskeysockets/baileys").WAMessage,
+            mediaMessage) as import("baileys").WAMessage,
       },
     ),
   );

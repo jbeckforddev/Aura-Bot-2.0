@@ -4,8 +4,7 @@ import specialCharacters from "./SpecialCharaters[1].json" with { type: "json" }
 import legendaryCharacters from "./LegendaryCharacters[1].json" with { type: "json" };
 import superSpecialCharacters from "./SuperSpecialCharacters[1].json" with { type: "json" };
 
-
-export interface GachaCharacter {
+interface GachaCharacter {
   name: string;
   rarity: string;
   type: string;
@@ -13,7 +12,6 @@ export interface GachaCharacter {
   value: number;
   img: Array<{ id: number; url: string }>;
 }
-
 export const GachaCharacters: Record<string, GachaCharacter> = {
   ...epicCharacters,
   ...mythicCharacters,
@@ -21,5 +19,3 @@ export const GachaCharacters: Record<string, GachaCharacter> = {
   ...legendaryCharacters,
   ...superSpecialCharacters,
 };
-
-export default GachaCharacters;

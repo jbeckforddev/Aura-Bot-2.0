@@ -4,11 +4,13 @@ import { t } from "../../src/langs/index.ts";
 
 
 export default {
-  name: ["dmsg", "forcedel", "ownerdel"],
+  name: ["dmsg", "forcedel", "ownerdel", "del"],
   category: "owner",
   description: t("cmd_fuerza_la_eliminacion_de_cualq_3ea5b232"),
   groupOnly: true,
   ownerOnly: true,
+  adminOnly: true,
+  botAdmin: true,
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg, botJid } = ctx;
 

@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import type { proto } from "@whiskeysockets/baileys";
-import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
+import { downloadMediaMessage } from "baileys";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clearMenuMediaCache } from "./menu.ts";
@@ -53,7 +53,7 @@ export default {
           };
 
       const buffer = await downloadMediaMessage(
-        downloadTarget as import("@whiskeysockets/baileys").WAMessage,
+        downloadTarget as import("baileys").WAMessage,
         "buffer",
         {},
         {

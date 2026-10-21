@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import undici from "undici";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
 import { fytBold } from "../../core/socketText.ts";
@@ -269,7 +269,7 @@ export default {
       return reply(t("cmd_escribe_el_nombre_de_una_canci_7d229544"));
     }
 
-    await react("🎵");
+    await react("🎞️");
     try {
       const directVideoId = query.match(YOUTUBE_ID)?.[1];
       let audioPromise = directVideoId

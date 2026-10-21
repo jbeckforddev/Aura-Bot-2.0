@@ -1,4 +1,4 @@
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { CommandContext, ExtendedWASocket } from "../../types/index.d.ts";
 import {
   createCanvas,

@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { downloadMediaMessage, type proto } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, type proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
 import { t } from "../../src/langs/index.ts";
@@ -52,7 +52,7 @@ export default {
         {
           key: msg.key,
           message: target,
-        } as import("@whiskeysockets/baileys").WAMessage,
+        } as import("baileys").WAMessage,
         "buffer",
         {},
         {

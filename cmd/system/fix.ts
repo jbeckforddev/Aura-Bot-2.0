@@ -1,4 +1,4 @@
-import type { WAMessage } from "@whiskeysockets/baileys";
+import type { WAMessage } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

@@ -9,7 +9,7 @@ import {
   unixTimestampSeconds,
   sha256,
   proto,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_CONFIG } from "../../config.ts";
 import { readFile } from "node:fs/promises";
@@ -144,7 +144,7 @@ async function sendStickerPack(
 
   const userJid = sock.user?.id;
   const m = generateWAMessageFromContent(remoteJid, content as proto.IMessage, {
-    quoted: quoted as unknown as import("@whiskeysockets/baileys").WAMessage,
+    quoted: quoted as unknown as import("baileys").WAMessage,
     userJid,
   });
   await sock.relayMessage(remoteJid, m.message, { messageId: m.key.id });

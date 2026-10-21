@@ -4,10 +4,7 @@ import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t, type TranslationKey } from "../../src/langs/index.ts";
-import {
-	drawRandomCharacter,
-	drawRandomImage,
-} from "../../core/gachaRuntime.ts";
+import { drawRandomCharacter, drawRandomImage } from "../../core/gachaRuntime.ts";
 
 const RARITY_TRANSLATIONS: Record<string, TranslationKey> = {
 	Especial: "gacha_rarity_special",
@@ -65,14 +62,9 @@ export default {
 		].join("\n");
 
 		const sentMessage = await sendMessageWithRateLimit(
-			ctx.sock,
-			ctx.from,
-			{
-				image: { url: image.url },
-				caption,
-			},
-			{ quoted: ctx.msg as import("@whiskeysockets/baileys").WAMessage },
-		);
+      ctx.sock, ctx.from,
+      { image: { url: image.url }, caption },
+      { quoted: ctx.msg as import("baileys").WAMessage });
 
 		const messageId = sentMessage?.key?.id;
 		if (!messageId) {

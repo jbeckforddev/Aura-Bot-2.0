@@ -2,7 +2,7 @@ import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
   type WAMessage,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { createLinkPreviewWithoutChannel } from "./LinkPreview.ts";
 import type { DownloadPreviewOptions } from "../types/index.d.ts";
 

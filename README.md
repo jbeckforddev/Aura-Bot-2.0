@@ -2,7 +2,7 @@
 
 ![Aura Reed Bot](https://cdn.dix.lat/me/izijnp-c91x-ozzy3t-433130.jpg)
 
-Bot de WhatsApp para grupos y uso personal, construido con `@whiskeysockets/baileys` y un sistema modular de comandos.
+Bot de WhatsApp para grupos y uso personal, construido con `baileys` y un sistema modular de comandos.
 
 ## 📌 Descripción
 

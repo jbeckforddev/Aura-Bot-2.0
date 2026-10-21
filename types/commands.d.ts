@@ -2,7 +2,7 @@ import type {
   proto,
   GroupMetadata,
   AnyMessageContent,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import type { ExtendedWASocket } from "./socket.d.ts";
 import type { IDatabase } from "./database.d.ts";
 import type { ButtonItem, OptionSection } from "./buttons.d.ts";

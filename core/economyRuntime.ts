@@ -1,4 +1,4 @@
-import { jidNormalizedUser, type proto } from "@whiskeysockets/baileys";
+import { jidNormalizedUser, type proto } from "baileys";
 import {
   addAura,
   formatMoney,

@@ -10,7 +10,7 @@ import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
   type WAMessage,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { downloadToCache } from "../../core/downloadUtils.ts";
 import { formatCount, formatDuration } from "../../utils/formatter.ts";
 import { fytBold } from "../../core/socketText.ts";

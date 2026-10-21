@@ -5,7 +5,7 @@ import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
   type WAMessage,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import {

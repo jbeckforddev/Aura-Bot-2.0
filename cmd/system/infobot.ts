@@ -6,7 +6,7 @@ import {
   generateWAMessageFromContent,
   prepareWAMessageMedia,
   type proto,
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { getActiveSubBots } from "../../core/subbotManager.ts";
 import { resolveBotType } from "../../core/botType.ts";

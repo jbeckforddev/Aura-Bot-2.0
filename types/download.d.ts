@@ -1,4 +1,4 @@
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import type { ExtendedWASocket } from "./socket.d.ts";
 
 export interface SearchItem {

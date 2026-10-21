@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { fytBold } from "./socketText.ts";
 import { getActiveSubBots } from "./subbotManager.ts";
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import type { ExtendedWASocket } from "../types/index.d.ts";
 import { t } from "../src/langs/index.ts";
 

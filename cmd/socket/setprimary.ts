@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import type { DatabaseBot } from "../../types/database.d.ts";
-import type { proto } from "@whiskeysockets/baileys";
+import type { proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 

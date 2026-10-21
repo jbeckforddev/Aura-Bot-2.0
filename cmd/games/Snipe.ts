@@ -27,7 +27,7 @@ export default {
 
     await sock.sendMessage(
       from,
-      { forward: snipedMsg as import("@whiskeysockets/baileys").WAMessage },
+      { forward: snipedMsg as import("baileys").WAMessage },
       { quoted: msg as any }
     ).catch(() => undefined);
 
