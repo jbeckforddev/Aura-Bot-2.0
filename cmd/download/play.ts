@@ -122,7 +122,7 @@ async function obtenerAudio(
   const body = new URLSearchParams({
     link: `https://youtu.be/${videoId}`,
     format: "mp3",
-    audioBitrate: "256",
+    audioBitrate: "128",
     videoQuality: "720",
     filenameStyle: "pretty",
     vCodec: "h264",
