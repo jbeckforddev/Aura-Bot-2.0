@@ -32,7 +32,7 @@
     "src/**/*.ts",
     "types/**/*.ts",
     "utils/**/*.ts"
-  ],
+, "core/conection.ts", "core/subbotManager.ts", "core/premBotManager.ts"  ],
   "exclude": [
     "node_modules",
     "dist",

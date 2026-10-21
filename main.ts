@@ -6,7 +6,7 @@ import "./config.ts";
 import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
-import { displayBanner, logInfo, connectionLog } from "./core/logger.ts";
+import { displayBanner, logInfo } from "./core/logger.ts";
 import * as AuraDB from "./database/AuraDB.ts";
 
 const TMP_DIR = path.resolve("./cache");
@@ -68,14 +68,14 @@ function startCpuProfile() {
   session.post("Profiler.enable", (enableError) => {
     if (enableError) {
       session.disconnect();
-      connectionLog(`No se pudo habilitar el perfil CPU: ${enableError.message}`, "error");
+      logInfo(`No se pudo habilitar el perfil CPU: ${enableError.message}`, "error");
       return;
     }
 
     session.post("Profiler.start", (startError) => {
       if (startError) {
         session.disconnect();
-        connectionLog(`No se pudo iniciar el perfil CPU: ${startError.message}`, "error");
+        logInfo(`No se pudo iniciar el perfil CPU: ${startError.message}`, "error");
         return;
       }
 
@@ -83,7 +83,7 @@ function startCpuProfile() {
         session.post("Profiler.stop", async (stopError, result) => {
           session.disconnect();
           if (stopError) {
-            connectionLog(`No se pudo guardar el perfil CPU: ${stopError.message}`, "error");
+            logInfo(`No se pudo guardar el perfil CPU: ${stopError.message}`, "error");
             return;
           }
 
@@ -91,9 +91,9 @@ function startCpuProfile() {
             await fsp.mkdir(PROFILES_DIR, { recursive: true });
             const profilePath = path.join(PROFILES_DIR, `cpu-${Date.now()}.cpuprofile`);
             await fsp.writeFile(profilePath, JSON.stringify(result.profile));
-            connectionLog(`Perfil CPU guardado en ${profilePath}`, "alert");
+            logInfo(`Perfil CPU guardado en ${profilePath}`, "alert");
           } catch (error) {
-            connectionLog(`No se pudo escribir el perfil CPU: ${String(error)}`, "error");
+            logInfo(`No se pudo escribir el perfil CPU: ${String(error)}`, "error");
           }
         });
       }, 45_000);
@@ -109,7 +109,7 @@ function handleShutdown(signal: string) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   try {
-    connectionLog(`Señal ${signal} recibida. Guardando base de datos...`, "alert");
+    logInfo(`Señal ${signal} recibida. Guardando base de datos...`, "alert");
     AuraDB.checkpointDb();
   } catch {}
   process.exit(0);
@@ -124,11 +124,11 @@ process.on("exit", () => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  connectionLog(`Promesa rechazada no controlada: ${String(reason)}`, "error");
+  logInfo(`Promesa rechazada no controlada: ${String(reason)}`, "error");
 });
 
 process.on("uncaughtException", (error) => {
-  connectionLog(`Excepción crítica capturada: ${error.message}`, "error");
+  logInfo(`Excepción crítica capturada: ${error.message}`, "error");
   try {
     AuraDB.checkpointDb();
   } catch {}
@@ -151,11 +151,11 @@ async function mainBot() {
   logInfo("Inicializando bot principal...");
   watchPlugins();
 
-  connectionLog("Conectando a WhatsApp...");
+  logInfo("Conectando a WhatsApp...");
   await connectToWhatsApp("main", false);
 
   void startSavedSubBots().catch((error) => {
-    connectionLog(`Error al iniciar subbots guardados: ${String(error)}`, "error");
+    logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");
   });
 }
 

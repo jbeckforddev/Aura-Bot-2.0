@@ -2,6 +2,7 @@ import chalk from "chalk";
 
 export type CmdLogInput = {
   numeroReal?: string | null;
+  receivedAt: number;
   rango?: string | null;
   commandName?: string | null;
   isGroup?: boolean;
@@ -32,38 +33,18 @@ export async function displayBanner() {
   console.log(banner);
 }
 
-function TimeZone() {
-  return new Date().toLocaleString("es-US", { timeZone: "America/Costa_Rica" });
-}
-
-export function logInfo(message: string) {
-  const timestamp = TimeZone();
-  console.log(
-    `${chalk.cyan("[INFO]")} ${chalk.gray(timestamp)} ${chalk.white(message)}`,
-  );
-}
-
-export function errorLog(message: string) {
-  const timestamp = TimeZone();
-  console.error(
-    `${chalk.red("[ERROR]")} ${chalk.gray(timestamp)} ${chalk.white(message)}`,
-  );
-}
-
 export function cmdLog({
-  numeroReal,
   rango,
   commandName,
   text,
-  jidRemitente,
   pushName,
   groupMetadata,
   sock,
+  receivedAt,
 }: CmdLogInput) {
   if (!commandName) return;
 
-  const rawSender = jidRemitente || String(numeroReal ?? "");
-  const senderNumber = rawSender.split("@")[0].split(":")[0];
+  const elapsedMs = Math.round(performance.now() - receivedAt);
   const nombreUsuario = pushName || "Usuario";
   const botName = sock?.isSubBot ? "Sub-Bot" : "Bot";
   const botNumber = sock?.subBotId ? `+${sock.subBotId}` : "Principal";
@@ -75,51 +56,32 @@ export function cmdLog({
   });
 
   console.log(chalk.cyan("╭───────────────────────────────────────────────╮"));
-  console.log(
-    `${chalk.cyan("│")} ${chalk.gray("🤖\u00A0Bot:")}       ${chalk.blue(`${botName} (${botNumber})`)}`,
-  );
-  console.log(
-    `${chalk.cyan("│")} ${chalk.gray("👤\u00A0Usuario:")}   ${chalk.white(`${nombreUsuario} (+${senderNumber || "desconocido"})`)}`,
-  );
-  console.log(
-    `${chalk.cyan("│")} ${chalk.gray("🛡️\u00A0Rango:")}     ${chalk.yellow(rango || "USUARIO")}`,
-  );
-  console.log(
-    `${chalk.cyan("│")} ${chalk.gray("👥\u00A0Grupo:")}     ${chalk.green(groupName)}`,
-  );
-  console.log(
-    `${chalk.cyan("│")} ${chalk.gray("🕒\u00A0Fecha:")}     ${chalk.magenta(timestamp)}`,
-  );
+  console.log(`${chalk.cyan("│")} ${chalk.gray("🤖\u00A0Bot:")}       ${chalk.blue(`${botName} (${botNumber})`)}`,);
+  console.log(`${chalk.cyan("│")} ${chalk.gray("👤\u00A0Usuario:")}   ${chalk.white(`${nombreUsuario}`)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.gray("🛡️\u00A0Rango:")}     ${chalk.yellow(rango || "USUARIO")}`);
+  console.log(`${chalk.cyan("│")} ${chalk.gray("👥\u00A0Grupo:")}     ${chalk.green(groupName)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.gray("🕒\u00A0Fecha:")}     ${chalk.magenta(timestamp)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.gray("⌛\u00A0Tiempo:")}    ${chalk.cyan(`${elapsedMs}ms`)}`);
   console.log(chalk.cyan("├───────────────────────────────────────────────┤"));
-  console.log(
-    `${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${commandName}`)} ${chalk.gray(`${commandText}`)}`,
-  );
+  console.log(`${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${commandName}`)} ${chalk.gray(`${commandText}`)}`);
   console.log(chalk.cyan("╰───────────────────────────────────────────────╯"));
 }
 
-export function connectionLog(
+export function logInfo(
   message: string,
-  level: "info" | "warn" | "error" | "alert" = "info",
+  level: "info" | "warn" | "error" | "alert" | "success" = "info",
 ) {
-  const timestamp = TimeZone();
   const prefixMap = {
-    info: chalk.cyan("[INFO]"),
-    warn: chalk.yellow("[WARN]"),
-    error: chalk.red("[ERROR]"),
-    alert: chalk.magenta("[ALERT]"),
+    info: chalk.bgCyan.bold("[INFO]"),
+    warn: chalk.bgYellow.bold("[WARN]"),
+    error: chalk.bgRed.bold("[ERROR]"),
+    success: chalk.bgGreen.bold("[SUCCESS]"),
+    alert: chalk.bgHex("#ff8000").bold("[ALERT]"),
   };
-
-  if (level === "info") {
-    return;
-  }
-
-  console.log(
-    `${prefixMap[level]} ${chalk.gray(timestamp)} ${chalk.white(message)}`,
-  );
+  console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }
 
 export function pairingLog(message: string) {
-  const timestamp = TimeZone();
   const menu =
     chalk.blue.bold(`╭──────────── Vinculación de Aura Reed ───────────⬣\n`) +
     chalk.blue.bold(`│ \n`) +
@@ -129,6 +91,6 @@ export function pairingLog(message: string) {
     chalk.blue.bold(`│ 2. Código de emparejamiento\n`) +
     chalk.blue.bold(`│ \n`) +
     chalk.blue.bold(`╰─────────────────────────────────────────────────⬣\n`) +
-    `${chalk.yellow("[PAIRING]")} ${chalk.gray(timestamp)} ${chalk.white(message)}`;
+    `${chalk.bgYellow("[PAIRING]")} ${chalk.white(message)}`;
   console.log(menu);
 }

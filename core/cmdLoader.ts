@@ -1,7 +1,7 @@
 import { readdir, watch, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { logInfo, errorLog } from "./logger.ts";
+import { logInfo } from "./logger.ts";
 import type { CommandPlugin } from "../types/index.d.ts";
 
 const plugins = new Map<string, CommandPlugin>();
@@ -29,7 +29,7 @@ export async function loadPlugins() {
   await loadDir(PLUGINS_DIR);
 
   const uniquePlugins = new Set(plugins.values());
-  logInfo(`Plugins cargados: ${uniquePlugins.size} comandos (${plugins.size} alias)`);
+  logInfo(`Plugins cargados: ${uniquePlugins.size} comandos (${plugins.size} alias)`, "info");
 }
 
 async function loadDir(dir: string) {
@@ -85,11 +85,11 @@ async function loadPlugin(filePath: string) {
         newAliases.push(cleanName);
       }
     }
-    
+
     pluginPaths.set(filePath, newAliases);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    errorLog(`Error cargando plugin ${filePath}: ${message}`);
+    logInfo(`Error cargando plugin ${filePath}: ${message}`, "error");
   }
 }
 
@@ -97,7 +97,7 @@ export async function watchPlugins() {
   const dirStat = await stat(PLUGINS_DIR).catch(() => null);
   if (!dirStat || !dirStat.isDirectory()) return;
 
-  logInfo("Hot-reload de plugins activo con soporte anti-duplicados");
+  logInfo("Hot-reload de plugins activo con soporte anti-duplicados", "info");
 
   try {
     const watcher = watch(PLUGINS_DIR, { recursive: true });
@@ -122,12 +122,12 @@ export async function watchPlugins() {
           if (oldAliases) {
             for (const alias of oldAliases) plugins.delete(alias);
             pluginPaths.delete(fullPath);
-            logInfo(`Plugin eliminado del disco y memoria: ${fileName}`);
+            logInfo(`Plugin eliminado del disco y memoria: ${fileName}`, "success");
           }
           return;
         }
 
-        logInfo(`Plugin actualizado detectado: ${fileName}`);
+        logInfo(`Plugin actualizado detectado: ${fileName}`, "info");
         await loadPlugin(fullPath);
       }, 250);
 
@@ -135,7 +135,7 @@ export async function watchPlugins() {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    errorLog(`Error en el observador de plugins: ${message}`);
+    logInfo(`Error en el observador de plugins: ${message}`, "error");
   }
 }
 

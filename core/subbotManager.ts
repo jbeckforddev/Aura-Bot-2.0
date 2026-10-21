@@ -1,6 +1,7 @@
 import { connectToWhatsApp, type ConnectionOptions } from "./conection.ts";
 import { db } from "../database/AuraDB.ts";
-import type { ExtendedWASocket, SubBotLinkRequest } from "../types/index.d.ts";
+import { logInfo } from "./logger.ts";
+import type { ExtendedWASocket, SubBotLinkRequest } from "../types/index";
 
 export type LinkRequest = SubBotLinkRequest;
 
@@ -191,6 +192,7 @@ export async function startSavedSubBots() {
     sessionsToStart.push(sessionName);
   }
 
+  logInfo(`Iniciando ${sessionsToStart.length} sub-bot(s) guardado(s).`, "info");
   if (sessionsToStart.length === 0) return;
 
   let currentIndex = 0;

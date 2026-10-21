@@ -6,6 +6,7 @@ import makeWASocket, {
   useSQLiteAuthState,
   jidNormalizedUser,
 } from "baileys";
+import chalk from "chalk";
 import pino from "pino";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -19,7 +20,7 @@ import {
   getGroupMetadata,
 } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
-import { connectionLog, pairingLog } from "./logger.ts";
+import { logInfo, pairingLog } from "./logger.ts";
 import { db } from "../database/AuraDB.ts";
 import { resolveBotType } from "./botType.ts";
 import {
@@ -32,7 +33,7 @@ import type {
   ExtendedWASocket,
   ConnectionOptions,
   GroupCallEvent,
-} from "../types/index.d.ts";
+} from "../types/index";
 import { t } from "../src/langs/index.ts";
 
 export type { ConnectionOptions };
@@ -107,7 +108,7 @@ const hibernationInterval = setInterval(() => {
       subBotActivity.delete(jid);
 
       if (targetSock) {
-        connectionLog(`Hibernando subbot ${jid} por inactividad.`, "warn");
+        logInfo(`Hibernando subbot ${jid} por inactividad.`, "warn");
         targetSock.manualLogout = true;
         safelyDestroySocket(targetSock, new Error("Hibernación por inactividad"));
         db.setBot(jid, { status: "offline" });
@@ -268,7 +269,7 @@ export async function connectToWhatsApp(
 
   if (isSubBot && !isRegistered && options.allowPairing === false) {
     await removeSessionFolder(true, sessionName);
-    connectionLog(
+    logInfo(
       "Sesión de subbot sin credenciales; reconexión detenida sin activar QR.",
       "alert",
     );
@@ -291,7 +292,7 @@ export async function connectToWhatsApp(
 
       if (!pairingPhone) {
         pairingMethod = "qr";
-        connectionLog("Número inválido. Se usará QR por defecto.");
+        logInfo("Número inválido. Se usará QR por defecto.");
       }
     } else {
       pairingMethod = "qr";
@@ -304,7 +305,7 @@ export async function connectToWhatsApp(
   try {
     version = await getWaWebVersion();
   } catch {
-    connectionLog(
+    logInfo(
       "No se pudo obtener la versión de WhatsApp Web; usando la interna de Baileys.",
       "warn",
     );
@@ -383,13 +384,13 @@ export async function connectToWhatsApp(
       try {
         await persistCredentials();
       } catch (error) {
-        connectionLog(`Error al guardar credenciales antes del cierre: ${String(error)}`, "error");
+        logInfo(`Error al guardar credenciales antes del cierre: ${String(error)}`, "error");
       }
 
       try {
         closeAuthState?.();
       } catch (error) {
-        connectionLog(`Error al cerrar el almacén de credenciales: ${String(error)}`, "error");
+        logInfo(`Error al cerrar el almacén de credenciales: ${String(error)}`, "error");
       }
 
       flushSocketCaches();
@@ -406,7 +407,7 @@ export async function connectToWhatsApp(
       try {
         await persistCredentials();
       } catch (error) {
-        connectionLog(`Error al guardar credenciales: ${String(error)}`, "error");
+        logInfo(`Error al guardar credenciales: ${String(error)}`, "error");
       }
     }, 3000);
     saveTimer.unref?.();
@@ -444,7 +445,7 @@ export async function connectToWhatsApp(
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
         if (!pairingPhone) {
-          connectionLog("Falta el número telefónico para la solicitud de emparejamiento.", "warn");
+          logInfo("Falta el número telefónico para la solicitud de emparejamiento.", "warn");
           return;
         }
 
@@ -470,7 +471,7 @@ export async function connectToWhatsApp(
         );
       } catch (err) {
         const pairingError = err instanceof Error ? err : new Error(String(err));
-        connectionLog(`Error al solicitar el código de emparejamiento: ${pairingError.message}`, "error");
+        logInfo(`Error al solicitar el código de emparejamiento: ${pairingError.message}`, "error");
         await options.onPairingError?.(pairingError);
       }
     })();
@@ -483,14 +484,14 @@ export async function connectToWhatsApp(
 
   const sharedRuntimeLogger = {
     message: () => {},
-    warn: (payload: unknown) => connectionLog(String(payload), "warn"),
-    error: (payload: unknown) => connectionLog(String(payload), "error"),
+    warn: (payload: unknown) => logInfo(String(payload), "warn"),
+    error: (payload: unknown) => logInfo(String(payload), "error"),
     cmdExec: () => {},
   };
 
   sock.ev.on("connection.update", async (u) => {
     if (u.qr && pairingMethod === "qr") {
-      connectionLog("Escanea este código QR con WhatsApp para vincular al bot.", "alert");
+      logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "alert");
       qrcodeTerminal.generate(u.qr, { small: true });
       await options.onQr?.(u.qr);
     }
@@ -558,10 +559,9 @@ export async function connectToWhatsApp(
         phone_number: botPhoneNumber,
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
-
       resetReconnectAttempts(sessionName);
       pairingRetryAttempts.delete(sessionName);
-      connectionLog(`WhatsApp conectado correctamente. JID: ${mainNum}`, "alert");
+      logInfo(`El Usuario ${chalk.bold(botName)} con ${chalk.bold(mainNum)} vinculado con exito.`, "success");
       await options.onConnected?.();
 
       void getBotGroups(extendedSock).then((botGroups) => {
@@ -591,11 +591,11 @@ export async function connectToWhatsApp(
       if (hasConnected) db.setBot(logoutBotJid, { status: "offline" });
       activeSubBots.delete(logoutBotJid);
       subBotActivity.delete(logoutBotJid);
-      connectionLog("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
+      logInfo("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
 
       if (!isSubBot) {
         globalThis.mainSocket = null;
-        connectionLog("Iniciando nuevamente el menú de vinculación del bot principal...", "alert");
+        logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "alert");
         void connectToWhatsApp(sessionName, false);
       }
       return;
@@ -615,7 +615,7 @@ export async function connectToWhatsApp(
     safelyDestroySocket(extendedSock, error);
     await closeAuthStateSafely();
 
-    connectionLog(
+    logInfo(
       `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}`,
       statusCode === 0 ? "warn" : "error",
     );
@@ -641,7 +641,7 @@ export async function connectToWhatsApp(
 
       if (retryAttempts < 1) {
         pairingRetryAttempts.set(sessionName, retryAttempts + 1);
-        connectionLog(
+        logInfo(
           "Sesión rechazada (401). Se limpió la carpeta y se intentará vincular una vez más con llaves nuevas.",
           "alert",
         );
@@ -650,7 +650,7 @@ export async function connectToWhatsApp(
       }
 
       pairingRetryAttempts.delete(sessionName);
-      connectionLog(
+      logInfo(
         "WhatsApp volvió a rechazar la sesión (401). Espera antes de volver a intentar.",
         "alert",
       );
@@ -667,7 +667,7 @@ export async function connectToWhatsApp(
       await removeSessionFolder(true, sessionName);
       db.deleteBot(sessionName);
       await options.onPairingExpired?.();
-      connectionLog(
+      logInfo(
         "Vinculación del subbot detenida definitivamente; no se solicitará un QR de respaldo.",
         "alert",
       );
@@ -699,7 +699,7 @@ export async function connectToWhatsApp(
     if (isTransientDisconnect && !shouldResetSession) {
       const retryCount = registerReconnectAttempt(sessionName);
       const delayMs = Math.min(2000 * retryCount, 10000);
-      connectionLog(
+      logInfo(
         `Desconexión temporal detectada (Código: ${statusCode}). Reconectando socket automáticamente...`,
         "warn",
       );
@@ -709,28 +709,28 @@ export async function connectToWhatsApp(
 
     if (shouldResetSession) {
       if (isNotRegistered) {
-        connectionLog("La vinculación fue interrumpida, expiró o la IP está bloqueada.", "alert");
+        logInfo("La vinculación fue interrumpida, expiró o la IP está bloqueada.", "alert");
       } else {
-        connectionLog("La sesión no es válida o fue desvinculada por WhatsApp.", "alert");
+        logInfo("La sesión no es válida o fue desvinculada por WhatsApp.", "alert");
       }
 
-      connectionLog("Limpiando credenciales y reiniciando el proceso de vinculación...", "warn");
+      logInfo("Limpiando credenciales y reiniciando el proceso de vinculación...", "warn");
       await removeSessionFolder(isSubBot, sessionName);
 
-      connectionLog("Iniciando nuevo proceso de vinculación en 3 segundos...", "warn");
+      logInfo("Iniciando nuevo proceso de vinculación en 3 segundos...", "warn");
       scheduleReconnect(3000, sessionName, isSubBot, options);
       return;
     }
 
     const retryCount = registerReconnectAttempt(sessionName);
     if (retryCount >= MAX_MAIN_RECONNECT_ATTEMPTS) {
-      connectionLog("Se alcanzó el máximo de reintentos. Reiniciando emparejamiento...", "alert");
+      logInfo("Se alcanzó el máximo de reintentos. Reiniciando emparejamiento...", "alert");
       await removeSessionFolder(isSubBot, sessionName);
       resetReconnectAttempts(sessionName);
       return;
     }
 
-    connectionLog(
+    logInfo(
       `Conexión interrumpida. Reconectando en 3 segundos... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
       "warn",
     );
@@ -800,7 +800,7 @@ export async function connectToWhatsApp(
           },
         );
       } catch (error) {
-        connectionLog(`Error al procesar mensaje: ${String(error)}`, "error");
+        logInfo(`Error al procesar mensaje: ${String(error)}`, "error");
       }
     }
   });
@@ -878,7 +878,7 @@ export async function connectToWhatsApp(
 
         await sock.sendMessage(id, { text, mentions: participantJids });
       } catch (error) {
-        connectionLog(
+        logInfo(
           `Error en evento de participantes del grupo: ${String(error)}`,
           "error",
         );

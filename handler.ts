@@ -309,6 +309,8 @@ async function handleMessageInternal(
   activeBotsLive: ExtendedWASocket[] = [],
   runtimeOptions: HandlerOptions = {},
 ) {
+  const receivedAt = performance.now();
+
   try {
     const config = {
       prefix: globalThis.DEFAULT_PREFIXES ?? ["."],
@@ -837,6 +839,7 @@ async function handleMessageInternal(
         pushName: msg.pushName,
         groupMetadata: groupMeta ? { subject: groupName || undefined } : null,
         sock: { isSubBot: Boolean(sock?.isSubBot), subBotId: sock?.subBotId },
+        receivedAt,
       });
     }
 
