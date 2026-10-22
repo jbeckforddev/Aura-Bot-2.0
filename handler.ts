@@ -66,7 +66,7 @@ import type {
 
 export type { ContactMetadata, HandlerConfig, HandlerLogger, HandlerOptions };
 
-const groupCache = new LRUCache<string, GroupMetadata>({
+export const GROUP_METADATA_CACHE = new LRUCache<string, GroupMetadata>({
   max: 150,
   ttl: 5 * 60 * 1000,
 });
@@ -75,8 +75,6 @@ const processedGroupMessages = new LRUCache<string, true>({
   max: 20_000,
   ttl: 2 * 60 * 1000,
 });
-
-const GROUP_METADATA_CACHE = groupCache;
 
 const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
   max: 500,
@@ -229,8 +227,8 @@ export async function getGroupMetadata(
 }
 
 export function invalidateGroupCache(groupJid: string) {
-  groupCache.delete(groupJid);
-  groupCache.delete(jidNormalizedUser(groupJid));
+  GROUP_METADATA_CACHE.delete(groupJid);
+  GROUP_METADATA_CACHE.delete(jidNormalizedUser(groupJid));
 }
 
 async function resolveLid(
@@ -526,14 +524,14 @@ async function handleMessageInternal(
     let groupMeta: GroupMetadata | null = null;
 
     if (isGroup) {
-      if (groupCache.has(from)) {
-        groupMeta = groupCache.get(from);
+      if (GROUP_METADATA_CACHE.has(from)) {
+        groupMeta = GROUP_METADATA_CACHE.get(from);
         groupName = groupMeta?.subject || from;
       } else {
         try {
           groupMeta = await sock.groupMetadata(from);
           groupName = groupMeta?.subject || from;
-          groupCache.set(from, groupMeta);
+          GROUP_METADATA_CACHE.set(from, groupMeta);
         } catch {
           groupName = from;
         }
@@ -947,7 +945,7 @@ async function handleMessageInternal(
       isBotAdmin,
       isBotUser,
       resolveLid: (lidJid: string) => resolveLid(lidJid, groupMeta, sock),
-      clearGroupCache: () => groupCache.delete(from),
+      clearGROUP_METADATA_CACHE: () => GROUP_METADATA_CACHE.delete(from),
       reply: async (content: ReplyContent) => {
         const managesPresence = !commandPresenceActive;
         if (managesPresence) {

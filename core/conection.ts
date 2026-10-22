@@ -18,6 +18,7 @@ import {
   handleMessage,
   invalidateGroupCache,
   getGroupMetadata,
+  GROUP_METADATA_CACHE,
 } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
 import { logInfo, pairingLog } from "./logger.ts";
@@ -55,6 +56,8 @@ let waWebVersionExpiresAt = 0;
 
 const activeSubBots = new Map<string, ExtendedWASocket>();
 const subBotActivity = new Map<string, number>();
+
+export const GroupCache = new LRUCache({ ttl: 5 * 60, ttlAutopurge: true })
 
 function createBoundedCacheStore(max: number, ttl: number) {
   const cache = new LRUCache<string, any>({ max, ttl });
@@ -342,6 +345,7 @@ export async function connectToWhatsApp(
 
   const sock = makeWASocket({
     ...(version ? { version } : {}),
+    shouldSyncHistoryMessage: () => false,
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger, signalKeyCache),
@@ -360,6 +364,7 @@ export async function connectToWhatsApp(
     generateHighQualityLinkPreview: false,
     retryRequestDelayMs: 250,
     maxMsgRetryCount: 3,
+    cachedGroupMetadata: async (jid) => GROUP_METADATA_CACHE.get(jid)
   });
 
   const extendedSock = sock as ExtendedWASocket;
@@ -842,7 +847,6 @@ export async function connectToWhatsApp(
     async ({ id, participants, action }) => {
       if (!id) return;
       invalidateGroupCache(id);
-
       if (
         !Array.isArray(participants) ||
         (action !== "add" && action !== "remove")

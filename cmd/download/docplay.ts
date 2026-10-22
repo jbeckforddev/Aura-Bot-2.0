@@ -140,7 +140,7 @@ async function obtenerAudio(
     signal: AbortSignal.timeout(60_000),
   });
   if (!response.ok) {
-    throw new Error(`converter respondió ${response.status}`);
+    throw new Error(`> Converter Error\nNo pude descargar el audio el proveedor del audio me rechazo la solicitud con *Estado HTTP: ${response.status}*.\nIntente con otro.`);
   }
 
   const data = (await response.json()) as ConverterResponse;

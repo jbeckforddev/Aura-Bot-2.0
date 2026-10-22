@@ -2,8 +2,6 @@ import { displayBanner, logInfo } from "./core/logger.ts";
 import v8 from "node:v8";
 
 const MAX_SIZE_OF_RAM = 512
-
-// ---------------------------------------------
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";

@@ -120,9 +120,9 @@ async function obtenerAudio(
 ): Promise<{ url: string; filename: string }> {
   const key = await obtenerKey(videoId);
   const body = new URLSearchParams({
-    link: `https://youtu.be/${videoId}`,
+    link: `https://youtube.com/watch?v=${videoId}`,
     format: "mp3",
-    audioBitrate: "128",
+    audioBitrate: "256",
     videoQuality: "720",
     filenameStyle: "pretty",
     vCodec: "h264",
@@ -141,7 +141,7 @@ async function obtenerAudio(
     signal: AbortSignal.timeout(60_000),
   });
   if (!response.ok) {
-    throw new Error(`converter respondió ${response.status}`);
+    throw new Error(`> Converter Error\nNo pude descargar el audio el proveedor del audio me rechazo la solicitud con *Estado HTTP: ${response.status}*.\nIntente con otro.`);
   }
 
   const data = (await response.json()) as ConverterResponse;
@@ -286,7 +286,7 @@ export default {
       const info = directVideoId
         ? results.find((video) => video.id === directVideoId)
         : results[0];
-
+ 
       if (!info && !directVideoId) {
         await react("❌");
         return reply(t("cmd_sin_resultados_aafe1c07"));

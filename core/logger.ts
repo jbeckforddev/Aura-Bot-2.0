@@ -54,10 +54,11 @@ export function cmdLog({
 
   const commandText = (text ?? "").slice(prefix?.length ?? 0).trimStart();
   const rawArgs = commandText.slice(cmdName.length).trim();
-  const safeArgs = rawArgs.length > 45 ? `${rawArgs.substring(0, 25)}...` : rawArgs;
+  const safeArgs = rawArgs.length > 20 ? `${rawArgs.substring(0, 25)}...` : rawArgs;
   const argsDisplay = safeArgs ? chalk.gray(safeArgs) : chalk.dim("{Sin argumentos}");
 
   const timestamp = new Date().toLocaleString("es-CR", {hour12: false});
+  const cmd = prefix + cmdName
 
   console.log(chalk.cyan("╭───────────────────────────────────────────────╮"));
   console.log(`${chalk.cyan("│")} ${chalk.white.bold("Bot:")}       ${chalk.blue(`${botName} (${botNumber})`)}`,);
@@ -67,7 +68,7 @@ export function cmdLog({
   console.log(`${chalk.cyan("│")} ${chalk.white.bold("Fecha:")}     ${chalk.magenta(timestamp)}`);
   console.log(`${chalk.cyan("│")} ${chalk.white.bold("Tiempo:")}    ${chalk.cyan(`${elapsedMs}ms`)}`);
   console.log(chalk.cyan("├───────────────────────────────────────────────┤"));
-  console.log(`${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${cmdName}`)} ${chalk.gray(`${argsDisplay}`)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${cmd}`)} ${chalk.gray(`${argsDisplay}`)}`);
   console.log(chalk.cyan("╰───────────────────────────────────────────────╯"));
 }
 
