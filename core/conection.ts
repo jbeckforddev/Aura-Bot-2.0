@@ -42,8 +42,8 @@ export const logger = pino({ level: "silent" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const HIBERNATION_INACTIVITY_MS = 6 * 60 * 60 * 1000;
-const HIBERNATION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const HIBERNATION_INACTIVITY_MS = 3 * 60 * 60 * 1000;
+const HIBERNATION_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
@@ -118,6 +118,23 @@ const hibernationInterval = setInterval(() => {
 }, HIBERNATION_CHECK_INTERVAL_MS);
 
 hibernationInterval.unref?.();
+
+
+const socketGarbageCollector = setInterval(() => {
+  for (const [_jid, sock] of activeSubBots.entries()) {
+    try {
+      if ((sock as any).user) {
+        const receiver = (sock.ws as any)?._receiver;
+        if (receiver) {
+          receiver._bufferedBytes = 0;
+        }
+      }
+    } catch {}
+  }
+}, 15 * 60 * 1000); // Ejecutar cada 15 minutos
+
+socketGarbageCollector.unref?.();
+
 
 function getWaWebVersion(): Promise<[number, number, number]> {
   if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
@@ -220,17 +237,19 @@ function getBotDisplayName(
 
 async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
   try {
-    const participating = await sock.groupFetchAllParticipating?.();
+    let participating = await sock.groupFetchAllParticipating?.();
     if (!participating) return [];
+
     const keys = Object.keys(participating).filter((jid) => jid.endsWith("@g.us"));
-    for (const k of Object.keys(participating)) {
-      delete participating[k];
-    }
+
+    (participating as undefined) = null;
     return keys;
-  } catch {
+  } catch (err: unknown) {
+    logInfo(`No se pudo obtener el JID del grupo: ${err}`, "error")
     return [];
   }
 }
+
 
 const botStartTime = Math.floor(Date.now() / 1000);
 

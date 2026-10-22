@@ -2,11 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import {
-  generateWAMessageFromContent,
-  prepareWAMessageMedia,
-  type proto,
-} from "baileys";
+import { generateWAMessageFromContent, prepareWAMessageMedia, type proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { getActiveSubBots } from "../../core/subbotManager.ts";
 import { resolveBotType } from "../../core/botType.ts";
@@ -14,7 +10,6 @@ import { getPlugins } from "../../core/cmdLoader.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
-
 
 const mediaCacheMap = new Map<string, any>();
 
@@ -89,13 +84,13 @@ export default {
       botRecord?.bot_type ?? botRecord?.data?.bot_type,
       sock.isSubBot,
     );
-    
+
     const botVersion = "2.5";
     const serverHost = getServerName();
     const platform = `${os.platform()} (${os.arch()})`;
     const memory = getMemoryInfo();
     const ramPercent = memory.total > 0 ? ((memory.used / memory.total) * 100).toFixed(1) : "0.0";
-    
+
     // Conteo de comandos hiper-rápido desde la memoria
     const pluginsMap = getPlugins();
     const uniqueCommands = new Set(pluginsMap.values()).size;
@@ -148,7 +143,7 @@ export default {
 
     if (!imgBanner && (customBannerBuffer || fs.existsSync(bannerSourcePath))) {
       try {
-        const mediaPayload = customBannerBuffer || fs.readFileSync(bannerSourcePath);
+        const mediaPayload = customBannerBuffer || fs.createReadStream(bannerSourcePath);
         const mediaType = isGif ? { video: mediaPayload } : { image: mediaPayload };
 
         const prepared = await prepareWAMessageMedia(mediaType, {

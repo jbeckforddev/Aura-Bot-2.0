@@ -4,7 +4,7 @@ export type CmdLogInput = {
   numeroReal?: string | null;
   receivedAt: number;
   rango?: string | null;
-  commandName?: string | null;
+  cmdName?: string | null;
   isGroup?: boolean;
   text?: string | null;
   jidRemitente?: string | null;
@@ -35,35 +35,39 @@ export async function displayBanner() {
 
 export function cmdLog({
   rango,
-  commandName,
+  cmdName,
   text,
   pushName,
   groupMetadata,
   sock,
   receivedAt,
+  prefix,
 }: CmdLogInput) {
-  if (!commandName) return;
+  if (!cmdName) return;
 
   const elapsedMs = Math.round(performance.now() - receivedAt);
   const nombreUsuario = pushName || "Usuario";
   const botName = sock?.isSubBot ? "Sub-Bot" : "Bot";
   const botNumber = sock?.subBotId ? `+${sock.subBotId}` : "Principal";
   const groupName = groupMetadata?.subject || "Chat privado";
-  const commandText = text ? String(text).trim() : "{ Sin argumentos }";
-  const timestamp = new Date().toLocaleString("es-CR", {
-    timeZone: "America/Costa_Rica",
-    hour12: false,
-  });
+
+
+  const commandText = (text ?? "").slice(prefix?.length ?? 0).trimStart();
+  const rawArgs = commandText.slice(cmdName.length).trim();
+  const safeArgs = rawArgs.length > 45 ? `${rawArgs.substring(0, 25)}...` : rawArgs;
+  const argsDisplay = safeArgs ? chalk.gray(safeArgs) : chalk.dim("{Sin argumentos}");
+
+  const timestamp = new Date().toLocaleString("es-CR", {hour12: false});
 
   console.log(chalk.cyan("╭───────────────────────────────────────────────╮"));
-  console.log(`${chalk.cyan("│")} ${chalk.gray("🤖\u00A0Bot:")}       ${chalk.blue(`${botName} (${botNumber})`)}`,);
-  console.log(`${chalk.cyan("│")} ${chalk.gray("👤\u00A0Usuario:")}   ${chalk.white(`${nombreUsuario}`)}`);
-  console.log(`${chalk.cyan("│")} ${chalk.gray("🛡️\u00A0Rango:")}     ${chalk.yellow(rango || "USUARIO")}`);
-  console.log(`${chalk.cyan("│")} ${chalk.gray("👥\u00A0Grupo:")}     ${chalk.green(groupName)}`);
-  console.log(`${chalk.cyan("│")} ${chalk.gray("🕒\u00A0Fecha:")}     ${chalk.magenta(timestamp)}`);
-  console.log(`${chalk.cyan("│")} ${chalk.gray("⌛\u00A0Tiempo:")}    ${chalk.cyan(`${elapsedMs}ms`)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Bot:")}       ${chalk.blue(`${botName} (${botNumber})`)}`,);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Usuario:")}   ${chalk.white(`${nombreUsuario}`)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Rango:")}     ${chalk.yellow(rango || "USUARIO")}`);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Grupo:")}     ${chalk.green(groupName)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Fecha:")}     ${chalk.magenta(timestamp)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.white.bold("Tiempo:")}    ${chalk.cyan(`${elapsedMs}ms`)}`);
   console.log(chalk.cyan("├───────────────────────────────────────────────┤"));
-  console.log(`${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${commandName}`)} ${chalk.gray(`${commandText}`)}`);
+  console.log(`${chalk.cyan("│")} ${chalk.cyan.bold("COMANDO")} ${chalk.white(`> ${cmdName}`)} ${chalk.gray(`${argsDisplay}`)}`);
   console.log(chalk.cyan("╰───────────────────────────────────────────────╯"));
 }
 

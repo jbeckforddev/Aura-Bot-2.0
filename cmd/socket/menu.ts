@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, createReadStream } from "node:fs";
 import path from "node:path";
 import type { proto } from "baileys";
 import type { CommandPlugin } from "../../types/commands.d.ts";
@@ -190,7 +190,7 @@ export default {
         : null) ??
       botRecord?.data?.customAudio ??
       null;
-    const customBannerBuffer = customBanner?.base64
+    const customBannerPath = customBanner?.base64
       ? Buffer.from(customBanner.base64, "base64")
       : null;
     const resolvedCustomPath = customBanner?.path
@@ -198,7 +198,7 @@ export default {
       : null;
     if (
       (resolvedCustomPath && existsSync(resolvedCustomPath)) ||
-      customBannerBuffer?.length
+      customBannerPath?.length
     ) {
       bannerPath =
         resolvedCustomPath ||
@@ -210,11 +210,11 @@ export default {
 
     let imgBanner: CachedMediaMessage | undefined =
       mediaCacheMap.get(bannerPath);
-    if (!imgBanner && (customBannerBuffer?.length || existsSync(bannerPath))) {
+    if (!imgBanner && (customBannerPath?.length || existsSync(bannerPath))) {
       try {
         const mediaType = isGif
-          ? { video: customBannerBuffer || readFileSync(bannerPath) }
-          : { image: customBannerBuffer || readFileSync(bannerPath) };
+          ? { video: customBannerPath || createReadStream(bannerPath) }
+          : { image: customBannerPath || createReadStream(bannerPath) };
 
         const prepared = await prepareWAMessageMedia(mediaType, {
           upload: sock.waUploadToServer,
@@ -281,7 +281,7 @@ export default {
         sock.sendMessage(
           remoteJid,
           {
-            audio: readFileSync(customAudio.path),
+            audio: createReadStream(customAudio.path),
             mimetype: "audio/ogg; codecs=opus",
             ptt: true,
           },

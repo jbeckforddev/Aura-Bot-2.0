@@ -832,7 +832,8 @@ async function handleMessageInternal(
               : isAdmin
                 ? "ADMIN"
                 : "USUARIO",
-        commandName: cmdName,
+        cmdName,
+        prefix: usedPrefix,
         isGroup,
         text: body,
         jidRemitente: sender,

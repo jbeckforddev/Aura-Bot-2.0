@@ -1,6 +1,7 @@
 import DataBase from "better-sqlite3";
 import { mkdirSync, existsSync } from "fs";
 import "../config.ts";
+import { logInfo } from "../core/logger.ts";
 import { resolveBotType } from "../core/botType.ts";
 import { SUPPORTED_LANGUAGES } from "../src/langs/index.ts";
 import type {
@@ -55,8 +56,10 @@ db_instance.pragma("journal_mode = WAL");
 db_instance.pragma("synchronous = NORMAL");
 db_instance.pragma("foreign_keys = ON");
 db_instance.pragma("wal_checkpoint = 1000");
-db_instance.pragma("busy_timeout = 2000");
-db_instance.pragma("cache_size = -4000");
+db_instance.pragma("busy_timeout = 5000");
+db_instance.pragma("cache_size = -2000");
+db_instance.pragma("temp_store = MEMORY");
+db_instance.pragma("mmap_size = 0");
 
 db_instance.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -1714,8 +1717,15 @@ export const db: IDatabase = {
 export function checkpointDb() {
   try {
     db_instance.pragma("wal_checkpoint(PASSIVE)");
+
+    (db_instance as any).unprepareAll?.();
+
+    userLanguageCache.clear();
+    groupLanguageCache.clear();
+
+    warmLanguageCaches();
   } catch {
-    // Ignora errores si la base de datos está ocupada
+    logInfo("Base de Datos Ocupada", "error")
   }
 }
 

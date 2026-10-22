@@ -1,16 +1,18 @@
+import { displayBanner, logInfo } from "./core/logger.ts";
+import v8 from "node:v8";
+
+const MAX_SIZE_OF_RAM = 512
+
+// ---------------------------------------------
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import inspector from "node:inspector";
 import "./config.ts";
 import { connectToWhatsApp } from "./core/conection.ts";
 import { startSavedSubBots } from "./core/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
-import { displayBanner, logInfo } from "./core/logger.ts";
 import * as AuraDB from "./database/AuraDB.ts";
-
 const TMP_DIR = path.resolve("./cache");
-const PROFILES_DIR = path.join(TMP_DIR, "profiles");
 
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 process.env.TMPDIR = TMP_DIR;
@@ -50,58 +52,30 @@ async function cleanCache(maxAgeMs: number = 0) {
 const maintenanceInterval = setInterval(() => {
   void cleanCache(30 * 60 * 1000);
   AuraDB.checkpointDb();
-  if (typeof (globalThis as any).gc === "function") {
+
+  const currentRss = process.memoryUsage().rss / 1024 / 1024;
+
+  if (currentRss > (MAX_SIZE_OF_RAM * 0.8)) {
     try {
-      (globalThis as any).gc();
-    } catch {}
+      logInfo(`[RAM] RSS Elevado (${currentRss.toFixed(2)} MB). Forzando purga nativa...`, "warn");
+      const v8Native = v8 as any;
+      if (typeof v8Native.getHeapSnapshot === "function") {
+        const stream = v8Native.getHeapSnapshot();
+        stream.resume();
+      }
+      v8Native.takeCoverageProfile?.();
+      if (typeof v8Native.adjustAmountOfExternalAllocatedMemory === "function") {
+        v8Native.adjustAmountOfExternalAllocatedMemory(-1024 * 1024 * 10);
+      }
+
+    } catch (error) {
+      logInfo(`Error en purga de RAM: ${String(error)}`, "error");
+    }
   }
-}, 15 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 maintenanceInterval.unref?.();
 
-function startCpuProfile() {
-  if (process.env.AURA_DEBUG_PROFILE !== "true") return;
-
-  const session = new inspector.Session();
-  session.connect();
-
-  session.post("Profiler.enable", (enableError) => {
-    if (enableError) {
-      session.disconnect();
-      logInfo(`No se pudo habilitar el perfil CPU: ${enableError.message}`, "error");
-      return;
-    }
-
-    session.post("Profiler.start", (startError) => {
-      if (startError) {
-        session.disconnect();
-        logInfo(`No se pudo iniciar el perfil CPU: ${startError.message}`, "error");
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        session.post("Profiler.stop", async (stopError, result) => {
-          session.disconnect();
-          if (stopError) {
-            logInfo(`No se pudo guardar el perfil CPU: ${stopError.message}`, "error");
-            return;
-          }
-
-          try {
-            await fsp.mkdir(PROFILES_DIR, { recursive: true });
-            const profilePath = path.join(PROFILES_DIR, `cpu-${Date.now()}.cpuprofile`);
-            await fsp.writeFile(profilePath, JSON.stringify(result.profile));
-            logInfo(`Perfil CPU guardado en ${profilePath}`, "alert");
-          } catch (error) {
-            logInfo(`No se pudo escribir el perfil CPU: ${String(error)}`, "error");
-          }
-        });
-      }, 45_000);
-
-      timer.unref?.();
-    });
-  });
-}
 
 let isShuttingDown = false;
 
@@ -136,8 +110,6 @@ process.on("uncaughtException", (error) => {
 
 async function mainBot() {
   await cleanCache(0);
-  startCpuProfile();
-
   await Promise.all([
     displayBanner(),
     (async () => {
