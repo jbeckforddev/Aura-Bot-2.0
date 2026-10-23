@@ -96,7 +96,7 @@ async function getAlyaCoreAudio(link: string): Promise<AlyaCoreData & { dl: stri
   const controller = new AbortController();
   const signal = AbortSignal.any([
     controller.signal,
-    AbortSignal.timeout(15000),
+    AbortSignal.timeout(60000),
   ]);
 
   try {

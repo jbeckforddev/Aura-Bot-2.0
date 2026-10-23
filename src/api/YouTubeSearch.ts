@@ -2,8 +2,8 @@ import undici from "undici";
 
 const HEADER =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
-const REQUEST_TIMEOUT_MS = 10000;
-const LIKES_TIMEOUT_MS = 2500;
+const REQUEST_TIMEOUT_MS = 60000;
+const LIKES_TIMEOUT_MS = 10000;
 type YouTubeVideo = {
   id: string;
   title: string;
