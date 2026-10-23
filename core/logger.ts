@@ -20,7 +20,7 @@ export type CmdLogInput = {
 };
 
 export async function displayBanner() {
-  console.clear();
+  //console.clear();
   const banner = `
     \t${chalk.hex("#e9d5ff").bold("  █████╗ ██╗   ██╗██████╗  █████╗ ")}
     \t${chalk.hex("#c084fc").bold(" ██╔══██╗██║   ██║██╔══██╗██╔══██╗")}

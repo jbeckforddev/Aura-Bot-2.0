@@ -7,7 +7,7 @@
   "scripts": {
     "start": "tsx main.ts",
     "prev": "node dist/main.js",
-    "test": "tsx --watch main.ts",
+    "test": "tsx --watch --inspect main.ts",
     "build": "tsc --noEmit false --outDir dist",
     "postinstall": "patch-package",
     "format": "prettier --write .",

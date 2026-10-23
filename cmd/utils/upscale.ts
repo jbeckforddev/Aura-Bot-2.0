@@ -37,7 +37,9 @@ export default {
       form.append("scale", String(scale));
       form.append(
         "file",
-        new Blob([buffer], { type: source.mimetype || "image/jpeg" }),
+        new Blob([Uint8Array.from(buffer).buffer as ArrayBuffer], {
+          type: source.mimetype || "image/jpeg",
+        }),
         source.mimetype?.includes("png") ? "image.png" : "image.jpg",
       );
       const response = await fetch(
