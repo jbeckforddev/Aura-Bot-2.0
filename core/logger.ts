@@ -71,7 +71,18 @@ export function cmdLog({
 
 export function logInfo(
   message: string,
-  level: "info" | "warn" | "error" | "alert" | "pairing" |"success" = "info",
+  level:
+    | "info"
+    | "warn"
+    | "error"
+    | "alert"
+    | "pairing"
+    | "success"
+    | "SubBotPairing"
+    | "SubBotWarning"
+    | "SubBotError"
+    | "SubBotInfo"
+    | "SubBotSuccess" = "info",
 ): void {
   const prefixMap = {
     info: chalk.bgCyan.bold("[INFO]"),
@@ -80,6 +91,11 @@ export function logInfo(
     success: chalk.bgGreen.bold("[SUCCESS]"),
     alert: chalk.bgHex("#ff8000").bold("[ALERT]"),
     pairing: chalk.bgBlue.bold("[PAIRING]"),
+    SubBotPairing: chalk.bgMagenta.bold("[SUB-BOT PAIRING]"),
+    SubBotWarning: chalk.bgYellowBright.bold("[SUB-BOT WARNING]"),
+    SubBotError: chalk.bgRedBright.bold("[SUB-BOT ERROR]"),
+    SubBotInfo: chalk.bgCyanBright.bold("[SUB-BOT INFO]"),
+    SubBotSuccess: chalk.bgGreenBright.bold("[SUB-BOT SUCCESS]"),
   };
   console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }
