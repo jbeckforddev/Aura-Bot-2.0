@@ -243,6 +243,8 @@ export async function getGroupMetadata(
 export function invalidateGroupCache(groupJid: string) {
   GROUP_METADATA_CACHE.delete(groupJid);
   GROUP_METADATA_CACHE.delete(jidNormalizedUser(groupJid));
+  GROUP_DB_CACHE.delete(groupJid);
+  GROUP_DB_CACHE.delete(jidNormalizedUser(groupJid));
 }
 
 async function resolveLid(

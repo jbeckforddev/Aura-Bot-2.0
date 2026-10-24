@@ -3,6 +3,7 @@ import type { DatabaseBot } from "../../types/database.d.ts";
 import type { proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
+import { invalidateGroupCache } from "../../handler.ts";
 
 type BotParticipant = {
   id?: string;
@@ -115,6 +116,7 @@ export default {
       }
 
       db.setPrimary(from, "");
+      invalidateGroupCache(from);
       return reply({
         text: t("socketPrimaryDeleted", {
           label: fytBold(t("socketPrimaryLabel")),
@@ -146,6 +148,7 @@ export default {
     }
 
     db.setPrimary(from, targetBot);
+    invalidateGroupCache(from);
     const mentionJid = await getBotMention(
       selectedBot || db.getBotById?.(targetBot),
       groupMeta?.participants || [],

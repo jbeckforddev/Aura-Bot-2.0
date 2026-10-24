@@ -20,31 +20,26 @@ import {
   getGroupMetadata,
   GROUP_METADATA_CACHE,
 } from "../handler.ts";
-import { getPlugins } from "./cmdLoader.ts";
-import { logInfo, pairingMenuLog } from "./logger.ts";
+import { getPlugins } from "../core/cmdLoader.ts";
+import { logInfo, pairingMenuLog } from "../core/logger.ts";
 import { db } from "../database/AuraDB.ts";
-import { resolveBotType } from "./botType.ts";
+import { resolveBotType } from "../core/botType.ts";
 import {
   handleAntilink,
   handleGroupCall,
   isPrimaryBotForGroup,
-} from "./groupModeration.ts";
+} from "../core/groupModeration.ts";
 
 import type {
   ExtendedWASocket,
-  ConnectionOptions,
   GroupCallEvent,
 } from "../types/index";
 import { t } from "../src/langs/index.ts";
-
-export type { ConnectionOptions };
 
 export const logger = pino({ level: "silent" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const HIBERNATION_INACTIVITY_MS = 3 * 60 * 60 * 1000;
-const HIBERNATION_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
@@ -53,9 +48,6 @@ const connectionsInProgress = new Set<string>();
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
-
-const activeSubBots = new Map<string, ExtendedWASocket>();
-const subBotActivity = new Map<string, number>();
 
 export const GroupCache = new LRUCache({max: 1000, ttl: 5 * 60, ttlAutopurge: true })
 
@@ -110,49 +102,13 @@ async function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Erro
   } catch {}
 }
 
-async function removeSessionFolder(isSubBot: boolean, sessionName: string) {
-  const authBase = isSubBot
-    ? (globalThis.subBotSession ?? "./sessions/subs")
-    : (globalThis.mainBotSession ?? "./sessions");
-  const authFolder = path.join(authBase, sessionName);
+async function removeSessionFolder(sessionName: string) {
+  const authFolder = path.join(
+    globalThis.mainBotSession ?? "./sessions",
+    sessionName,
+  );
   await rm(authFolder, { recursive: true, force: true }).catch(() => undefined);
 }
-
-const hibernationInterval = setInterval(async () => {
-  const now = Date.now();
-  for (const [jid, lastActive] of subBotActivity.entries()) {
-    if (now - lastActive > HIBERNATION_INACTIVITY_MS) {
-      const targetSock = activeSubBots.get(jid);
-      activeSubBots.delete(jid);
-      subBotActivity.delete(jid);
-
-      if (targetSock) {
-        logInfo(`Hibernando subbot ${jid} por inactividad.`, "warn");
-        targetSock.manualLogout = true;
-        await safelyDestroySocket(targetSock, new Error("Hibernación por inactividad"));
-        db.setBot(jid, { status: "offline" });
-      }
-    }
-  }
-}, HIBERNATION_CHECK_INTERVAL_MS);
-
-hibernationInterval.unref?.();
-
-
-const socketGarbageCollector = setInterval(() => {
-  for (const [_jid, sock] of activeSubBots.entries()) {
-    try {
-      if ((sock as any).user) {
-        const receiver = (sock.ws as any)?._receiver;
-        if (receiver) {
-          receiver._bufferedBytes = 0;
-        }
-      }
-    } catch {}
-  }
-}, 15 * 60 * 1000); // Ejecutar cada 15 minutos
-
-socketGarbageCollector.unref?.();
 
 
 function getWaWebVersion(): Promise<[number, number, number]> {
@@ -190,13 +146,11 @@ function clearReconnectTimer(sessionName: string) {
 function scheduleReconnect(
   delayMs: number,
   sessionName: string,
-  isSubBot: boolean,
-  options: ConnectionOptions = {},
 ) {
   clearReconnectTimer(sessionName);
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionName);
-    void connectToWhatsApp(sessionName, isSubBot, options);
+    void connectMainBot(sessionName);
   }, delayMs);
   timer.unref?.();
   reconnectTimers.set(sessionName, timer);
@@ -280,11 +234,13 @@ async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
 
 const botStartTime = Math.floor(Date.now() / 1000);
 
-export async function connectToWhatsApp(
+export async function connectMainBot(
   sessionName: string,
-  isSubBot: boolean = false,
-  options: ConnectionOptions = {},
 ) {
+  return connectSocket(sessionName);
+}
+
+async function connectSocket(sessionName: string) {
   if (connectionsInProgress.has(sessionName)) {
     return;
   }
@@ -294,11 +250,10 @@ export async function connectToWhatsApp(
   let authState: Awaited<ReturnType<typeof useSQLiteAuthState>>;
 
   try {
-    const baseSessionDir = isSubBot
-      ? (globalThis.subBotSession ?? "./sessions/subs")
-      : (globalThis.mainBotSession ?? "./sessions");
-
-    const sessionDir = path.join(baseSessionDir, sessionName);
+    const sessionDir = path.join(
+      globalThis.mainBotSession ?? "./sessions",
+      sessionName,
+    );
     await mkdir(sessionDir, { recursive: true });
     authState = await useSQLiteAuthState(sessionDir);
   } catch (error) {
@@ -313,19 +268,10 @@ export async function connectToWhatsApp(
     state.creds && (state.creds.registered || state.creds.me),
   );
 
-  if (isSubBot && !isRegistered && options.allowPairing === false) {
-    await removeSessionFolder(true, sessionName);
-    logInfo(
-      "Sesión de subbot sin credenciales; reconexión detenida sin activar QR.",
-      "alert",
-    );
-    return null;
-  }
+  let pairingMethod: "qr" | "code" | undefined;
+  let pairingPhone = "";
 
-  let pairingMethod = options.pairingMethod;
-  let pairingPhone = normalizePairingPhone(options.pairingPhone || "");
-
-  if (!isRegistered && !isSubBot && !pairingMethod) {
+  if (!isRegistered) {
     logInfo("Selecciona el método de vinculación:" , "pairing");
     pairingMenuLog("1. Código QR (Terminal)\n2. Código de emparejamiento");
     logInfo("Elija el etodo (1 o 2): ", "pairing");
@@ -359,9 +305,9 @@ export async function connectToWhatsApp(
     );
   }
 
-  const signalKeyCache = createBoundedCacheStore(isSubBot ? 300 : 800, 5 * 60 * 1000);
-  const msgRetryCounterCache = createBoundedCacheStore(isSubBot ? 250 : 600, 2 * 60 * 1000);
-  const userDevicesCache = createBoundedCacheStore(isSubBot ? 250 : 600, 5 * 60 * 1000);
+  const signalKeyCache = createBoundedCacheStore(800, 5 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(600, 2 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(600, 5 * 60 * 1000);
 
   const flushSocketCaches = () => {
     signalKeyCache.flushAll();
@@ -393,11 +339,9 @@ export async function connectToWhatsApp(
   });
 
   const extendedSock = sock as ExtendedWASocket;
-  if (!isSubBot) globalThis.mainSocket = extendedSock;
-  extendedSock.isSubBot = isSubBot;
-  extendedSock.subBotId = sessionName;
+  globalThis.mainSocket = extendedSock;
+  extendedSock.isSubBot = false;
   extendedSock.sessionName = sessionName;
-  await options.onSocketCreated?.(extendedSock);
 
   let saveTimer: NodeJS.Timeout | null = null;
   let credentialsDirty = false;
@@ -463,29 +407,7 @@ export async function connectToWhatsApp(
     saveTimer.unref?.();
   });
 
-  let connectionOpened = isRegistered;
   let hasConnected = false;
-  let pairingExpired = false;
-  let pairingTimer: NodeJS.Timeout | null = null;
-
-  const clearPairingTimer = () => {
-    if (!pairingTimer) return;
-    clearTimeout(pairingTimer);
-    pairingTimer = null;
-  };
-
-  if (!isRegistered) {
-    pairingTimer = setTimeout(async () => {
-      if (connectionOpened) return;
-
-      pairingExpired = true;
-      safelyDestroySocket(extendedSock);
-      await closeAuthStateSafely();
-      await removeSessionFolder(isSubBot, sessionName);
-      await options.onPairingExpired?.();
-    }, options.pairingTimeoutMs ?? 60_000);
-    pairingTimer.unref?.();
-  }
 
   const knownGroupJids = new LRUCache<string, true>({
     max: 500,
@@ -503,7 +425,6 @@ export async function connectToWhatsApp(
     if (u.qr && pairingMethod === "qr") {
       logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "pairing");
       qrcodeTerminal.generate(u.qr, { small: true });
-      await options.onQr?.(u.qr);
     }
     if (u.qr && !isRegistered && pairingMethod === "code" && pairingPhone) {
         try {
@@ -512,27 +433,15 @@ export async function connectToWhatsApp(
             const rawCode = await sock.requestPairingCode(cleanPhone);
             const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
             logInfo(`🔑 CÓDIGO: ${code}`, "pairing");
-            await options.onPairingCode?.(code);
 
         } catch (err) {
             logInfo(`Error al solicitar código: ${String(err)}`, "error");
         }
     }
     if (u.connection === "open") {
-      connectionOpened = true;
       hasConnected = true;
-      clearPairingTimer();
       const mainNum = sock.user?.id ?? "desconocido";
       const botJid = jidNormalizedUser(mainNum);
-
-      if (isSubBot) {
-        const prevSock = activeSubBots.get(botJid);
-        if (prevSock && prevSock !== extendedSock) {
-          await safelyDestroySocket(prevSock);
-        }
-        activeSubBots.set(botJid, extendedSock);
-        subBotActivity.set(botJid, Date.now());
-      }
 
       let botId = String(
         (sock.user as unknown as Record<string, unknown>)?.lid || "",
@@ -551,11 +460,7 @@ export async function connectToWhatsApp(
       const botLid = cleanLid(botId);
       const previousBot = db.getBot(botJid);
       const previousBotType = resolveBotType(previousBot?.bot_type);
-      const botType = isSubBot
-        ? "Sub-Bot"
-        : previousBotType === "Prem-Bot"
-          ? "Prem-Bot"
-          : "Principal";
+      const botType = previousBotType === "Prem-Bot" ? "Prem-Bot" : "Principal";
       const botName =
         previousBot?.data?.customBotName && previousBot.bot_name
           ? previousBot.bot_name
@@ -568,7 +473,7 @@ export async function connectToWhatsApp(
         phone_number: botPhoneNumber,
         lid: botLid,
         groups: Array.isArray(previousBot?.groups) ? previousBot.groups : [],
-        isMain: isSubBot ? 0 : 1,
+        isMain: 1,
         bot_type: botType,
         status: "active",
         sessionName,
@@ -584,7 +489,6 @@ export async function connectToWhatsApp(
       resetReconnectAttempts(sessionName);
       pairingRetryAttempts.delete(sessionName);
       logInfo(`El Usuario ${chalk.bold(botName)} con ${chalk.bold(mainNum)} vinculado con exito.`, "success");
-      await options.onConnected?.();
 
       setTimeout(() => {
         void getBotGroups(extendedSock).then((botGroups) => {
@@ -601,27 +505,20 @@ export async function connectToWhatsApp(
       return;
     }
 
-    clearPairingTimer();
     knownGroupJids.clear();
-    await options.onDisconnected?.();
-    if (pairingExpired) return;
 
     if (extendedSock.manualLogout) {
       safelyDestroySocket(extendedSock);
       await closeAuthStateSafely();
-      await removeSessionFolder(isSubBot, sessionName);
+      await removeSessionFolder(sessionName);
 
       const logoutBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : sessionName;
       if (hasConnected) db.setBot(logoutBotJid, { status: "offline" });
-      activeSubBots.delete(logoutBotJid);
-      subBotActivity.delete(logoutBotJid);
       logInfo("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
 
-      if (!isSubBot) {
-        globalThis.mainSocket = null;
-        logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "pairing");
-        void connectToWhatsApp(sessionName, false);
-      }
+      globalThis.mainSocket = null;
+      logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "pairing");
+      void connectMainBot(sessionName);
       return;
     }
 
@@ -651,9 +548,6 @@ export async function connectToWhatsApp(
 
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
     if (disconnectedBotJid) {
-      if (activeSubBots.get(disconnectedBotJid) === extendedSock) {
-        activeSubBots.delete(disconnectedBotJid);
-      }
       if (hasConnected) db.setBot(disconnectedBotJid, { status: "offline" });
     }
 
@@ -661,7 +555,7 @@ export async function connectToWhatsApp(
       clearReconnectTimer(sessionName);
       resetReconnectAttempts(sessionName);
       const retryAttempts = pairingRetryAttempts.get(sessionName) ?? 0;
-      await removeSessionFolder(isSubBot, sessionName);
+      await removeSessionFolder(sessionName);
 
       if (retryAttempts < 1) {
         pairingRetryAttempts.set(sessionName, retryAttempts + 1);
@@ -669,30 +563,13 @@ export async function connectToWhatsApp(
           "Sesión rechazada (401). Se limpió la carpeta y se intentará vincular una vez más con llaves nuevas.",
           "alert",
         );
-        scheduleReconnect(3000, sessionName, isSubBot, options);
+        scheduleReconnect(3000, sessionName);
         return;
       }
 
       pairingRetryAttempts.delete(sessionName);
       logInfo(
         "WhatsApp volvió a rechazar la sesión (401). Espera antes de volver a intentar.",
-        "alert",
-      );
-      await options.onPairingError?.(
-        new Error(
-          "WhatsApp volvió a rechazar el emparejamiento (401). Espera antes de volver a intentar.",
-        ),
-      );
-      return;
-    }
-
-    if (isSubBot && isNotRegistered) {
-      pairingExpired = true;
-      await removeSessionFolder(true, sessionName);
-      db.deleteBot(sessionName);
-      await options.onPairingExpired?.();
-      logInfo(
-        "Vinculación del subbot detenida definitivamente; no se solicitará un QR de respaldo.",
         "alert",
       );
       return;
@@ -727,7 +604,7 @@ export async function connectToWhatsApp(
         `Desconexión temporal detectada (Código: ${statusCode}). Reconectando socket automáticamente...`,
         "warn",
       );
-      scheduleReconnect(delayMs, sessionName, isSubBot, options);
+      scheduleReconnect(delayMs, sessionName);
       return;
     }
 
@@ -739,17 +616,17 @@ export async function connectToWhatsApp(
       }
 
       logInfo("Limpiando credenciales y reiniciando el proceso de vinculación...", "warn");
-      await removeSessionFolder(isSubBot, sessionName);
+      await removeSessionFolder(sessionName);
 
       logInfo("Iniciando nuevo proceso de vinculación en 3 segundos...", "warn");
-      scheduleReconnect(3000, sessionName, isSubBot, options);
+      scheduleReconnect(3000, sessionName);
       return;
     }
 
     const retryCount = registerReconnectAttempt(sessionName);
     if (retryCount >= MAX_MAIN_RECONNECT_ATTEMPTS) {
       logInfo("Se alcanzó el máximo de reintentos. Reiniciando emparejamiento...", "alert");
-      await removeSessionFolder(isSubBot, sessionName);
+      await removeSessionFolder(sessionName);
       resetReconnectAttempts(sessionName);
       return;
     }
@@ -758,7 +635,7 @@ export async function connectToWhatsApp(
       `Conexión interrumpida. Reconectando en 3 segundos... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
       "warn",
     );
-    scheduleReconnect(3000, sessionName, isSubBot, options);
+    scheduleReconnect(3000, sessionName);
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
@@ -767,9 +644,6 @@ export async function connectToWhatsApp(
     }
 
     const connectedBot = sock.user?.id || "";
-    if (isSubBot && connectedBot) {
-      subBotActivity.set(jidNormalizedUser(connectedBot), Date.now());
-    }
 
     for (const msg of messages) {
       if (!msg?.message) continue;
@@ -795,7 +669,7 @@ export async function connectToWhatsApp(
         await handleMessage(
           extendedSock,
           msg,
-          isSubBot ? "SUB" : "MAIN",
+          "MAIN",
           connectedBot || null,
           [],
           {

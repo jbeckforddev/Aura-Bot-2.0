@@ -1,5 +1,5 @@
 import { LRUCache } from "lru-cache";
-import { getActiveSubBots } from "./subbotManager.ts";
+import { getActiveSubBots } from "../connection/subbotManager.ts";
 import type { ExtendedWASocket } from "../types/index.d.ts";
 
 const claimedMessages = new LRUCache<string, true>({

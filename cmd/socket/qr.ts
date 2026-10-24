@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import qr from "qr-image";
-import { requestSubBotLink } from "../../core/subbotManager.ts";
+import { requestSubBotLink } from "../../connection/subbotManager.ts";
 import { IS_SUBBOT_ONLINE } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 

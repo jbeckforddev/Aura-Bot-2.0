@@ -1,5 +1,4 @@
 import type { CommandContext, CommandPlugin } from "../../types/index.d.ts";
-import { forgetActiveSubBot } from "../../core/subbotManager.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
@@ -12,7 +11,6 @@ export default {
   async run({ reply, sock, db }: CommandContext) {
     await reply({ text: t("socketLogoutClosing") });
     sock.manualLogout = true;
-    forgetActiveSubBot(String(sock.sessionName || ""));
 
     try {
       await sock.logout();

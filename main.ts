@@ -3,8 +3,8 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import "./config.ts";
-import { connectToWhatsApp } from "./core/conection.ts";
-import { startSavedSubBots } from "./core/subbotManager.ts";
+import { connectMainBot } from "./connection/MainBotManager.ts";
+import { startSavedSubBots } from "./connection/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import * as AuraDB from "./database/AuraDB.ts";
 const TMP_DIR = path.resolve("./cache");
@@ -104,7 +104,7 @@ async function mainBot() {
   watchPlugins();
 
   logInfo("Conectando a WhatsApp...");
-  await connectToWhatsApp("main", false);
+  await connectMainBot("main");
 
   void startSavedSubBots().catch((error) => {
     logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");

@@ -4,7 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { generateWAMessageFromContent, prepareWAMessageMedia, type proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
-import { getActiveSubBots } from "../../core/subbotManager.ts";
+import { getActiveSubBots } from "../../connection/subbotManager.ts";
 import { resolveBotType } from "../../core/botType.ts";
 import { getPlugins } from "../../core/cmdLoader.ts";
 import type { CommandContext } from "../../types/index.d.ts";
