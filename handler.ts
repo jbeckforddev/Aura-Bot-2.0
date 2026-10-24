@@ -23,7 +23,6 @@ import {
 import { db, lookupUserLanguage, lookupGroupLanguage } from "./database/AuraDB.ts";
 import { resolveBotType } from "./core/botType.ts";
 import { withLocale } from "./src/langs/index.ts";
-import { sendWithRecordingPresence } from "./core/mediaSendUtils.ts";
 import {
   handleGroupStatus,
   handleGroupToxic,
@@ -62,6 +61,7 @@ import type {
   HandlerOptions,
   DatabaseBot,
   DatabaseUser,
+  DatabaseGroup,
 } from "./types/index.d.ts";
 
 export type { ContactMetadata, HandlerConfig, HandlerLogger, HandlerOptions };
@@ -86,6 +86,20 @@ const configuredLidCache = new LRUCache<string, string | null>({
   ttl: 30 * 60 * 1000,
 });
 
+const USER_DB_CACHE = new LRUCache<string, DatabaseUser>({
+  max: 5000,
+  ttl: 10 * 60 * 1000
+});
+
+const GROUP_DB_CACHE = new LRUCache<string, DatabaseGroup>({
+  max: 1000,
+  ttl: 10 * 60 * 1000
+})
+
+const BOT_DB_CACHE = new LRUCache<string, DatabaseBot>({
+  max: 5000,
+  ttl: 10 * 60 * 1000
+});
 const commandCooldowns = new LRUCache<string, number>({ max: 20_000 });
 
 function stripDeviceSuffixFromJid(jid?: string | null): string | null {
@@ -340,7 +354,11 @@ async function handleMessageInternal(
     if (from === "status@broadcast") return;
 
     const isGroup = from.endsWith("@g.us");
-    const groupData = isGroup ? runtimeDb.getGroup(from) : null;
+    let groupData = isGroup ? GROUP_DB_CACHE.get(from) : null;
+    if (isGroup && !groupData) {
+      groupData = runtimeDb.getGroup(from);
+      if (groupData) GROUP_DB_CACHE.set(from, groupData);
+    }
     const groupMessageKey =
       isGroup && !msg.key?.fromMe && msg.key?.id
         ? `${from}:${msg.key.id}:${msg.key.participant || msg.participant || ""}`
@@ -380,8 +398,12 @@ async function handleMessageInternal(
 
     let sender = cleanJid(senderJid);
     const senderLid = cleanJid(senderLidJid);
-    const botJid = cleanJid(sock.user?.id || "");
-    const botRecord: Partial<DatabaseBot> = runtimeDb.getBot?.(botJid) ?? {};
+    const botJid = cleanJid(String(sock.user?.id || ""));
+    let botRecord = BOT_DB_CACHE.get(`bot:${botJid}`);
+    if (!botRecord) {
+      botRecord = (runtimeDb.getBot?.(botJid) ?? {}) as DatabaseBot;
+      BOT_DB_CACHE.set(`bot:${botJid}`, botRecord);
+    }
     const isPrimaryGroupBot = isGroup
       ? isPrimaryBotForGroup(
           sock,
@@ -558,8 +580,11 @@ async function handleMessageInternal(
     const senderNum = sender.split("@")[0];
 
     if (msg.pushName) {
-      const currentUser: Partial<DatabaseUser> =
-        runtimeDb.getUser?.(sender) ?? {};
+      let currentUser = USER_DB_CACHE.get(`user:${sender}`);
+      if (!currentUser) {
+        currentUser = (runtimeDb.getUser?.(sender) ?? {}) as DatabaseUser;
+        USER_DB_CACHE.set(`user:${sender}`, currentUser);
+      }
       const hasResolvedPhone = !sender.endsWith("@lid");
       const nextContact = {
         jid: hasResolvedPhone ? sender : null,
@@ -898,7 +923,6 @@ async function handleMessageInternal(
       );
     }
 
-    let commandPresenceActive = false;
     const stickerContextInfo = stickerCommand
       ? getStickerContextInfo(msg.message)
       : undefined;
@@ -947,16 +971,6 @@ async function handleMessageInternal(
       resolveLid: (lidJid: string) => resolveLid(lidJid, groupMeta, sock),
       clearGROUP_METADATA_CACHE: () => GROUP_METADATA_CACHE.delete(from),
       reply: async (content: ReplyContent) => {
-        const managesPresence = !commandPresenceActive;
-        if (managesPresence) {
-          try {
-            await sock.sendPresenceUpdate("composing", from);
-          } catch (error: unknown) {
-            logger.warn?.(
-              `[${botLabel}] no se pudo activar composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
-            );
-          }
-        }
         const sendable =
           typeof content === "string" ? { text: content } : { ...content };
         if (typeof sendable.text === "string") {
@@ -984,27 +998,7 @@ async function handleMessageInternal(
           }
         };
 
-        if (sendable.audio) {
-          return sendWithRecordingPresence(sock, from, sendReply, (state, error) =>
-            logger.warn?.(
-              `[${botLabel}] no se pudo ${state === "recording" ? "activar" : "detener"} recording: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
-            ),
-          );
-        }
-
-        try {
-          return await sendReply();
-        } finally {
-          if (managesPresence) {
-            try {
-              await sock.sendPresenceUpdate("paused", from);
-            } catch (error: unknown) {
-              logger.warn?.(
-                `[${botLabel}] no se pudo detener composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
-              );
-            }
-          }
-        }
+        return sendReply();
       },
       react: async (emoji: string) => {
         try {
@@ -1277,14 +1271,6 @@ async function handleMessageInternal(
 
     const start = Date.now();
     try {
-      try {
-        await sock.sendPresenceUpdate("composing", from);
-      } catch (error: unknown) {
-        logger.warn?.(
-          `[${botLabel}] no se pudo activar composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
-        );
-      }
-      commandPresenceActive = true;
       await plugin.run(ctx);
       const downloadState = ctx as Record<string, unknown>;
       if (
@@ -1331,15 +1317,6 @@ async function handleMessageInternal(
         const errorDetails =
           e instanceof Error ? e.stack || e.message : String(e);
         await ctx.reply({ text: ERROR_CMD({ cmdName, errorDetails }) });
-      }
-    } finally {
-      commandPresenceActive = false;
-      try {
-        await sock.sendPresenceUpdate("paused", from);
-      } catch (error: unknown) {
-        logger.warn?.(
-          `[${botLabel}] no se pudo detener composing: ${error instanceof Error ? error.message : String(error)} | from: ${from}`,
-        );
       }
     }
   } catch (e: unknown) {

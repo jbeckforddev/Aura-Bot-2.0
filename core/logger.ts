@@ -20,7 +20,7 @@ export type CmdLogInput = {
 };
 
 export async function displayBanner() {
-  //console.clear();
+  console.clear();
   const banner = `
     \t${chalk.hex("#e9d5ff").bold("  █████╗ ██╗   ██╗██████╗  █████╗ ")}
     \t${chalk.hex("#c084fc").bold(" ██╔══██╗██║   ██║██╔══██╗██╔══██╗")}
@@ -50,13 +50,10 @@ export function cmdLog({
   const botName = sock?.isSubBot ? "Sub-Bot" : "Bot";
   const botNumber = sock?.subBotId ? `+${sock.subBotId}` : "Principal";
   const groupName = groupMetadata?.subject || "Chat privado";
-
-
   const commandText = (text ?? "").slice(prefix?.length ?? 0).trimStart();
   const rawArgs = commandText.slice(cmdName.length).trim();
   const safeArgs = rawArgs.length > 20 ? `${rawArgs.substring(0, 25)}...` : rawArgs;
   const argsDisplay = safeArgs ? chalk.gray(safeArgs) : chalk.dim("{Sin argumentos}");
-
   const timestamp = new Date().toLocaleString("es-CR", {hour12: false});
   const cmd = prefix + cmdName
 
@@ -74,20 +71,21 @@ export function cmdLog({
 
 export function logInfo(
   message: string,
-  level: "info" | "warn" | "error" | "alert" | "success" = "info",
-) {
+  level: "info" | "warn" | "error" | "alert" | "pairing" |"success" = "info",
+): void {
   const prefixMap = {
     info: chalk.bgCyan.bold("[INFO]"),
     warn: chalk.bgYellow.bold("[WARN]"),
     error: chalk.bgRed.bold("[ERROR]"),
     success: chalk.bgGreen.bold("[SUCCESS]"),
     alert: chalk.bgHex("#ff8000").bold("[ALERT]"),
+    pairing: chalk.bgBlue.bold("[PAIRING]"),
   };
   console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }
 
-export function pairingLog(message: string) {
-  const menu =
+export function pairingMenuLog(message: string) {
+  const Options =
     chalk.blue.bold(`╭──────────── Vinculación de Aura Reed ───────────⬣\n`) +
     chalk.blue.bold(`│ \n`) +
     chalk.blue.bold(`│ Seleccione un método de vinculación:\n`) +
@@ -95,7 +93,6 @@ export function pairingLog(message: string) {
     chalk.blue.bold(`│ 1. Código QR (Terminal)\n`) +
     chalk.blue.bold(`│ 2. Código de emparejamiento\n`) +
     chalk.blue.bold(`│ \n`) +
-    chalk.blue.bold(`╰─────────────────────────────────────────────────⬣\n`) +
-    `${chalk.bgYellow("[PAIRING]")} ${chalk.white(message)}`;
-  console.log(menu);
+    chalk.blue.bold(`╰─────────────────────────────────────────────────⬣\n`);
+  console.log(Options);
 }

@@ -21,7 +21,7 @@ import {
   GROUP_METADATA_CACHE,
 } from "../handler.ts";
 import { getPlugins } from "./cmdLoader.ts";
-import { logInfo, pairingLog } from "./logger.ts";
+import { logInfo, pairingMenuLog } from "./logger.ts";
 import { db } from "../database/AuraDB.ts";
 import { resolveBotType } from "./botType.ts";
 import {
@@ -57,7 +57,7 @@ let waWebVersionExpiresAt = 0;
 const activeSubBots = new Map<string, ExtendedWASocket>();
 const subBotActivity = new Map<string, number>();
 
-export const GroupCache = new LRUCache({ ttl: 5 * 60, ttlAutopurge: true })
+export const GroupCache = new LRUCache({max: 1000, ttl: 5 * 60, ttlAutopurge: true })
 
 function createBoundedCacheStore(max: number, ttl: number) {
   const cache = new LRUCache<string, any>({ max, ttl });
@@ -75,22 +75,38 @@ function createBoundedCacheStore(max: number, ttl: number) {
   };
 }
 
-function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Error) {
+// Reemplaza tu función actual por esta versión asíncrona:
+async function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Error) {
   if (!sock) return;
   try {
-    (
-      sock.ev as unknown as {
-        removeAllListeners?: () => void;
-        destroy?: () => void;
+    if (sock.ev && typeof sock.ev.off === "function") {
+      sock.ev.off("creds.update", () => {});
+      sock.ev.off("connection.update", () => {});
+      sock.ev.off("messages.upsert", () => {});
+      sock.ev.off("call", () => {});
+      sock.ev.off("groups.update", () => {});
+      sock.ev.off("group-participants.update", () => {});
+    } else if (typeof sock.ev.removeAllListeners === "function") {
+      (sock.ev as any).removeAllListeners();
+    }
+  } catch {}
+  if (sock.ws) {
+    try {
+      if ((sock.ws as any).readyState !== 3) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, 2000);
+          sock.ws.once('close', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          sock.ws.close();
+        });
       }
-    )?.removeAllListeners?.();
-    (sock.ev as unknown as { destroy?: () => void })?.destroy?.();
-  } catch {}
+    } catch {}
+  }
+
   try {
-    sock.ws?.close();
-  } catch {}
-  try {
-    void sock.end?.(reason);
+    await sock.end?.(reason);
   } catch {}
 }
 
@@ -102,7 +118,7 @@ async function removeSessionFolder(isSubBot: boolean, sessionName: string) {
   await rm(authFolder, { recursive: true, force: true }).catch(() => undefined);
 }
 
-const hibernationInterval = setInterval(() => {
+const hibernationInterval = setInterval(async () => {
   const now = Date.now();
   for (const [jid, lastActive] of subBotActivity.entries()) {
     if (now - lastActive > HIBERNATION_INACTIVITY_MS) {
@@ -113,7 +129,7 @@ const hibernationInterval = setInterval(() => {
       if (targetSock) {
         logInfo(`Hibernando subbot ${jid} por inactividad.`, "warn");
         targetSock.manualLogout = true;
-        safelyDestroySocket(targetSock, new Error("Hibernación por inactividad"));
+        await safelyDestroySocket(targetSock, new Error("Hibernación por inactividad"));
         db.setBot(jid, { status: "offline" });
       }
     }
@@ -238,17 +254,25 @@ function getBotDisplayName(
   return name ? String(name).trim() : null;
 }
 
-async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
-  try {
-    let participating = await sock.groupFetchAllParticipating?.();
-    if (!participating) return [];
+const groupsFetchCache = new Map<string, { groups: string[]; timestamp: number }>();
+const GROUPS_CACHE_TTL = 60 * 60 * 1000; // 1 hora de caché
 
+async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
+  const botId = sock.user?.id || "unknown";
+  const cached = groupsFetchCache.get(botId);
+  if (cached && Date.now() - cached.timestamp < GROUPS_CACHE_TTL) {
+    return cached.groups;
+  }
+
+  try {
+    const participating = await sock.groupFetchAllParticipating?.();
+    if (!participating) return [];
     const keys = Object.keys(participating).filter((jid) => jid.endsWith("@g.us"));
 
-    (participating as undefined) = null;
+    groupsFetchCache.set(botId, { groups: keys, timestamp: Date.now() });
     return keys;
   } catch (err: unknown) {
-    logInfo(`No se pudo obtener el JID del grupo: ${err}`, "error")
+    logInfo(`No se pudo obtener el JID del grupo: ${err}`, "error");
     return [];
   }
 }
@@ -283,7 +307,7 @@ export async function connectToWhatsApp(
   }
 
   const { state, saveCreds, close: closeAuthState } = authState;
-  connectionsInProgress.delete(sessionName);
+
 
   const isRegistered = Boolean(
     state.creds && (state.creds.registered || state.creds.me),
@@ -302,19 +326,21 @@ export async function connectToWhatsApp(
   let pairingPhone = normalizePairingPhone(options.pairingPhone || "");
 
   if (!isRegistered && !isSubBot && !pairingMethod) {
-    pairingLog("Selecciona el método de vinculación:");
-    const option = await askQuestion("Seleccione una opción (1 o 2): ");
+    logInfo("Selecciona el método de vinculación:" , "pairing");
+    pairingMenuLog("1. Código QR (Terminal)\n2. Código de emparejamiento");
+    logInfo("Elija el etodo (1 o 2): ", "pairing");
 
+    const option = await askQuestion("~/aura/method/select $ ");
     if (option === "2") {
       pairingMethod = "code";
-      pairingLog("Ingrese el número de teléfono con código de país");
+      logInfo("Ingrese el número de teléfono con código de país (ej: 50612345678)", "pairing");
       pairingPhone = normalizePairingPhone(
-        await askQuestion("Ej: 50612345678: "),
+        await askQuestion("~/aura/method/select/code $ "),
       );
 
       if (!pairingPhone) {
         pairingMethod = "qr";
-        logInfo("Número inválido. Se usará QR por defecto.");
+        logInfo("Número inválido. Se usará QR por defecto.", "warn");
       }
     } else {
       pairingMethod = "qr";
@@ -425,7 +451,8 @@ export async function connectToWhatsApp(
   extendedSock.ev.on("creds.update", () => {
     if (authStateClosing) return;
     credentialsDirty = true;
-    if (saveTimer) clearTimeout(saveTimer);
+    if (saveTimer) return;
+
     saveTimer = setTimeout(async () => {
       saveTimer = null;
       try {
@@ -464,7 +491,7 @@ export async function connectToWhatsApp(
   if (pairingMethod === "code" && !isRegistered) {
     void (async () => {
       try {
-        pairingLog("Esperando estabilización del socket para generar el código");
+        logInfo("Esperando estabilización del socket para generar el código", "pairing");
         await sock.waitForSocketOpen();
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
@@ -473,7 +500,7 @@ export async function connectToWhatsApp(
           return;
         }
 
-        pairingLog(`Solicitando código para: ${pairingPhone}`);
+        logInfo(`Solicitando código para: ${pairingPhone}`, "pairing");
         const rawCode = String(
           (await sock.requestPairingCode(pairingPhone)) || "",
         ).replace(/[^a-zA-Z0-9]/g, "");
@@ -483,16 +510,7 @@ export async function connectToWhatsApp(
         const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
 
         await options.onPairingCode?.(code);
-
-        console.log(
-          "\n" +
-            "╭──────────────────────────────────────────╮\n" +
-            "│ 🔑 CÓDIGO DE VINCULACIÓN PRINCIPAL:      │\n" +
-            "│                                          │\n" +
-            `│        ${code?.toUpperCase() ?? ""}        │\n` +
-            "│                                          │\n" +
-            "╰──────────────────────────────────────────╯\n",
-        );
+        logInfo(`Código de emparejamiento generado: ${chalk.bgHex("#4c1d95").white.bold(code)}`, "pairing");
       } catch (err) {
         const pairingError = err instanceof Error ? err : new Error(String(err));
         logInfo(`Error al solicitar el código de emparejamiento: ${pairingError.message}`, "error");
@@ -515,7 +533,7 @@ export async function connectToWhatsApp(
 
   sock.ev.on("connection.update", async (u) => {
     if (u.qr && pairingMethod === "qr") {
-      logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "alert");
+      logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "pairing");
       qrcodeTerminal.generate(u.qr, { small: true });
       await options.onQr?.(u.qr);
     }
@@ -530,7 +548,7 @@ export async function connectToWhatsApp(
       if (isSubBot) {
         const prevSock = activeSubBots.get(botJid);
         if (prevSock && prevSock !== extendedSock) {
-          safelyDestroySocket(prevSock);
+          await safelyDestroySocket(prevSock);
         }
         activeSubBots.set(botJid, extendedSock);
         subBotActivity.set(botJid, Date.now());
@@ -588,12 +606,14 @@ export async function connectToWhatsApp(
       logInfo(`El Usuario ${chalk.bold(botName)} con ${chalk.bold(mainNum)} vinculado con exito.`, "success");
       await options.onConnected?.();
 
-      void getBotGroups(extendedSock).then((botGroups) => {
-        if (botGroups.length > 0) {
-          for (const gJid of botGroups) knownGroupJids.set(gJid, true);
-          db.setBot(botJid, { groups: botGroups });
-        }
-      });
+      setTimeout(() => {
+        void getBotGroups(extendedSock).then((botGroups) => {
+          if (botGroups.length > 0) {
+            for (const gJid of botGroups) knownGroupJids.set(gJid, true);
+            db.setBot(botJid, { groups: botGroups });
+          }
+        });
+      }, 10000);
       return;
     }
 
@@ -619,7 +639,7 @@ export async function connectToWhatsApp(
 
       if (!isSubBot) {
         globalThis.mainSocket = null;
-        logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "alert");
+        logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "pairing");
         void connectToWhatsApp(sessionName, false);
       }
       return;
@@ -636,9 +656,9 @@ export async function connectToWhatsApp(
       0;
     const errorMessage = error?.message || "Error desconocido";
 
-    safelyDestroySocket(extendedSock, error);
+    await  safelyDestroySocket(extendedSock, error);
     await closeAuthStateSafely();
-
+    
     logInfo(
       `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}`,
       statusCode === 0 ? "warn" : "error",
@@ -908,6 +928,6 @@ export async function connectToWhatsApp(
       }
     },
   );
-
+  connectionsInProgress.delete(sessionName);
   return extendedSock;
 }
