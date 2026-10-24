@@ -1,154 +1,351 @@
-import { fytBold } from "../../core/socketText.ts";
-import { safeFileName } from "../../core/downloadUtils.ts";
+import type { CommandContext } from "../../types/index.d.ts";
+import type { WAMessage } from "baileys";
+import undici from "undici";
 import { sendDownloadPreview } from "../../core/downloadPreview.ts";
-import { CONVERT_TO_AVC } from "../../utils/converter.ts";
+import { fytBold } from "../../core/socketText.ts";
+import { DL_TEMPLATE } from "../../utils/template.ts";
+import { formatCount, formatDuration } from "../../utils/formatter.ts";
 import {
-  prepareDownloadChargeBySize,
   confirmDownloadCharge,
   formatMoney,
+  prepareDownloadChargeBySize,
 } from "../../core/economyConfig.ts";
-import type {
-  CommandContext,
-} from "../../types/index.d.ts";
-import { DL_TEMPLATE } from "../../utils/template.ts";
-import {
-  searchYouTubeVideo,
-  type YouTubeSearchVideo,
-} from "../../src/api/YouTubeSearch.ts";
-import { downloadYouTube } from "../../src/api/YouTubeDowloader.ts";
 import { t } from "../../src/langs/index.ts";
 
-const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
-const ql = "360p";
-const MAX_VIDEO_DURATION_SECONDS = 15 * 60; // 15 minutos máximo para usuarios
-const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024; // 200 MB máximo absoluto
+const FRAME_ORIGIN = "https://frame.y2meta-uk.com";
+const API_BASE = "https://cnv.cx/v2";
+const DOWNLOAD_AS_DOCUMENT_MB = 100;
+const REQUEST_TIMEOUT_MS = 10_000;
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const YOUTUBE_ID = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([\w-]{11})/i;
 
-function videoId(value: string): string | null {
-  return value.match(YOUTUBE_ID)?.[1] || null;
+interface YouTubeVideoRenderer {
+  videoId?: string;
+  title?: { runs?: Array<{ text?: string }> };
+  ownerText?: { runs?: Array<{ text?: string }> };
+  lengthText?: { simpleText?: string };
+  viewCountText?: { simpleText?: string };
 }
 
-function parseDurationToSeconds(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
-  if (typeof value !== "string") return null;
+interface YouTubeInitialData {
+  contents?: {
+    twoColumnSearchResultsRenderer?: {
+      primaryContents?: {
+        sectionListRenderer?: {
+          contents?: Array<{
+            itemSectionRenderer?: {
+              contents?: Array<{ videoRenderer?: YouTubeVideoRenderer }>;
+            };
+          }>;
+        };
+      };
+    };
+  };
+}
 
-  const text = value.trim();
-  if (!text) return null;
+interface VideoInfo {
+  id: string;
+  title: string;
+  channel: string;
+  duration: string;
+  views: string;
+  likes?: string;
+  url: string;
+  thumbnail: string;
+}
 
-  if (/^\d+$/.test(text)) return Number(text);
+interface ConverterResponse {
+  key?: unknown;
+  url?: unknown;
+  filename?: unknown;
+}
 
-  const isoMatch = text.match(
-    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i,
+function formatYouTubeCount(value: string | undefined): string {
+  if (!value) return "";
+
+  const match = value.match(
+    /([\d.,]+)\s*(mil|mill(?:ón|ones)?|[KMBT])?/i,
   );
-  if (isoMatch && /[hms]/i.test(text)) {
-    const days = Number(isoMatch[1] || 0);
-    const hours = Number(isoMatch[2] || 0);
-    const minutes = Number(isoMatch[3] || 0);
-    const seconds = Number(isoMatch[4] || 0);
-    return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  if (!match) return value;
+
+  const rawCount = match[1];
+  const suffix = match[2]?.toLowerCase();
+  if (!suffix) return formatCount(rawCount.replace(/[,.]/g, ""));
+
+  const count = Number(
+    rawCount.includes(".")
+      ? rawCount.replace(/,/g, "")
+      : rawCount.replace(",", "."),
+  );
+  if (!Number.isFinite(count)) return value;
+
+  const multiplier =
+    suffix === "mil" || suffix === "k"
+      ? 1e3
+      : suffix.startsWith("mill") || suffix === "m"
+        ? 1e6
+        : suffix === "b"
+          ? 1e9
+          : 1e12;
+  return formatCount(count * multiplier);
+}
+
+async function obtenerKey(videoId: string): Promise<string> {
+  const response = await undici.fetch(
+    `${API_BASE}/sanity/key?id=${encodeURIComponent(videoId)}`,
+    {
+      headers: {
+        Origin: FRAME_ORIGIN,
+        Referer: `${FRAME_ORIGIN}/`,
+        Accept: "*/*",
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+      },
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`sanity/key respondió ${response.status}`);
   }
 
-  const colonMatch = text.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
-  if (colonMatch) {
-    const hours = Number(colonMatch[1] || 0);
-    const minutes = Number(colonMatch[2]);
-    const seconds = Number(colonMatch[3]);
-    return hours * 3600 + minutes * 60 + seconds;
+  const data = (await response.json()) as ConverterResponse;
+  if (typeof data.key !== "string" || !data.key) {
+    throw new Error("sanity/key no devolvió key");
+  }
+  return data.key;
+}
+
+async function obtenerAudio(
+  videoId: string,
+): Promise<{ url: string; filename: string }> {
+  const key = await obtenerKey(videoId);
+  const body = new URLSearchParams({
+    link: `https://youtu.be/${videoId}`,
+    format: "mp4",
+    audioBitrate: "256",
+    videoQuality: "1080",
+    filenameStyle: "pretty",
+    vCodec: "h264",
+  });
+  const response = await undici.fetch(`${API_BASE}/converter`, {
+    method: "POST",
+    headers: {
+      Origin: FRAME_ORIGIN,
+      Referer: `${FRAME_ORIGIN}/`,
+      Accept: "*/*",
+      "Content-Type": "application/x-www-form-urlencoded",
+      key,
+      "User-Agent": USER_AGENT,
+    },
+    body,
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) {
+    throw new Error(`> Converter Error\nNo pude descargar el video el proveedor del video me rechazo la solicitud con *Estado HTTP: ${response.status}*.\nIntente con otro.`);
   }
 
-  const mmssMatch = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (mmssMatch) {
-    return Number(mmssMatch[1]) * 60 + Number(mmssMatch[2]);
+  const data = (await response.json()) as ConverterResponse;
+  if (typeof data.url !== "string" || !data.url) {
+    throw new Error("converter no devolvió url");
+  }
+  return {
+    url: data.url,
+    filename:
+      typeof data.filename === "string" && data.filename
+        ? data.filename
+        : `${videoId}.mp4`,
+  };
+}
+
+async function descargarBuffer(url: string): Promise<Buffer> {
+  const downloadUrl = new URL(url);
+  if (downloadUrl.protocol !== "https:") {
+    throw new Error("El enlace de descarga no es seguro.");
   }
 
-  return null;
+  const response = await undici.fetch(downloadUrl, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Origin: FRAME_ORIGIN,
+      Referer: `${FRAME_ORIGIN}/`,
+      Accept: "*/*",
+    },
+    signal: AbortSignal.timeout(10 * 60_000),
+  });
+  if (!response.ok) {
+    throw new Error(`La descarga respondió ${response.status}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function buscarYouTube(
+  query: string,
+  limit = 5,
+): Promise<VideoInfo[]> {
+  const response = await undici.fetch(
+    `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=es`,
+    {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "es-ES,es;q=0.9",
+        Cookie: "CONSENT=YES+1; SOCS=CAI",
+      },
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`YouTube respondió ${response.status}`);
+  }
+
+  const html = await response.text();
+  const match = html.match(/var ytInitialData\s*=\s*(\{.+?\});<\/script>/s);
+  if (!match) throw new Error("No se pudo leer la página de YouTube");
+
+  const data = JSON.parse(match[1]) as YouTubeInitialData;
+  const sections =
+    data.contents?.twoColumnSearchResultsRenderer?.primaryContents
+      ?.sectionListRenderer?.contents ?? [];
+  const results: VideoInfo[] = [];
+
+  for (const section of sections) {
+    for (const item of section.itemSectionRenderer?.contents ?? []) {
+      const video = item.videoRenderer;
+      if (!video?.videoId || !video.lengthText) continue;
+
+      results.push({
+        id: video.videoId,
+        title: video.title?.runs?.[0]?.text || t("template_no_title_44ba2cb7"),
+        channel: video.ownerText?.runs?.[0]?.text || "YouTube",
+        duration: formatDuration(video.lengthText.simpleText || "--:--"),
+        views: formatYouTubeCount(video.viewCountText?.simpleText),
+        url: `https://youtu.be/${video.videoId}`,
+        thumbnail: `https://i.ytimg.com/vi/${video.videoId}/maxresdefault.jpg`,
+      });
+      if (results.length >= limit) return results;
+    }
+  }
+  return results;
+}
+
+async function getVideoLikes(videoId: string): Promise<string | undefined> {
+  try {
+    const response = await undici.fetch(
+      `https://www.youtube.com/watch?v=${videoId}&hl=es`,
+      {
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Accept-Language": "es-ES,es;q=0.9",
+          Cookie: "CONSENT=YES+1; SOCS=CAI",
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      },
+    );
+
+    if (!response.ok) return undefined;
+
+    const html = await response.text();
+    const match = html.match(/"likeCount":"(\d+)"/);
+    return match ? formatCount(match[1]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cleanFileName(name: string): string {
+  return (
+    name
+      .replace(/[\\/:*?"<>|]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 100) || "audio"
+  );
 }
 
 export default {
-  name: ["ytmp4", "video", "playvideo", "mp4", "ytv", "play2"],
-  category: "download",
+  name: ["mp4", "ytmp4", "video", "playvideo", "mp4", "ytv", "play2"],
   description: t("cmd_busca_y_descarga_video_de_yout_2a84044d"),
+  category: "download",
+  ownerOnly: false,
+  hideCmd: true,
   async run(ctx: CommandContext) {
-    const { args, reply, react, sock, from, msg, sender, isOwner, isMod } = ctx;
-    const query = args.join(" ").trim();
-    if (!query) return reply(t("cmd_proporciona_el_nombre_o_enlace_5304fbbf"));
-    
-    await react("⏳");
+    const { sock, from, msg, react, reply, text, args, sender } = ctx;
+    const query = (text || args.join(" ")).trim();
+    if (!query) {
+      return reply(t("cmd_escribe_el_nombre_de_una_canci_7d229544"));
+    }
+
+    await react("🎞️");
     try {
-      const id = videoId(query);
-      let searchResult: YouTubeSearchVideo | undefined;
-      const url = id
-        ? `https://youtu.be/${id}`
-        : ((searchResult = await searchYouTubeVideo(query)).url);
+      const directVideoId = query.match(YOUTUBE_ID)?.[1];
+      let audioPromise = directVideoId
+        ? obtenerAudio(directVideoId)
+        : undefined;
+      audioPromise?.catch(() => {});
 
-      // Verificación previa de duración mediante metadatos de búsqueda si están disponibles
-      if (searchResult && searchResult.duration) {
-        const searchDurationSec = parseDurationToSeconds(searchResult.duration);
-        if (typeof searchDurationSec === "number" && searchDurationSec > MAX_VIDEO_DURATION_SECONDS && !isOwner && !isMod) {
-          await react("❌");
-          return reply({
-            text: `⚠️ *Límite excedido*\n\nEl video dura más de 15 minutos (${searchResult.duration}). Por seguridad y rendimiento del servidor, está prohibido descargar videos tan largos. (Solo Owners/Mods pueden omitir esta regla).`,
-          });
-        }
+      const results = await buscarYouTube(directVideoId || query);
+      const info = directVideoId
+        ? results.find((video) => video.id === directVideoId)
+        : results[0];
+
+      if (!info && !directVideoId) {
+        await react("❌");
+        return reply(t("cmd_sin_resultados_aafe1c07"));
       }
 
-      const video = await downloadYouTube(
-        url,
-        "video",
-        Number.parseInt(ql, 10),
-        searchResult,
+      const videoId = directVideoId || info?.id;
+      if (!videoId) throw new Error("No se pudo obtener el ID del video.");
+      const url = info?.url || `https://youtu.be/${videoId}`;
+      const title = info?.title || t("template_no_title_44ba2cb7");
+      audioPromise ??= obtenerAudio(videoId);
+      const likes = await getVideoLikes(videoId);
+      const video = await audioPromise;
+      const buffer = await descargarBuffer(video.url);
+      const asDocument = buffer.length >= DOWNLOAD_AS_DOCUMENT_MB * 1024 * 1024;
+      const { cost } = prepareDownloadChargeBySize(
+        ctx,
+        asDocument ? "document" : "video",
+        buffer.length,
       );
+      const fileName = `${cleanFileName(
+        title !== t("template_no_title_44ba2cb7")
+          ? title
+          : video.filename.replace(/\.(mp3|mp4)$/i, ""),
+      )}.mp4`;
 
-      const title = video.title || "Video de YouTube";
-      const channel = video.author || "YouTube";
-      const thumbnail = video.thumbnail;
-      const duration = video.duration;
-      const durationSeconds = parseDurationToSeconds(duration);
-
-      // Control inteligente estricto de duración
-      if (typeof durationSeconds === "number" && durationSeconds > MAX_VIDEO_DURATION_SECONDS && !isOwner && !isMod) {
-        throw new Error(
-          `El video excede la duración máxima permitida de 15 minutos (Duración detectada: ${duration}).`,
-        );
-      }
-
-      // Control inteligente estricto de peso en bytes (200 MB)
-      if (video.size > MAX_VIDEO_SIZE_BYTES && !isOwner && !isMod) {
-        const sizeMB = (video.size / (1024 * 1024)).toFixed(1);
-        throw new Error(`El video pesa ${sizeMB} MB y supera el límite permitido de 200 MB para usuarios.`);
-      }
-
-      const VIDEO_READY = await CONVERT_TO_AVC(video.dl_url);
-
-      const { cost } = prepareDownloadChargeBySize(ctx, "video", video.size);
       const caption = DL_TEMPLATE({
         bold: fytBold,
-        label: t("cmd_youtube_video_79419e04"),
+        label: asDocument
+          ? t("cmd_youtube_document_0d20c17e")
+          : t("cmd_youtube_video_79419e04"),
         icon: t("cmd_text_2b02d8d7"),
         title,
-        channel,
-        duration,
-        type: t("cmd_video_mp4_value0_8a2ac6e8", { value0: video.quality }),
-        views: video.views === undefined ? undefined : String(video.views),
-        likes: video.likes === undefined ? undefined : String(video.likes),
-        cost: formatMoney(cost, ctx),
+        channel: info?.channel || "YouTube",
+        duration: info?.duration,
+        views: info?.views,
+        likes,
         url,
-        showChannel: Boolean(channel),
-        showDuration: Boolean(duration),
-        showType: true,
-        showViews: video.views !== undefined,
-        showLikes: video.likes !== undefined,
-        showVideoId: Boolean(video.videoId),
+        showChannel: Boolean(info?.channel),
+        showDuration: Boolean(info?.duration),
+        showViews: Boolean(info?.views),
+        showLikes: Boolean(likes),
         showSource: true,
-        loadingText: t("cmd_enviando_video_a23e79a0"),
-        loadingIcon: t("cmd_text_7a2ad7a6"),
+        showType: true,
+        type: asDocument
+          ? t("cmd_documento_mp4_2386c56a")
+          : t("cmd_video_mp4_1275e211"),
+        cost: formatMoney(cost, ctx),
+        showCost: true,
+        loadingText: asDocument
+          ? t("cmd_descargando_documento_2572aa2f")
+          : t("cmd_enviando_video_a23e79a0"),
       });
 
-      const hasPreview = thumbnail
+      const hasPreview = info
         ? await sendDownloadPreview({
             sock,
             from,
-            msg,
-            thumbnail,
+            msg: msg as unknown as WAMessage,
+            thumbnail: info.thumbnail,
             caption,
             link: url,
             title,
@@ -156,23 +353,42 @@ export default {
             sender,
           })
         : false;
-
       if (!hasPreview) await reply({ text: caption });
 
-      await reply({
-        video: { url: VIDEO_READY },
-        mimetype: "video/mp4",
-        fileName: `${safeFileName(title, "youtube")}.mp4`,
-      });
-
+      if (asDocument) {
+        await sock.sendMessage(
+          from,
+          {
+            document: buffer,
+            mimetype: "video/mp4",
+            fileName,
+            caption: t("cmd_descarga_videos_de_youtube_com_6943316c"),
+          },
+          { quoted: msg as unknown as WAMessage },
+        );
+      } else {
+        await sock.sendMessage(
+          from,
+          { video: buffer, mimetype: "video/mp4", fileName, ptt: false },
+          { quoted: msg as unknown as WAMessage },
+        );
+      }
       confirmDownloadCharge(ctx);
+
       await react("✅");
     } catch (error: unknown) {
+      console.error(
+        "[dl:y2mate]",
+        error instanceof Error ? error.message : error,
+      );
       await react("❌");
-      const message =
-        error instanceof Error ? error.message : "No se pudo descargar el video.";
       return reply({
-        text: t("cmd_value0_maximo_permitido_20_min_06db8d0e", { value0: message }),
+        text: t("cmd_value0_bb624cd4", {
+          value0:
+            error instanceof Error
+              ? error.message
+              : "No se pudo descargar el audio.",
+        }),
       });
     }
   },
