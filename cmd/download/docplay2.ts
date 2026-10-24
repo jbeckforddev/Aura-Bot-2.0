@@ -261,7 +261,7 @@ function cleanFileName(name: string): string {
 }
 
 export default {
-  name: ["dytmp4", "docvideo", "playdocvideo", "dmp4", "ytv", "docplay2"],
+  name: ["dytmp4", "docvideo", "playdocvideo", "dmp4", "dytv", "docplay2"],
   description: t("cmd_busca_y_descarga_video_de_yout_2a84044d"),
   category: "download",
   ownerOnly: false,
