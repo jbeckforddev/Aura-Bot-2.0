@@ -19,6 +19,25 @@ function readNumber(filePath: string): number | null {
   }
 }
 
+function readMemoryStat(filePath: string, keys: string[]): number | null {
+  try {
+    const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const [key, value] = line.trim().split(/\s+/);
+      if (keys.includes(key)) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function memoryUsedWithoutInactiveCache(used: number, statPath: string, keys: string[]) {
+  const inactiveCache = readMemoryStat(statPath, keys) ?? 0;
+  return Math.max(used - inactiveCache, 0);
+}
+
 function getMemoryInfo() {
   try {
     if (
@@ -28,7 +47,15 @@ function getMemoryInfo() {
       const total = readNumber("/sys/fs/cgroup/memory.max");
       const used = readNumber("/sys/fs/cgroup/memory.current");
       if (total !== null && total > 0 && used !== null && used >= 0) {
-        return { total, used, source: "contenedor" };
+        return {
+          total,
+          used: memoryUsedWithoutInactiveCache(
+            used,
+            "/sys/fs/cgroup/memory.stat",
+            ["inactive_file"],
+          ),
+          source: "contenedor",
+        };
       }
     }
 
@@ -42,7 +69,15 @@ function getMemoryInfo() {
         used !== null &&
         used >= 0
       ) {
-        return { total, used, source: "contenedor" };
+        return {
+          total,
+          used: memoryUsedWithoutInactiveCache(
+            used,
+            "/sys/fs/cgroup/memory/memory.stat",
+            ["total_inactive_file", "inactive_file"],
+          ),
+          source: "contenedor",
+        };
       }
     }
   } catch {
