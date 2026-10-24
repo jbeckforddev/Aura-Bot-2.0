@@ -370,8 +370,7 @@ export async function connectToWhatsApp(
   };
 
   const sock = makeWASocket({
-    ...(version ? { version } : {}),
-    shouldSyncHistoryMessage: () => false,
+    version: version || [2, 3000, 1042466098],
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger, signalKeyCache),
