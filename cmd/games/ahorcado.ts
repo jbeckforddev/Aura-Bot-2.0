@@ -132,8 +132,8 @@ async function sendGame(
     t("cmd_text_ae3d84da"),
     t("cmd_value0_66aaf25a", { value0: status }),
     t("cmd_vidas_value0_value1_66248bb0", { value0: "❤️".repeat(lives), value1: "🖤".repeat(game.mistakes) }),
-    used && !ended ? t("cmd_usadas_value0_eecf10ab", { value0: used }) : t("cmd_text_da39a3ee"),
-    !ended ? t("cmd_escribe_una_letra_o_la_palabra_6e15355e") : t("cmd_text_da39a3ee"),
+    used && !ended ? t("cmd_usadas_value0_eecf10ab", { value0: used }) :
+    !ended ? t("cmd_escribe_una_letra_o_la_palabra_6e15355e") :
     t("cmd_text_001ce096"),
   ]
     .filter(Boolean)
