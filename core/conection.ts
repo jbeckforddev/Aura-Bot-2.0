@@ -488,37 +488,6 @@ export async function connectToWhatsApp(
     pairingTimer.unref?.();
   }
 
-  if (pairingMethod === "code" && !isRegistered) {
-    void (async () => {
-      try {
-        logInfo("Esperando estabilización del socket para generar el código", "pairing");
-        await sock.waitForSocketOpen();
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-
-        if (!pairingPhone) {
-          logInfo("Falta el número telefónico para la solicitud de emparejamiento.", "warn");
-          return;
-        }
-
-        logInfo(`Solicitando código para: ${pairingPhone}`, "pairing");
-        const rawCode = String(
-          (await sock.requestPairingCode(pairingPhone)) || "",
-        ).replace(/[^a-zA-Z0-9]/g, "");
-        if (!rawCode) {
-          throw new Error("WhatsApp no devolvió un código de vinculación.");
-        }
-        const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
-
-        await options.onPairingCode?.(code);
-        logInfo(`Código de emparejamiento generado: ${chalk.bgHex("#4c1d95").white.bold(code)}`, "pairing");
-      } catch (err) {
-        const pairingError = err instanceof Error ? err : new Error(String(err));
-        logInfo(`Error al solicitar el código de emparejamiento: ${pairingError.message}`, "error");
-        await options.onPairingError?.(pairingError);
-      }
-    })();
-  }
-
   const knownGroupJids = new LRUCache<string, true>({
     max: 500,
     ttl: 60 * 60 * 1000,
@@ -537,7 +506,19 @@ export async function connectToWhatsApp(
       qrcodeTerminal.generate(u.qr, { small: true });
       await options.onQr?.(u.qr);
     }
+    if (u.qr && !isRegistered && pairingMethod === "code" && pairingPhone) {
+        try {
+            const cleanPhone = pairingPhone.replace(/[^0-9]/g, '');
+            logInfo(`Solicitando código para: ${cleanPhone}`, "pairing");
+            const rawCode = await sock.requestPairingCode(cleanPhone);
+            const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
+            logInfo(`🔑 CÓDIGO: ${code}`, "pairing");
+            await options.onPairingCode?.(code);
 
+        } catch (err) {
+            logInfo(`Error al solicitar código: ${String(err)}`, "error");
+        }
+    }
     if (u.connection === "open") {
       connectionOpened = true;
       hasConnected = true;
