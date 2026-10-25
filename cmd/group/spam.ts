@@ -1,14 +1,15 @@
-import { getActiveSubBots } from "../../core/subbotManager.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
+import { getActiveSubBots } from "../../core/subbotManager.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default {
   name: ["spam", "reportar", "atacar"],
   category: "group",
-  ownerOnly: true,
   description: "Reporta y bloquea un número masivamente usando todos los subbots activos.",
+  ownerOnly: true,
   async run(ctx: CommandContext) {
     const { args, reply, react, sock } = ctx;
     
@@ -24,10 +25,8 @@ export default {
       return reply("❌ No hay ningún bot ni subbot disponible en este momento.");
     }
 
-    await react("⏳");
+    await react("⏳").catch(() => undefined);
     await reply(`🚀 *Iniciando operación de reporte masivo*\n\n🎯 *Objetivo:* +${targetQuery}\n🤖 *Bots ejecutores:* ${allSockets.length} instancia(s)\n🔄 *Intentos por bot:* 5 ciclos de reporte/bloqueo`);
-
-    let totalReportsSent = 0;
 
     await Promise.allSettled(
       allSockets.map(async (botSock, botIndex) => {
@@ -55,9 +54,7 @@ export default {
               ],
             }).catch(() => {});
 
-            totalReportsSent++;
             await sleep(1500);
-            
             await botSock.updateBlockStatus(targetJid, "unblock").catch(() => {});
             await sleep(1000);
           } catch (err) {
@@ -67,7 +64,7 @@ export default {
       })
     );
 
-    await react("✅");
+    await react("✅").catch(() => undefined);
     await reply(`✅ *Operación Finalizada*\n\n📊 Se completaron exitosamente los ciclos de reporte y bloqueo sobre el objetivo *+${targetQuery}* utilizando *${allSockets.length}* instancias de bots.`);
-  },
+  }
 };
