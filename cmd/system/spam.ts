@@ -1,5 +1,5 @@
 import { getActiveSubBots } from "../../core/subbotManager.ts";
-import type { CommandContext } from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
