@@ -40,6 +40,7 @@ export const logger = pino({ level: "silent" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
@@ -273,7 +274,7 @@ async function connectSocket(sessionName: string) {
 
   if (!isRegistered) {
     logInfo("Selecciona el método de vinculación:" , "pairing");
-    pairingMenuLog("1. Código QR (Terminal)\n2. Código de emparejamiento");
+    pairingMenuLog();
     logInfo("Elija el etodo (1 o 2): ", "pairing");
 
     const option = await askQuestion("~/aura/method/select $ ");
@@ -408,6 +409,8 @@ async function connectSocket(sessionName: string) {
   });
 
   let hasConnected = false;
+  let pairingCodeRequested = false;
+  let connectionClosed = false;
 
   const knownGroupJids = new LRUCache<string, true>({
     max: 500,
@@ -426,17 +429,31 @@ async function connectSocket(sessionName: string) {
       logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "pairing");
       qrcodeTerminal.generate(u.qr, { small: true });
     }
-    if (u.qr && !isRegistered && pairingMethod === "code" && pairingPhone) {
-        try {
-            const cleanPhone = pairingPhone.replace(/[^0-9]/g, '');
-            logInfo(`Solicitando código para: ${cleanPhone}`, "pairing");
-            const rawCode = await sock.requestPairingCode(cleanPhone);
-            const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
-            logInfo(`🔑 CÓDIGO: ${code}`, "pairing");
-
-        } catch (err) {
-            logInfo(`Error al solicitar código: ${String(err)}`, "error");
-        }
+    if (
+      u.qr &&
+      !isRegistered &&
+      pairingMethod === "code" &&
+      pairingPhone &&
+      !pairingCodeRequested
+    ) {
+      pairingCodeRequested = true;
+      try {
+        logInfo(
+          `Esperando ${PAIRING_CODE_REQUEST_DELAY_MS} ms antes de solicitar el código.`,
+          "pairing",
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, PAIRING_CODE_REQUEST_DELAY_MS),
+        );
+        if (connectionClosed || hasConnected) return;
+        const cleanPhone = pairingPhone.replace(/\D/g, "");
+        logInfo(`Solicitando código para: ${cleanPhone}`, "pairing");
+        const rawCode = await sock.requestPairingCode(cleanPhone);
+        const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
+        logInfo(`🔑 CÓDIGO: ${chalk.bgHex("#4c1d95").white.bold(code)}`, "pairing");
+      } catch (err) {
+        logInfo(`Error al solicitar código: ${String(err)}`, "error");
+      }
     }
     if (u.connection === "open") {
       hasConnected = true;
@@ -506,6 +523,7 @@ async function connectSocket(sessionName: string) {
     }
 
     knownGroupJids.clear();
+    connectionClosed = true;
 
     if (extendedSock.manualLogout) {
       safelyDestroySocket(extendedSock);

@@ -100,7 +100,7 @@ export function logInfo(
   console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }
 
-export function pairingMenuLog(message: string) {
+export function pairingMenuLog() {
   const Options =
     chalk.blue.bold(`╭──────────── Vinculación de Aura Reed ───────────⬣\n`) +
     chalk.blue.bold(`│ \n`) +

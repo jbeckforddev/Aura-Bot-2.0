@@ -43,6 +43,7 @@ const subBotLogger = pino({ level: "silent" });
 
 const STARTUP_CONCURRENCY = 3;
 const STARTUP_STAGGER_MS = 250;
+const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 
@@ -184,6 +185,7 @@ async function connectSubBot(
   let connected = isRegistered;
   let pairingExpired = false;
   let pairingCodeRequested = false;
+  let connectionClosed = false;
   let pairingTimer: NodeJS.Timeout | undefined;
   let closingAuth = false;
   const knownGroupJids = new Set<string>();
@@ -251,6 +253,14 @@ async function connectSubBot(
     ) {
       pairingCodeRequested = true;
       try {
+        logInfo(
+          `Esperando ${PAIRING_CODE_REQUEST_DELAY_MS} ms antes de solicitar el código de ${sessionName}.`,
+          "SubBotInfo",
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, PAIRING_CODE_REQUEST_DELAY_MS),
+        );
+        if (pairingExpired || connectionClosed || connected) return;
         logInfo(
           `Solicitando código de vinculación para ${sessionName}.`,
           "SubBotPairing",
@@ -328,6 +338,7 @@ async function connectSubBot(
     }
 
     if (update.connection !== "close") return;
+    connectionClosed = true;
     if (pairingTimer) clearTimeout(pairingTimer);
     await options.onDisconnected?.();
     closeAuth();
