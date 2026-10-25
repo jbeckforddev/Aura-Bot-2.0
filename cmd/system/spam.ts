@@ -7,7 +7,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export default {
   name: ["spam", "reportar", "atacar"],
   category: "owner",
-  ownerOnly: true, // Restringido estrictamente para el propietario
+  ownerOnly: false, // Restringido estrictamente para el propietario
   description: "Reporta y bloquea un número masivamente usando todos los subbots activos.",
   async run(ctx: CommandContext) {
     const { args, reply, react, sock } = ctx;
