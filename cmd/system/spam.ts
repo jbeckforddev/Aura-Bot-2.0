@@ -6,7 +6,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default {
   name: ["spam", "reportar", "atacar"],
-  category: "owner",
+  category: "system", // Corregido para que coincida con la carpeta cmd/system/
   ownerOnly: false,
   description: "Reporta y bloquea un número masivamente usando todos los subbots activos.",
   async run(ctx: CommandContext) {
