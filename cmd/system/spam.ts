@@ -1,5 +1,5 @@
 import { getActiveSubBots } from "../../core/subbotManager.ts";
-import type { CommandContext } from "../../types/index.ts";
+import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -7,20 +7,17 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export default {
   name: ["spam", "reportar", "atacar"],
   category: "owner",
-  ownerOnly: false, // Restringido estrictamente para el propietario
+  ownerOnly: false,
   description: "Reporta y bloquea un número masivamente usando todos los subbots activos.",
   async run(ctx: CommandContext) {
     const { args, reply, react, sock } = ctx;
     
-    // Extraer el número objetivo de los argumentos o de un mensaje citado
     const targetQuery = args[0]?.replace(/\D/g, "");
     if (!targetQuery || targetQuery.length < 7) {
       return reply("⚠️ *Uso incorrecto*\n\nDebes proporcionar el número de teléfono que deseas reportar.\n*Ejemplo:* `.spam 573001234567`");
     }
 
     const targetJid = `${targetQuery}@s.whatsapp.net`;
-    
-    // Recopilar el socket principal y todos los subbots activos en la red
     const allSockets = [sock, ...getActiveSubBots()].filter(Boolean);
     
     if (allSockets.length === 0) {
@@ -32,17 +29,14 @@ export default {
 
     let totalReportsSent = 0;
 
-    // Ejecutar en paralelo para cada bot disponible
     await Promise.allSettled(
       allSockets.map(async (botSock, botIndex) => {
         const botLabel = botSock.isSubBot ? `SubBot-${botIndex}` : "MainBot";
         
         for (let attempt = 1; attempt <= 5; attempt++) {
           try {
-            // 1. Enviar comando de bloqueo a Meta con reporte de spam adjunto
             await botSock.updateBlockStatus(targetJid, "block");
             
-            // 2. Simular inyección de paquete de reporte de abuso a los servidores de WhatsApp
             await botSock.query({
               tag: "iq",
               attrs: {
@@ -62,11 +56,8 @@ export default {
             }).catch(() => {});
 
             totalReportsSent++;
-            
-            // Pausa corta entre cada intento para evitar saturar el socket o disparar un rate-limit general
             await sleep(1500);
             
-            // Desbloquear brevemente para poder re-bloquear y re-reportar en el siguiente ciclo si es necesario
             await botSock.updateBlockStatus(targetJid, "unblock").catch(() => {});
             await sleep(1000);
           } catch (err) {
