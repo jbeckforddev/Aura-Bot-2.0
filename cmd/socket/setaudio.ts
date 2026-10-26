@@ -1,15 +1,11 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import type { proto } from "baileys";
 import { downloadMediaMessage } from "baileys";
-import ffmpegPath from "ffmpeg-static";
-import { execFile } from "node:child_process";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { t } from "../../src/langs/index.ts";
-
-const execFileAsync = promisify(execFile);
+import { CONVERT_AUDIO_TO_OGG } from "../../utils/converter.ts";
 
 function unwrapAudio(
   message: proto.IMessage | null | undefined,
@@ -31,14 +27,10 @@ export default {
   description: t("socketDescriptionSetAudio"),
   botUserOnly: true,
   async run(ctx: CommandContext) {
-    if (!ffmpegPath) return ctx.reply(t("socketSetAudioNoFfmpeg"));
-
     const context = ctx.msg?.message?.extendedTextMessage?.contextInfo;
     const quotedMessage = context?.quotedMessage;
     const target = unwrapAudio(quotedMessage) || unwrapAudio(ctx.msg?.message);
-    if (!target)
-      return ctx.reply(t("socketSetAudioNeedReply"));
-    let input = "";
+    if (!target) return ctx.reply(t("socketSetAudioNeedReply"));
     let output = "";
     let outputStored = false;
     try {
@@ -72,33 +64,16 @@ export default {
       await mkdir(dir, { recursive: true });
       const id = randomUUID();
       const botKey = String(ctx.botJid || "main").replace(/[^a-zA-Z0-9]/g, "_");
-      input = path.join(dir, `menu-audio-${botKey}-${id}.input`);
       output = path.join(dir, `menu-audio-${botKey}-${id}.ogg`);
-      await writeFile(input, buffer);
-      await execFileAsync(
-        ffmpegPath,
-        [
-          "-y",
-          "-i",
-          input,
-          "-vn",
-          "-c:a",
-          "libopus",
-          "-b:a",
-          "96k",
-          "-ar",
-          "48000",
-          output,
-        ],
-        { timeout: 120000 },
-      );
+      const convertedAudio = await CONVERT_AUDIO_TO_OGG(buffer);
+      await writeFile(output, convertedAudio);
 
       const bot = ctx.db.getBot(ctx.botJid);
-      const previousPath = (
-        bot?.data?.customAudio as { path?: string } | undefined
-      )?.path || (bot?.currentAudio
-        ? path.join(dir, path.basename(bot.currentAudio))
-        : undefined);
+      const previousPath =
+        (bot?.data?.customAudio as { path?: string } | undefined)?.path ||
+        (bot?.currentAudio
+          ? path.join(dir, path.basename(bot.currentAudio))
+          : undefined);
       if (previousPath && previousPath !== output)
         await unlink(previousPath).catch(() => undefined);
       const fileName = path.basename(output);
@@ -119,17 +94,17 @@ export default {
       });
       outputStored = true;
       await ctx.react("✅");
-      return ctx.reply(
-        t("socketSetAudioUpdated"),
-      );
+      return ctx.reply(t("socketSetAudioUpdated"));
     } catch (error: unknown) {
       return ctx.reply({
         text: t("socketSetAudioError", {
-          error: error instanceof Error ? error.message : String(error) || "error desconocido",
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error) || "error desconocido",
         }),
       });
     } finally {
-      if (input) await unlink(input).catch(() => undefined);
       if (output && !outputStored) await unlink(output).catch(() => undefined);
     }
   },

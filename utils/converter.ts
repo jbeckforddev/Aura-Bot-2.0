@@ -2,8 +2,9 @@ import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat, readFile, writeFile,mkdtemp } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { request } from "undici";
@@ -208,5 +209,52 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
     throw error instanceof Error
       ? error
       : new Error("No se pudo convertir el video a un formato compatible.");
+  }
+}
+
+export async function CONVERT_AUDIO_TO_OGG(buffer: Buffer): Promise<Buffer> {
+  if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "gstatus-audio-"));
+  const inputPath = path.join(tempDir, "input.mp3");
+  const outputPath = path.join(tempDir, "output.ogg");
+
+  try {
+    await writeFile(inputPath, buffer);
+    await execFileAsync(
+      ffmpegPath,
+      [
+        "-y",
+        "-i",
+        inputPath,
+        "-vn",
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "96k",
+        "-ar",
+        "48000",
+        "-application",
+        "voip",
+        "-frame_duration",
+        "20",
+        "-avoid_negative_ts",
+        "make_zero",
+        "-map_metadata",
+        "-1",
+        "-map_chapters",
+        "-1",
+        "-f",
+        "ogg",
+        outputPath,
+      ],
+      { timeout: 120000 },
+    );
+
+    const converted = await readFile(outputPath);
+    if (!converted.length) throw new Error("FFmpeg generó un audio vacío.");
+    return converted;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
 }
