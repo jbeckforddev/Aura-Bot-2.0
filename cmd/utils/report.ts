@@ -1,4 +1,4 @@
-import type { CommandContext } from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index";
 import { fytBold } from "../../core/socketText.ts";
 import {
   REPORT_GROUP_JID,
@@ -11,7 +11,7 @@ import { t } from "../../src/langs/index.ts";
 
 
 export default {
-  name: ["report", "bug", "sugerencia", "reportar", "sugerir"],
+  name: ["report", "bug", "sugerencia", "sugerir"],
   category: "system",
   description: t("cmd_envia_un_bug_o_sugerencia_al_g_b4673ce4"),
   async run(ctx: CommandContext) {
