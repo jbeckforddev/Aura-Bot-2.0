@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "एक यादृच्छिक गाचा पात्र निकालें।",
   "gacha_claim_description": "ड्रॉ कार्ड का जवाब देकर पात्र प्राप्त करें।",
   "gacha_catalog_unavailable": "गाचा सूची में कोई मान्य पात्र उपलब्ध नहीं है।",
+  "gacha_no_unclaimed_cards": "इस समूह में दावा करने के लिए कोई कार्ड बाकी नहीं है।",
   "gacha_rarity_label": "दुर्लभता",
   "gacha_type_label": "प्रकार",
   "gacha_value_label": "मूल्य",

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Vylosuje náhodnou postavu z gachy.",
   "gacha_claim_description": "Získejte postavu odpovědí na kartu losování.",
   "gacha_catalog_unavailable": "V katalogu gachy nejsou dostupné žádné platné postavy.",
+  "gacha_no_unclaimed_cards": "V této skupině už nezbývají žádné nevyzvednuté karty.",
   "gacha_rarity_label": "Vzácnost",
   "gacha_type_label": "Typ",
   "gacha_value_label": "Hodnota",

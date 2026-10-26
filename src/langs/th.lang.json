@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "สุ่มตัวละครกาชา",
   "gacha_claim_description": "รับตัวละครโดยตอบกลับการ์ดที่สุ่มได้",
   "gacha_catalog_unavailable": "ไม่มีตัวละครที่ถูกต้องในรายการกาชา",
+  "gacha_no_unclaimed_cards": "ไม่มีการ์ดที่ยังไม่ถูกรับเหลืออยู่ในกลุ่มนี้แล้ว",
   "gacha_rarity_label": "ระดับความหายาก",
   "gacha_type_label": "ประเภท",
   "gacha_value_label": "มูลค่า",

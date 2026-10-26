@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Rút ngẫu nhiên một nhân vật gacha.",
   "gacha_claim_description": "Nhận nhân vật bằng cách trả lời thẻ lượt rút.",
   "gacha_catalog_unavailable": "Không có nhân vật hợp lệ trong danh mục gacha.",
+  "gacha_no_unclaimed_cards": "Nhóm này không còn thẻ nào chưa được nhận.",
   "gacha_rarity_label": "Độ hiếm",
   "gacha_type_label": "Loại",
   "gacha_value_label": "Giá trị",

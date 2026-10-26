@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "抽取一名随机扭蛋角色。",
   "gacha_claim_description": "回复抽取卡片以领取角色。",
   "gacha_catalog_unavailable": "扭蛋目录中没有可用的有效角色。",
+  "gacha_no_unclaimed_cards": "本群组已没有未领取的卡牌。",
   "gacha_rarity_label": "稀有度",
   "gacha_type_label": "类型",
   "gacha_value_label": "价值",

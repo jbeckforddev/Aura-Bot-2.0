@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Draw a random gacha character.",
   "gacha_claim_description": "Claim a character by replying to its draw card.",
   "gacha_catalog_unavailable": "No valid characters are available in the gacha catalog.",
+  "gacha_no_unclaimed_cards": "There are no unclaimed cards left in this group.",
   "gacha_rarity_label": "Rarity",
   "gacha_type_label": "Type",
   "gacha_value_label": "Value",

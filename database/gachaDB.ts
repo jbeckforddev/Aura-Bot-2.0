@@ -83,6 +83,24 @@ export interface GachaHaremEntry {
   claimed_at: number;
 }
 
+export function getGachaClaimedCards(
+  groupId: string,
+): Array<Pick<GachaHaremEntry, "character_id" | "image_id">> {
+  return db_instance
+    .prepare(
+      `SELECT character_id, image_id
+       FROM GachaImageOwnership
+       WHERE group_id = ?
+       UNION
+       SELECT character_id, NULL AS image_id
+       FROM GachaOwnership
+       WHERE group_id = ?`,
+    )
+    .all(groupId, groupId) as Array<
+    Pick<GachaHaremEntry, "character_id" | "image_id">
+  >;
+}
+
 interface GachaDraw {
   group_id: string;
   message_id: string;

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Húzz egy véletlenszerű gacha karaktert.",
   "gacha_claim_description": "A húzás kártyájára válaszolva igényeld a karaktert.",
   "gacha_catalog_unavailable": "A gacha katalógusban nincs elérhető érvényes karakter.",
+  "gacha_no_unclaimed_cards": "Ebben a csoportban már nincs igényelhető kártya.",
   "gacha_rarity_label": "Ritkaság",
   "gacha_type_label": "Típus",
   "gacha_value_label": "Érték",

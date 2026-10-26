@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Bumunot ng random na karakter sa gacha.",
   "gacha_claim_description": "I-claim ang karakter sa pamamagitan ng pag-reply sa draw card.",
   "gacha_catalog_unavailable": "Walang wastong karakter na available sa gacha catalog.",
+  "gacha_no_unclaimed_cards": "Wala nang hindi pa na-claim na card sa grupong ito.",
   "gacha_rarity_label": "Bihira",
   "gacha_type_label": "Uri",
   "gacha_value_label": "Halaga",

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Sorteia um personagem aleatório do gacha.",
   "gacha_claim_description": "Resgate um personagem respondendo ao cartão do sorteio.",
   "gacha_catalog_unavailable": "Não há personagens válidos disponíveis no catálogo gacha.",
+  "gacha_no_unclaimed_cards": "Não há mais cartas não reivindicadas neste grupo.",
   "gacha_rarity_label": "Raridade",
   "gacha_type_label": "Tipo",
   "gacha_value_label": "Valor",

@@ -101,6 +101,18 @@ const BOT_DB_CACHE = new LRUCache<string, DatabaseBot>({
   ttl: 10 * 60 * 1000
 });
 const commandCooldowns = new LRUCache<string, number>({ max: 20_000 });
+const GROUP_PREFIX_COMMANDS = new Set([
+  "setprefix",
+  "prefix",
+  "delprefix",
+  "deleteprefix",
+]);
+const BOT_PREFIX_COMMANDS = new Set([
+  "modprefix",
+  "setmodprefix",
+  "delmodprefix",
+  "deletemodprefix",
+]);
 
 function stripDeviceSuffixFromJid(jid?: string | null): string | null {
   if (!jid || typeof jid !== "string") return null;
@@ -1319,6 +1331,14 @@ async function handleMessageInternal(
         const errorDetails =
           e instanceof Error ? e.stack || e.message : String(e);
         await ctx.reply({ text: ERROR_CMD({ cmdName, errorDetails }) });
+      }
+    } finally {
+      if (isGroup && GROUP_PREFIX_COMMANDS.has(cmdName)) {
+        GROUP_DB_CACHE.delete(from);
+        GROUP_DB_CACHE.delete(jidNormalizedUser(from));
+      }
+      if (BOT_PREFIX_COMMANDS.has(cmdName)) {
+        BOT_DB_CACHE.delete(`bot:${botJid}`);
       }
     }
   } catch (e: unknown) {

@@ -109,20 +109,26 @@ export function getGachaCatalogStats() {
   return { characters: CHARACTERS.length, series: series.size };
 }
 
-export function drawRandomCharacter(): GachaCharacter {
-  if (CHARACTERS.length === 0) {
+export function getGachaCharacters(): GachaCharacter[] {
+  return CHARACTERS;
+}
+
+export function drawRandomCharacter(
+  characters: GachaCharacter[] = CHARACTERS,
+): GachaCharacter {
+  if (characters.length === 0) {
     throw new Error("El catálogo gacha no contiene personajes con imágenes válidas.");
   }
 
   const rarityCounts = new Map<GachaRarity, number>();
-  for (const character of CHARACTERS) {
+  for (const character of characters) {
     rarityCounts.set(
       character.rarity,
       (rarityCounts.get(character.rarity) || 0) + 1,
     );
   }
 
-  const weighted = CHARACTERS.map((character) => ({
+  const weighted = characters.map((character) => ({
     character,
     weight:
       RARITY_WEIGHTS[character.rarity] /

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Extrage un personaj aleatoriu din gacha.",
   "gacha_claim_description": "Revendică un personaj răspunzând la cartea extragerii.",
   "gacha_catalog_unavailable": "Nu există personaje valide disponibile în catalogul gacha.",
+  "gacha_no_unclaimed_cards": "Nu au mai rămas cărți nerevendicate în acest grup.",
   "gacha_rarity_label": "Raritate",
   "gacha_type_label": "Tip",
   "gacha_value_label": "Valoare",

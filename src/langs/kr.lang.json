@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "무작위 가챠 캐릭터를 뽑습니다.",
   "gacha_claim_description": "뽑기 카드에 답장하여 캐릭터를 획득합니다.",
   "gacha_catalog_unavailable": "가챠 카탈로그에 사용할 수 있는 캐릭터가 없습니다.",
+  "gacha_no_unclaimed_cards": "이 그룹에 더 이상 획득하지 않은 카드가 없습니다.",
   "gacha_rarity_label": "희귀도",
   "gacha_type_label": "유형",
   "gacha_value_label": "가치",

@@ -54,6 +54,7 @@ type GachaTranslationKey =
   | "gacha_rw_description"
   | "gacha_claim_description"
   | "gacha_catalog_unavailable"
+  | "gacha_no_unclaimed_cards"
   | "gacha_rarity_label"
   | "gacha_type_label"
   | "gacha_value_label"

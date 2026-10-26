@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Τράβηξε έναν τυχαίο χαρακτήρα gacha.",
   "gacha_claim_description": "Διεκδίκησε έναν χαρακτήρα απαντώντας στην κάρτα κλήρωσης.",
   "gacha_catalog_unavailable": "Δεν υπάρχουν έγκυροι χαρακτήρες στον κατάλογο gacha.",
+  "gacha_no_unclaimed_cards": "Δεν έχουν απομείνει κάρτες χωρίς διεκδίκηση σε αυτή την ομάδα.",
   "gacha_rarity_label": "Σπανιότητα",
   "gacha_type_label": "Τύπος",
   "gacha_value_label": "Αξία",

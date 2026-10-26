@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Estrai un personaggio casuale dal gacha.",
   "gacha_claim_description": "Riscatta un personaggio rispondendo alla carta dell'estrazione.",
   "gacha_catalog_unavailable": "Nessun personaggio valido è disponibile nel catalogo gacha.",
+  "gacha_no_unclaimed_cards": "Non ci sono più carte non reclamate in questo gruppo.",
   "gacha_rarity_label": "Rarità",
   "gacha_type_label": "Tipo",
   "gacha_value_label": "Valore",

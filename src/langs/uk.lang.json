@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Витягнути випадкового персонажа гача.",
   "gacha_claim_description": "Забрати персонажа, відповівши на картку розіграшу.",
   "gacha_catalog_unavailable": "У каталозі гача немає доступних персонажів.",
+  "gacha_no_unclaimed_cards": "У цій групі більше не залишилося незабраних карток.",
   "gacha_rarity_label": "Рідкість",
   "gacha_type_label": "Тип",
   "gacha_value_label": "Цінність",

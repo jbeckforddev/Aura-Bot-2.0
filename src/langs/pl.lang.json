@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Wylosuj losową postać z gachy.",
   "gacha_claim_description": "Odbierz postać, odpowiadając na kartę losowania.",
   "gacha_catalog_unavailable": "W katalogu gachy nie ma dostępnych prawidłowych postaci.",
+  "gacha_no_unclaimed_cards": "W tej grupie nie ma już nieodebranych kart.",
   "gacha_rarity_label": "Rzadkość",
   "gacha_type_label": "Typ",
   "gacha_value_label": "Wartość",

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "ランダムなガチャキャラクターを引きます。",
   "gacha_claim_description": "抽選カードに返信してキャラクターを受け取ります。",
   "gacha_catalog_unavailable": "ガチャカタログに有効なキャラクターがありません。",
+  "gacha_no_unclaimed_cards": "このグループには未獲得のカードがもうありません。",
   "gacha_rarity_label": "レア度",
   "gacha_type_label": "タイプ",
   "gacha_value_label": "価値",

@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Ziehe eine zufällige Gacha-Figur.",
   "gacha_claim_description": "Beanspruche eine Figur, indem du auf ihre Ziehungskarte antwortest.",
   "gacha_catalog_unavailable": "Im Gacha-Katalog sind keine gültigen Figuren verfügbar.",
+  "gacha_no_unclaimed_cards": "In dieser Gruppe sind keine nicht beanspruchten Karten mehr übrig.",
   "gacha_rarity_label": "Seltenheit",
   "gacha_type_label": "Typ",
   "gacha_value_label": "Wert",

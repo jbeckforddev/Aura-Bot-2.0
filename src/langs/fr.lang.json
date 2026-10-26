@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Tirez un personnage aléatoire du gacha.",
   "gacha_claim_description": "Réclamez un personnage en répondant à sa carte de tirage.",
   "gacha_catalog_unavailable": "Aucun personnage valide n'est disponible dans le catalogue gacha.",
+  "gacha_no_unclaimed_cards": "Il ne reste aucune carte non réclamée dans ce groupe.",
   "gacha_rarity_label": "Rareté",
   "gacha_type_label": "Type",
   "gacha_value_label": "Valeur",

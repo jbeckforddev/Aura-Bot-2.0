@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Dra en slumpmässig gacha-karaktär.",
   "gacha_claim_description": "Hämta en karaktär genom att svara på dragkortet.",
   "gacha_catalog_unavailable": "Det finns inga giltiga karaktärer tillgängliga i gacha-katalogen.",
+  "gacha_no_unclaimed_cards": "Det finns inga oinlösta kort kvar i den här gruppen.",
   "gacha_rarity_label": "Sällsynthet",
   "gacha_type_label": "Typ",
   "gacha_value_label": "Värde",

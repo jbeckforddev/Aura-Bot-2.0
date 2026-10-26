@@ -1,10 +1,14 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { getGachaOwnership, saveGachaDraw } from "../../database/gachaDB.ts";
+import { getGachaClaimedCards, saveGachaDraw } from "../../database/gachaDB.ts";
 import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { sendMessageWithRateLimit } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t, type TranslationKey } from "../../src/langs/index.ts";
-import { drawRandomCharacter, drawRandomImage } from "../../core/gachaRuntime.ts";
+import {
+	drawRandomCharacter,
+	drawRandomImage,
+	getGachaCharacters,
+} from "../../core/gachaRuntime.ts";
 
 const RARITY_TRANSLATIONS: Record<string, TranslationKey> = {
 	Especial: "gacha_rarity_special",
@@ -22,24 +26,39 @@ export default {
 	groupOnly: true,
 
 	async run(ctx: CommandContext) {
+		const claimedCards = getGachaClaimedCards(ctx.from);
+		const claimedImages = new Map<string, Set<number>>();
+		const legacyClaimedCharacters = new Set<string>();
+		for (const card of claimedCards) {
+			if (card.image_id === null) {
+				legacyClaimedCharacters.add(card.character_id);
+				continue;
+			}
+			const imageIds = claimedImages.get(card.character_id) ?? new Set<number>();
+			imageIds.add(card.image_id);
+			claimedImages.set(card.character_id, imageIds);
+		}
+
+		const availableCharacters = getGachaCharacters().flatMap((character) => {
+			if (legacyClaimedCharacters.has(character.id)) return [];
+			const claimed = claimedImages.get(character.id);
+			const images = claimed
+				? character.images.filter((image) => !claimed.has(image.id))
+				: character.images;
+			return images.length > 0 ? [{ ...character, images }] : [];
+		});
+		if (availableCharacters.length === 0) {
+			return ctx.reply(t("gacha_no_unclaimed_cards"));
+		}
+
 		let character;
 		try {
-			character = drawRandomCharacter();
+			character = drawRandomCharacter(availableCharacters);
 		} catch {
 			return ctx.reply(t("gacha_catalog_unavailable"));
 		}
 
 		const image = drawRandomImage(character);
-		const ownership = getGachaOwnership(ctx.from, character.id, image.id);
-		const ownerJid = ownership?.user_id;
-		const ownerUser = ownerJid ? ctx.db.getUser(ownerJid) : undefined;
-		const ownerLabel = ownerJid
-			? ownerUser?.pushName ||
-				ownerUser?.username ||
-				ownerUser?.name ||
-				ownerUser?.phone_number ||
-				ownerJid.split("@")[0]
-			: "";
 		const rarity = t(RARITY_TRANSLATIONS[character.rarity]);
 		const characterType =
 			character.type.toLowerCase() === "support"
@@ -57,7 +76,7 @@ export default {
 				? [`┃ ✦ ${t("gacha_source_label")}: ${character.source}`]
 				: []),
 			`┃ ✦ ${t("gacha_value_label")}: ${character.value}`,
-			`┃ ✦ ${t("gacha_status_label")}: ${ownerJid ? t("gacha_status_claimed_by", { user: ownerLabel }) : t("gacha_status_free")}`,
+			`┃ ✦ ${t("gacha_status_label")}: ${t("gacha_status_free")}`,
 			`╰━━━━━━━━━━━━⬣`,
 		].join("\n");
 

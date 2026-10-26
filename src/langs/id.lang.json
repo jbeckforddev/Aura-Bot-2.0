@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Dapatkan karakter gacha secara acak.",
   "gacha_claim_description": "Klaim karakter dengan membalas kartu hasil undian.",
   "gacha_catalog_unavailable": "Tidak ada karakter valid yang tersedia di katalog gacha.",
+  "gacha_no_unclaimed_cards": "Tidak ada kartu yang belum diklaim tersisa di grup ini.",
   "gacha_rarity_label": "Kelangkaan",
   "gacha_type_label": "Tipe",
   "gacha_value_label": "Nilai",

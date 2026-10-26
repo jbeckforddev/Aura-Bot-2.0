@@ -1278,6 +1278,7 @@
   "gacha_rw_description": "Trek een willekeurig gacha-personage.",
   "gacha_claim_description": "Claim een personage door op de trekkingskaart te reageren.",
   "gacha_catalog_unavailable": "Er zijn geen geldige personages beschikbaar in de gacha-catalogus.",
+  "gacha_no_unclaimed_cards": "Er zijn geen niet-geclaimde kaarten meer in deze groep.",
   "gacha_rarity_label": "Zeldzaamheid",
   "gacha_type_label": "Type",
   "gacha_value_label": "Waarde",
