@@ -16,8 +16,9 @@ export default {
     const bot = ctx.db.getBot(ctx.botJid);
     ctx.db.setBot(ctx.botJid, {
       bot_name: name,
-      data: { ...(bot.data || {}), customBotName: true },
+      data: { ...(bot?.data || {}), customBotName: true },
     });
+    ctx.db.invalidateBotDbCache?.(ctx.botJid);
     return ctx.reply(t("socketSetBotNameUpdated", { name }));
   },
 };

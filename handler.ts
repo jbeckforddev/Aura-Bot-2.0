@@ -134,11 +134,19 @@ const GROUP_PREFIX_COMMANDS = new Set([
   "delprefix",
   "deleteprefix",
 ]);
-const BOT_PREFIX_COMMANDS = new Set([
+const BOT_CONFIG_COMMANDS = new Set([
   "modprefix",
   "setmodprefix",
   "delmodprefix",
   "deletemodprefix",
+  "setbotname",
+  "setname",
+  "botname",
+  "setbanner",
+  "setmenuimage",
+  "setmenubanner",
+  "setaudio",
+  "setcurrency",
 ]);
 
 function stripDeviceSuffixFromJid(jid?: string | null): string | null {
@@ -1405,8 +1413,9 @@ async function handleMessageInternal(
         GROUP_DB_CACHE.delete(from);
         GROUP_DB_CACHE.delete(jidNormalizedUser(from));
       }
-      if (BOT_PREFIX_COMMANDS.has(cmdName)) {
+      if (BOT_CONFIG_COMMANDS.has(cmdName)) {
         BOT_DB_CACHE.delete(`bot:${botJid}`);
+        BOT_DB_CACHE.delete(`bot:${cleanJid(botJid)}`);
       }
     }
   } catch (e: unknown) {

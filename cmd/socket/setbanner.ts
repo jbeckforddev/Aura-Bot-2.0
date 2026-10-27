@@ -82,7 +82,8 @@ export default {
             ? "png"
             : "jpg";
       const botKey = String(ctx.botJid || "main").replace(/[^a-zA-Z0-9]/g, "_");
-      const fileName = `menu-banner-${botKey}.${extension}`;
+      const timestamp = Date.now();
+      const fileName = `menu-banner-${botKey}-${timestamp}.${extension}`;
       const filePath = path.join(databaseDir, fileName);
       await writeFile(filePath, buffer);
 
@@ -109,6 +110,7 @@ export default {
       });
       clearMenuMediaCache();
       clearInfoBotMediaCache();
+      ctx.db.invalidateBotDbCache?.(ctx.botJid);
       return ctx.reply(t("socketSetBannerUpdated"));
     } catch (error: unknown) {
       return ctx.reply({

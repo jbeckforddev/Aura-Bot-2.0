@@ -16,10 +16,22 @@ import { t } from "../../src/langs/index.ts";
 type CachedMediaMessage =
   proto.Message.IImageMessage | proto.Message.IVideoMessage;
 
-const mediaCacheMap = new Map<string, CachedMediaMessage>();
+const mediaCacheMap: Map<string, CachedMediaMessage> =
+  (globalThis as unknown as { __menuMediaCache?: Map<string, CachedMediaMessage> })
+    .__menuMediaCache ??
+  ((
+    globalThis as unknown as {
+      __menuMediaCache?: Map<string, CachedMediaMessage>;
+    }
+  ).__menuMediaCache = new Map<string, CachedMediaMessage>());
 
 export function clearMenuMediaCache() {
   mediaCacheMap.clear();
+  (
+    globalThis as unknown as {
+      __menuMediaCache?: Map<string, CachedMediaMessage>;
+    }
+  ).__menuMediaCache?.clear();
 }
 
 export async function preloadMenuBanner(sock: { waUploadToServer?: any }) {
@@ -71,7 +83,7 @@ export default {
       prefix ?? usedPrefix ?? globalThis.DEFAULT_PREFIXES?.[0] ?? ".";
     const remoteJid = from;
     const pushName = msg?.pushName || "Usuario";
-    const botRecord = runtimeDb?.getBot?.(sock.user?.id);
+    const botRecord = runtimeDb?.getBot?.(ctx.botJid || sock.user?.id);
     const botName = botRecord?.bot_name || "Aura Reed";
     const botType = resolveBotType(botRecord?.bot_type, sock.isSubBot);
     const tituloEstilizado = fytBold(t("cmd_value0_bb624cd4", { value0: String(botName).toUpperCase() }));

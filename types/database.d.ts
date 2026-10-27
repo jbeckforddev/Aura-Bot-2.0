@@ -265,6 +265,7 @@ export interface IDatabase {
   addBotGroup(botJid: string, groupJid: string): void;
   getBotById(botId: string): DatabaseBot | null;
   deleteBot(jid: string): void;
+  invalidateBotDbCache?(key?: string): void;
   getAllUsers(): DatabaseUser[];
   getAllBots(): DatabaseBot[];
   hasRoles(jid: string, roles: string[]): Record<string, boolean>;

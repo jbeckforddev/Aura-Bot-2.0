@@ -509,12 +509,17 @@ async function connectSubBot(
       }
       const botLid = botId.replace(/@lid$/, "") || null;
       const phoneNumber = botJid.split("@")[0].split(":")[0].replace(/\D/g, "");
-      const botName = String(
-        (socket.user as unknown as Record<string, unknown> | undefined)?.name ||
-          (socket.user as unknown as Record<string, unknown> | undefined)?.notify ||
-          previousBot?.bot_name ||
-          "",
-      ).trim() || null;
+      const hasCustomName = Boolean(
+        previousBot?.data?.customBotName && previousBot?.bot_name,
+      );
+      const botName = hasCustomName
+        ? previousBot.bot_name
+        : String(
+            previousBot?.bot_name ||
+              (socket.user as unknown as Record<string, unknown> | undefined)?.name ||
+              (socket.user as unknown as Record<string, unknown> | undefined)?.notify ||
+              "",
+          ).trim() || null;
 
       socket.subBotId = botLid ? `${botLid}@lid` : botJid;
       db.setBot(botJid, {
@@ -527,6 +532,12 @@ async function connectSubBot(
         bot_type: "Sub-Bot",
         status: "active",
         sessionName,
+        currentBanner: previousBot?.currentBanner ?? null,
+        currentAudio: previousBot?.currentAudio ?? null,
+        data: {
+          ...(previousBot?.data || {}),
+          sessionName,
+        },
       });
       db.setUser(botJid, {
         jid: botJid,

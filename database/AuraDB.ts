@@ -1125,7 +1125,7 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
 function getBot(jid: string): DatabaseBot {
   const rawInput = String(jid || "").trim();
   const key = normalizeJid(rawInput);
-  const cached = botMemoryCache.get(rawInput) ?? botMemoryCache.get(key);
+  const cached = botMemoryCache.get(key);
   if (cached) {
     return { ...cached, data: { ...cached.data } };
   }
@@ -1171,7 +1171,6 @@ function getBot(jid: string): DatabaseBot {
     );
     botTypeCache.set(key, "Principal");
 
-    botMemoryCache.set(rawInput, defaultBot);
     botMemoryCache.set(key, defaultBot);
     return defaultBot;
   }
@@ -1215,7 +1214,6 @@ function getBot(jid: string): DatabaseBot {
       | null,
     data: jsonData,
   };
-  botMemoryCache.set(rawInput, result);
   botMemoryCache.set(key, result);
   return result;
 }
@@ -1253,6 +1251,7 @@ export const db: IDatabase = {
   getUser,
   getGroup,
   getBot,
+  invalidateBotDbCache,
 
   setUser(
     jid: string,

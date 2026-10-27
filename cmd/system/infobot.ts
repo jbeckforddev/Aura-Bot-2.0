@@ -11,10 +11,22 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
 
-const mediaCacheMap = new Map<string, any>();
+const mediaCacheMap: Map<string, any> =
+  (globalThis as unknown as { __infobotMediaCache?: Map<string, any> })
+    .__infobotMediaCache ??
+  ((
+    globalThis as unknown as {
+      __infobotMediaCache?: Map<string, any>;
+    }
+  ).__infobotMediaCache = new Map<string, any>());
 
 export function clearInfoBotMediaCache(): void {
   mediaCacheMap.clear();
+  (
+    globalThis as unknown as {
+      __infobotMediaCache?: Map<string, any>;
+    }
+  ).__infobotMediaCache?.clear();
 }
 
 function getServerName(): string {
