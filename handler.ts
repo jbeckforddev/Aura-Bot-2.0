@@ -67,40 +67,43 @@ import type {
 export type { ContactMetadata, HandlerConfig, HandlerLogger, HandlerOptions };
 
 export const GROUP_METADATA_CACHE = new LRUCache<string, GroupMetadata>({
-  max: 150,
-  ttl: 5 * 60 * 1000,
+  max: 500,
+  ttl: 60 * 60 * 1000,
 });
 
 const processedGroupMessages = new LRUCache<string, true>({
-  max: 20_000,
-  ttl: 2 * 60 * 1000,
+  max: 5_000,
+  ttl: 60 * 1000,
 });
 
 const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
-  max: 500,
+  max: 300,
   ttl: 5 * 60 * 1000,
 });
 
 const configuredLidCache = new LRUCache<string, string | null>({
-  max: 200,
-  ttl: 30 * 60 * 1000,
+  max: 150,
+  ttl: 15 * 60 * 1000,
 });
 
 const USER_DB_CACHE = new LRUCache<string, DatabaseUser>({
-  max: 5000,
-  ttl: 10 * 60 * 1000
+  max: 2000,
+  ttl: 5 * 60 * 1000,
 });
 
 const GROUP_DB_CACHE = new LRUCache<string, DatabaseGroup>({
-  max: 1000,
-  ttl: 10 * 60 * 1000
-})
+  max: 500,
+  ttl: 5 * 60 * 1000,
+});
 
 const BOT_DB_CACHE = new LRUCache<string, DatabaseBot>({
-  max: 5000,
-  ttl: 10 * 60 * 1000
+  max: 100,
+  ttl: 5 * 60 * 1000,
 });
-const commandCooldowns = new LRUCache<string, number>({ max: 20_000 });
+const commandCooldowns = new LRUCache<string, number>({
+  max: 2_000,
+  ttl: 2 * 60 * 1000,
+});
 const GROUP_PREFIX_COMMANDS = new Set([
   "setprefix",
   "prefix",
@@ -234,30 +237,57 @@ export async function getGroupMetadata(
   sock: ExtendedWASocket,
 ): Promise<GroupMetadata | null> {
   const normalizedJid = jidNormalizedUser(jid);
-  if (GROUP_METADATA_CACHE.has(normalizedJid)) {
-    return GROUP_METADATA_CACHE.get(normalizedJid) ?? null;
-  }
+  const cached = GROUP_METADATA_CACHE.get(normalizedJid);
+  if (cached) return cached;
 
-  try {
-    const metadata = await sock.groupMetadata(normalizedJid);
-    GROUP_METADATA_CACHE.set(normalizedJid, metadata);
-    return metadata;
-  } catch (error) {
-    console.error(
-      chalk.red(
-        `Error al obtener metadata del grupo ${normalizedJid}: ${String(error)}`,
-      ),
-    );
-    return null;
-  }
+  const inFlight = groupMetaInFlight.get(normalizedJid);
+  if (inFlight) return inFlight;
+
+  const promise = (async () => {
+    let timeoutId: NodeJS.Timeout | undefined;
+    try {
+      const metaPromise = sock.groupMetadata(normalizedJid);
+      const timeoutPromise = new Promise<null>((resolve) => {
+        timeoutId = setTimeout(() => resolve(null), 2500);
+        timeoutId.unref?.();
+      });
+      const metadata = await Promise.race([metaPromise, timeoutPromise]);
+      if (metadata) {
+        GROUP_METADATA_CACHE.set(normalizedJid, metadata);
+      }
+      return metadata ?? null;
+    } catch (error) {
+      console.error(
+        chalk.red(
+          `Error al obtener metadata del grupo ${normalizedJid}: ${String(error)}`,
+        ),
+      );
+      return null;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      groupMetaInFlight.delete(normalizedJid);
+    }
+  })();
+
+  groupMetaInFlight.set(normalizedJid, promise);
+  return promise;
 }
 
 export function invalidateGroupCache(groupJid: string) {
+  const normalized = jidNormalizedUser(groupJid);
   GROUP_METADATA_CACHE.delete(groupJid);
-  GROUP_METADATA_CACHE.delete(jidNormalizedUser(groupJid));
+  GROUP_METADATA_CACHE.delete(normalized);
   GROUP_DB_CACHE.delete(groupJid);
-  GROUP_DB_CACHE.delete(jidNormalizedUser(groupJid));
+  GROUP_DB_CACHE.delete(normalized);
+  groupMetaInFlight.delete(groupJid);
+  groupMetaInFlight.delete(normalized);
 }
+
+const lidToPnCache = new LRUCache<string, string>({
+  max: 5000,
+  ttl: 60 * 60 * 1000,
+});
+const groupMetaInFlight = new Map<string, Promise<GroupMetadata | null>>();
 
 async function resolveLid(
   lidJid: string | null | undefined,
@@ -266,17 +296,26 @@ async function resolveLid(
 ) {
   if (!lidJid || !lidJid.endsWith("@lid")) return lidJid;
 
+  const cached = lidToPnCache.get(lidJid);
+  if (cached) return cached;
+
   const match = groupMeta?.participants?.find(
     (p: GroupParticipant) => cleanJid(p.id || "") === lidJid,
   );
   if (match?.phoneNumber) {
-    return cleanJid(match.phoneNumber);
+    const pn = cleanJid(match.phoneNumber);
+    lidToPnCache.set(lidJid, pn);
+    return pn;
   }
 
   try {
     const resolved =
       await sock.signalRepository?.lidMapping?.getPNForLID(lidJid);
-    if (resolved) return cleanJid(resolved);
+    if (resolved) {
+      const pn = cleanJid(resolved);
+      lidToPnCache.set(lidJid, pn);
+      return pn;
+    }
   } catch {
     // Ignoramos errores de resolución de LID y devolvemos el valor original.
   }
@@ -290,7 +329,7 @@ async function matchesConfiguredNumber(
   rawLid: string,
   sock: ExtendedWASocket,
 ) {
-  if (!Array.isArray(numberList)) return false;
+  if (!Array.isArray(numberList) || numberList.length === 0) return false;
 
   if (
     numberList.some(
@@ -561,24 +600,20 @@ async function handleMessageInternal(
 
     if (isGroup) {
       if (GROUP_METADATA_CACHE.has(from)) {
-        groupMeta = GROUP_METADATA_CACHE.get(from);
-        groupName = groupMeta?.subject || from;
+        groupMeta = GROUP_METADATA_CACHE.get(from) ?? null;
       } else {
-        try {
-          groupMeta = await sock.groupMetadata(from);
-          groupName = groupMeta?.subject || from;
-          GROUP_METADATA_CACHE.set(from, groupMeta);
-        } catch {
-          groupName = from;
-        }
+        groupMeta = await getGroupMetadata(from, sock);
       }
+      groupName = groupMeta?.subject || groupData?.group_name || from;
 
       const storedGroup = groupData;
-      if (groupName && storedGroup.group_name !== groupName) {
+      if (groupName && storedGroup && storedGroup.group_name !== groupName) {
+        storedGroup.group_name = groupName;
         runtimeDb.setGroup(from, { group_name: groupName });
+        GROUP_DB_CACHE.set(from, storedGroup);
       }
 
-      const primaryBot = groupData.primaryBot;
+      const primaryBot = groupData?.primaryBot;
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         if (!isPrimaryGroupBot && isCmd) return;
         if (botRecord.status !== "active") return;
@@ -613,12 +648,14 @@ async function handleMessageInternal(
         currentUser.phone_number !== nextContact.phone_number ||
         currentUser.lid !== nextContact.lid;
 
-      if (contactChanged) runtimeDb.setUser?.(sender, nextContact);
+      if (contactChanged) {
+        runtimeDb.setUser?.(sender, nextContact);
+        USER_DB_CACHE.set(`user:${sender}`, { ...currentUser, ...nextContact });
+      }
     }
 
     const botUserJid = cleanJid(sock.user?.id || "");
-    const storedBot: Partial<DatabaseBot> =
-      runtimeDb.getBot?.(botUserJid) ?? botRecord;
+    const storedBot: Partial<DatabaseBot> = botRecord;
     const botIdentities = [
       botUserJid,
       sock.subBotId,
@@ -676,13 +713,18 @@ async function handleMessageInternal(
 
     if (isGroup && groupMeta?.participants) {
       const botJidClean = cleanJid(botJid);
-      let botLidClean = "";
-      try {
-        const resolvedBotLid =
-          await sock.signalRepository?.lidMapping?.getLIDForPN(botJidClean);
-        if (resolvedBotLid) botLidClean = cleanJid(resolvedBotLid);
-      } catch {
-        // Sin LID resoluble, se mantiene sin botLidClean.
+      let botLidClean = (sock as any)._cachedBotLid || "";
+      if (!botLidClean) {
+        try {
+          const resolvedBotLid =
+            await sock.signalRepository?.lidMapping?.getLIDForPN(botJidClean);
+          if (resolvedBotLid) {
+            botLidClean = cleanJid(resolvedBotLid);
+            (sock as any)._cachedBotLid = botLidClean;
+          }
+        } catch {
+          // Sin LID resoluble, se mantiene sin botLidClean.
+        }
       }
 
       const senderJidClean = cleanJid(sender);

@@ -5,8 +5,8 @@
   "type": "module",
   "main": "main.ts",
   "scripts": {
-    "start": "tsx main.ts",
-    "prev": "node dist/main.js",
+    "start": "node --expose-gc --import=tsx main.ts",
+    "prev": "node --expose-gc dist/main.js",
     "test": "tsx --watch --inspect main.ts",
     "build": "tsc --noEmit false --outDir dist",
     "postinstall": "patch-package",

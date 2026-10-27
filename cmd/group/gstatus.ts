@@ -138,7 +138,7 @@ export default {
                 mimetype: "audio/ogg; codecs=opus",
                 ptt: false,
                 groupStatus: true,
-              },
+              } as any,
               { backgroundColor: DEFAULT_STATUS_BACKGROUND },
             );
           } else {
@@ -160,7 +160,7 @@ export default {
           if (inputContent && (quotedAudio || quotedMsg.stickerMessage)) {
             await sock.sendMessage(
               remoteJid,
-              { text: inputContent, groupStatus: true },
+              { text: inputContent, groupStatus: true } as any,
               { backgroundColor: DEFAULT_STATUS_BACKGROUND },
             );
           }
@@ -189,7 +189,7 @@ export default {
 
           await sock.sendMessage(
             remoteJid,
-            { text: statusText, groupStatus: true },
+            { text: statusText, groupStatus: true } as any,
             { backgroundColor },
           );
         }
@@ -210,7 +210,7 @@ export default {
 
         await sock.sendMessage(
           remoteJid,
-          { text, groupStatus: true },
+          { text, groupStatus: true } as any,
           { backgroundColor },
         );
       }

@@ -1,5 +1,6 @@
 import DataBase from "better-sqlite3";
 import { mkdirSync, existsSync } from "fs";
+import { LRUCache } from "lru-cache";
 import "../config.ts";
 import { logInfo } from "../core/logger.ts";
 import { resolveBotType } from "../core/botType.ts";
@@ -55,11 +56,54 @@ const db_instance = new DataBase(`${DATA_BASE_DIR}/Aura.db`);
 db_instance.pragma("journal_mode = WAL");
 db_instance.pragma("synchronous = NORMAL");
 db_instance.pragma("foreign_keys = ON");
-db_instance.pragma("wal_checkpoint = 1000");
-db_instance.pragma("busy_timeout = 5000");
-db_instance.pragma("cache_size = -2000");
+db_instance.pragma("wal_autocheckpoint = 1000");
+db_instance.pragma("busy_timeout = 15000");
+db_instance.pragma("cache_size = -16000");
 db_instance.pragma("temp_store = MEMORY");
-db_instance.pragma("mmap_size = 0");
+db_instance.pragma("mmap_size = 67108864");
+
+// In-memory L1 caches for ultra-fast zero-IO reads
+const userMemoryCache = new LRUCache<string, DatabaseUser>({
+  max: 2000,
+  ttl: 10 * 60 * 1000,
+});
+
+const groupMemoryCache = new LRUCache<string, DatabaseGroup>({
+  max: 1000,
+  ttl: 10 * 60 * 1000,
+});
+
+const botMemoryCache = new LRUCache<string, DatabaseBot>({
+  max: 150,
+  ttl: 10 * 60 * 1000,
+});
+
+export function invalidateUserDbCache(key?: string): void {
+  if (key) {
+    userMemoryCache.delete(key);
+    userMemoryCache.delete(normalizeJid(key));
+  } else {
+    userMemoryCache.clear();
+  }
+}
+
+export function invalidateGroupDbCache(key?: string): void {
+  if (key) {
+    groupMemoryCache.delete(key);
+    groupMemoryCache.delete(normalizeJid(key));
+  } else {
+    groupMemoryCache.clear();
+  }
+}
+
+export function invalidateBotDbCache(key?: string): void {
+  if (key) {
+    botMemoryCache.delete(key);
+    botMemoryCache.delete(normalizeJid(key));
+  } else {
+    botMemoryCache.clear();
+  }
+}
 
 db_instance.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -264,6 +308,13 @@ for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
     db_instance.exec(`ALTER TABLE users ADD COLUMN ${column} INTEGER DEFAULT 0`);
 }
 
+db_instance.exec(`
+  CREATE INDEX IF NOT EXISTS idx_users_lid ON users(lid);
+  CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
+  CREATE INDEX IF NOT EXISTS idx_bots_bot_id ON bots(bot_id);
+  CREATE INDEX IF NOT EXISTS idx_bots_lid ON bots(lid);
+`);
+
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
 function hasRoleLevel(userRole: string | null | undefined, role: string) {
@@ -410,18 +461,18 @@ function setCachedLocaleValue(
   cache.set(key, value);
 }
 
-function getCachedLocaleValue(
+function getCachedLocaleEntry(
   cache: Map<string, string | null>,
   input: string | null | undefined,
   builder: (jid: string | null | undefined) => string | null,
-): string | null {
+): { found: boolean; value: string | null } {
   const key = builder(input);
-  if (!key) return null;
+  if (!key) return { found: false, value: null };
 
-  if (cache.has(key)) return cache.get(key) ?? null;
+  if (cache.has(key)) return { found: true, value: cache.get(key) ?? null };
 
   const normalized = normalizeLocaleCacheKey(input);
-  if (!normalized) return null;
+  if (!normalized) return { found: false, value: null };
 
   const candidates = [
     normalized,
@@ -431,11 +482,12 @@ function getCachedLocaleValue(
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   for (const candidate of candidates) {
-    const value = cache.get(candidate);
-    if (value !== undefined) return value;
+    if (cache.has(candidate)) {
+      return { found: true, value: cache.get(candidate) ?? null };
+    }
   }
 
-  return null;
+  return { found: false, value: null };
 }
 
 const userLanguageCache = new Map<string, string | null>();
@@ -469,11 +521,13 @@ export function warmLanguageCaches(): { users: number; groups: number } {
 }
 
 export function getCachedUserLanguage(jid: string | null | undefined): string | null {
-  return getCachedLocaleValue(userLanguageCache, jid, makeUserLocaleCacheKey);
+  const entry = getCachedLocaleEntry(userLanguageCache, jid, makeUserLocaleCacheKey);
+  return entry.found ? entry.value : null;
 }
 
 export function getCachedGroupLanguage(jid: string | null | undefined): string | null {
-  return getCachedLocaleValue(groupLanguageCache, jid, makeGroupLocaleCacheKey);
+  const entry = getCachedLocaleEntry(groupLanguageCache, jid, makeGroupLocaleCacheKey);
+  return entry.found ? entry.value : null;
 }
 
 /**
@@ -482,8 +536,8 @@ export function getCachedGroupLanguage(jid: string | null | undefined): string |
  * Returns null if the user has no language preference set.
  */
 export function lookupUserLanguage(jid: string | null | undefined): string | null {
-  const cached = getCachedLocaleValue(userLanguageCache, jid, makeUserLocaleCacheKey);
-  if (cached !== null) return cached;
+  const entry = getCachedLocaleEntry(userLanguageCache, jid, makeUserLocaleCacheKey);
+  if (entry.found) return entry.value;
 
   const raw = String(jid ?? "").trim();
   if (!raw) return null;
@@ -494,7 +548,10 @@ export function lookupUserLanguage(jid: string | null | undefined): string | nul
     (normalizedJid ? stmts.getUserLang.get(normalizedJid) as Record<string, unknown> | undefined : undefined) ??
     (raw.endsWith("@lid") ? stmts.getUserLangByLid.get(raw) as Record<string, unknown> | undefined : undefined);
 
-  if (!row) return null;
+  if (!row) {
+    setUserLanguageCache(raw, null);
+    return null;
+  }
 
   const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
   const lang = normalizeLocale(jsonData.userLang ?? row.UserLang ?? null);
@@ -509,14 +566,17 @@ export function lookupUserLanguage(jid: string | null | undefined): string | nul
  * Returns null if the group has no language configured.
  */
 export function lookupGroupLanguage(jid: string | null | undefined): string | null {
-  const cached = getCachedLocaleValue(groupLanguageCache, jid, makeGroupLocaleCacheKey);
-  if (cached !== null) return cached;
+  const entry = getCachedLocaleEntry(groupLanguageCache, jid, makeGroupLocaleCacheKey);
+  if (entry.found) return entry.value;
 
   const raw = String(jid ?? "").trim();
   if (!raw) return null;
 
   const row = stmts.getGroupLang.get(raw) as Record<string, unknown> | undefined;
-  if (!row) return null;
+  if (!row) {
+    setGroupLanguageCache(raw, null);
+    return null;
+  }
 
   const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
   const lang = normalizeLocale(jsonData.groupLang ?? row.GroupLang ?? null);
@@ -812,6 +872,10 @@ function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
 function getUser(input: string): DatabaseUser {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
+  const cached = userMemoryCache.get(rawInput) ?? userMemoryCache.get(key);
+  if (cached) {
+    return { ...cached, data: { ...cached.data } };
+  }
   const row = getUserRow(rawInput);
 
   if (!row) {
@@ -844,7 +908,12 @@ function getUser(input: string): DatabaseUser {
 
     setUserLanguageCache(defaultUser.jid ?? defaultUser.lid ?? rawInput, defaultUser.userLang ?? null);
 
-    return { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
+    const result = { ...defaultUser, coins: 100000, bank: 10000, bolsillo: 100000, banco: 10000 };
+    userMemoryCache.set(rawInput, result);
+    if (result.jid) userMemoryCache.set(result.jid, result);
+    if (result.lid) userMemoryCache.set(result.lid, result);
+    if (key) userMemoryCache.set(key, result);
+    return result;
   }
 
   const userRow = row as unknown as Record<string, unknown>;
@@ -860,7 +929,7 @@ function getUser(input: string): DatabaseUser {
   const userLang = normalizeLocale(jsonData.userLang ?? row.UserLang ?? null);
   setUserLanguageCache(rawInput || row.jid || row.lid, userLang);
 
-  return {
+  const result: DatabaseUser = {
     ...jsonData,
     jid: (row.jid !== undefined ? row.jid : (jsonData.jid ?? key)) as
       string | null,
@@ -881,10 +950,20 @@ function getUser(input: string): DatabaseUser {
     banco: bank,
     data: jsonData,
   };
+  userMemoryCache.set(rawInput, result);
+  if (result.jid) userMemoryCache.set(result.jid, result);
+  if (result.lid) userMemoryCache.set(result.lid, result);
+  if (key) userMemoryCache.set(key, result);
+  return result;
 }
 
 function getGroup(jid: string): DatabaseGroup {
-  const key = normalizeJid(jid);
+  const rawInput = String(jid || "").trim();
+  const key = normalizeJid(rawInput);
+  const cached = groupMemoryCache.get(rawInput) ?? groupMemoryCache.get(key);
+  if (cached) {
+    return { ...cached, data: { ...cached.data } };
+  }
   const row = stmts.getGroup.get(key) as GroupDbRow | undefined;
 
   if (!row) {
@@ -932,6 +1011,8 @@ function getGroup(jid: string): DatabaseGroup {
 
     setGroupLanguageCache(jid, defaultGroup.groupLang ?? null);
 
+    groupMemoryCache.set(rawInput, defaultGroup);
+    groupMemoryCache.set(key, defaultGroup);
     return defaultGroup;
   }
 
@@ -948,7 +1029,7 @@ function getGroup(jid: string): DatabaseGroup {
   );
   const groupLang = normalizeLocale(jsonData.groupLang ?? row.GroupLang ?? null);
   setGroupLanguageCache(jid, groupLang);
-  return {
+  const result: DatabaseGroup = {
     ...jsonData,
     group_id: (jsonData.group_id ?? row.group_id ?? key) as string,
     group_name: (jsonData.group_name ?? row.group_name ?? null) as
@@ -978,6 +1059,9 @@ function getGroup(jid: string): DatabaseGroup {
     mutedUsers: storedMutedUsers,
     data: jsonData,
   };
+  groupMemoryCache.set(rawInput, result);
+  groupMemoryCache.set(key, result);
+  return result;
 }
 
 function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
@@ -1021,7 +1105,12 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
 }
 
 function getBot(jid: string): DatabaseBot {
-  const key = normalizeJid(jid);
+  const rawInput = String(jid || "").trim();
+  const key = normalizeJid(rawInput);
+  const cached = botMemoryCache.get(rawInput) ?? botMemoryCache.get(key);
+  if (cached) {
+    return { ...cached, data: { ...cached.data } };
+  }
   const row = stmts.getBot.get(key) as BotDbRow | undefined;
 
   if (!row) {
@@ -1064,6 +1153,8 @@ function getBot(jid: string): DatabaseBot {
     );
     botTypeCache.set(key, "Principal");
 
+    botMemoryCache.set(rawInput, defaultBot);
+    botMemoryCache.set(key, defaultBot);
     return defaultBot;
   }
 
@@ -1078,7 +1169,7 @@ function getBot(jid: string): DatabaseBot {
     data: jsonData,
   });
 
-  return {
+  const result: DatabaseBot = {
     ...jsonData,
     jid: (row.jid ?? key) as string,
     bot_id: (jsonData.bot_id ?? row.bot_id ?? key) as string,
@@ -1106,6 +1197,9 @@ function getBot(jid: string): DatabaseBot {
       | null,
     data: jsonData,
   };
+  botMemoryCache.set(rawInput, result);
+  botMemoryCache.set(key, result);
+  return result;
 }
 
 function migrateBotTypes(): void {
@@ -1211,6 +1305,10 @@ export const db: IDatabase = {
           currentData.jid,
           currentData.lid,
         );
+        invalidateUserDbCache(jid);
+        invalidateUserDbCache(key);
+        if (rawJid) invalidateUserDbCache(rawJid);
+        if (rawLid) invalidateUserDbCache(rawLid);
         return;
       }
       row = getUserRow(rawJid ?? key, rawLid);
@@ -1265,6 +1363,11 @@ export const db: IDatabase = {
       currentData.jid,
       currentData.lid,
     );
+    invalidateUserDbCache(jid);
+    invalidateUserDbCache(key);
+    if (rawJid) invalidateUserDbCache(rawJid);
+    if (rawLid) invalidateUserDbCache(rawLid);
+    if (storedLid) invalidateUserDbCache(storedLid);
   },
 
   setGroup(
@@ -1325,6 +1428,8 @@ export const db: IDatabase = {
         JSON.stringify(payload),
       );
       refreshGroupLanguageCache(jid, nextGroupLang);
+      invalidateGroupDbCache(jid);
+      invalidateGroupDbCache(key);
       return;
     }
 
@@ -1354,6 +1459,8 @@ export const db: IDatabase = {
       key,
     );
     refreshGroupLanguageCache(jid, nextGroupLang);
+    invalidateGroupDbCache(jid);
+    invalidateGroupDbCache(key);
   },
 
   setBot(
@@ -1416,6 +1523,8 @@ export const db: IDatabase = {
       );
       invalidateBotTypeCache(key);
       botTypeCache.set(key, botType);
+      invalidateBotDbCache(jid);
+      invalidateBotDbCache(key);
       return;
     }
 
@@ -1445,6 +1554,8 @@ export const db: IDatabase = {
       key,
     );
     botTypeCache.set(key, botType);
+    invalidateBotDbCache(jid);
+    invalidateBotDbCache(key);
   },
 
   setPushName(jid: string, pushName: string) {
@@ -1498,6 +1609,8 @@ export const db: IDatabase = {
     const key = normalizeJid(jid);
     stmts.deleteBot.run(key);
     invalidateBotTypeCache(key);
+    invalidateBotDbCache(jid);
+    invalidateBotDbCache(key);
   },
 
   getAllUsers(): DatabaseUser[] {
@@ -1717,15 +1830,8 @@ export const db: IDatabase = {
 export function checkpointDb() {
   try {
     db_instance.pragma("wal_checkpoint(PASSIVE)");
-
-    (db_instance as any).unprepareAll?.();
-
-    userLanguageCache.clear();
-    groupLanguageCache.clear();
-
-    warmLanguageCaches();
   } catch {
-    logInfo("Base de Datos Ocupada", "error")
+    logInfo("Base de Datos Ocupada", "error");
   }
 }
 

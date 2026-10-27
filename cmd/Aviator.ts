@@ -1,5 +1,5 @@
+import type { CommandContext, CommandPlugin } from "../types/index.d.ts";
 import { t } from "../src/langs/index.ts";
-const { AIRich, createCtx } = require('../lib/messageBuilder');
 
 function buildAviatorPayload() {
     const htmlContent = `<style>
@@ -229,21 +229,23 @@ function endGame(win) {
     };
 }
 
-const aviatorCommand = async (sock, chatId, msg, args) => {
-    const ctx = createCtx(sock, chatId, msg, { args });
-
-    const rich = new AIRich(ctx.sock || ctx.core)
-        .setTitle('✈️ AVIATOR LUFEROS')
-        .setFooter('LuferOS Aviator • ¡Retira el dinero antes de que el avión vuele!');
-
-    rich.addSection(buildAviatorPayload());
-
+export default {
+  name: ["aviator", "juego", "apostar"],
+  category: "games",
+  description: t("cmd_abre_el_minijuego_html_aviator_6c8ba549"),
+  async run({ sock, from, msg, reply }: CommandContext) {
     try {
-        await rich.send(ctx.chatId, { quoted: ctx.msg });
-    } catch (error) {
-        console.error('LuferOS Aviator Error:', error?.message || error);
-        await ctx.reply(t("cmd_imposible_abrir_luferos_aviato_18df84bf"));
-    }
-};
+      const { AIRich } = await import("baileys/lib/Builders/ai-rich.js" as any);
+      const rich = new (AIRich as any)(sock)
+        .setTitle(t("cmd_aviator_luferos_bf11169b"))
+        .setFooter(t("cmd_luferos_aviator_retira_el_dine_ea100d1b"));
 
-module.exports = aviatorCommand;
+      rich.addSection(buildAviatorPayload());
+
+      await rich.send(from, { quoted: msg });
+    } catch (error: unknown) {
+      console.error("LuferOS Aviator Error:", error instanceof Error ? error.message : String(error));
+      await reply(t("cmd_imposible_abrir_luferos_aviato_18df84bf"));
+    }
+  },
+} satisfies CommandPlugin;

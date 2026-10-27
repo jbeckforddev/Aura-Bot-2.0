@@ -12,9 +12,16 @@ export const GACHA_CLAIM_TTL_MS = 60_000;
 db_instance.pragma("journal_mode = WAL");
 db_instance.pragma("synchronous = NORMAL");
 db_instance.pragma("foreign_keys = ON");
-db_instance.pragma("wal_checkpoint = 1000");
+db_instance.pragma("wal_autocheckpoint = 1000");
 db_instance.pragma("busy_timeout = 2000");
-db_instance.pragma("cache_size = -4000");
+db_instance.pragma("cache_size = -16000");
+db_instance.pragma("mmap_size = 67108864");
+
+db_instance.exec(`
+CREATE INDEX IF NOT EXISTS idx_gachadraws_user ON GachaDraws(user_id);
+CREATE INDEX IF NOT EXISTS idx_gachaowner_user ON GachaOwnership(user_id);
+CREATE INDEX IF NOT EXISTS idx_gachaimgowner_user ON GachaImageOwnership(user_id);
+`);
 
 db_instance.exec(`
 CREATE TABLE IF NOT EXISTS GachaClaims (

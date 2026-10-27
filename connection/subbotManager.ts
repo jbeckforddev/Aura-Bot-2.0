@@ -8,6 +8,7 @@ import makeWASocket, {
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
+import { LRUCache } from "lru-cache";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -41,13 +42,29 @@ const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
 const subBotLogger = pino({ level: "silent" });
 
-const STARTUP_CONCURRENCY = 3;
-const STARTUP_STAGGER_MS = 250;
+const STARTUP_CONCURRENCY = 2;
+const STARTUP_STAGGER_MS = 1500;
 const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
+
+function createBoundedCacheStore(max: number, ttl: number) {
+  const cache = new LRUCache<string, any>({ max, ttl });
+  return {
+    get: <T>(key: string): T | undefined => cache.get(key) as T | undefined,
+    set: <T>(key: string, value: T): void => {
+      cache.set(key, value);
+    },
+    del: (key: string): void => {
+      cache.delete(key);
+    },
+    flushAll: (): void => {
+      cache.clear();
+    },
+  };
+}
 
 function getSubBotWebVersion() {
   if (!waWebVersionPromise) {
@@ -80,7 +97,7 @@ function scheduleReconnect(sessionName: string, options: ConnectionOptions) {
     return;
   }
 
-  const delayMs = Math.min(2000 * attempts, 10000);
+  const delayMs = Math.min(2000 * attempts, 10000) + Math.floor(Math.random() * 2000);
   logInfo(
     `Reconexión ${attempts}/${MAX_RECONNECT_ATTEMPTS} para ${sessionName} en ${delayMs} ms.`,
     "SubBotWarning",
@@ -153,21 +170,30 @@ async function connectSubBot(
     logInfo(`Se usará la versión interna de Baileys para ${sessionName}.`, "SubBotWarning");
   }
 
+  const signalKeyCache = createBoundedCacheStore(150, 3 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(100, 2 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(150, 3 * 60 * 1000);
+  const subBotStartTime = Math.floor(Date.now() / 1000);
+
   const socket = makeWASocket({
     version: version || [2, 3000, 1042466098],
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, subBotLogger),
+      keys: makeCacheableSignalKeyStore(state.keys, subBotLogger, signalKeyCache),
     },
+    msgRetryCounterCache,
+    userDevicesCache,
     getMessage: async () => undefined,
     printQRInTerminal: false,
     browser: Browsers.ubuntu("Chrome"),
     logger: subBotLogger,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 25000,
+    keepAliveIntervalMs: 30000,
     syncFullHistory: false,
-    markOnlineOnConnect: false,
+    shouldSyncHistoryMessage: () => false,
+    disableLinkPreviews: true,
+    markOnlineOnConnect: true,
     generateHighQualityLinkPreview: false,
     retryRequestDelayMs: 250,
     maxMsgRetryCount: 3,
@@ -194,11 +220,17 @@ async function connectSubBot(
     if (closingAuth) return;
     closingAuth = true;
     try {
+      signalKeyCache.flushAll();
+      msgRetryCounterCache.flushAll();
+      userDevicesCache.flushAll();
+    } catch {}
+    try {
       closeAuthState?.();
     } catch (error) {
       logInfo(`Error cerrando auth de ${sessionName}: ${String(error)}`, "SubBotWarning");
     }
   };
+  (socket as any).closeAuth = closeAuth;
 
   socket.ev.on("creds.update", () => {
     void saveCreds().catch((error: unknown) =>
@@ -340,6 +372,7 @@ async function connectSubBot(
     if (update.connection !== "close") return;
     connectionClosed = true;
     if (pairingTimer) clearTimeout(pairingTimer);
+    destroySocketInstance(socket);
     await options.onDisconnected?.();
     closeAuth();
     const error = update.lastDisconnect?.error;
@@ -392,49 +425,53 @@ async function connectSubBot(
   });
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !Array.isArray(messages)) return;
+    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
     if (socket.user?.id) reconnectAttempts.delete(sessionName);
-    for (const message of messages) {
-      if (!message?.message) continue;
-      try {
-        const groupJid = message.key?.remoteJid;
-        if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
-          if (socket.user?.id) db.addBotGroup(socket.user.id, groupJid);
-          knownGroupJids.add(groupJid);
-        }
-        await handleMessage(
-          socket,
-          message,
-          "SUB",
-          socket.user?.id || null,
-          [],
-          {
-            db,
-            config: { prefix: globalThis.DEFAULT_PREFIXES ?? ["."] },
-            getPlugins,
-            checkAntilink: ({
-              sock: messageSock,
-              msg: antilinkMessage,
-              body,
-              isAdmin,
-              isOwner,
-              isBotAdmin,
-            }) =>
-              handleAntilink(
-                messageSock,
-                antilinkMessage,
+
+    await Promise.allSettled(
+      messages.map(async (message) => {
+        if (!message?.message) return;
+
+        try {
+          const groupJid = message.key?.remoteJid;
+          if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
+            if (socket.user?.id) db.addBotGroup(socket.user.id, groupJid);
+            knownGroupJids.add(groupJid);
+          }
+          await handleMessage(
+            socket,
+            message,
+            "SUB",
+            socket.user?.id || null,
+            [],
+            {
+              db,
+              config: { prefix: globalThis.DEFAULT_PREFIXES ?? ["."] },
+              getPlugins,
+              checkAntilink: ({
+                sock: messageSock,
+                msg: antilinkMessage,
                 body,
                 isAdmin,
                 isOwner,
                 isBotAdmin,
-              ),
-            logger: runtimeLogger,
-          },
-        );
-      } catch (error) {
-        logInfo(`Error procesando mensaje de ${sessionName}: ${String(error)}`, "SubBotError");
-      }
-    }
+              }) =>
+                handleAntilink(
+                  messageSock,
+                  antilinkMessage,
+                  body,
+                  isAdmin,
+                  isOwner,
+                  isBotAdmin,
+                ),
+              logger: runtimeLogger,
+            },
+          );
+        } catch (error) {
+          logInfo(`Error procesando mensaje de ${sessionName}: ${String(error)}`, "SubBotError");
+        }
+      }),
+    );
   });
 
   socket.ev.on("call", async (calls: unknown[]) => {
@@ -527,11 +564,15 @@ function sessionNameFor(requester: string, fallbackPhone?: string): string {
 function destroySocketInstance(socket: ExtendedWASocket | undefined) {
   if (!socket) return;
   try {
-    (socket.ev as any)?.removeAllListeners?.();
-    (socket.ev as any)?.destroy?.();
+    (socket as any).closeAuth?.();
   } catch {}
   try {
+    socket.ws?.removeAllListeners?.();
     socket.ws?.close();
+  } catch {}
+  try {
+    (socket.ev as any)?.removeAllListeners?.();
+    (socket.ev as any)?.destroy?.();
   } catch {}
   try {
     socket.end?.(undefined);

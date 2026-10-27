@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { LRUCache } from "lru-cache";
 import { fytBold } from "./socketText.ts";
 import { getActiveSubBots } from "../connection/subbotManager.ts";
+import { GROUP_METADATA_CACHE } from "../handler.ts";
 import type { GroupMetadata, proto } from "baileys";
 import type {
   ExtendedWASocket,
@@ -122,13 +123,14 @@ async function fetchGroupMetadataFast(
   groupJid: string,
   sockets: ExtendedWASocket[],
 ): Promise<GroupMetadata | null> {
-  const cached = moderationMetaCache.get(groupJid);
+  const cached = GROUP_METADATA_CACHE.get(groupJid) || moderationMetaCache.get(groupJid);
   if (cached) return cached;
 
-  for (const socket of sockets) {
+  for (const socket of sockets.slice(0, 4)) {
     try {
       const metadata = await socket.groupMetadata(groupJid);
       if (metadata?.participants) {
+        GROUP_METADATA_CACHE.set(groupJid, metadata);
         moderationMetaCache.set(groupJid, metadata);
         return metadata;
       }
@@ -174,7 +176,7 @@ async function getAdminSocket(
   const adminTokens = buildAdminTokenSet(metadata);
   if (adminTokens.size === 0) return null;
 
-  for (const socket of sockets) {
+  for (const socket of sockets.slice(0, 4)) {
     const identities = [
       socket.user?.id,
       (socket.user as unknown as Record<string, unknown>)?.lid,

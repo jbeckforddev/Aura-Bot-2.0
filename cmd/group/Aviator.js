@@ -210,7 +210,7 @@ export default {
     await react("✈️").catch(() => undefined);
 
     try {
-      const { AIRich } = require("../../lib/messageBuilder");
+      const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
 
       const rich = new AIRich(sock)
         .setTitle(t("cmd_aviator_luferos_bf11169b"))

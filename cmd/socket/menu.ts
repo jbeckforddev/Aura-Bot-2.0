@@ -22,6 +22,23 @@ export function clearMenuMediaCache() {
   mediaCacheMap.clear();
 }
 
+export async function preloadMenuBanner(sock: { waUploadToServer?: any }) {
+  const bannerPath = path.resolve("./assets/img/BotBanner.jpg");
+  if (mediaCacheMap.has(bannerPath) || !existsSync(bannerPath) || !sock?.waUploadToServer) return;
+  try {
+    const prepared = await prepareWAMessageMedia(
+      { image: createReadStream(bannerPath) },
+      {
+        upload: sock.waUploadToServer,
+        mediaTypeOverride: "thumbnail-link",
+      },
+    );
+    if (prepared.imageMessage) {
+      mediaCacheMap.set(bannerPath, prepared.imageMessage);
+    }
+  } catch {}
+}
+
 function getCommandCategories() {
   const dirs = readdirSync(path.resolve("./cmd"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())

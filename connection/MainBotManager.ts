@@ -29,6 +29,7 @@ import {
   handleGroupCall,
   isPrimaryBotForGroup,
 } from "../core/groupModeration.ts";
+import { preloadMenuBanner } from "../cmd/socket/menu.ts";
 
 import type {
   ExtendedWASocket,
@@ -306,9 +307,9 @@ async function connectSocket(sessionName: string) {
     );
   }
 
-  const signalKeyCache = createBoundedCacheStore(800, 5 * 60 * 1000);
-  const msgRetryCounterCache = createBoundedCacheStore(600, 2 * 60 * 1000);
-  const userDevicesCache = createBoundedCacheStore(600, 5 * 60 * 1000);
+  const signalKeyCache = createBoundedCacheStore(250, 4 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(150, 2 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(250, 4 * 60 * 1000);
 
   const flushSocketCaches = () => {
     signalKeyCache.flushAll();
@@ -330,9 +331,11 @@ async function connectSocket(sessionName: string) {
     logger,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 25000,
+    keepAliveIntervalMs: 30000,
     syncFullHistory: false,
-    markOnlineOnConnect: false,
+    shouldSyncHistoryMessage: () => false,
+    disableLinkPreviews: true,
+    markOnlineOnConnect: true,
     generateHighQualityLinkPreview: false,
     retryRequestDelayMs: 250,
     maxMsgRetryCount: 3,
@@ -505,6 +508,7 @@ async function connectSocket(sessionName: string) {
       if (sessionName !== botJid) db.deleteBot(sessionName);
       resetReconnectAttempts(sessionName);
       pairingRetryAttempts.delete(sessionName);
+      void preloadMenuBanner(extendedSock).catch(() => {});
       logInfo(`El Usuario ${chalk.bold(botName)} con ${chalk.bold(mainNum)} vinculado con exito.`, "success");
 
       setTimeout(() => {
@@ -663,62 +667,55 @@ async function connectSocket(sessionName: string) {
 
     const connectedBot = sock.user?.id || "";
 
-    for (const msg of messages) {
-      if (!msg?.message) continue;
+    await Promise.allSettled(
+      messages.map(async (msg) => {
+        if (!msg?.message) return;
 
-      const msgTimestamp =
-        typeof msg.messageTimestamp === "number"
-          ? msg.messageTimestamp
-          : (msg.messageTimestamp as { low?: number } | null)?.low ?? 0;
-
-      if (msgTimestamp && msgTimestamp < botStartTime) {
-        continue;
-      }
-
-      try {
-        const groupJid = msg.key?.remoteJid;
-        if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
-          if (connectedBot) {
-            db.addBotGroup(connectedBot, groupJid);
-            knownGroupJids.set(groupJid, true);
+        try {
+          const groupJid = msg.key?.remoteJid;
+          if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
+            if (connectedBot) {
+              db.addBotGroup(connectedBot, groupJid);
+              knownGroupJids.set(groupJid, true);
+            }
           }
-        }
 
-        await handleMessage(
-          extendedSock,
-          msg,
-          "MAIN",
-          connectedBot || null,
-          [],
-          {
-            db,
-            config: {
-              prefix: globalThis.DEFAULT_PREFIXES ?? ["."],
-            },
-            getPlugins,
-            checkAntilink: ({
-              sock: messageSock,
-              msg: antilinkMsg,
-              body,
-              isAdmin,
-              isOwner,
-              isBotAdmin,
-            }) =>
-              handleAntilink(
-                messageSock,
-                antilinkMsg,
+          await handleMessage(
+            extendedSock,
+            msg,
+            "MAIN",
+            connectedBot || null,
+            [],
+            {
+              db,
+              config: {
+                prefix: globalThis.DEFAULT_PREFIXES ?? ["."],
+              },
+              getPlugins,
+              checkAntilink: ({
+                sock: messageSock,
+                msg: antilinkMsg,
                 body,
                 isAdmin,
                 isOwner,
                 isBotAdmin,
-              ),
-            logger: sharedRuntimeLogger,
-          },
-        );
-      } catch (error) {
-        logInfo(`Error al procesar mensaje: ${String(error)}`, "error");
-      }
-    }
+              }) =>
+                handleAntilink(
+                  messageSock,
+                  antilinkMsg,
+                  body,
+                  isAdmin,
+                  isOwner,
+                  isBotAdmin,
+                ),
+              logger: sharedRuntimeLogger,
+            },
+          );
+        } catch (error) {
+          logInfo(`Error al procesar mensaje: ${String(error)}`, "error");
+        }
+      }),
+    );
   });
 
   sock.ev.on("call", async (calls: unknown[]) => {

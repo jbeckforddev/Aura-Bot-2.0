@@ -8,7 +8,8 @@ const PokemonDB = new DataBase(`${DATA_BASE_DIR}/pokemon.db`);
 PokemonDB.pragma("journal_mode = WAL");
 PokemonDB.pragma("synchronous = NORMAL");
 PokemonDB.pragma("foreign_keys = ON");
-PokemonDB.pragma("wal_checkpoint = 1000");
+PokemonDB.pragma("wal_autocheckpoint = 1000");
 PokemonDB.pragma("busy_timeout = 2000");
-PokemonDB.pragma("cache_size = -4000");
+PokemonDB.pragma("cache_size = -16000");
+PokemonDB.pragma("mmap_size = 67108864");
 

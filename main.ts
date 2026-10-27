@@ -2,7 +2,20 @@ import { displayBanner, logInfo } from "./core/logger.ts";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import v8 from "node:v8";
+import vm from "node:vm";
 import "./config.ts";
+
+process.setMaxListeners(0);
+
+// Enable runtime V8 garbage collection if not already exposed
+if (typeof (globalThis as any).gc !== "function") {
+  try {
+    v8.setFlagsFromString("--expose_gc");
+    (globalThis as any).gc = vm.runInNewContext("gc");
+  } catch {}
+}
+
 import { connectMainBot } from "./connection/MainBotManager.ts";
 import { startSavedSubBots } from "./connection/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
@@ -44,16 +57,19 @@ async function cleanCache(maxAgeMs: number = 0) {
   }
 }
 
-const maintenanceInterval = setInterval(() => {
-  void cleanCache(30 * 60 * 1000);
-  AuraDB.checkpointDb();
+function runMemoryMaintenance() {
+  void cleanCache(10 * 60 * 1000);
+  try {
+    AuraDB.checkpointDb();
+  } catch {}
   if (typeof (globalThis as any).gc === "function") {
     try {
       (globalThis as any).gc();
     } catch {}
   }
-}, 15 * 60 * 1000);
+}
 
+const maintenanceInterval = setInterval(runMemoryMaintenance, 5 * 60 * 1000);
 maintenanceInterval.unref?.();
 
 
@@ -106,9 +122,13 @@ async function mainBot() {
   logInfo("Conectando a WhatsApp...");
   await connectMainBot("main");
 
-  void startSavedSubBots().catch((error) => {
-    logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");
-  });
+  void startSavedSubBots()
+    .then(() => {
+      runMemoryMaintenance();
+    })
+    .catch((error) => {
+      logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");
+    });
 }
 
 void mainBot();
