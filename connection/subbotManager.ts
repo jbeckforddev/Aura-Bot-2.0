@@ -336,38 +336,6 @@ async function connectSubBot(
     throw error;
   }
 
-  // Wrapper seguro de sendMessage con fallback sin quoted y registro en caché
-  const rawSendMessage = socket.sendMessage.bind(socket);
-  socket.sendMessage = (async (jid: any, content: any, sendOptions?: any) => {
-    try {
-      const res = await rawSendMessage(jid, content, sendOptions);
-      if (res?.key?.id && res?.message) {
-        recentMessagesCache.set(res.key.id, res.message);
-      }
-      return res;
-    } catch (err: unknown) {
-      if (sendOptions?.quoted) {
-        logInfo(
-          `[${sessionName}] Envío con quoted falló, reintentando sin quoted...`,
-          "SubBotWarning",
-        );
-        try {
-          const fallbackRes = await rawSendMessage(jid, content, {
-            ...sendOptions,
-            quoted: undefined,
-          });
-          if (fallbackRes?.key?.id && fallbackRes?.message) {
-            recentMessagesCache.set(fallbackRes.key.id, fallbackRes.message);
-          }
-          return fallbackRes;
-        } catch (fbErr) {
-          throw fbErr;
-        }
-      }
-      throw err;
-    }
-  }) as typeof rawSendMessage;
-
   logInfo(`Socket creado para ${sessionName}.`, "SubBotInfo");
   socket.isSubBot = true;
   socket.subBotId = sessionName;

@@ -350,37 +350,6 @@ async function connectSocket(sessionName: string) {
   extendedSock.isSubBot = false;
   extendedSock.sessionName = sessionName;
 
-  const rawSendMessage = extendedSock.sendMessage.bind(extendedSock);
-  extendedSock.sendMessage = (async (jid: any, content: any, sendOptions?: any) => {
-    try {
-      const res = await rawSendMessage(jid, content, sendOptions);
-      if (res?.key?.id && res?.message) {
-        mainMessagesCache.set(res.key.id, res.message);
-      }
-      return res;
-    } catch (err: unknown) {
-      if (sendOptions?.quoted) {
-        logInfo(
-          `Fallo al enviar mensaje con quoted (${err instanceof Error ? err.message : String(err)}). Reintentando sin quoted...`,
-          "warn",
-        );
-        try {
-          const fallbackRes = await rawSendMessage(jid, content, {
-            ...sendOptions,
-            quoted: undefined,
-          });
-          if (fallbackRes?.key?.id && fallbackRes?.message) {
-            mainMessagesCache.set(fallbackRes.key.id, fallbackRes.message);
-          }
-          return fallbackRes;
-        } catch (fbErr) {
-          throw fbErr;
-        }
-      }
-      throw err;
-    }
-  }) as typeof extendedSock.sendMessage;
-
   let saveTimer: NodeJS.Timeout | null = null;
   let credentialsDirty = false;
   let authStateClosing = false;
