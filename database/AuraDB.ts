@@ -451,7 +451,7 @@ function makeGroupLocaleCacheKey(jid: string | null | undefined): string | null 
 }
 
 function setCachedLocaleValue(
-  cache: Map<string, string | null>,
+  cache: LRUCache<string, string | null>,
   input: string | null | undefined,
   value: string | null,
   builder: (jid: string | null | undefined) => string | null,
@@ -462,7 +462,7 @@ function setCachedLocaleValue(
 }
 
 function getCachedLocaleEntry(
-  cache: Map<string, string | null>,
+  cache: LRUCache<string, string | null>,
   input: string | null | undefined,
   builder: (jid: string | null | undefined) => string | null,
 ): { found: boolean; value: string | null } {
@@ -490,20 +490,16 @@ function getCachedLocaleEntry(
   return { found: false, value: null };
 }
 
-const userLanguageCache = new Map<string, string | null>();
-const groupLanguageCache = new Map<string, string | null>();
+const userLanguageCache = new LRUCache<string, string | null>({
+  max: 3000,
+  ttl: 30 * 60 * 1000,
+});
+const groupLanguageCache = new LRUCache<string, string | null>({
+  max: 1000,
+  ttl: 60 * 60 * 1000,
+});
 
 export function warmLanguageCaches(): { users: number; groups: number } {
-  const userRows = stmts.getAllUsers.all() as Array<Record<string, unknown>>;
-  for (const row of userRows) {
-    const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
-    const value = normalizeLocale(
-      jsonData.userLang ?? row.UserLang ?? row.userLang ?? row.user_lang ?? null,
-    );
-    const key = makeUserLocaleCacheKey(String(row.jid ?? row.lid ?? row.phone_number ?? ""));
-    if (key) userLanguageCache.set(key, value);
-  }
-
   const groupRows = stmts.getAllGroups.all() as Array<Record<string, unknown>>;
   for (const row of groupRows) {
     const jsonData = safeJson<Record<string, unknown>>(row.data as string | undefined);
@@ -663,7 +659,15 @@ function clearLegacyTopMessageRankings(): void {
   }
 }
 
-clearLegacyTopMessageRankings();
+// Migraciones de esquema ejecutadas una sola vez mediante user_version
+const currentDbVersion = Number(
+  db_instance.pragma("user_version", { simple: true }) ?? 0,
+);
+if (currentDbVersion < 1) {
+  clearLegacyTopMessageRankings();
+  migrateUserProfileColumns();
+  db_instance.pragma("user_version = 1");
+}
 
 function hydrateUserProfile(
   data: Record<string, unknown>,
@@ -779,8 +783,6 @@ function migrateUserProfileColumns(): void {
   migrate();
 }
 
-migrateUserProfileColumns();
-
 function safeJsonArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String);
   if (typeof value !== "string") return [];
@@ -817,12 +819,28 @@ function hydrateEconomyLasts(
   return hydrated;
 }
 
+function hasEconomyUpdates(data: Record<string, unknown>): boolean {
+  if (
+    data.economy &&
+    typeof data.economy === "object" &&
+    Object.keys(data.economy as Record<string, unknown>).length > 0
+  ) {
+    return true;
+  }
+  for (const key of Object.keys(ECONOMY_LAST_COLUMNS)) {
+    if (data[key] !== undefined) return true;
+  }
+  return false;
+}
+
 function persistEconomyLasts(
   jid: string,
   lid: string | null,
   data: Record<string, unknown>,
+  existingRow?: UserDbRow,
 ): void {
-  const row = getUserRow(jid, lid);
+  if (!hasEconomyUpdates(data)) return;
+  const row = existingRow ?? getUserRow(jid, lid);
   if (!row) return;
 
   const economy =
@@ -830,7 +848,7 @@ function persistEconomyLasts(
       ? (data.economy as Record<string, unknown>)
       : {};
   const values = Object.entries(ECONOMY_LAST_COLUMNS).map(([key, column]) =>
-    maxTimestamp(data[key], economy[key], row[column]),
+    maxTimestamp(data[key], economy[key], (row as unknown as Record<string, unknown>)[column]),
   );
 
   if (row.jid === null && row.lid) {
@@ -1297,7 +1315,7 @@ export const db: IDatabase = {
         ...getUserProfileValues(merged),
       );
       if (result.changes > 0) {
-        persistEconomyLasts(rawJid ?? key, rawLid, payload);
+        persistEconomyLasts(rawJid ?? key, rawLid, payload, row);
         refreshUserLanguageCache(
           rawJid ?? key,
           rawLid,
@@ -1355,7 +1373,7 @@ export const db: IDatabase = {
         row.jid ?? key,
       );
     }
-    persistEconomyLasts(rawJid ?? key, rawLid, payload);
+    persistEconomyLasts(rawJid ?? key, rawLid, payload, row);
     refreshUserLanguageCache(
       rawJid ?? key,
       storedLid,
@@ -1827,11 +1845,15 @@ export const db: IDatabase = {
   },
 };
 
-export function checkpointDb() {
+export function checkpointDb(mode: "PASSIVE" | "TRUNCATE" | "RESTART" = "TRUNCATE") {
   try {
-    db_instance.pragma("wal_checkpoint(PASSIVE)");
+    db_instance.pragma(`wal_checkpoint(${mode})`);
   } catch {
-    logInfo("Base de Datos Ocupada", "error");
+    try {
+      db_instance.pragma("wal_checkpoint(PASSIVE)");
+    } catch {
+      logInfo("Base de Datos Ocupada", "error");
+    }
   }
 }
 

@@ -196,7 +196,7 @@ export default {
               if (sizeMB > 60) {
                 await updateStatus(`┃ ⚙️ Estado: Renderizando video (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Compresión Ultra-rápida...`);
                 await execAsync(
-                  `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
+                  `ffmpeg -y -threads 2 -i "${finalPath}" -c:v libx264 -crf 18 -preset superfast -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
                   { maxBuffer: 1024 * 1024 * 50 }
                 );
                 finalPath = outFile;
@@ -207,13 +207,13 @@ export default {
                 if (codec === "h264") {
                   await updateStatus(`┃ ⚙️ Estado: Clonando flujo (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Bypass directo (0% pérdida)...`);
                   await execAsync(
-                    `ffmpeg -y -threads 0 -i "${finalPath}" -c copy -movflags +faststart "${outFile}"`,
+                    `ffmpeg -y -threads 2 -i "${finalPath}" -c copy -movflags +faststart "${outFile}"`,
                     { maxBuffer: 1024 * 1024 * 50 }
                   );
                 } else {
                   await updateStatus(`┃ ⚙️ Estado: Re-codificando formato (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Adaptando a WhatsApp...`);
                   await execAsync(
-                    `ffmpeg -y -threads 0 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
+                    `ffmpeg -y -threads 2 -i "${finalPath}" -c:v libx264 -crf 16 -preset superfast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${outFile}"`,
                     { maxBuffer: 1024 * 1024 * 50 }
                   );
                 }
@@ -231,7 +231,7 @@ export default {
           
           await updateStatus(`┃ 🗜️ Estado: Procesando imagen (${currentIndex}/${totalFiles})\n┃ 📊 Progreso: Optimizando...`);
           try {
-            await execAsync(`ffmpeg -y -threads 0 -i "${finalPath}" -q:v 2 "${outFile}"`, { maxBuffer: 1024 * 1024 * 50 });
+            await execAsync(`ffmpeg -y -threads 2 -i "${finalPath}" -q:v 2 "${outFile}"`, { maxBuffer: 1024 * 1024 * 50 });
             finalPath = outFile;
           } catch {
             finalPath = file;

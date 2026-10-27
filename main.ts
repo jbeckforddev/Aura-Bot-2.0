@@ -20,6 +20,7 @@ import { connectMainBot } from "./connection/MainBotManager.ts";
 import { startSavedSubBots } from "./connection/subbotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import * as AuraDB from "./database/AuraDB.ts";
+import { flushPendingContacts } from "./handler.ts";
 const TMP_DIR = path.resolve("./cache");
 
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -60,6 +61,9 @@ async function cleanCache(maxAgeMs: number = 0) {
 function runMemoryMaintenance() {
   void cleanCache(10 * 60 * 1000);
   try {
+    flushPendingContacts();
+  } catch {}
+  try {
     AuraDB.checkpointDb();
   } catch {}
   if (typeof (globalThis as any).gc === "function") {
@@ -80,6 +84,7 @@ function handleShutdown(signal: string) {
   isShuttingDown = true;
   try {
     logInfo(`Señal ${signal} recibida. Guardando base de datos...`, "alert");
+    flushPendingContacts();
     AuraDB.checkpointDb();
   } catch {}
   process.exit(0);
@@ -89,6 +94,7 @@ process.on("SIGINT", () => handleShutdown("SIGINT"));
 process.on("SIGTERM", () => handleShutdown("SIGTERM"));
 process.on("exit", () => {
   try {
+    flushPendingContacts();
     AuraDB.checkpointDb();
   } catch {}
 });

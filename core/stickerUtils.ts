@@ -185,9 +185,10 @@ export async function imageToWebp(
   buffer: Buffer,
   animated = false,
 ): Promise<Buffer> {
+  const maxPixels = 25_000_000;
   try {
     if (animated && isAnimatedWebp(buffer)) {
-      return await sharp(buffer, { animated: true, limitInputPixels: false })
+      return await sharp(buffer, { animated: true, limitInputPixels: maxPixels })
         .resize(512, 512, {
           fit: "contain",
           background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -198,20 +199,20 @@ export async function imageToWebp(
     return await sharp(
       buffer,
       animated
-        ? { animated: true, limitInputPixels: false }
-        : { limitInputPixels: false },
+        ? { animated: true, limitInputPixels: maxPixels }
+        : { limitInputPixels: maxPixels },
     )
-      .resize(512, 512, {
-        fit: "contain",
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      })
-      .webp({
-        quality: 80,
-        lossless: false,
-        alphaQuality: 100,
-        loop: animated ? 0 : undefined,
-      })
-      .toBuffer();
+        .resize(512, 512, {
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .webp({
+          quality: 80,
+          lossless: false,
+          alphaQuality: 100,
+          loop: animated ? 0 : undefined,
+        })
+        .toBuffer();
   } catch {
     return await toSticker(buffer, animated);
   }

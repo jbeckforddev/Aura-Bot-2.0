@@ -8,16 +8,13 @@ export default {
   category: "system",
   description: t("cmd_muestra_la_latencia_y_velocida_3888d36d"),
   async run(ctx: CommandContext) {
-    const { sock, from, msg } = ctx;
-    const start = Date.now();
-    const textPing = t("cmd_value0_espera_un_momento_anali_e68d4676", { value0: fytBold(t("cmd_calculando_velocidad_dd96eeed")) });
-    const sent = await sock.sendMessage(
-      from,
-      { text: textPing },
-      { quoted: msg as any }
-    ).catch(() => null);
-    if (!sent) return;
-    const latency = Date.now() - start;
+    const { reply, msg } = ctx;
+    const start = ctx.receivedAt ?? performance.now();
+    const processLatency = Math.max(1, Math.round(performance.now() - start));
+    const timestampMs = Number(msg?.messageTimestamp || 0) * 1000;
+    const netLatency = timestampMs > 0 ? Math.max(0, Date.now() - timestampMs) : 0;
+    const latency = netLatency > 0 && netLatency < 10000 ? netLatency : processLatency;
+
     let status = "";
     let system = "";
 
@@ -35,15 +32,13 @@ export default {
       system = t("cmd_ping_system_problems_4b6a7c5e");
     }
 
-    const textPing2 = t("cmd_value0_velocidad_del_bot_value_231251fb", { value0: fytBold(t("cmd_resultado_de_la_prueba_71fa9b51")), value1: fytBold(latency + "ms"), value2: status, value3: system });
-    try {
-      await sock.sendMessage(
-        from,
-        { text: textPing2, edit: sent.key }
-      );
-    } catch {
-      // Si falla la edición, envía el mensaje normal
-      await sock.sendMessage(from, { text: textPing2 }, { quoted: msg as any });
-    }
+    const textPing = t("cmd_value0_velocidad_del_bot_value_231251fb", {
+      value0: fytBold(t("cmd_resultado_de_la_prueba_71fa9b51")),
+      value1: fytBold(`${latency}ms`),
+      value2: status,
+      value3: system,
+    });
+
+    return reply({ text: textPing });
   },
 };

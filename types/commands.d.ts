@@ -44,6 +44,7 @@ export interface CommandContext {
   isAdmin: boolean;
   isBotAdmin: boolean;
   isBotUser: boolean;
+  receivedAt?: number;
   prefix: string;
   resolveLid: (lidJid: string) => Promise<string>;
   clearGroupCache: () => boolean;

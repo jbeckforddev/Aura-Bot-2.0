@@ -387,6 +387,14 @@ async function connectSubBot(
   let pairingTimer: NodeJS.Timeout | undefined;
   let closingAuth = false;
   const knownGroupJids = new Set<string>();
+  try {
+    const existingBot = db.getBot(sessionName);
+    if (Array.isArray(existingBot?.groups)) {
+      for (const g of existingBot.groups) {
+        if (g) knownGroupJids.add(g);
+      }
+    }
+  } catch {}
 
   const closeAuth = () => {
     if (closingAuth) return;

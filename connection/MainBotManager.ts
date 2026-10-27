@@ -79,27 +79,21 @@ function createBoundedCacheStore(max: number, ttl: number) {
 async function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Error) {
   if (!sock) return;
   try {
-    if (sock.ev && typeof sock.ev.off === "function") {
-      sock.ev.off("creds.update", () => {});
-      sock.ev.off("connection.update", () => {});
-      sock.ev.off("messages.upsert", () => {});
-      sock.ev.off("call", () => {});
-      sock.ev.off("groups.update", () => {});
-      sock.ev.off("group-participants.update", () => {});
-    } else if (typeof sock.ev.removeAllListeners === "function") {
+    if (sock.ev && typeof sock.ev.removeAllListeners === "function") {
       (sock.ev as any).removeAllListeners();
     }
   } catch {}
   if (sock.ws) {
     try {
+      (sock.ws as any).removeAllListeners?.();
       if ((sock.ws as any).readyState !== 3) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 2000);
-          sock.ws.once('close', () => {
+          sock.ws?.once('close', () => {
             clearTimeout(timeout);
             resolve();
           });
-          sock.ws.close();
+          sock.ws?.close();
         });
       }
     } catch {}
@@ -355,6 +349,37 @@ async function connectSocket(sessionName: string) {
   globalThis.mainSocket = extendedSock;
   extendedSock.isSubBot = false;
   extendedSock.sessionName = sessionName;
+
+  const rawSendMessage = extendedSock.sendMessage.bind(extendedSock);
+  extendedSock.sendMessage = (async (jid: any, content: any, sendOptions?: any) => {
+    try {
+      const res = await rawSendMessage(jid, content, sendOptions);
+      if (res?.key?.id && res?.message) {
+        mainMessagesCache.set(res.key.id, res.message);
+      }
+      return res;
+    } catch (err: unknown) {
+      if (sendOptions?.quoted) {
+        logInfo(
+          `Fallo al enviar mensaje con quoted (${err instanceof Error ? err.message : String(err)}). Reintentando sin quoted...`,
+          "warn",
+        );
+        try {
+          const fallbackRes = await rawSendMessage(jid, content, {
+            ...sendOptions,
+            quoted: undefined,
+          });
+          if (fallbackRes?.key?.id && fallbackRes?.message) {
+            mainMessagesCache.set(fallbackRes.key.id, fallbackRes.message);
+          }
+          return fallbackRes;
+        } catch (fbErr) {
+          throw fbErr;
+        }
+      }
+      throw err;
+    }
+  }) as typeof extendedSock.sendMessage;
 
   let saveTimer: NodeJS.Timeout | null = null;
   let credentialsDirty = false;

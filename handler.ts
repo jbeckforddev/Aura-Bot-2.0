@@ -91,6 +91,30 @@ const USER_DB_CACHE = new LRUCache<string, DatabaseUser>({
   ttl: 5 * 60 * 1000,
 });
 
+const pendingContactUpdates = new Map<string, Record<string, unknown>>();
+let flushContactTimer: NodeJS.Timeout | null = null;
+
+function scheduleContactFlush(database: typeof db) {
+  if (flushContactTimer) return;
+  flushContactTimer = setTimeout(() => {
+    flushContactTimer = null;
+    flushPendingContacts(database);
+  }, 5000);
+  flushContactTimer.unref?.();
+}
+
+export function flushPendingContacts(database: typeof db = db) {
+  if (pendingContactUpdates.size === 0) return;
+  const updates = Array.from(pendingContactUpdates.entries());
+  pendingContactUpdates.clear();
+
+  for (const [sender, nextContact] of updates) {
+    try {
+      database.setUser?.(sender, nextContact);
+    } catch {}
+  }
+}
+
 const GROUP_DB_CACHE = new LRUCache<string, DatabaseGroup>({
   max: 500,
   ttl: 5 * 60 * 1000,
@@ -649,8 +673,9 @@ async function handleMessageInternal(
         currentUser.lid !== nextContact.lid;
 
       if (contactChanged) {
-        runtimeDb.setUser?.(sender, nextContact);
         USER_DB_CACHE.set(`user:${sender}`, { ...currentUser, ...nextContact });
+        pendingContactUpdates.set(sender, nextContact);
+        scheduleContactFlush(runtimeDb);
       }
     }
 
@@ -999,6 +1024,7 @@ async function handleMessageInternal(
       sock,
       db: runtimeDb,
       msg: commandMsg,
+      receivedAt,
       from,
       sender,
       senderNum,
