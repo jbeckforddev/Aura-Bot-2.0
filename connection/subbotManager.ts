@@ -585,6 +585,12 @@ async function connectSubBot(
       );
       if (!currentRegistered) {
         await options.onPairingExpired?.();
+      } else if (connected) {
+        await options.onSessionClosed?.(
+          statusCode === DisconnectReason.loggedOut
+            ? "loggedOut"
+            : `desconectado (${statusCode || "sin estado"})`,
+        );
       } else {
         await options.onPairingError?.(
           new Error(`Sesión de subbot inválida (${statusCode || "sin estado"}).`),
@@ -817,6 +823,9 @@ export async function requestSubBotLink(request: LinkRequest): Promise<string> {
       onPairingExpired: async () => {
         await unlinkSubBot(sessionName, managedSocket, "tiempo de vinculación agotado");
         await request.onPairingExpired?.();
+      },
+      onSessionClosed: async (reason) => {
+        await request.onSessionClosed?.(reason);
       },
       onDisconnected: () => {
         void cleanSubBot(sessionName, managedSocket);

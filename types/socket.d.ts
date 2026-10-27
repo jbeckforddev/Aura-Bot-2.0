@@ -22,6 +22,7 @@ export interface ConnectionOptions {
   onPairingError?: (error: Error) => Promise<void> | void;
   onPairingExpired?: () => Promise<void> | void;
   onDisconnected?: () => Promise<void> | void;
+  onSessionClosed?: (reason: string) => Promise<void> | void;
 }
 
 export interface SubBotLinkRequest {
@@ -33,6 +34,7 @@ export interface SubBotLinkRequest {
   onConnected?: () => Promise<void> | void;
   onPairingError?: (error: Error) => Promise<void> | void;
   onPairingExpired?: () => Promise<void> | void;
+  onSessionClosed?: (reason: string) => Promise<void> | void;
 }
 
 export interface ContactMetadata {

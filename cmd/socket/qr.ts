@@ -24,6 +24,13 @@ export default {
       onConnected: async () => {
         void reply({ text: IS_SUBBOT_ONLINE({ prefix: usedPrefix ?? "." }) });
       },
+      onSessionClosed: (reason) => {
+        if (reason === "loggedOut") {
+          void reply({ text: t("socketSubBotLoggedOut") });
+        } else {
+          void reply({ text: t("socketSubBotDisconnected", { reason }) });
+        }
+      },
     });
   },
 };

@@ -53,6 +53,13 @@ export default {
         void reply({
           text: t("socketCodeExpired"),
         }),
+      onSessionClosed: (reason) => {
+        if (reason === "loggedOut") {
+          void reply({ text: t("socketSubBotLoggedOut") });
+        } else {
+          void reply({ text: t("socketSubBotDisconnected", { reason }) });
+        }
+      },
     });
   },
 };

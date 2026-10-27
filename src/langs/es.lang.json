@@ -22,6 +22,8 @@
   "socketCodeExpired": "⌛ El código expiró después de 1 minuto. El subbot quedó offline; solicita otro código para volver a intentarlo.",
   "socketLogoutClosing": "⏳ Cerrando la sesión de este bot...",
   "socketLogoutError": "❌ No se pudo cerrar la sesión: {{error}}",
+  "socketSubBotLoggedOut": "╭〔 🔌 𝐒𝐔𝐁-𝐁𝐎𝐓 〕⬣\n┃ ℹ️ 𝐒𝐄𝐒𝐈Ó𝐍 𝐅𝐈𝐍𝐀𝐋𝐈𝐙𝐀𝐃𝐀\n╰━━━━━━━━━━━━⬣\n\n┃ La sesión fue cerrada desde WhatsApp.\n┃ El sub-bot se ha desvinculado correctamente.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "socketSubBotDisconnected": "╭〔 🔌 𝐒𝐔𝐁-𝐁𝐎𝐓 〕⬣\n┃ ⚠️ 𝐒𝐄𝐒𝐈Ó𝐍 𝐅𝐈𝐍𝐀𝐋𝐈𝐙𝐀𝐃𝐀\n╰━━━━━━━━━━━━⬣\n\n┃ La sesión del sub-bot finalizó: {{reason}}.\n┃ Se eliminaron los datos de la sesión.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
   "socketQrPreparing": "⏳ Preparando el código QR de vinculación...",
   "socketQrCaption": "📱 Escanea este QR para vincular el subbot.",
   "socketSelfPermission": "⛔ Solo un moderador o esta instancia del bot puede cambiar este modo.",
