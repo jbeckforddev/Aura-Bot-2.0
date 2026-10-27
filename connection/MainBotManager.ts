@@ -5,6 +5,7 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   useSQLiteAuthState,
   jidNormalizedUser,
+  type proto,
 } from "baileys";
 import chalk from "chalk";
 import pino from "pino";
@@ -47,6 +48,11 @@ const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
 const pairingRetryAttempts = new Map<string, number>();
 const connectionsInProgress = new Set<string>();
+
+const mainMessagesCache = new LRUCache<string, proto.IMessage>({
+  max: 1500,
+  ttl: 15 * 60 * 1000,
+});
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
@@ -325,7 +331,10 @@ async function connectSocket(sessionName: string) {
     },
     msgRetryCounterCache,
     userDevicesCache,
-    getMessage: async () => undefined,
+    getMessage: async (key) => {
+      if (!key?.id) return undefined;
+      return mainMessagesCache.get(key.id);
+    },
     printQRInTerminal: false,
     browser: Browsers.ubuntu("Chrome"),
     logger,
@@ -664,6 +673,12 @@ async function connectSocket(sessionName: string) {
     if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) {
       return;
     }
+
+    messages.forEach((msg) => {
+      if (msg.key?.id && msg.message) {
+        mainMessagesCache.set(msg.key.id, msg.message);
+      }
+    });
 
     const connectedBot = sock.user?.id || "";
 
