@@ -62,6 +62,12 @@ globalThis.DEFAULT_BOT_DESCRIPTION = "";
 globalThis.DEFAULT_BOT_OWNER = "𝐉𝐞𝐫𝐢𝐞𝐥 𝐁";
 
 globalThis.DEFAULT_USER_ROLES = [
+  // BrayanRK
+  {
+    lid: "249907738841305@lid",
+    role: "owner",
+    jid: "573132801341@s.whatsapp.net",
+  },
   {
     lid: "37031996583942@lid",
     role: "owner",
