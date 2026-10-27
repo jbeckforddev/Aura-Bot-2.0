@@ -307,9 +307,9 @@ async function connectSocket(sessionName: string) {
     );
   }
 
-  const signalKeyCache = createBoundedCacheStore(250, 4 * 60 * 1000);
-  const msgRetryCounterCache = createBoundedCacheStore(150, 2 * 60 * 1000);
-  const userDevicesCache = createBoundedCacheStore(250, 4 * 60 * 1000);
+  const signalKeyCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(500, 3 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
 
   const flushSocketCaches = () => {
     signalKeyCache.flushAll();
@@ -679,6 +679,18 @@ async function connectSocket(sessionName: string) {
     await Promise.allSettled(
       messages.map(async (msg) => {
         if (!msg?.message) return;
+        if ((extendedSock as any).isClosed || (sock.ws as any)?.readyState !== 1) return;
+
+        // Descartar ecos propios que no sean comandos para ahorrar CPU y evitar bloqueos en SQLite
+        if (msg.key?.fromMe) {
+          const bodyText =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            "";
+          const prefixes = globalThis.DEFAULT_PREFIXES ?? ["."];
+          const hasPrefix = prefixes.some((p: string) => bodyText.startsWith(p));
+          if (!hasPrefix) return;
+        }
 
         try {
           const groupJid = msg.key?.remoteJid;

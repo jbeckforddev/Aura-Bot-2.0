@@ -56,6 +56,32 @@ const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 
+// Semáforo para escalonar reconexiones y evitar bloqueos '503 Stream Errored' por ráfagas concurrentes en la misma IP
+const MAX_CONCURRENT_RECONNECTS = 2;
+let activeReconnects = 0;
+const reconnectQueue: (() => Promise<void>)[] = [];
+
+function processReconnectQueue() {
+  if (activeReconnects >= MAX_CONCURRENT_RECONNECTS || reconnectQueue.length === 0) {
+    return;
+  }
+  const task = reconnectQueue.shift();
+  if (!task) return;
+
+  activeReconnects++;
+  void task().finally(() => {
+    setTimeout(() => {
+      activeReconnects--;
+      processReconnectQueue();
+    }, 1200);
+  });
+}
+
+function enqueueReconnect(task: () => Promise<void>) {
+  reconnectQueue.push(task);
+  processReconnectQueue();
+}
+
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 
 function createBoundedCacheStore(max: number, ttl: number) {
@@ -95,13 +121,15 @@ function clearReconnectTimer(sessionName: string) {
 
 /**
  * Destruye de forma segura y en el orden correcto un socket.
- * Primero se cierran eventos y socket WS, y al final se cierra SQLite.
+ * Primero se marcan banderas de cierre, luego eventos y socket WS, y al final se cierra SQLite de forma segura.
  */
 async function safelyDestroySocket(
   sock?: ExtendedWASocket | null,
   reason?: Error,
 ) {
   if (!sock) return;
+  (sock as any).isClosed = true;
+  (sock as any).isClosing = true;
 
   try {
     if (sock.ev && typeof sock.ev.removeAllListeners === "function") {
@@ -130,7 +158,7 @@ async function safelyDestroySocket(
   } catch {}
 
   try {
-    (sock as any).closeAuth?.();
+    await (sock as any).closeAuth?.();
   } catch {}
 }
 
@@ -147,12 +175,12 @@ export async function unlinkSubBot(
   connectionsInProgress.delete(sessionName);
 
   const socket = targetSocket || activeSubBots.get(sessionName);
+  activeSubBots.delete(sessionName);
   const botJid = socket?.user?.id ? jidNormalizedUser(socket.user.id) : "";
 
   if (socket) {
     await safelyDestroySocket(socket);
   }
-  activeSubBots.delete(sessionName);
 
   // Eliminar de la base de datos tanto por JID normalizado como por sessionName
   try {
@@ -186,6 +214,7 @@ async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket)
   connectionsInProgress.delete(sessionName);
 
   const current = activeSubBots.get(sessionName);
+  activeSubBots.delete(sessionName);
   if (targetSocket && current && current !== targetSocket) {
     await safelyDestroySocket(targetSocket);
     return;
@@ -193,7 +222,6 @@ async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket)
   if (current) {
     await safelyDestroySocket(current);
   }
-  activeSubBots.delete(sessionName);
 }
 
 /**
@@ -225,11 +253,15 @@ function scheduleReconnect(sessionName: string, options: ConnectionOptions) {
 
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionName);
-    void connectSubBot(sessionName, options).catch((error) => {
-      logInfo(
-        `Falló la reconexión de ${sessionName}: ${String(error)}`,
-        "SubBotError",
-      );
+    enqueueReconnect(async () => {
+      try {
+        await connectSubBot(sessionName, options);
+      } catch (error) {
+        logInfo(
+          `Falló la reconexión de ${sessionName}: ${String(error)}`,
+          "SubBotError",
+        );
+      }
     });
   }, delayMs);
   timer.unref?.();
@@ -295,9 +327,9 @@ async function connectSubBot(
     logInfo(`Se usará la versión interna de Baileys para ${sessionName}.`, "SubBotWarning");
   }
 
-  const signalKeyCache = createBoundedCacheStore(150, 3 * 60 * 1000);
-  const msgRetryCounterCache = createBoundedCacheStore(100, 2 * 60 * 1000);
-  const userDevicesCache = createBoundedCacheStore(150, 3 * 60 * 1000);
+  const signalKeyCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(500, 3 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
 
   let socket: ExtendedWASocket;
   try {
@@ -322,7 +354,7 @@ async function connectSubBot(
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       disableLinkPreviews: true,
-      markOnlineOnConnect: true,
+      markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
       retryRequestDelayMs: 250,
       maxMsgRetryCount: 3,
@@ -353,7 +385,6 @@ async function connectSubBot(
   let pairingCodeRequested = false;
   let connectionClosed = false;
   let pairingTimer: NodeJS.Timeout | undefined;
-  let closingAuth = false;
   const knownGroupJids = new Set<string>();
   try {
     const existingBot = db.getBot(sessionName);
@@ -363,27 +394,64 @@ async function connectSubBot(
       }
     }
   } catch {}
+  let saveTimer: NodeJS.Timeout | null = null;
+  let credentialsDirty = false;
+  let authStateClosing = false;
+  let authStateClosePromise: Promise<void> | null = null;
+  let credentialsWriteQueue: Promise<void> = Promise.resolve();
+
+  const persistCredentials = () => {
+    if (!credentialsDirty) return credentialsWriteQueue;
+    credentialsDirty = false;
+    credentialsWriteQueue = credentialsWriteQueue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          if (!authStateClosing) await saveCreds();
+        } catch (error) {
+          logInfo(`Error guardando credenciales de ${sessionName}: ${String(error)}`, "SubBotError");
+        }
+      });
+    return credentialsWriteQueue;
+  };
 
   const closeAuth = () => {
-    if (closingAuth) return;
-    closingAuth = true;
-    try {
-      signalKeyCache.flushAll();
-      msgRetryCounterCache.flushAll();
-      userDevicesCache.flushAll();
-    } catch {}
-    try {
-      closeAuthState?.();
-    } catch (error) {
-      logInfo(`Error cerrando auth de ${sessionName}: ${String(error)}`, "SubBotWarning");
-    }
+    if (authStateClosePromise) return authStateClosePromise;
+    authStateClosing = true;
+    authStateClosePromise = (async () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      try {
+        await persistCredentials();
+      } catch (error) {
+        logInfo(`Error guardando credenciales antes de cerrar ${sessionName}: ${String(error)}`, "SubBotWarning");
+      }
+      try {
+        signalKeyCache.flushAll();
+        msgRetryCounterCache.flushAll();
+        userDevicesCache.flushAll();
+      } catch {}
+      try {
+        closeAuthState?.();
+      } catch (error) {
+        logInfo(`Error cerrando auth de ${sessionName}: ${String(error)}`, "SubBotWarning");
+      }
+    })();
+    return authStateClosePromise;
   };
   (socket as any).closeAuth = closeAuth;
 
   socket.ev.on("creds.update", () => {
-    void saveCreds().catch((error: unknown) =>
-      logInfo(`Error guardando credenciales de ${sessionName}: ${String(error)}`, "SubBotError"),
-    );
+    if (authStateClosing) return;
+    credentialsDirty = true;
+    if (saveTimer) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void persistCredentials();
+    }, 500);
+    saveTimer.unref?.();
   });
 
   if (!isRegistered) {
@@ -579,8 +647,8 @@ async function connectSubBot(
     }
 
     // Desconexión transitoria: limpiar el socket de forma segura y reconectar
-    await safelyDestroySocket(socket);
     activeSubBots.delete(sessionName);
+    await safelyDestroySocket(socket);
     scheduleReconnect(sessionName, options);
   });
 
@@ -598,6 +666,18 @@ async function connectSubBot(
     await Promise.allSettled(
       messages.map(async (message) => {
         if (!message?.message) return;
+        if ((socket as any).isClosed || (socket.ws as any)?.readyState !== 1) return;
+
+        // Descartar ecos propios que no sean comandos para ahorrar CPU y evitar bloqueos en SQLite
+        if (message.key?.fromMe) {
+          const bodyText =
+            message.message?.conversation ||
+            message.message?.extendedTextMessage?.text ||
+            "";
+          const prefixes = globalThis.DEFAULT_PREFIXES ?? ["."];
+          const hasPrefix = prefixes.some((p: string) => bodyText.startsWith(p));
+          if (!hasPrefix) return;
+        }
 
         try {
           const groupJid = message.key?.remoteJid;
@@ -737,7 +817,12 @@ function sessionNameFor(requester: string, fallbackPhone?: string): string {
 export function getActiveSubBots(): ExtendedWASocket[] {
   const list: ExtendedWASocket[] = [];
   for (const [sessionName, socket] of activeSubBots.entries()) {
-    if (!socket || !socket.user?.id) {
+    if (
+      !socket ||
+      !socket.user?.id ||
+      (socket as any).isClosed ||
+      (socket.ws as any)?.readyState !== 1
+    ) {
       continue;
     }
     list.push(socket);
