@@ -104,7 +104,7 @@ export default {
           fail++;
         }
         hechos++;
-        if (hechos % 25 === 0) {
+        if (hechos % 100 === 0) {
           await reply(renderStatus("bc_progress", { done: hechos, total })).catch(() => {});
         }
         if (hechos < total) await sleep(SEND_DELAY_MS);
