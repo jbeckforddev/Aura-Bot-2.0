@@ -43,6 +43,6 @@
     "assets",
     "patches",
     "tests",
-    "src/libs/**"
+    "src/libs/**",
   ]
 }

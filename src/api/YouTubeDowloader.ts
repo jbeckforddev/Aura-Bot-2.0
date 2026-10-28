@@ -1,12 +1,11 @@
 import { fetch } from "undici";
-import { createDecipheriv } from "crypto";
-import {
-  searchYouTubeVideo,
-  type YouTubeSearchVideo,
-} from "./YouTubeSearch.ts";
+import { DL_CONFIG } from "../../config.ts";
+import type { YouTubeSearchVideo } from "./YouTubeSearch.ts";
+import { formatCount } from "../../utils/formatter.ts";
 
 function getID(url: string): string | null {
-  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const regex =
+    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
@@ -19,7 +18,8 @@ function idValidUrl(input: string): boolean {
 
 function makeId(length: number): string {
   let result = "";
-  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const charactersLength = characters.length;
   let counter = 0;
   while (counter < length) {
@@ -28,54 +28,12 @@ function makeId(length: number): string {
   }
   return result;
 }
-function formatCount(valor: unknown): string {
-  if (valor === null || valor === undefined) return "0";
-
-  const raw = String(valor).trim();
-  if (!raw) return "0";
-  if (/^[\d,.]+[kKmMbBtT]$/.test(raw)) {
-    return raw.replace(/,/g, "").toUpperCase();
-  }
-  const normalized = raw.replace(/,/g, "");
-  const numericPart = normalized.match(/^\s*\d+(?:\.\d+)?/);
-  if (!numericPart) return normalized;
-  const numero = Number(numericPart[0]);
-  if (!Number.isFinite(numero)) return normalized;
-  if (numero >= 1e12) {
-    return `${(numero / 1e12).toFixed(1)}T`;
-  }
-  if (numero >= 1e9) {
-    return `${(numero / 1e9).toFixed(1)}B`;
-  }
-  if (numero >= 1e6) {
-    return `${(numero / 1e6).toFixed(1)}M`;
-  }
-  if (numero >= 1e3) {
-    return `${(numero / 1e3).toFixed(1)}K`;
-  }
-  return numero.toString();
-}
-
-function formatYouTubeViewCount(value: unknown): string {
-  const raw = String(value ?? "").trim().replace(/\u00a0/g, " ");
-  const compact = raw.match(/([\d,.]+)\s*([KMBT])/i);
-  if (compact) return formatCount(`${compact[1].replace(/,/g, "")}${compact[2]}`);
-
-  const numeric = raw.match(/[\d.,]+/)?.[0];
-  if (!numeric) return "0";
-  const normalized = /\.\d{3}(?:\.|$)/.test(numeric)
-    ? numeric.replace(/[.,]/g, "")
-    : numeric.replace(/,/g, "");
-  return formatCount(normalized);
-}
 const audio_q = [92, 128, 256, 320];
 const video_q = [144, 360, 480, 720, 1080];
 const CONTENT_QUALITIES = {
   audio: audio_q,
   video: video_q,
 } as const;
-const ALYACORE_KEY = "AURA-BOT-JERIELB";
-
 type AlyaCoreData = {
   title?: string;
   author?: string;
@@ -84,14 +42,121 @@ type AlyaCoreData = {
   quality?: string;
   size?: number;
   dl?: string;
+  views?: string;
+  likes?: string;
+  channel_url?: string;
 };
 
-async function getAlyaCoreAudio(link: string): Promise<AlyaCoreData & { dl: string }> {
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : undefined;
+}
+
+function firstString(
+  records: JsonRecord[],
+  keys: string[],
+): string | undefined {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+      if (typeof value === "number") return String(value);
+    }
+  }
+}
+
+function normalizeAudioResponse(
+  payload: unknown,
+): AlyaCoreData & { dl: string } {
+  const root = asRecord(payload);
+  if (!root || root.status !== true) {
+    const message =
+      root && typeof root.message === "string" ? root.message : "";
+    throw new Error(message || "El proveedor no pudo generar el audio.");
+  }
+
+  const data = asRecord(root.data);
+  const result = asRecord(root.result);
+  const records = [
+    data,
+    result,
+    asRecord(data?.result),
+    asRecord(result?.data),
+    root,
+  ].filter((record): record is JsonRecord => record !== undefined);
+  const dl = firstString(records, ["dl", "mp3", "download"]);
+  if (!dl) throw new Error("El proveedor no devolvió un enlace de descarga.");
+
+  if (!URL.canParse(dl)) {
+    throw new Error("El proveedor devolvió un enlace de descarga inválido.");
+  }
+  const downloadUrl = new URL(dl);
+  if (downloadUrl.protocol !== "http:" && downloadUrl.protocol !== "https:") {
+    throw new Error("El proveedor devolvió un enlace de descarga inválido.");
+  }
+
+  const rawAuthor = records.find(
+    (record) => record.author !== undefined,
+  )?.author;
+  const author =
+    typeof rawAuthor === "string"
+      ? rawAuthor
+      : (firstString([asRecord(rawAuthor) ?? {}], ["name", "username"]) ??
+        firstString(records, ["channel"]));
+  const rawSize = records.find(
+    (record) => typeof record.size === "number",
+  )?.size;
+
+  return {
+    title: firstString(records, ["title"]),
+    author,
+    duration: firstString(records, ["duration"]),
+    thumbnail: firstString(records, ["thumbnail", "image"]),
+    quality: firstString(records, ["quality"]),
+    size: typeof rawSize === "number" ? rawSize : undefined,
+    views: firstString(records, ["views"]),
+    likes: firstString(records, ["likes"]),
+    channel_url: firstString(records, ["channel_url", "channelUrl"]),
+    dl,
+  };
+}
+
+async function getAlyaCoreAudio(
+  link: string,
+): Promise<AlyaCoreData & { dl: string }> {
   const encodedUrl = encodeURIComponent(link);
   const endpoints = [
-    `https://api.alyacore.xyz/dl/fastytmp3?url=${encodedUrl}&key=${ALYACORE_KEY}`,
-    `https://api.alyacore.xyz/dl/ytmp3converter?url=${encodedUrl}&key=${ALYACORE_KEY}`,
-    `https://api.alyacore.xyz/dl/youtubeplayv2?query=${encodedUrl}&type=mp3&quality=auto&key=${ALYACORE_KEY}`,
+    {
+      name: "Alya fastytmp3",
+      url: `${DL_CONFIG.alya.BASE_URL}dl/fastytmp3?url=${encodedUrl}&key=${DL_CONFIG.alya.API_KEY}`,
+    },
+    {
+      name: "Alya ytmp3converter",
+      url: `${DL_CONFIG.alya.BASE_URL}dl/ytmp3converter?url=${encodedUrl}&key=${DL_CONFIG.alya.API_KEY}`,
+    },
+    {
+      name: "Alya youtubeplayv2",
+      url: `${DL_CONFIG.alya.BASE_URL}dl/youtubeplayv2?query=${encodedUrl}&type=mp3&quality=auto&key=${DL_CONFIG.alya.API_KEY}`,
+    },
+    {
+      name: "Alya youtubeplay",
+      url: `${DL_CONFIG.alya.BASE_URL}dl/youtubeplay?query=${encodedUrl}&key=${DL_CONFIG.alya.API_KEY}`,
+    },
+    {
+      name: "Alya ytmp3downloader",
+      url: `${DL_CONFIG.alya.BASE_URL}dl/ytmp3downloader?url=${encodedUrl}&key=${DL_CONFIG.alya.API_KEY}`,
+    },
+    {
+      name: "FaaApi ytmp3",
+      url: `${DL_CONFIG.faaApi.BASE_URL}faa/ytmp3?url=${encodedUrl}`,
+    },
+    {
+      name: "Delirius ytmp3",
+      url: `${DL_CONFIG.deliriusApi.BASE_URL}download/ytmp3?url=${encodedUrl}`,
+    },
   ];
   const controller = new AbortController();
   const signal = AbortSignal.any([
@@ -100,61 +165,33 @@ async function getAlyaCoreAudio(link: string): Promise<AlyaCoreData & { dl: stri
   ]);
 
   try {
-    return await Promise.any(
-      endpoints.map(async (endpoint) => {
-        const response = await fetch(endpoint, { signal });
+    const winner = await Promise.any(
+      endpoints.map(async ({ name, url }) => {
+        const response = await fetch(url, { signal });
         if (!response.ok) {
-          throw new Error(`AlyaCore respondió HTTP ${response.status}`);
+          throw new Error(`${name} respondió HTTP ${response.status}`);
         }
 
-        const payload = (await response.json()) as {
-          status?: boolean;
-          data?: AlyaCoreData;
-        };
-        const downloadUrl = payload.data?.dl;
-        if (payload.status !== true || typeof downloadUrl !== "string") {
-          throw new Error("AlyaCore no devolvió un enlace de descarga");
-        }
-
-        let parsedUrl: URL;
-        try {
-          parsedUrl = new URL(downloadUrl);
-        } catch {
-          throw new Error("AlyaCore devolvió un enlace inválido");
-        }
-        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-          throw new Error("AlyaCore devolvió un enlace inválido");
-        }
-
-        controller.abort();
-        return { ...payload.data, dl: downloadUrl };
+        const payload: unknown = await response.json();
+        return normalizeAudioResponse(payload);
       }),
     );
-  } catch {
-    throw new Error("Ningún endpoint de AlyaCore pudo generar el audio.");
+    controller.abort();
+    return winner;
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const reasons = error.errors
+        .map((reason) =>
+          reason instanceof Error ? reason.message : String(reason),
+        )
+        .join("; ");
+      throw new Error(`Ninguna API pudo generar el audio. ${reasons}`, {
+        cause: error,
+      });
+    }
+    throw error;
   }
 }
-
-const decode = (enc: string) => {
-  try {
-    const secret_key = "C5D58EF67A7584E4A29F6C35BBC4EB12";
-    const data = Buffer.from(enc, "base64");
-    const iv = data.slice(0, 16);
-    const content = data.slice(16);
-    const key = Buffer.from(secret_key, "hex");
-
-    const decipher = createDecipheriv("aes-128-cbc", key, iv);
-    const decrypted = Buffer.concat([
-      decipher.update(content),
-      decipher.final(),
-    ]);
-
-    return JSON.parse(decrypted.toString());
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error("Error al decodificar la información: " + message);
-  }
-};
 
 async function getDirectLinkMetadata(
   downloadUrl: string,
@@ -197,156 +234,76 @@ async function getYouTubeVideoMetadata(videoId: string): Promise<{
     "Accept-Language": "es-ES,es;q=0.9",
     Cookie: "CONSENT=YES+1; SOCS=CAI",
   };
-
-  try {
-    const searchResponse = await fetch(
-      `https://www.youtube.com/results?search_query=${videoId}&hl=es`,
-      { headers, signal: AbortSignal.timeout(10000) },
+  const response = await fetch(
+    `https://www.youtube.com/watch?v=${videoId}&hl=es`,
+    { headers, signal: AbortSignal.timeout(10000), redirect: "follow" },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `No se pudo obtener la metadata del video: ${response.status}`,
     );
-    if (!searchResponse.ok) {
-      throw new Error(`YouTube HTTP ${searchResponse.status}`);
-    }
-
-    const searchHtml = await searchResponse.text();
-    const apiKey = searchHtml.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/)?.[1];
-    const clientVersion = searchHtml.match(
-      /"INNERTUBE_CLIENT_VERSION"\s*:\s*"([^"]+)"/,
-    )?.[1];
-    if (!apiKey || !clientVersion) {
-      throw new Error("No se encontró la configuración web de YouTube.");
-    }
-
-    const metadataResponse = await fetch(
-      `https://www.youtube.com/youtubei/v1/next?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-          Origin: "https://www.youtube.com",
-        },
-        body: JSON.stringify({
-          context: {
-            client: { clientName: "WEB", clientVersion, hl: "es", gl: "US" },
-          },
-          videoId,
-        }),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-    if (!metadataResponse.ok) {
-      throw new Error(`YouTube metadata HTTP ${metadataResponse.status}`);
-    }
-
-    const data = (await metadataResponse.json()) as Record<string, any>;
-    const contents =
-      data.contents?.twoColumnWatchNextResults?.results?.results?.contents || [];
-    const primary = contents.find(
-      (item: Record<string, any>) => item.videoPrimaryInfoRenderer,
-    )?.videoPrimaryInfoRenderer;
-    const secondary = contents.find(
-      (item: Record<string, any>) => item.videoSecondaryInfoRenderer,
-    )?.videoSecondaryInfoRenderer;
-    const likeButton = primary?.videoActions?.menuRenderer?.topLevelButtons?.find(
-      (button: Record<string, any>) =>
-        button.segmentedLikeDislikeButtonViewModel,
-    )?.segmentedLikeDislikeButtonViewModel;
-    const likeTitle =
-      likeButton?.likeButtonViewModel?.likeButtonViewModel?.toggleButtonViewModel
-        ?.toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel?.title;
-    const likeText = typeof likeTitle === "string" ? likeTitle.replace(/\s/g, "") : "";
-    const viewCountRenderer = primary?.viewCount?.videoViewCountRenderer;
-    const originalViews = Number(viewCountRenderer?.originalViewCount);
-    const viewsCount =
-      Number.isFinite(originalViews) && originalViews > 0
-        ? formatCount(originalViews)
-        : formatYouTubeViewCount(
-            viewCountRenderer?.shortViewCount?.simpleText ||
-              viewCountRenderer?.viewCount?.simpleText,
-          );
-    const owner = secondary?.owner?.videoOwnerRenderer;
-    const channelUrl =
-      owner?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url || "";
-    const title = (primary?.title?.runs || [])
-      .map((run: { text?: string }) => run.text || "")
-      .join("")
-      .trim();
-
-    if (!title && !likeText) {
-      throw new Error("YouTube no devolvió metadatos para el video.");
-    }
-
-    return {
-      title: title || "Sin título",
-      channel:
-        owner?.title?.runs?.map((run: { text?: string }) => run.text || "").join("") ||
-        "Desconocido",
-      channel_url: channelUrl.startsWith("/")
-        ? `https://www.youtube.com${channelUrl}`
-        : channelUrl || `https://www.youtube.com/channel/${owner?.navigationEndpoint?.browseEndpoint?.browseId || ""}`,
-      views: viewsCount,
-      likes: /^[\d,.]+[KMBT]?$/i.test(likeText) ? formatCount(likeText) : "0",
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      duration: "",
-    };
-  } catch {
-    const response = await fetch(
-      `https://www.youtube.com/watch?v=${videoId}&hl=es`,
-      { headers, signal: AbortSignal.timeout(10000), redirect: "follow" },
-    );
-
-    if (!response.ok) {
-      throw new Error(`No se pudo obtener la metadata del video: ${response.status}`);
-    }
-
-    const html = await response.text();
-    const playerMatch =
-      html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s) ||
-      html.match(/window\["ytInitialPlayerResponse"\]\s*=\s*(\{.+?\});<\/script>/s) ||
-      html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
-    let player: Record<string, any> = {};
-    if (playerMatch?.[1]) {
-      try {
-        player = JSON.parse(playerMatch[1]);
-      } catch {
-        player = {};
-      }
-    }
-
-    const videoDetails = player.videoDetails || {};
-    const likeCount =
-      html.match(/"likeCount":"(\d+)"/)?.[1] ||
-      html.match(/"likeCount":(\d+)/)?.[1] ||
-      "0";
-    const lengthSeconds =
-      videoDetails.lengthSeconds || html.match(/"lengthSeconds":"?(\d+)"?/)?.[1] || "0";
-
-    return {
-      title:
-        videoDetails.title ||
-        html.match(/<meta property="og:title" content="([^"]+)"/)?.[1] ||
-        "Sin título",
-      channel:
-        videoDetails.author ||
-        videoDetails.ownerChannelName ||
-        html.match(/"author":"([^"]+)"/)?.[1] ||
-        "Desconocido",
-      channel_url:
-        videoDetails.ownerProfileUrl ||
-        html.match(/"ownerProfileUrl":"([^"]+)"/)?.[1] ||
-        `https://www.youtube.com/channel/${videoDetails.channelId || ""}`,
-      views: formatCount(videoDetails.viewCount || html.match(/"viewCount":"(\d+)"/)?.[1] || "0"),
-      likes: formatCount(likeCount),
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      duration:
-        Number(lengthSeconds) > 0
-          ? `${Math.floor(Number(lengthSeconds) / 60)}m ${Number(lengthSeconds) % 60}s`
-          : "0s",
-    };
   }
+
+  const html = await response.text();
+  const playerMatch =
+    html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s) ||
+    html.match(
+      /window\["ytInitialPlayerResponse"\]\s*=\s*(\{.+?\});<\/script>/s,
+    ) ||
+    html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
+  let player: JsonRecord = {};
+  if (playerMatch?.[1]) {
+    try {
+      player = asRecord(JSON.parse(playerMatch[1])) ?? {};
+    } catch {
+      player = {};
+    }
+  }
+
+  const videoDetails = asRecord(player.videoDetails) ?? {};
+  const likeCount =
+    html.match(/"likeCount":"(\d+)"/)?.[1] ||
+    html.match(/"likeCount":(\d+)/)?.[1] ||
+    "0";
+  const lengthSeconds =
+    videoDetails.lengthSeconds ||
+    html.match(/"lengthSeconds":"?(\d+)"?/)?.[1] ||
+    "0";
+  const seconds = Number(lengthSeconds);
+  const channelId =
+    typeof videoDetails.channelId === "string" ? videoDetails.channelId : "";
+  const channelUrl =
+    (typeof videoDetails.ownerProfileUrl === "string" &&
+      videoDetails.ownerProfileUrl) ||
+    (channelId
+      ? `https://www.youtube.com/channel/${channelId}`
+      : "https://www.youtube.com/");
+
+  return {
+    title:
+      (typeof videoDetails.title === "string" && videoDetails.title) ||
+      html.match(/<meta property="og:title" content="([^"]+)"/)?.[1] ||
+      "Sin título",
+    channel:
+      (typeof videoDetails.author === "string" && videoDetails.author) ||
+      (typeof videoDetails.ownerChannelName === "string" &&
+        videoDetails.ownerChannelName) ||
+      html.match(/"author":"([^"]+)"/)?.[1] ||
+      "Desconocido",
+    channel_url: channelUrl,
+    views: String(
+      videoDetails.viewCount || html.match(/"viewCount":"(\d+)"/)?.[1] || "0",
+    ),
+    likes: likeCount,
+    thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    duration:
+      Number.isFinite(seconds) && seconds > 0
+        ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+        : "0s",
+  };
 }
 
-async function savetube(
+async function downloadFromProviders(
   link: string,
   quality: number,
   value: "audio" | "video",
@@ -406,141 +363,68 @@ async function savetube(
     };
   }
 
+  if (value !== "audio") {
+    return {
+      creator: "Jeriel B.",
+      status: "failed",
+      statusCode: 400,
+      type: value,
+      data: [],
+      error:
+        "Las APIs configuradas actualmente solo permiten descargar audio MP3.",
+    };
+  }
+
   try {
-    let info: Record<string, any>;
-    let finalUrl: string;
-    let providerQuality: string | undefined;
-    let providerSize: number | undefined;
-
-    if (value === "audio") {
-      const providerData = await getAlyaCoreAudio(link);
-      info = providerData;
-      finalUrl = providerData.dl;
-      providerQuality = providerData.quality;
-      providerSize = providerData.size;
-    } else {
-      const cdnResponse = await fetch("https://media.savetube.vip/api/random-cdn");
-      const cdnData = (await cdnResponse.json()) as { cdn?: string };
-      if (!cdnData.cdn) {
-        throw new Error("No se obtuvo un CDN disponible");
-      }
-
-      const cdn = cdnData.cdn;
-      const infoResponse = await fetch(`https://${cdn}/v2/info`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-          Referer: "https://save-tube.com/",
-        },
-        body: JSON.stringify({ url: link }),
-      });
-
-      if (!infoResponse.ok) {
-        throw new Error(`No se pudo obtener la información del video: ${infoResponse.status}`);
-      }
-
-      const infoget = (await infoResponse.json()) as { data?: string };
-      if (!infoget.data) {
-        throw new Error("No se recibió la información cifrada del video");
-      }
-
-      info = decode(infoget.data);
-      const downloadResponse = await fetch(`https://${cdn}/download`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-          Referer: "https://save-tube.com/",
-        },
-        body: JSON.stringify({
-          downloadType: value,
-          quality: String(quality),
-          key: info.key,
-        }),
-      });
-
-      const response = (await downloadResponse.json()) as {
-        data?: { downloadUrl?: string } | null;
-        message?: string;
-        status?: boolean;
-      };
-      const downloadUrl = response.data?.downloadUrl;
-      if (
-        !downloadResponse.ok ||
-        response.status === false ||
-        typeof downloadUrl !== "string" ||
-        !downloadUrl.trim()
-      ) {
-        throw new Error(
-          response.message ||
-            `No se pudo generar el enlace de descarga: ${downloadResponse.status}`,
-        );
-      }
-      try {
-        const parsedUrl = new URL(downloadUrl);
-        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-          throw new Error();
-        }
-      } catch {
-        throw new Error("El proveedor devolvió un enlace de descarga inválido");
-      }
-      finalUrl = downloadUrl;
-    }
-
-    const directMeta = await getDirectLinkMetadata(finalUrl, quality, value);
+    const providerData = await getAlyaCoreAudio(link);
     const videoId = getID(link) || searchResult?.videoId || makeId(11);
-    const ytsMeta =
-      searchResult ||
-      (value === "audio"
-        ? await searchYouTubeVideo(videoId).catch(() => null)
-        : null);
-    const youtubeMeta = await getYouTubeVideoMetadata(videoId).catch(() => null);
-
-    const channelId =
-      info?.channelId ||
-      info?.channel?.id ||
-      info?.authorId ||
-      info?.owner?.channelId ||
-      "";
-    const channelUrl =
-      youtubeMeta?.channel_url ||
-      (channelId ? `https://www.youtube.com/channel/${channelId}` : "https://www.youtube.com/");
+    const [directMeta, youtubeMeta] = await Promise.all([
+      getDirectLinkMetadata(providerData.dl, quality, "audio"),
+      getYouTubeVideoMetadata(videoId).catch((error: unknown) => {
+        console.warn("No se pudieron obtener los metadatos de YouTube:", error);
+        return null;
+      }),
+    ]);
     const result = {
       id: videoId,
-      title: ytsMeta?.title || youtubeMeta?.title || info.title || "Sin título",
+      title:
+        youtubeMeta?.title ||
+        providerData.title ||
+        searchResult?.title ||
+        "Sin título",
       channel:
-        ytsMeta?.author || youtubeMeta?.channel || info.author || info.channel || "Desconocido",
-      duration: ytsMeta?.duration || youtubeMeta?.duration || info.duration || "0s",
+        youtubeMeta?.channel ||
+        providerData.author ||
+        searchResult?.author ||
+        "Desconocido",
+      duration:
+        (youtubeMeta?.duration !== "0s" && youtubeMeta?.duration) ||
+        providerData.duration ||
+        searchResult?.duration ||
+        "0s",
       views:
-        ytsMeta?.views ||
-        youtubeMeta?.views ||
-        (typeof info.views === "number"
-          ? info.views.toString()
-          : typeof info.viewCount === "number"
-            ? info.viewCount.toString()
-            : typeof info.views === "string"
-              ? info.views
-              : "0"),
+        (youtubeMeta?.views !== "0" && youtubeMeta?.views) ||
+        providerData.views ||
+        searchResult?.views ||
+        "0",
       likes:
-        ytsMeta?.likes ||
-        youtubeMeta?.likes ||
-        (typeof info.likes === "number"
-          ? info.likes.toString()
-          : typeof info.likeCount === "number"
-            ? info.likeCount.toString()
-            : typeof info.likes === "string"
-              ? info.likes
-              : "0"),
+        (youtubeMeta?.likes !== "0" && youtubeMeta?.likes) ||
+        providerData.likes ||
+        searchResult?.likes ||
+        "0",
       url: `https://youtu.be/${videoId}`,
-      channel_url: channelUrl,
+      channel_url:
+        youtubeMeta?.channel_url ||
+        providerData.channel_url ||
+        "https://www.youtube.com/",
       thumbnail:
-        ytsMeta?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        providerData.thumbnail ||
+        youtubeMeta?.thumbnail ||
+        searchResult?.thumbnail ||
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       dl_url: directMeta.url,
-      size: providerSize || directMeta.size,
-      quality: providerQuality || directMeta.quality,
+      size: providerData.size || directMeta.size,
+      quality: providerData.quality || directMeta.quality,
     };
 
     return {
@@ -570,7 +454,12 @@ export async function downloadYouTube(
   quality: number,
   searchResult?: YouTubeSearchVideo,
 ) {
-  const response = await savetube(url, quality, mediaType, searchResult);
+  const response = await downloadFromProviders(
+    url,
+    quality,
+    mediaType,
+    searchResult,
+  );
   if (response.status !== "success") throw new Error(response.error);
 
   const video = response.data[0];
@@ -587,8 +476,8 @@ export async function downloadYouTube(
       response.type === "audio"
         ? video.quality || `${quality}kbps`
         : `${quality}p`,
-    views: video.views || searchResult?.views || "0",
-    likes: video.likes || searchResult?.likes,
+    views: formatCount(video.views || searchResult?.views || "0"),
+    likes: formatCount(video.likes || searchResult?.likes || "0"),
     thumbnail: video.thumbnail || searchResult?.thumbnail,
     dl_url: video.dl_url,
     size: video.size,
