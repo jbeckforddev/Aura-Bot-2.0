@@ -207,7 +207,9 @@ async function getDirectLinkMetadata(
   const finalUrl = res.url;
   const contentType = res.headers.get("content-type") || "";
   const type = contentType.includes("audio") ? "audio" : mediaType;
-  const size = Number(res.headers.get("content-length") || "0");
+  const contentLength = Number(res.headers.get("content-length") || "0");
+  const size =
+    Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0;
   const quality =
     type === "audio" ? `${requestedQuality}kbps` : `${requestedQuality}p`;
 
@@ -379,7 +381,20 @@ async function downloadFromProviders(
     const providerData = await getAlyaCoreAudio(link);
     const videoId = getID(link) || searchResult?.videoId || makeId(11);
     const [directMeta, youtubeMeta] = await Promise.all([
-      getDirectLinkMetadata(providerData.dl, quality, "audio"),
+      getDirectLinkMetadata(providerData.dl, quality, "audio").catch(
+        (error: unknown) => {
+          console.warn(
+            "No se pudieron obtener los metadatos del archivo descargable:",
+            error,
+          );
+          return {
+            url: providerData.dl,
+            type: "audio" as const,
+            quality: `${quality}kbps`,
+            size: 0,
+          };
+        },
+      ),
       getYouTubeVideoMetadata(videoId).catch((error: unknown) => {
         console.warn("No se pudieron obtener los metadatos de YouTube:", error);
         return null;
@@ -388,34 +403,34 @@ async function downloadFromProviders(
     const result = {
       id: videoId,
       title:
-        youtubeMeta?.title ||
         providerData.title ||
+        youtubeMeta?.title ||
         searchResult?.title ||
         "Sin título",
       channel:
-        youtubeMeta?.channel ||
         providerData.author ||
+        youtubeMeta?.channel ||
         searchResult?.author ||
         "Desconocido",
       duration:
-        (youtubeMeta?.duration !== "0s" && youtubeMeta?.duration) ||
         providerData.duration ||
+        (youtubeMeta?.duration !== "0s" && youtubeMeta?.duration) ||
         searchResult?.duration ||
         "0s",
       views:
-        (youtubeMeta?.views !== "0" && youtubeMeta?.views) ||
         providerData.views ||
+        (youtubeMeta?.views !== "0" && youtubeMeta?.views) ||
         searchResult?.views ||
         "0",
       likes:
-        (youtubeMeta?.likes !== "0" && youtubeMeta?.likes) ||
         providerData.likes ||
+        (youtubeMeta?.likes !== "0" && youtubeMeta?.likes) ||
         searchResult?.likes ||
         "0",
       url: `https://youtu.be/${videoId}`,
       channel_url:
-        youtubeMeta?.channel_url ||
         providerData.channel_url ||
+        youtubeMeta?.channel_url ||
         "https://www.youtube.com/",
       thumbnail:
         providerData.thumbnail ||
@@ -423,7 +438,7 @@ async function downloadFromProviders(
         searchResult?.thumbnail ||
         `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       dl_url: directMeta.url,
-      size: providerData.size || directMeta.size,
+      size: providerData.size || directMeta.size || 0,
       quality: providerData.quality || directMeta.quality,
     };
 
@@ -480,6 +495,6 @@ export async function downloadYouTube(
     likes: formatCount(video.likes || searchResult?.likes || "0"),
     thumbnail: video.thumbnail || searchResult?.thumbnail,
     dl_url: video.dl_url,
-    size: video.size,
+    size: video.size || 0,
   };
 }
