@@ -33,8 +33,8 @@ function buildLinkPreview(
     mentionedJid = [],
     isForwarded = true,
     forwardingScore = 1,
-    newsletterJid = "120363424808187278@newsletter",
-    newsletterName = "⋆ Aura Reed Channel Official ⋆",
+    newsletterJid = "120363410945728976@newsletter",
+    newsletterName = "⬣〔 𝑨̰𝑼̰𝑹̰𝑨̰ 𝑹̰𝑬̰𝑬̰𝑫̰ 𝑪̰𝑯̰𝑨̰𝑵̰𝑬̰𝑳̰ 〕⬣",
   }: LinkPreviewOptions,
   includeChannel: boolean,
 ) {
