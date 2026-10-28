@@ -40,10 +40,6 @@ export const DL_CONFIG = {
     BASE_URL: "https://api-faa.my.id/",
     API_KEY: null,
   },
-  mancosAPI: {
-    BASE_URL: "https://mancos-api.skyultraweb.com/",
-    API_KEY: "AURA_PURAVIDA",
-  },
   nekosApi: {
     BASE_URL: "https://nekos.best/api/v2",
     API_KEY: null,
