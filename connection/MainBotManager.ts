@@ -679,18 +679,7 @@ async function connectSocket(sessionName: string) {
     await Promise.allSettled(
       messages.map(async (msg) => {
         if (!msg?.message) return;
-        if ((extendedSock as any).isClosed || (sock.ws as any)?.readyState !== 1) return;
-
-        // Descartar ecos propios que no sean comandos para ahorrar CPU y evitar bloqueos en SQLite
-        if (msg.key?.fromMe) {
-          const bodyText =
-            msg.message?.conversation ||
-            msg.message?.extendedTextMessage?.text ||
-            "";
-          const prefixes = globalThis.DEFAULT_PREFIXES ?? ["."];
-          const hasPrefix = prefixes.some((p: string) => bodyText.startsWith(p));
-          if (!hasPrefix) return;
-        }
+        if ((extendedSock as any).isClosed) return;
 
         try {
           const groupJid = msg.key?.remoteJid;

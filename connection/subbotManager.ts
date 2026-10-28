@@ -354,7 +354,7 @@ async function connectSubBot(
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       disableLinkPreviews: true,
-      markOnlineOnConnect: false,
+      markOnlineOnConnect: true,
       generateHighQualityLinkPreview: false,
       retryRequestDelayMs: 250,
       maxMsgRetryCount: 3,
@@ -666,18 +666,7 @@ async function connectSubBot(
     await Promise.allSettled(
       messages.map(async (message) => {
         if (!message?.message) return;
-        if ((socket as any).isClosed || (socket.ws as any)?.readyState !== 1) return;
-
-        // Descartar ecos propios que no sean comandos para ahorrar CPU y evitar bloqueos en SQLite
-        if (message.key?.fromMe) {
-          const bodyText =
-            message.message?.conversation ||
-            message.message?.extendedTextMessage?.text ||
-            "";
-          const prefixes = globalThis.DEFAULT_PREFIXES ?? ["."];
-          const hasPrefix = prefixes.some((p: string) => bodyText.startsWith(p));
-          if (!hasPrefix) return;
-        }
+        if ((socket as any).isClosed) return;
 
         try {
           const groupJid = message.key?.remoteJid;
@@ -817,12 +806,7 @@ function sessionNameFor(requester: string, fallbackPhone?: string): string {
 export function getActiveSubBots(): ExtendedWASocket[] {
   const list: ExtendedWASocket[] = [];
   for (const [sessionName, socket] of activeSubBots.entries()) {
-    if (
-      !socket ||
-      !socket.user?.id ||
-      (socket as any).isClosed ||
-      (socket.ws as any)?.readyState !== 1
-    ) {
+    if (!socket || !socket.user?.id || (socket as any).isClosed) {
       continue;
     }
     list.push(socket);
