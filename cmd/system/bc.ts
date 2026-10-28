@@ -14,7 +14,7 @@ export default {
   description: "Envía un mensaje a todos los grupos donde haya bots",
   category: "owner",
   ownerOnly: true,
-  groupOnly: true,
+  groupOnly: false,
 
   async run(ctx: CommandContext) {
     const { sock, from, msg, reply, text } = ctx;
@@ -105,12 +105,12 @@ export default {
         }
         hechos++;
         if (hechos % 25 === 0) {
-          await edit(renderStatus("bc_progress", { done: hechos, total })).catch(() => {});
+          await reply(renderStatus("bc_progress", { done: hechos, total })).catch(() => {});
         }
         if (hechos < total) await sleep(SEND_DELAY_MS);
       }
     }
 
-    await edit(renderStatus("bc_finished", { sent: ok, failed: fail, skipped: skip }));
+    await reply(renderStatus("bc_finished", { sent: ok, failed: fail, skipped: skip }));
   },
 };
