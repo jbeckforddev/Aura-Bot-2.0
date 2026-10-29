@@ -16,7 +16,10 @@ export default {
     const value = String(ctx.args?.[0] || "").toLowerCase();
     const group = ctx.db.getGroup(ctx.from);
     if (!value) {
-      const state = group.botOn === 0 ? "Desactivado" : "Activado";
+      const state =
+        group.botOn === 0
+          ? t("core_desactivado_7cc5cccc")
+          : t("core_activado_2e624c72");
       return ctx.reply({
         text: t("cmd_value0_value1_el_bot_esta_actu_0b6464d6", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_estado_del_bot_bb6b3ad3")), value2: state, value3: ctx.usedPrefix || ".", value4: ctx.usedPrefix || ".", value5: fytBold(t("cmd_system_info_1a78a0cb")) }),
       });

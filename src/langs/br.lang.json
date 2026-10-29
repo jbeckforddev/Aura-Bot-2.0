@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐍𝐀̃𝐎 𝐅𝐎𝐈 𝐒𝐀𝐋𝐕𝐎 〕⬣\n┃ Não foi possível associar o comando\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐒𝐀𝐋𝐕𝐎 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Este atalho é pessoal; as permissões\n┃ do comando continuam valendo.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐍𝐀̃𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎 〕⬣\n┃ Você não tem um comando associado\n┃ a este sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐑𝐄𝐌𝐎𝐕𝐈𝐃𝐎 〕⬣\n┃ Este sticker não executará mais\n┃ nenhum comando pessoal.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐀𝐓𝐀𝐋𝐇𝐎 𝐑𝐄𝐌𝐎𝐕𝐈𝐃𝐎 〕⬣\n┃ Este sticker não executará mais\n┃ nenhum comando pessoal.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Detecta mensagens em massa e avisa antes de remover quem reincidir.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Status atual: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Ativar proteção antispam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Desativar proteção antispam\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐃𝐎 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > A proteção antispam foi\n┃ > {{status}} com sucesso.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Usuário: @{{user}}\n┃ 📊 Advertências: [ {{count}}/{{limit}} ]\n┃ 📌 Motivo: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐀𝐓𝐈𝐕𝐎 〕⬣",
+  "groupSpamReason": "Mais de {{limit}} mensagens em {{seconds}} segundos",
+  "groupSpamActionWarn": "Uma advertência foi adicionada.",
+  "groupSpamActionKick": "O usuário foi removido ao atingir o limite de advertências.",
+  "groupSpamActionKickFailed": "Não foi possível remover o usuário; verifique se o bot é administrador do grupo.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

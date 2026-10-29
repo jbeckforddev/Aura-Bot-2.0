@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐎𝐏𝐒𝐋𝐀𝐀𝐍 𝐌𝐈𝐒𝐋𝐔𝐊𝐓 〕⬣\n┃ De opdracht kon niet aan deze sticker\n┃ worden gekoppeld.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐎𝐏𝐆𝐄𝐒𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Deze snelkoppeling is persoonlijk; de\n┃ opdrachtrechten blijven van kracht.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐆𝐄𝐄𝐍 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 〕⬣\n┃ Er is geen opdracht aan deze sticker\n┃ gekoppeld voor jouw account.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐕𝐄𝐑𝐖𝐈𝐉𝐃𝐄𝐑𝐃 〕⬣\n┃ Deze sticker voert geen persoonlijke\n┃ opdracht meer uit.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐍𝐄𝐋𝐊𝐎𝐏𝐏𝐄𝐋𝐈𝐍𝐆 𝐕𝐄𝐑𝐖𝐈𝐉𝐃𝐄𝐑𝐃 〕⬣\n┃ Deze sticker voert geen persoonlijke\n┃ opdracht meer uit.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Detecteert massaberichten en waarschuwt gebruikers die herhaaldelijk spammen.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Huidige status: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Antispambeveiliging inschakelen\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Antispambeveiliging uitschakelen\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐄𝐌𝐈𝐍𝐅𝐎 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Antispambeveiliging is\n┃ > succesvol {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 ANTISPAMWAARSCHUWING\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Gebruiker: @{{user}}\n┃ 📊 Waarschuwingen: [ {{count}}/{{limit}} ]\n┃ 📌 Reden: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTEEM ACTIEF 〕⬣",
+  "groupSpamReason": "Meer dan {{limit}} berichten in {{seconds}} seconden",
+  "groupSpamActionWarn": "Er is een waarschuwing toegevoegd.",
+  "groupSpamActionKick": "De gebruiker is verwijderd na het bereiken van de waarschuwingslimiet.",
+  "groupSpamActionKickFailed": "De gebruiker kon niet worden verwijderd; controleer of de bot groepsbeheerder is.",
+  "groupAntiSpamLabel": "Antispam"
 }

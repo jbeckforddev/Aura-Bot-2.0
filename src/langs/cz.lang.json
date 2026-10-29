@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐈́ 𝐒𝐄 𝐍𝐄𝐙𝐃𝐀𝐑̌𝐈𝐋𝐎 〕⬣\n┃ Příkaz se nepodařilo přiřadit\n┃ k této nálepce.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐔𝐋𝐎𝐙̌𝐄𝐍𝐀 〕⬣\n┃ 🎴 Nálepka → `{{prefix}}{{shortcut}}`\n┃ Zkratka je osobní; oprávnění příkazu\n┃ se nadále kontrolují.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐍𝐄𝐍𝐈́ 〕⬣\n┃ K této nálepce nemáte přiřazený\n┃ žádný příkaz.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐎𝐃𝐒𝐓𝐑𝐀𝐍𝐄̌𝐍𝐀 〕⬣\n┃ Tato nálepka už nebude spouštět\n┃ žádný osobní příkaz.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐙𝐊𝐑𝐀́𝐓𝐊𝐀 𝐎𝐃𝐒𝐓𝐑𝐀𝐍𝐄̌𝐍𝐀 〕⬣\n┃ Tato nálepka už nebude spouštět\n┃ žádný osobní příkaz.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Rozpoznává hromadné zprávy a při opakovaném porušení uděluje varování nebo uživatele odebere.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄́𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Aktuální stav: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Zapnout ochranu proti spamu\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Vypnout ochranu proti spamu\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐘𝐒𝐓𝐄́𝐌𝐔 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄́𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Ochrana proti spamu byla\n┃ > úspěšně {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄́𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 VAROVÁNÍ ANTI-SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Uživatel: @{{user}}\n┃ 📊 Varování: [ {{count}}/{{limit}} ]\n┃ 📌 Důvod: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTÉM AKTIVNÍ 〕⬣",
+  "groupSpamReason": "Více než {{limit}} zpráv během {{seconds}} sekund",
+  "groupSpamActionWarn": "Bylo přidáno varování.",
+  "groupSpamActionKick": "Uživatel byl odebrán po dosažení limitu varování.",
+  "groupSpamActionKickFailed": "Uživatele se nepodařilo odebrat; ověřte, že je bot správcem skupiny.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

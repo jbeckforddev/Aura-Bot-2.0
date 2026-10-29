@@ -25,6 +25,7 @@ import { resolveBotType } from "./core/botType.ts";
 import { withLocale } from "./src/langs/index.ts";
 import {
   handleGroupStatus,
+  handleGroupSpam,
   handleGroupToxic,
   isPrimaryBotForGroup,
 } from "./core/groupModeration.ts";
@@ -133,6 +134,8 @@ const GROUP_PREFIX_COMMANDS = new Set([
   "prefix",
   "delprefix",
   "deleteprefix",
+  "antispam",
+  "antispammsg",
 ]);
 const BOT_CONFIG_COMMANDS = new Set([
   "modprefix",
@@ -822,6 +825,19 @@ async function handleMessageInternal(
           });
           if (handled) return;
         }
+      }
+
+      if (
+        isPrimaryGroupBot &&
+        (await handleGroupSpam(
+          sock,
+          msg,
+          runtimeDb,
+          isAdmin || isMod || isBotUser,
+          isBotAdmin,
+        ))
+      ) {
+        return;
       }
 
       // ── Restricciones de acceso ──

@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐄́𝐂𝐇𝐄𝐂 𝐃'𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄𝐌𝐄𝐍𝐓 〕⬣\n┃ Impossible d'associer la commande\n┃ à ce sticker.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐄𝐍𝐑𝐄𝐆𝐈𝐒𝐓𝐑𝐄́ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Ce raccourci est personnel ; les droits\n┃ de la commande restent appliqués.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐀𝐔𝐂𝐔𝐍 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 〕⬣\n┃ Aucune commande n'est associée\n┃ à ce sticker pour votre compte.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐒𝐔𝐏𝐏𝐑𝐈𝐌𝐄́ 〕⬣\n┃ Ce sticker ne lancera plus\n┃ de commande personnelle.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐑𝐀𝐂𝐂𝐎𝐔𝐑𝐂𝐈 𝐒𝐔𝐏𝐏𝐑𝐈𝐌𝐄́ 〕⬣\n┃ Ce sticker ne lancera plus\n┃ de commande personnelle.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Détecte les envois massifs et avertit les récidivistes avant leur exclusion.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐘𝐒𝐓𝐄̀𝐌𝐄 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ État actuel : {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Activer la protection anti-spam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Désactiver la protection anti-spam\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐘𝐒𝐓𝐄̀𝐌𝐄 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐘𝐒𝐓𝐄̀𝐌𝐄 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > La protection anti-spam a été\n┃ > {{status}} avec succès.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄̀𝐌𝐄 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 AVERTISSEMENT ANTI-SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Utilisateur : @{{user}}\n┃ 📊 Avertissements : [ {{count}}/{{limit}} ]\n┃ 📌 Motif : {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTÈME ACTIF 〕⬣",
+  "groupSpamReason": "Plus de {{limit}} messages en {{seconds}} secondes",
+  "groupSpamActionWarn": "Un avertissement a été ajouté.",
+  "groupSpamActionKick": "L'utilisateur a été exclu après avoir atteint la limite d'avertissements.",
+  "groupSpamActionKickFailed": "Impossible d'exclure l'utilisateur ; vérifiez que le bot est administrateur du groupe.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

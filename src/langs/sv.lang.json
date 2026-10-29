@@ -1146,7 +1146,7 @@
   "core_anti_toxic_system_384ef390": "ANTI-GIFTSYSTEM",
   "core_system_29d43743": "SYSTEM",
   "core_system_active_e403484a": "SYSTEM AKTIVT {{ZXZQBOUNDARY}d Aktivera}D",
-  "core_activado_2e624c72": "",
+  "core_activado_2e624c72": "✅ Aktiverad",
   "core_desactivado_7cc5cccc": "❌ Inaktiverad",
   "core_value0_value1_5d5b6d7e": "╭〔 {{value0}} {{value1}} 〕⬣\n╰━━━━━━━━━━━━⬣\n\n",
   "core_value0_d225103c": "\n╰〔 ⚡ {{value0}} 〕⬣",
@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐊𝐔𝐍𝐃𝐄 𝐈𝐍𝐓𝐄 𝐒𝐏𝐀𝐑𝐀 〕⬣\n┃ Kommandot kunde inte kopplas\n┃ till klistermärket.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐒𝐏𝐀𝐑𝐀𝐃 〕⬣\n┃ 🎴 Klistermärke → `{{prefix}}{{shortcut}}`\n┃ Genvägen är personlig; kommandots\n┃ behörigheter gäller fortfarande.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐈𝐍𝐆𝐄𝐍 𝐆𝐄𝐍𝐕𝐀̈𝐆 〕⬣\n┃ Inget kommando är kopplat till\n┃ det här klistermärket.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐁𝐎𝐑𝐓𝐓𝐀𝐆𝐄𝐍 〕⬣\n┃ Klistermärket kör inte längre\n┃ något personligt kommando.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐆𝐄𝐍𝐕𝐀̈𝐆 𝐁𝐎𝐑𝐓𝐓𝐀𝐆𝐄𝐍 〕⬣\n┃ Klistermärket kör inte längre\n┃ något personligt kommando.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Upptäcker massmeddelanden och varnar användare som upprepar beteendet.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Aktuell status: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Aktivera spamskydd\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Inaktivera spamskydd\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌𝐈𝐍𝐅𝐎 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Spamskyddet har\n┃ > {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 SPAMVARNING\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Användare: @{{user}}\n┃ 📊 Varningar: [ {{count}}/{{limit}} ]\n┃ 📌 Orsak: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTEM AKTIVT 〕⬣",
+  "groupSpamReason": "Fler än {{limit}} meddelanden inom {{seconds}} sekunder",
+  "groupSpamActionWarn": "En varning har lagts till.",
+  "groupSpamActionKick": "Användaren togs bort efter att ha nått varningsgränsen.",
+  "groupSpamActionKickFailed": "Användaren kunde inte tas bort; kontrollera att boten är gruppadministratör.",
+  "groupAntiSpamLabel": "Antispam"
 }

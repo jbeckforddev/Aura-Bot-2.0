@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ 无法将命令关联到此贴纸。\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 贴纸 → `{{prefix}}{{shortcut}}`\n┃ 此快捷方式仅属于你；命令权限\n┃ 仍会照常检查。\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐎 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 〕⬣\n┃ 你没有为此贴纸关联命令。\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ 此贴纸将不再执行个人命令。\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ 此贴纸将不再执行个人命令。\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "检测群发消息，并在重复违规时警告或移除用户。",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 系统\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ 当前状态：{{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ 启用反垃圾保护\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ 关闭反垃圾保护\n\n╰〔 ⚡ 系统信息 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 系统\n╰━━━━━━━━━━━━⬣\n\n┃ > 反垃圾保护已成功{{status}}。\n\n╰〔 ⚡ 系统 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 反垃圾警告\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 用户：@{{user}}\n┃ 📊 警告：[ {{count}}/{{limit}} ]\n┃ 📌 原因：{{reason}}\n┃ ⚡ {{action}}\n\n╰〔 系统运行中 〕⬣",
+  "groupSpamReason": "{{seconds}} 秒内发送超过 {{limit}} 条消息",
+  "groupSpamActionWarn": "已添加一次警告。",
+  "groupSpamActionKick": "用户因达到警告上限已被移出群组。",
+  "groupSpamActionKickFailed": "无法移出用户；请确认机器人是群管理员。",
+  "groupAntiSpamLabel": "反垃圾消息"
 }

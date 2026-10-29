@@ -1327,5 +1327,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ Couldn't link the command\n┃ to this sticker.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ This shortcut is personal; command\n┃ permissions are still enforced.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐎 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 〕⬣\n┃ You don't have a command linked\n┃ to this sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ This sticker will no longer run\n┃ a personal command.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ This sticker will no longer run\n┃ a personal command.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Detects mass messaging and issues warnings before removing repeat offenders.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Current status: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Enable anti-spam protection\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Disable anti-spam protection\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐈𝐍𝐅𝐎 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Anti-spam protection was\n┃ > successfully {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 ANTI-SPAM WARNING\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 User: @{{user}}\n┃ 📊 Warnings: [ {{count}}/{{limit}} ]\n┃ 📌 Reason: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTEM ACTIVE 〕⬣",
+  "groupSpamReason": "More than {{limit}} messages in {{seconds}} seconds",
+  "groupSpamActionWarn": "A warning was added.",
+  "groupSpamActionKick": "The user was removed after reaching the warning limit.",
+  "groupSpamActionKickFailed": "The user could not be removed; make sure the bot is a group admin.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐋𝐔̛𝐔 𝐊𝐇𝐎̂𝐍𝐆 𝐓𝐇𝐀̀𝐍𝐇 𝐂𝐎̂𝐍𝐆 〕⬣\n┃ Không thể liên kết lệnh với sticker này.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐃𝐀̃ 𝐋𝐔̛𝐔 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Lối tắt này là cá nhân; quyền của lệnh\n┃ vẫn được kiểm tra như bình thường.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐂𝐇𝐔̛𝐀 𝐂𝐎́ 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ Bạn chưa liên kết lệnh nào\n┃ với sticker này.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐃𝐀̃ 𝐗𝐎́𝐀 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ Sticker này sẽ không chạy lệnh\n┃ cá nhân nữa.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐃𝐀̃ 𝐗𝐎́𝐀 𝐋𝐎̂́𝐈 𝐓𝐀̆́𝐓 〕⬣\n┃ Sticker này sẽ không chạy lệnh\n┃ cá nhân nữa.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Phát hiện gửi tin nhắn hàng loạt và cảnh báo người tái phạm.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐇𝐄̣̂ 𝐓𝐇𝐎̂́𝐍𝐆 𝐂𝐇𝐎̂́𝐍𝐆 𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Trạng thái hiện tại: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Bật bảo vệ chống spam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Tắt bảo vệ chống spam\n\n╰〔 ⚡ 𝐓𝐇𝐎̂𝐍𝐆 𝐓𝐈𝐍 𝐇𝐄̣̂ 𝐓𝐇𝐎̂́𝐍𝐆 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐇𝐄̣̂ 𝐓𝐇𝐎̂́𝐍𝐆 𝐂𝐇𝐎̂́𝐍𝐆 𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Đã {{status}} bảo vệ chống spam\n┃ > thành công.\n\n╰〔 ⚡ 𝐇𝐄̣̂ 𝐓𝐇𝐎̂́𝐍𝐆 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 CẢNH BÁO SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Người dùng: @{{user}}\n┃ 📊 Cảnh cáo: [ {{count}}/{{limit}} ]\n┃ 📌 Lý do: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 HỆ THỐNG ĐANG HOẠT ĐỘNG 〕⬣",
+  "groupSpamReason": "Hơn {{limit}} tin nhắn trong {{seconds}} giây",
+  "groupSpamActionWarn": "Đã thêm cảnh cáo.",
+  "groupSpamActionKick": "Đã xóa người dùng khi đạt giới hạn cảnh cáo.",
+  "groupSpamActionKickFailed": "Không thể xóa người dùng; hãy đảm bảo bot là quản trị viên nhóm.",
+  "groupAntiSpamLabel": "Chống spam"
 }

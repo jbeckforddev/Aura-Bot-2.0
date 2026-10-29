@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐏𝐄𝐈𝐂𝐇𝐄𝐑𝐍 𝐅𝐄𝐇𝐋𝐆𝐄𝐒𝐂𝐇𝐋𝐀𝐆𝐄𝐍 〕⬣\n┃ Der Befehl konnte nicht mit diesem\n┃ Sticker verknüpft werden.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋 𝐆𝐄𝐒𝐏𝐄𝐈𝐂𝐇𝐄𝐑𝐓 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Dieser Kurzbefehl ist persönlich; die\n┃ Befehlsberechtigungen bleiben aktiv.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐊𝐄𝐈𝐍 𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋 〕⬣\n┃ Für diesen Sticker ist kein Befehl\n┃ mit deinem Konto verknüpft.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋 𝐄𝐍𝐓𝐅𝐄𝐑𝐍𝐓 〕⬣\n┃ Dieser Sticker führt keinen deiner\n┃ persönlichen Befehle mehr aus.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐊𝐔𝐑𝐙𝐁𝐄𝐅𝐄𝐇𝐋 𝐄𝐍𝐓𝐅𝐄𝐑𝐍𝐓 〕⬣\n┃ Dieser Sticker führt keinen deiner\n┃ persönlichen Befehle mehr aus.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Erkennt Massen-Nachrichten und verwarnt Nutzer; bei Wiederholung werden sie entfernt.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌-𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Aktueller Status: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Anti-Spam-Schutz aktivieren\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Anti-Spam-Schutz deaktivieren\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌𝐈𝐍𝐅𝐎 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌-𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Der Anti-Spam-Schutz wurde\n┃ > erfolgreich {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 ANTI-SPAM-WARNUNG\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Nutzer: @{{user}}\n┃ 📊 Verwarnungen: [ {{count}}/{{limit}} ]\n┃ 📌 Grund: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTEM AKTIV 〕⬣",
+  "groupSpamReason": "Mehr als {{limit}} Nachrichten in {{seconds}} Sekunden",
+  "groupSpamActionWarn": "Eine Verwarnung wurde hinzugefügt.",
+  "groupSpamActionKick": "Der Nutzer wurde nach Erreichen des Verwarnungslimits entfernt.",
+  "groupSpamActionKickFailed": "Der Nutzer konnte nicht entfernt werden; stelle sicher, dass der Bot Gruppenadministrator ist.",
+  "groupAntiSpamLabel": "Anti-Spam"
 }

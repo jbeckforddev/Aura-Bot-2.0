@@ -130,6 +130,21 @@ export function getLanguageMetadata(language: unknown) {
 
 type TranslationValues = Record<string, unknown>;
 const localeStorage = new AsyncLocalStorage<Language>();
+const translationSourceMap = new Map<string, TranslationKey>();
+
+for (const language of [DEFAULT_LANGUAGE, ...SUPPORTED_LANGUAGES]) {
+  const translations = resolveTranslations(language);
+  for (const [key, value] of Object.entries(translations)) {
+    if (
+      typeof value === "string" &&
+      value.trim() &&
+      key in resolveTranslations(DEFAULT_LANGUAGE) &&
+      !translationSourceMap.has(value)
+    ) {
+      translationSourceMap.set(value, key as TranslationKey);
+    }
+  }
+}
 
 function isValidLanguage(value: unknown): value is Language {
   return typeof value === "string" && (SUPPORTED_LANGUAGES as string[]).includes(value);
@@ -146,10 +161,7 @@ export function withLocale<T>(language: unknown, callback: () => T): T {
 
 export function translateText(value: unknown): string {
   const source = String(value ?? "");
-  const fallback = resolveTranslations(DEFAULT_LANGUAGE);
-  const key = Object.keys(fallback).find(
-    (entry) => fallback[entry] === source,
-  ) as TranslationKey | undefined;
+  const key = translationSourceMap.get(source);
   return key ? t(key) : source;
 }
 
@@ -163,7 +175,9 @@ export function t(key: TranslationKey, values: TranslationValues = {}): string {
   const translations = resolveTranslations(active);
   const fallbackTranslations = resolveTranslations(DEFAULT_LANGUAGE);
 
-  const template = (translations[key as string] ?? fallbackTranslations[key as string]) as string | undefined;
+  const translated = translations[key as string];
+  const template =
+    translated?.trim() || fallbackTranslations[key as string];
   if (!template) return key as string;
 
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, name: string) =>

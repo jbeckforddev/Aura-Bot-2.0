@@ -6,7 +6,9 @@ import { t } from "../../src/langs/index.ts";
 
 
 const status = (value: unknown): string =>
-  value ? "✅ Activado" : "❌ Desactivado";
+  value
+    ? t("core_activado_2e624c72")
+    : t("core_desactivado_7cc5cccc");
 const onlyAdmin = (value: unknown): string =>
   value ? "🔒 Solo Admins" : "🔓 Todos";
 const onlyAdminMembers = (value: unknown): string =>
@@ -45,6 +47,7 @@ export default {
     text += t("cmd_value0_value1_670e2442", { value0: fytBold(t("cmd_antiestado_d9923985")), value1: status(group.antiStatus) });
     text += t("cmd_value0_value1_43b21f7f", { value0: fytBold(t("cmd_antitoxico_639fa229")), value1: status(group.antiToxic) });
     text += t("cmd_value0_value1_88f7e135", { value0: fytBold(t("cmd_antillamadas_b8f607b1")), value1: status(group.antiCalls) });
+    text += t("cmd_value0_value1_f3470541", { value0: fytBold(t("groupAntiSpamLabel")), value1: status(group.antiSpam) });
     text += t("cmd_value0_6e998262", { value0: fytBold(t("cmd_tipo_de_grupo_3a538159")) });
     text += t("cmd_value0_value1_ffa00b9c", { value0: fytBold(t("cmd_miembros_e9ff2e67")), value1: participants.length });
     text += t("cmd_value0_value1_062a99db", { value0: fytBold(t("cmd_administradores_f8f9e495")), value1: admins.length });

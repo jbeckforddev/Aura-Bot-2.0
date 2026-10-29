@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐃𝐄𝐔𝐍𝐆𝐑𝐎𝐊 𝐒𝐈𝐋𝐏𝐀𝐄 〕⬣\n┃ 이 스티커에 명령을 연결할 수 없습니다.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 𝐃𝐄𝐔𝐍𝐆𝐑𝐎𝐊 〕⬣\n┃ 🎴 스티커 → `{{prefix}}{{shortcut}}`\n┃ 개인 바로 가기이며 명령 권한 검사는\n┃ 그대로 적용됩니다.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 𝐄𝐎𝐏𝐒𝐄𝐔𝐌 〕⬣\n┃ 이 스티커에 연결된 명령이 없습니다.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 𝐒𝐀𝐆𝐉𝐄 〕⬣\n┃ 이 스티커는 더 이상 개인 명령을\n┃ 실행하지 않습니다.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐁𝐀𝐑𝐎𝐆𝐀𝐆𝐈 𝐒𝐀𝐆𝐉𝐄 〕⬣\n┃ 이 스티커는 더 이상 개인 명령을\n┃ 실행하지 않습니다.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "메시지 도배를 감지하고 반복 위반 사용자에게 경고합니다.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ 현재 상태: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ 스팸 방지 기능 켜기\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ 스팸 방지 기능 끄기\n\n╰〔 시스템 정보 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > 스팸 방지 기능이\n┃ > 성공적으로 {{status}}되었습니다.\n\n╰〔 시스템 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 스팸 경고\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 사용자: @{{user}}\n┃ 📊 경고: [ {{count}}/{{limit}} ]\n┃ 📌 사유: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 시스템 작동 중 〕⬣",
+  "groupSpamReason": "{{seconds}}초 동안 {{limit}}개를 초과하는 메시지",
+  "groupSpamActionWarn": "경고가 추가되었습니다.",
+  "groupSpamActionKick": "경고 한도에 도달하여 사용자를 내보냈습니다.",
+  "groupSpamActionKickFailed": "사용자를 내보내지 못했습니다. 봇이 그룹 관리자인지 확인하세요.",
+  "groupAntiSpamLabel": "스팸 방지"
 }

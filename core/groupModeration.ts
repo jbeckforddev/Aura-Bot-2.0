@@ -3,6 +3,7 @@ import { LRUCache } from "lru-cache";
 import { fytBold } from "./socketText.ts";
 import { getActiveSubBots } from "../connection/subbotManager.ts";
 import { GROUP_METADATA_CACHE } from "../handler.ts";
+import { logInfo } from "./logger.ts";
 import type { GroupMetadata, proto } from "baileys";
 import type {
   ExtendedWASocket,
@@ -24,6 +25,13 @@ const moderationMetaCache = new LRUCache<string, GroupMetadata>({
   max: 200,
   ttl: 45_000,
 });
+
+const groupSpamMessages = new LRUCache<string, number[]>({
+  max: 10_000,
+  ttl: 30_000,
+});
+const SPAM_WINDOW_MS = 3_000;
+const SPAM_MESSAGE_LIMIT = 3;
 
 const dateFormatter = new Intl.DateTimeFormat("es-CR", {
   timeZone: "America/Costa_Rica",
@@ -526,4 +534,91 @@ export async function handleGroupStatus(
   } catch {
     return false;
   }
+}
+
+export async function handleGroupSpam(
+  sock: ExtendedWASocket,
+  message: proto.IWebMessageInfo,
+  db: IDatabase,
+  isExempt: boolean,
+  isBotAdmin: boolean,
+): Promise<boolean> {
+  const groupJid = message.key?.remoteJid;
+  const userJid = message.key?.participant || message.participant;
+  if (
+    !groupJid?.endsWith("@g.us") ||
+    !userJid ||
+    !message.message ||
+    message.key?.fromMe ||
+    isExempt
+  ) {
+    return false;
+  }
+
+  const group = db.getGroup(groupJid);
+  const spamKey = `${groupJid}:${cleanJid(userJid)}`;
+  if (!group.antiSpam) {
+    groupSpamMessages.delete(spamKey);
+    return false;
+  }
+  if (!isPrimaryBotForGroup(sock, groupJid, db, group.primaryBot)) return false;
+
+  const now = Date.now();
+  const recentMessages = (groupSpamMessages.get(spamKey) || []).filter(
+    (timestamp) => now - timestamp < SPAM_WINDOW_MS,
+  );
+  recentMessages.push(now);
+  if (recentMessages.length <= SPAM_MESSAGE_LIMIT) {
+    groupSpamMessages.set(spamKey, recentMessages);
+    return false;
+  }
+
+  groupSpamMessages.delete(spamKey);
+
+  const limit = getWarnLimit(group);
+  const { count, warns } = addWarning(
+    db,
+    groupJid,
+    userJid,
+    `Spam: ${t("groupSpamReason", {
+      limit: SPAM_MESSAGE_LIMIT,
+      seconds: SPAM_WINDOW_MS / 1000,
+    })}`,
+  );
+  const actionSock = isBotAdmin ? sock : await getAdminSocket(sock, groupJid);
+  let removed = false;
+
+  if (count >= limit && actionSock) {
+    try {
+      await actionSock.groupParticipantsUpdate(groupJid, [userJid], "remove");
+      removed = true;
+      db.setGroup(groupJid, { warns: { ...warns, [userJid]: [] } });
+    } catch (error) {
+      logInfo(
+        `No se pudo expulsar a ${userJid} por spam en ${groupJid}: ${error instanceof Error ? error.message : String(error)}`,
+        "warn",
+      );
+    }
+  }
+
+  const action = removed
+    ? t("groupSpamActionKick")
+    : count >= limit
+      ? t("groupSpamActionKickFailed")
+      : t("groupSpamActionWarn");
+  const reason = t("groupSpamReason", {
+    limit: SPAM_MESSAGE_LIMIT,
+    seconds: SPAM_WINDOW_MS / 1000,
+  });
+  await sock.sendMessage(groupJid, {
+    text: t("groupSpamNotice", {
+      user: localPart(userJid),
+      count,
+      limit,
+      reason,
+      action,
+    }),
+    mentions: [userJid],
+  });
+  return true;
 }

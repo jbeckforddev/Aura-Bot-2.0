@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐆𝐀𝐆𝐀𝐋 𝐌𝐄𝐍𝐘𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ Perintah tidak dapat dihubungkan\n┃ ke stiker ini.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐓𝐄𝐑𝐒𝐈𝐌𝐏𝐀𝐍 〕⬣\n┃ 🎴 Stiker → `{{prefix}}{{shortcut}}`\n┃ Pintasan ini bersifat pribadi; izin\n┃ perintah tetap diberlakukan.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐓𝐈𝐃𝐀𝐊 𝐀𝐃𝐀 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 〕⬣\n┃ Tidak ada perintah yang terhubung\n┃ ke stiker ini di akunmu.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐃𝐈𝐇𝐀𝐏𝐔𝐒 〕⬣\n┃ Stiker ini tidak akan menjalankan\n┃ perintah pribadi lagi.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐏𝐈𝐍𝐓𝐀𝐒𝐀𝐍 𝐃𝐈𝐇𝐀𝐏𝐔𝐒 〕⬣\n┃ Stiker ini tidak akan menjalankan\n┃ perintah pribadi lagi.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Mendeteksi pesan massal dan memberi peringatan kepada pelanggar berulang.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐈𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Status saat ini: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Aktifkan perlindungan anti-spam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Nonaktifkan perlindungan anti-spam\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐈𝐒𝐓𝐄𝐌 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐈𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Perlindungan anti-spam berhasil\n┃ > {{status}}.\n\n╰〔 ⚡ 𝐒𝐈𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 PERINGATAN ANTI-SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Pengguna: @{{user}}\n┃ 📊 Peringatan: [ {{count}}/{{limit}} ]\n┃ 📌 Alasan: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SISTEM AKTIF 〕⬣",
+  "groupSpamReason": "Lebih dari {{limit}} pesan dalam {{seconds}} detik",
+  "groupSpamActionWarn": "Peringatan telah ditambahkan.",
+  "groupSpamActionKick": "Pengguna dikeluarkan setelah mencapai batas peringatan.",
+  "groupSpamActionKickFailed": "Pengguna tidak dapat dikeluarkan; pastikan bot adalah admin grup.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐙𝐀𝐏𝐈𝐒 𝐒𝐈𝐄̨ 𝐍𝐈𝐄 𝐏𝐎𝐖𝐈𝐎́𝐃Ł 〕⬣\n┃ Nie udało się połączyć polecenia\n┃ z tą naklejką.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐙𝐀𝐏𝐈𝐒𝐀𝐍𝐘 〕⬣\n┃ 🎴 Naklejka → `{{prefix}}{{shortcut}}`\n┃ Skrót jest osobisty; uprawnienia\n┃ polecenia nadal obowiązują.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐁𝐑𝐀𝐊 𝐒𝐊𝐑𝐎́𝐓𝐔 〕⬣\n┃ Nie masz polecenia przypisanego\n┃ do tej naklejki.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐔𝐒𝐔𝐍𝐈𝐄̨𝐓𝐘 〕⬣\n┃ Ta naklejka nie będzie już uruchamiać\n┃ osobistego polecenia.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐊𝐑𝐎́𝐓 𝐔𝐒𝐔𝐍𝐈𝐄̨𝐓𝐘 〕⬣\n┃ Ta naklejka nie będzie już uruchamiać\n┃ osobistego polecenia.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Wykrywa masowe wiadomości i ostrzega użytkowników, którzy powtarzają spamowanie.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐘-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Aktualny stan: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Włącz ochronę przed spamem\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Wyłącz ochronę przed spamem\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐘𝐒𝐓𝐄𝐌𝐔 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐘-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Ochrona przed spamem została\n┃ > pomyślnie {{status}}.\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 OSTRZEŻENIE ANTYSPAMOWE\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Użytkownik: @{{user}}\n┃ 📊 Ostrzeżenia: [ {{count}}/{{limit}} ]\n┃ 📌 Powód: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SYSTEM AKTYWNY 〕⬣",
+  "groupSpamReason": "Więcej niż {{limit}} wiadomości w ciągu {{seconds}} sekund",
+  "groupSpamActionWarn": "Dodano ostrzeżenie.",
+  "groupSpamActionKick": "Użytkownik został usunięty po osiągnięciu limitu ostrzeżeń.",
+  "groupSpamActionKickFailed": "Nie udało się usunąć użytkownika; sprawdź, czy bot jest administratorem grupy.",
+  "groupAntiSpamLabel": "Antyspam"
 }

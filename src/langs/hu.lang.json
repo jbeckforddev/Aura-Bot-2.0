@@ -1146,7 +1146,7 @@
   "core_anti_toxic_system_384ef390": "ANTITOXIKUS RENDSZER",
   "core_system_29d43743": "RENDSZER",
   "core_system_active_e403484a": "RENDSZER {ZZQBOUNDARY2XZQX AKTÍV} Engedélyezve:",
-  "core_activado_2e624c72": "",
+  "core_activado_2e624c72": "✅ Bekapcsolva",
   "core_desactivado_7cc5cccc": "❌ Letiltva",
   "core_value0_value1_5d5b6d7e": "╭〔 {{value0}} {{value1}} 〕⬣\n╰━━━━━━━━━━━━⬣\n\n",
   "core_value0_d225103c": "\n╰〔 ⚡ {{value0}} 〕⬣",
@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐌𝐄𝐍𝐓𝐄́𝐒𝐈 𝐇𝐈𝐁𝐀 〕⬣\n┃ Nem sikerült a parancsot ehhez\n┃ a matricához kapcsolni.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐌𝐄𝐍𝐓𝐕𝐄 〕⬣\n┃ 🎴 Matrica → `{{prefix}}{{shortcut}}`\n┃ Ez a parancsikon személyes; a parancs\n┃ jogosultságai továbbra is érvényesek.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐈𝐍𝐂𝐒 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 〕⬣\n┃ Ehhez a matricához nincs parancs\n┃ társítva a fiókodban.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐓𝐎̈𝐑𝐎̈𝐋𝐕𝐄 〕⬣\n┃ Ez a matrica többé nem futtat\n┃ személyes parancsot.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐏𝐀𝐑𝐀𝐍𝐂𝐒𝐎𝐍𝐓 𝐓𝐎̈𝐑𝐎̈𝐋𝐕𝐄 〕⬣\n┃ Ez a matrica többé nem futtat\n┃ személyes parancsot.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Felismeri a tömeges üzenetküldést, és figyelmezteti a visszaeső felhasználókat.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐑𝐄𝐍𝐃𝐒𝐙𝐄𝐑\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Jelenlegi állapot: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Antispam védelem bekapcsolása\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Antispam védelem kikapcsolása\n\n╰〔 ⚡ 𝐑𝐄𝐍𝐃𝐒𝐙𝐄𝐑𝐈𝐍𝐅𝐎 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐑𝐄𝐍𝐃𝐒𝐙𝐄𝐑\n╰━━━━━━━━━━━━⬣\n\n┃ > Az antispam védelem sikeresen\n┃ > {{status}}.\n\n╰〔 ⚡ 𝐑𝐄𝐍𝐃𝐒𝐙𝐄𝐑 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 ANTISPAM FIGYELMEZTETÉS\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Felhasználó: @{{user}}\n┃ 📊 Figyelmeztetések: [ {{count}}/{{limit}} ]\n┃ 📌 Ok: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 RENDSZER AKTÍV 〕⬣",
+  "groupSpamReason": "Több mint {{limit}} üzenet {{seconds}} másodperc alatt",
+  "groupSpamActionWarn": "Figyelmeztetés hozzáadva.",
+  "groupSpamActionKick": "A felhasználót eltávolítottuk a figyelmeztetési korlát elérése után.",
+  "groupSpamActionKickFailed": "A felhasználót nem sikerült eltávolítani; ellenőrizd, hogy a bot csoportadminisztrátor-e.",
+  "groupAntiSpamLabel": "Antispam"
 }

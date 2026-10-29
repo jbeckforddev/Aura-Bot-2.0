@@ -15,7 +15,7 @@ import { t } from "../../src/langs/index.ts";
 export default {
 	name: ["ginfo", "gachainfo"],
 	category: "gacha",
-	description: "Muestra tu colección, el tiempo de espera y el catálogo gacha.",
+	description: t("gacha_info_intro"),
 
 	async run(ctx: CommandContext) {
 		const prefix = ctx.usedPrefix ?? ".";

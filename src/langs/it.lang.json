@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀𝐆𝐆𝐈𝐎 𝐍𝐎𝐍 𝐑𝐈𝐔𝐒𝐂𝐈𝐓𝐎 〕⬣\n┃ Impossibile collegare il comando\n┃ a questo sticker.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐒𝐀𝐋𝐕𝐀𝐓𝐀 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ La scorciatoia è personale; i permessi\n┃ del comando restano attivi.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐄𝐒𝐒𝐔𝐍𝐀 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 〕⬣\n┃ Non hai associato alcun comando\n┃ a questo sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐑𝐈𝐌𝐎𝐒𝐒𝐀 〕⬣\n┃ Questo sticker non eseguirà più\n┃ alcun comando personale.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐎𝐑𝐂𝐈𝐀𝐓𝐎𝐈𝐀 𝐑𝐈𝐌𝐎𝐒𝐒𝐀 〕⬣\n┃ Questo sticker non eseguirà più\n┃ alcun comando personale.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Rileva l'invio massivo di messaggi e avvisa chi reitera la violazione.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Stato attuale: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Attiva la protezione antispam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Disattiva la protezione antispam\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > La protezione antispam è stata\n┃ > {{status}} correttamente.\n\n╰〔 ⚡ 𝐒𝐈𝐒𝐓𝐄𝐌𝐀 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 AVVISO ANTI-SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Utente: @{{user}}\n┃ 📊 Avvertimenti: [ {{count}}/{{limit}} ]\n┃ 📌 Motivo: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SISTEMA ATTIVO 〕⬣",
+  "groupSpamReason": "Più di {{limit}} messaggi in {{seconds}} secondi",
+  "groupSpamActionWarn": "È stato aggiunto un avvertimento.",
+  "groupSpamActionKick": "L'utente è stato rimosso dopo aver raggiunto il limite di avvertimenti.",
+  "groupSpamActionKickFailed": "Impossibile rimuovere l'utente; verifica che il bot sia amministratore del gruppo.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

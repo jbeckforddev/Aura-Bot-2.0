@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐒𝐀𝐕𝐄 𝐅𝐀𝐈𝐋𝐄𝐃 〕⬣\n┃ ステッカーにコマンドを登録できません。\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐒𝐀𝐕𝐄𝐃 〕⬣\n┃ 🎴 ステッカー → `{{prefix}}{{shortcut}}`\n┃ 個人用ショートカットです。コマンドの\n┃ 権限チェックは引き続き適用されます。\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃 〕⬣\n┃ このステッカーにはコマンドが\n┃ 登録されていません。\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ このステッカーは個人コマンドを\n┃ 実行しなくなります。\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐇𝐎𝐑𝐓𝐂𝐔𝐓 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 〕⬣\n┃ このステッカーは個人コマンドを\n┃ 実行しなくなります。\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "連続した大量送信を検出し、繰り返すユーザーに警告します。",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ 現在の状態：{{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ スパム対策を有効にする\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ スパム対策を無効にする\n\n╰〔 ⚡ システム情報 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌 𝐒𝐘𝐒𝐓𝐄𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > スパム対策を正常に\n┃ > {{status}}しました。\n\n╰〔 システム 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 スパム警告\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 ユーザー：@{{user}}\n┃ 📊 警告：[ {{count}}/{{limit}} ]\n┃ 📌 理由：{{reason}}\n┃ ⚡ {{action}}\n\n╰〔 システム稼働中 〕⬣",
+  "groupSpamReason": "{{seconds}}秒間に{{limit}}件を超えるメッセージ",
+  "groupSpamActionWarn": "警告を追加しました。",
+  "groupSpamActionKick": "警告上限に達したため、ユーザーを退出させました。",
+  "groupSpamActionKickFailed": "ユーザーを退出させられませんでした。ボットがグループ管理者か確認してください。",
+  "groupAntiSpamLabel": "スパム対策"
 }

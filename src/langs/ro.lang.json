@@ -1325,5 +1325,14 @@
   "cmdst_save_failed": "╭〔 ❌ 𝐄𝐑𝐎𝐀𝐑𝐄 𝐋𝐀 𝐒𝐀𝐋𝐕𝐀𝐑𝐄 〕⬣\n┃ Comanda nu a putut fi asociată\n┃ cu acest sticker.\n╰━━━━━━━━━━━━⬣",
   "cmdst_saved": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒𝐀𝐋𝐕𝐀𝐓𝐀̆ 〕⬣\n┃ 🎴 Sticker → `{{prefix}}{{shortcut}}`\n┃ Scurtătura este personală; permisiunile\n┃ comenzii rămân active.\n╰━━━━━━━━━━━━⬣",
   "cmdst_remove_not_found": "╭〔 ⚠️ 𝐍𝐔 𝐄𝐗𝐈𝐒𝐓𝐀̆ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 〕⬣\n┃ Nu ai nicio comandă asociată\n┃ cu acest sticker.\n╰━━━━━━━━━━━━⬣",
-  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒̦𝐓𝐄𝐀𝐑𝐒𝐀̆ 〕⬣\n┃ Acest sticker nu va mai executa\n┃ nicio comandă personală.\n╰━━━━━━━━━━━━⬣"
+  "cmdst_removed": "╭〔 ✅ 𝐒𝐂𝐔𝐑𝐓𝐀̆𝐓𝐔𝐑𝐀̆ 𝐒̦𝐓𝐄𝐀𝐑𝐒𝐀̆ 〕⬣\n┃ Acest sticker nu va mai executa\n┃ nicio comandă personală.\n╰━━━━━━━━━━━━⬣",
+  "groupAntiSpamDescription": "Detectează mesajele în masă și avertizează utilizatorii care repetă spamul.",
+  "groupAntiSpamStatusText": "╭〔 🛡️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ ⚙️ 𝐒𝐈𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ ℹ️ Stare actuală: {{status}}\n\n┃ ➪ {{prefix}}antispam on\n┃ ✦ Activează protecția anti-spam\n\n┃ ➪ {{prefix}}antispam off\n┃ ✦ Dezactivează protecția anti-spam\n\n╰〔 ⚡ 𝐈𝐍𝐅𝐎 𝐒𝐈𝐒𝐓𝐄𝐌 〕⬣",
+  "groupAntiSpamSuccessText": "╭〔 {{emoji}} 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🛡️ 𝐒𝐈𝐒𝐓𝐄𝐌 𝐀𝐍𝐓𝐈-𝐒𝐏𝐀𝐌\n╰━━━━━━━━━━━━⬣\n\n┃ > Protecția anti-spam a fost\n┃ > {{status}} cu succes.\n\n╰〔 ⚡ 𝐒𝐈𝐒𝐓𝐄𝐌 〕⬣",
+  "groupSpamNotice": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 🚫 AVERTISMENT ANTI-SPAM\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Utilizator: @{{user}}\n┃ 📊 Avertismente: [ {{count}}/{{limit}} ]\n┃ 📌 Motiv: {{reason}}\n┃ ⚡ {{action}}\n\n╰〔 SISTEM ACTIV 〕⬣",
+  "groupSpamReason": "Mai mult de {{limit}} mesaje în {{seconds}} secunde",
+  "groupSpamActionWarn": "A fost adăugat un avertisment.",
+  "groupSpamActionKick": "Utilizatorul a fost eliminat după atingerea limitei de avertismente.",
+  "groupSpamActionKickFailed": "Utilizatorul nu a putut fi eliminat; verifică dacă botul este administratorul grupului.",
+  "groupAntiSpamLabel": "Anti-spam"
 }

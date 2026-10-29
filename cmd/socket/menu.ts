@@ -11,7 +11,7 @@ import { getPlugins } from "../../core/cmdLoader.ts";
 import { resolveBotType } from "../../core/botType.ts";
 import { sendWithRecordingPresence } from "../../core/mediaSendUtils.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { t } from "../../src/langs/index.ts";
+import { t, translateText } from "../../src/langs/index.ts";
 
 type CachedMediaMessage =
   proto.Message.IImageMessage | proto.Message.IVideoMessage;
@@ -173,12 +173,18 @@ export default {
 
           if (Array.isArray(cmd.description)) {
             const description = cmd.description[names.indexOf(alias)];
-            if (description) textoMenu += t("cmd_value0_d9d88ac0", { value0: description });
+            if (description) {
+              textoMenu += t("cmd_value0_d9d88ac0", {
+                value0: translateText(description),
+              });
+            }
           }
         }
 
         if (typeof cmd.description === "string" && cmd.description) {
-          textoMenu += t("cmd_value0_d9d88ac0", { value0: cmd.description });
+          textoMenu += t("cmd_value0_d9d88ac0", {
+            value0: translateText(cmd.description),
+          });
         }
       }
     }
