@@ -177,7 +177,7 @@ export function t(key: TranslationKey, values: TranslationValues = {}): string {
 
   const translated = translations[key as string];
   const template =
-    translated?.trim() || fallbackTranslations[key as string];
+    translated?.trim() ? translated : fallbackTranslations[key as string];
   if (!template) return key as string;
 
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, name: string) =>
