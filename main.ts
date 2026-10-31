@@ -125,16 +125,28 @@ async function mainBot() {
   logInfo("Inicializando bot principal...");
   watchPlugins();
 
-  logInfo("Conectando a WhatsApp...");
-  await connectMainBot("main");
+  const instanceRole = (process.env.INSTANCE_ROLE || "").trim().toLowerCase();
+  const shouldStartMainBot = instanceRole !== "sub" && instanceRole !== "subs";
+  const shouldStartSubBots = process.env.DISABLE_SUBBOTS !== "true" && instanceRole !== "main";
 
-  void startSavedSubBots()
-    .then(() => {
-      runMemoryMaintenance();
-    })
-    .catch((error) => {
-      logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");
-    });
+  if (shouldStartMainBot) {
+    logInfo("Conectando a WhatsApp...");
+    await connectMainBot("main");
+  } else {
+    logInfo(`Instancia configurada exclusivamente para subbots (INSTANCE_ROLE=${instanceRole}).`, "info");
+  }
+
+  if (shouldStartSubBots) {
+    void startSavedSubBots()
+      .then(() => {
+        runMemoryMaintenance();
+      })
+      .catch((error) => {
+        logInfo(`Error al iniciar subbots guardados: ${String(error)}`, "error");
+      });
+  } else {
+    logInfo(`Subbots desactivados para esta instancia (INSTANCE_ROLE=${instanceRole || "main"}).`, "info");
+  }
 }
 
 void mainBot();

@@ -35,12 +35,23 @@ export default {
     const groupData = db.getGroup(from);
     let mutedUsers: string[] = Array.isArray(groupData.mutedUsers) ? [...groupData.mutedUsers] : [];
 
-    if (!isUnmute) {
-      const targetParticipant = groupMeta?.participants.find((p) => p.id === target);
-      const isTargetAdmin = targetParticipant?.admin === "admin" || targetParticipant?.admin === "superadmin";
-      const isTargetOwner = target.startsWith("573118353868") || db.hasRole?.(target, "owner");
+    const targetParticipant = groupMeta?.participants.find(
+      (p) => p.id === target || p.lid === target,
+    );
+    const targetIds = new Set<string>([target]);
+    if (targetParticipant?.id) targetIds.add(targetParticipant.id);
+    if (targetParticipant?.lid) targetIds.add(targetParticipant.lid);
 
-      if (isTargetAdmin || isTargetOwner || target === botJid) {
+    if (!isUnmute) {
+      const isTargetAdmin =
+        targetParticipant?.admin === "admin" ||
+        targetParticipant?.admin === "superadmin";
+      const isTargetOwner = Array.from(targetIds).some(
+        (id) => id.startsWith("573118353868") || db.hasRole?.(id, "owner"),
+      );
+      const isTargetBot = Array.from(targetIds).some((id) => id === botJid);
+
+      if (isTargetAdmin || isTargetOwner || isTargetBot) {
         return reply(t("cmd_value0_value1_no_puedo_silenci_875da1ae", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_objetivo_protegido_4969efc2")), value2: fytBold(t("cmd_system_29d43743")) }));
       }
 
@@ -65,29 +76,34 @@ export default {
         }
       }
 
-      if (!mutedUsers.includes(target)) {
-        mutedUsers.push(target);
-        db.setGroup(from, { mutedUsers });
+      for (const id of targetIds) {
+        if (!mutedUsers.includes(id)) {
+          mutedUsers.push(id);
+        }
       }
+      db.setGroup(from, { mutedUsers });
 
       setTimeout(() => {
         const currentGroupData = db.getGroup(from);
         let currentMuted = Array.isArray(currentGroupData.mutedUsers) ? [...currentGroupData.mutedUsers] : [];
-        if (currentMuted.includes(target!)) {
-          currentMuted = currentMuted.filter(jid => jid !== target);
-          db.setGroup(from, { mutedUsers: currentMuted });
-        }
+        currentMuted = currentMuted.filter((jid) => !targetIds.has(jid));
+        db.setGroup(from, { mutedUsers: currentMuted });
       }, durationMs);
 
       await react("🤐").catch(() => undefined);
       return reply({
-        text: t("cmd_value0_objetivo_value1_duracio_35e87b68", { value0: fytBold(t("cmd_usuario_silenciado_9fe70e68")), value1: target.split("@")[0], value2: timeMsg }),
+        text: t("cmd_value0_objetivo_value1_duracio_35e87b68", {
+          value0: fytBold(t("cmd_usuario_silenciado_9fe70e68")),
+          value1: target.split("@")[0],
+          value2: `${timeMsg}\n> 💡 Sus mensajes se eliminarán automáticamente a partir de este momento.`,
+        }),
         mentions: [target]
       });
 
     } else {
-      if (mutedUsers.includes(target)) {
-        mutedUsers = mutedUsers.filter(jid => jid !== target);
+      const hasTarget = Array.from(targetIds).some((id) => mutedUsers.includes(id));
+      if (hasTarget) {
+        mutedUsers = mutedUsers.filter((jid) => !targetIds.has(jid));
         db.setGroup(from, { mutedUsers });
         
         await react("🔊").catch(() => undefined);

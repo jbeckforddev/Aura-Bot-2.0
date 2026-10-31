@@ -20,7 +20,7 @@ import {
   NOT_HAVE_COINS,
   PLUGINS_OFF
 } from "./core/socketText.ts";
-import { db, lookupUserLanguage, lookupGroupLanguage } from "./database/AuraDB.ts";
+import { db, lookupUserLanguage, lookupGroupLanguage, setGroupUpdateListener } from "./database/AuraDB.ts";
 import { resolveBotType } from "./core/botType.ts";
 import { withLocale } from "./src/langs/index.ts";
 import {
@@ -317,6 +317,10 @@ export function invalidateGroupCache(groupJid: string) {
   groupMetaInFlight.delete(groupJid);
   groupMetaInFlight.delete(normalized);
 }
+
+try {
+  setGroupUpdateListener(invalidateGroupCache);
+} catch {}
 
 const lidToPnCache = new LRUCache<string, string>({
   max: 5000,
@@ -1425,9 +1429,8 @@ async function handleMessageInternal(
         await ctx.reply({ text: ERROR_CMD({ cmdName, errorDetails }) });
       }
     } finally {
-      if (isGroup && GROUP_PREFIX_COMMANDS.has(cmdName)) {
-        GROUP_DB_CACHE.delete(from);
-        GROUP_DB_CACHE.delete(jidNormalizedUser(from));
+      if (isGroup) {
+        invalidateGroupCache(from);
       }
       if (BOT_CONFIG_COMMANDS.has(cmdName)) {
         BOT_DB_CACHE.delete(`bot:${botJid}`);

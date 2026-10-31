@@ -600,12 +600,21 @@ async function connectSocket(sessionName: string) {
       return;
     }
 
+    if (statusCode === DisconnectReason.connectionReplaced) {
+      logInfo(
+        `La sesión ${sessionName} fue reemplazada por otra instancia o cliente (Código 440). Se suspende la reconexión automática para evitar conflicto.`,
+        "alert",
+      );
+      clearReconnectTimer(sessionName);
+      resetReconnectAttempts(sessionName);
+      return;
+    }
+
     const transientDisconnectCodes = [
       DisconnectReason.connectionLost,
       DisconnectReason.connectionClosed,
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
-      DisconnectReason.connectionReplaced,
       408,
       428,
       515,

@@ -210,7 +210,6 @@ export async function unlinkSubBot(
  */
 async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket) {
   clearReconnectTimer(sessionName);
-  reconnectAttempts.delete(sessionName);
   connectionsInProgress.delete(sessionName);
 
   const current = activeSubBots.get(sessionName);
@@ -643,6 +642,18 @@ async function connectSubBot(
           new Error(`Sesión de subbot inválida (${statusCode || "sin estado"}).`),
         );
       }
+      return;
+    }
+
+    if (statusCode === DisconnectReason.connectionReplaced) {
+      logInfo(
+        `Sesión ${sessionName} fue reemplazada por otra instancia o cliente externo (Código 440). Se suspende la reconexión automática para evitar conflicto en bucle.`,
+        "SubBotWarning",
+      );
+      activeSubBots.delete(sessionName);
+      clearReconnectTimer(sessionName);
+      reconnectAttempts.delete(sessionName);
+      await safelyDestroySocket(socket);
       return;
     }
 

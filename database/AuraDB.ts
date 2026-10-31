@@ -87,10 +87,19 @@ export function invalidateUserDbCache(key?: string): void {
   }
 }
 
+export type GroupUpdateListener = (groupJid: string) => void;
+let groupUpdateListener: GroupUpdateListener | null = null;
+export function setGroupUpdateListener(listener: GroupUpdateListener | null): void {
+  groupUpdateListener = listener;
+}
+
 export function invalidateGroupDbCache(key?: string): void {
   if (key) {
     groupMemoryCache.delete(key);
     groupMemoryCache.delete(normalizeJid(key));
+    try {
+      groupUpdateListener?.(key);
+    } catch {}
   } else {
     groupMemoryCache.clear();
   }
