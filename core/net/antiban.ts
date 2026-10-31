@@ -24,7 +24,10 @@ export function isRateLimit(err: unknown): boolean {
 export class Semaphore {
   private queue: (() => void)[] = [];
   private active = 0;
-  constructor(private readonly max: number) {}
+  private readonly max: number;
+  constructor(max: number) {
+    this.max = max;
+  }
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
     if (this.active >= this.max) await new Promise<void>((r) => this.queue.push(r));
@@ -44,7 +47,10 @@ export class Semaphore {
  */
 export class Pacer {
   private next = 0;
-  constructor(private readonly minGap: number) {}
+  private readonly minGap: number;
+  constructor(minGap: number) {
+    this.minGap = minGap;
+  }
 
   async wait(): Promise<void> {
     const now = Date.now();
