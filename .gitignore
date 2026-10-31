@@ -3,7 +3,7 @@ cache
 .env
 package-lock.json
 tests
-data
+/data
 sessions
 .vscode
 dist
