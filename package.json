@@ -9,6 +9,8 @@
     "prev": "node --expose-gc dist/main.js",
     "test": "tsx --watch --inspect main.ts",
     "build": "tsc --noEmit false --outDir dist",
+    "refresh:reaction": "tsx scripts/refresh-reaction-videos.ts",
+    "refresh:reactionV2": "tsx scripts/refresh-reaction-videos-delirius.ts",
     "postinstall": "patch-package",
     "format": "prettier --write .",
     "lint": "eslint . --ext .ts"

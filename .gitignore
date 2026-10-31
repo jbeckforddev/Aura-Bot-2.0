@@ -10,3 +10,4 @@ dist
 test.endpoint.*
 test.*
 test/*
+scripts/

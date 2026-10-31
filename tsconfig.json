@@ -30,6 +30,7 @@
     "core/**/*.ts",
     "connection/**/*.ts",
     "database/**/*.ts",
+    "scripts/**/*.ts",
     "src/**/*.ts",
     "types/**/*.ts",
     "utils/**/*.ts"
