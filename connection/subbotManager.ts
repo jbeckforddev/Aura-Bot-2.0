@@ -162,7 +162,7 @@ async function safelyDestroySocket(
   } catch {}
 }
 
-/**
+/*
  * Desvincula por completo un subbot de memoria, base de datos y disco de forma atómica.
  */
 export async function unlinkSubBot(
@@ -205,7 +205,7 @@ export async function unlinkSubBot(
   );
 }
 
-/**
+/*
  * Limpia la instancia en memoria sin necesariamente purgar la sesión de disco/DB (usado en reconexiones).
  */
 async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket) {
@@ -224,7 +224,7 @@ async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket)
   }
 }
 
-/**
+/*
  * Programa reconexiones inteligentes con jitter aleatorio para prevenir tormentas
  * y backoff espaciado en lugar de muerte permanente tras 5 intentos.
  */

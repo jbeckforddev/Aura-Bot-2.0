@@ -6,46 +6,54 @@
     "source": "Gotoubun no Hanayome",
     "value": 4500,
     "img": [
-      {
-        "id": 21,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images.jpeg"
-      },
-      {
-        "id": 22,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(3).jpeg"
-      },
-      {
-        "id": 23,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(2).jpeg"
-      },
-      {
-        "id": 24,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(7).jpeg"
-      },
-      {
-        "id": 25,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(5).jpeg"
-      },
-      {
-        "id": 26,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(1).jpeg"
-      },
-      {
-        "id": 27,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(4).jpeg"
-      },
-      {
-        "id": 28,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(8).jpeg"
-      },
-      {
-        "id": 29,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(9).jpeg"
-      },
-      {
-        "id": 30,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(6).jpeg"
-      }
+      {"id": 21, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images.jpeg"},
+      {"id": 22, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(3).jpeg"},
+      {"id": 23, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(2).jpeg"},
+      {"id": 24, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(7).jpeg"},
+      {"id": 25, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(5).jpeg"},
+      {"id": 26, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(1).jpeg"},
+      {"id": 27, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(4).jpeg"},
+      {"id": 28, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(8).jpeg"},
+      {"id": 29, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(9).jpeg"},
+      {"id": 30, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images%20(6).jpeg"}
+    ]
+  },
+    "Katsuki Bakugo": {
+    "name": "Katsuki Bakugo",
+    "rarity": "Mitic",
+    "type": "Atacante",
+    "source": "My Hero Academia",
+    "value": 4500,
+    "img": [
+      {"id": 151, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/1.webp"},
+      {"id": 152, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/2.jpeg"},
+      {"id": 153, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/3.jpeg"},
+      {"id": 154, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/4.jpeg"},
+      {"id": 155, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/5.jpeg"},
+      {"id": 156, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/6.jpeg"},
+      {"id": 157, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/7.jpeg"},
+      {"id": 158, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/8.jpeg"},
+      {"id": 159, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/9.jpeg"},
+      {"id": 160, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/10.jpeg"}
+    ]
+  },
+    "Shoto Todoroki": {
+    "name": "Shoto Todoroki",
+    "rarity": "Mitic",
+    "type": "Atacante",
+    "source": "My Hero Academia",
+    "value": 4500,
+    "img": [
+      {"id": 161, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/1.jpg"},
+      {"id": 162, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/2.jpeg"},
+      {"id": 163, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/3.jpeg"},
+      {"id": 164, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/4.jpeg"},
+      {"id": 165, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/5.jpeg"},
+      {"id": 166, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/6.png"},
+      {"id": 167, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/7.jpeg"},
+      {"id": 168, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/8.jpeg"},
+      {"id": 169, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/9.avif"},
+      {"id": 170, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/10.jpg"}
     ]
   }
 }

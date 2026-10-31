@@ -37,6 +37,11 @@ export interface SubBotLinkRequest {
   onSessionClosed?: (reason: string) => Promise<void> | void;
 }
 
+export interface PremBotLinkRequest {
+  token?: string,
+  SubBotLinkRequiest: []
+}
+
 export interface ContactMetadata {
   user?: string | null;
   jid?: string | null;

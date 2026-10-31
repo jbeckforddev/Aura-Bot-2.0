@@ -6,46 +6,73 @@
     "source": "One Punch Man",
     "value": 1000,
     "img": [
-      {
-        "id": 31,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/1.jpeg"
-      },
-      {
-        "id": 32,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/2.jpeg"
-      },
-      {
-        "id": 33,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/3.jpeg"
-      },
-      {
-        "id": 34,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/4.jpeg"
-      },
-      {
-        "id": 35,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/5.jpeg"
-      },
-      {
-        "id": 36,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/6.jpeg"
-      },
-      {
-        "id": 37,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/7.jpeg"
-      },
-      {
-        "id": 38,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/8.jpeg"
-      },
-      {
-        "id": 39,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/9.jpeg"
-      },
-      {
-        "id": 40,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/10.jpeg"
-      }
+      {"id": 31, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/1.jpeg"},
+      {"id": 32, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/2.jpeg"},
+      {"id": 33, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/3.jpeg"},
+      {"id": 34,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/4.jpeg"},
+      {"id": 35,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/5.jpeg"},
+      {"id": 36,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/6.jpeg"},
+      {"id": 37,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/7.jpeg"},
+      {"id": 38,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/8.jpeg"},
+      {"id": 39,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/9.jpeg"},
+      {"id": 40,"url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Mumen%20Rider/Mumen%20Rider/10.jpeg"}
+    ]
+  },
+  "Inosuke Hashibira": {
+    "name": "Inosuke Hashibira",
+    "rarity": "Special",
+    "type": "Defensor",
+    "sourge": "Demon Slayer",
+    "value": 1000,
+    "img": [
+      {"id": 81, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/1.jpeg"},
+      {"id": 82, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/2.jpg"},
+      {"id": 83, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/3.jpg"},
+      {"id": 84, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/4.jpg"},
+      {"id": 85, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/5.jpg"},
+      {"id": 86, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/6.jpg"},
+      {"id": 87, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/7.jpeg"},
+      {"id": 88, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/8.jpg"},
+      {"id": 89, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/9.jpeg"},
+      {"id": 90, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Inosuke%20Hashibira/Inosuke%20Hashibira/10.jpeg"}
+    ]
+  },
+  "Usopp": {
+    "name": "Usopp",
+    "rarity": "Special",
+    "type": "Soporte",
+    "sourge": "One Piece",
+    "value":1000,
+    "img": [
+      {"id": 91, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/1.webp"},
+      {"id": 92, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/2.jpeg"},
+      {"id": 93, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/3.avif"},
+      {"id": 94, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/4.jpg"},
+      {"id": 95, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/5.jpeg"},
+      {"id": 96, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/6.png"},
+      {"id": 97, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/7.jpeg"},
+      {"id": 98, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/8.jpg"},
+      {"id": 99, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/9.jpeg"},
+      {"id": 100, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Usopp/Usopp/10.webp"}
+    ]
+  },
+  "Krilin": {
+    "name": "Krilin",
+    "rarity": "Special",
+    "type": "Soporte",
+    "sourge": "Dragon Ball",
+    "value": 1000,
+    "img": [
+      {"id": 101, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/1.avif"},
+      {"id": 102, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/2.jpeg"},
+      {"id": 103, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/3.jpg"},
+      {"id": 104, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/4.avif"},
+      {"id": 105, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/5.jpeg"},
+      {"id": 106, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/6.jpeg"},
+      {"id": 107, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/7.png"},
+      {"id": 108, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/8.webp"},
+      {"id": 109, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/9.webp"},
+      {"id": 110, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Krilin/Krilin/10.png"}
     ]
   }
 }

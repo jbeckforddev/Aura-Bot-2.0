@@ -6,46 +6,54 @@
     "source": "Gotoubun no Hanayome",
     "value": 8000,
     "img": [
-      {
-        "id": 11,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/1.jpg"
-      },
-      {
-        "id": 12,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/2.jpg"
-      },
-      {
-        "id": 13,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/3.webp"
-      },
-      {
-        "id": 14,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/4.png"
-      },
-      {
-        "id": 15,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/5.jpg"
-      },
-      {
-        "id": 16,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/6.jpeg"
-      },
-      {
-        "id": 17,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/7.jpeg"
-      },
-      {
-        "id": 18,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/8.jpg"
-      },
-      {
-        "id": 19,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/9.jpg"
-      },
-      {
-        "id": 20,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/10.webp"
-      }
+      {"id": 11, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/1.jpg"},
+      {"id": 12, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/2.jpg"},
+      {"id": 13, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/3.webp"},
+      {"id": 14, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/4.png"},
+      {"id": 15, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/5.jpg"},
+      {"id": 16, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/6.jpeg"},
+      {"id": 17, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/7.jpeg"},
+      {"id": 18, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/8.jpg"},
+      {"id": 19, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/9.jpg"},
+      {"id": 20, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Nino%20Nakano/Nino%20Nakano/10.webp"}
+    ]
+  },
+  "Izuku Midoriya": {
+    "name": "Izuku Midoriya",
+    "rarity": "Legendary",
+    "type": "Balance",
+    "sourge": "My Hero Academia",
+    "value": 8000,
+    "img":[
+      {"id": 131, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/1.jpg"},
+      {"id": 132, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/2.jpeg"},
+      {"id": 133, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/3.jpeg"},
+      {"id": 134, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/4.jpeg"},
+      {"id": 135, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/5.jpg"},
+      {"id": 136, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/6.jpg"},
+      {"id": 137, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/6.jpg"},
+      {"id": 138, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/8.jpg"},
+      {"id": 139, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/9.jpg"},
+      {"id": 140, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Izuku%20Mirodiya/Izuku%20Mirodiya/10.webp"}
+    ]
+  },
+    "All Might": {
+    "name": "All Might",
+    "rarity": "Legendary",
+    "type": "Defensor",
+    "sourge": "My Hero Academia",
+    "value": 8000,
+    "img":[
+      {"id": 141, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/1.webp"},
+      {"id": 142, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/2.jpeg"},
+      {"id": 143, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/3.jpeg"},
+      {"id": 144, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/4.jpeg"},
+      {"id": 145, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/5.jpeg"},
+      {"id": 146, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/6.webp"},
+      {"id": 147, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/7.jpg"},
+      {"id": 148, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/8.jpeg"},
+      {"id": 149, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/9.jpeg"},
+      {"id": 150, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/All%20Might/All%20Might/10.jpeg"}
     ]
   }
 }

@@ -6,46 +6,54 @@
     "source": "My Hero Academia",
     "value": 2500,
     "img": [
-      {
-        "id": 41,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/1.jpeg"
-      },
-      {
-        "id": 42,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/2.jpg"
-      },
-      {
-        "id": 43,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/3.jpeg"
-      },
-      {
-        "id": 44,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/4.jpg"
-      },
-      {
-        "id": 45,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/5.jpeg"
-      },
-      {
-        "id": 46,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/6.jpeg"
-      },
-      {
-        "id": 47,
-        "url":"https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/7.jpg"
-      },
-      {
-        "id": 48,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/8.jpeg"
-      },
-      {
-        "id": 49,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/9.jpeg"
-      },
-      {
-        "id": 50,
-        "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/10.webp"
-      }
+      {"id": 41, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/1.jpeg"},
+      {"id": 42, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/2.jpg"},
+      {"id": 43, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/3.jpeg"},
+      {"id": 44, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/4.jpg"},
+      {"id": 45, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/5.jpeg"},
+      {"id": 46, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/6.jpeg"},
+      {"id": 47, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/7.jpg"},
+      {"id": 48, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/8.jpeg"},
+      {"id": 49, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/9.jpeg"},
+      {"id": 50, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Eijiro%20Kirishima/Eijiro%20Kirishima/10.webp"}
+    ]
+  },
+  "Piccolo": {
+    "name": "Piccolo",
+    "rarity":"Super Special",
+    "type": "Defensor",
+    "sourge": "Dragon Ball",
+    "value": 2500,
+    "img":[
+      {"id": 111, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/1.jpeg"},
+      {"id": 112, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/2.jpeg"},
+      {"id": 113, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/3.jpeg"},
+      {"id": 114, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/4.jpeg"},
+      {"id": 115, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/5.jpg"},
+      {"id": 116, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/6.jpeg"},
+      {"id": 117, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/7.jpeg"},
+      {"id": 118, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/8.jpeg"},
+      {"id": 119, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/9.webp"},
+      {"id": 120, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Picolo/Piccolo/10.jpeg"}
+    ]
+  },
+  "Rock Lee": {
+    "name": "Rock Lee",
+    "rarity":"Super Special",
+    "type": "Atacante",
+    "sourge": "Naruto",
+    "value": 2500,
+    "img": [
+      {"id": 121, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/1.webp?updatedAt=1793408828688"},
+      {"id": 122, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/2.jpeg?updatedAt=1793408828620"},
+      {"id": 123, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/3.png?updatedAt=1793408828619"},
+      {"id": 124, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/4.jpeg?updatedAt=1793408828611"},
+      {"id": 125, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/5.jpeg?updatedAt=1793408828704"},
+      {"id": 126, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/6.jpeg?updatedAt=1793408828485"},
+      {"id": 127, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/7.jpeg?updatedAt=1793408828530"},
+      {"id": 128, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/8.jpeg?updatedAt=1793408828699"},
+      {"id": 129, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/9.jpeg?updatedAt=1793408828452"},
+      {"id": 130, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Rock%20Lee/10.jpeg?updatedAt=1793408828628"}
     ]
   }
 }
