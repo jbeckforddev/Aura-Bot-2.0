@@ -88,7 +88,7 @@ export default {
   description: "Escanea y resuelve el JID real, LID, metadatos de red y perfil de un usuario.",
   groupOnly: false,
   async run(ctx: CommandContext) {
-    const { reply, react, db, msg, args, groupMeta, sock, from } = ctx;
+    const { reply, react, db, msg, args, groupMeta, sock, from, sender } = ctx;
 
     const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
     let rawInput = "";
@@ -404,7 +404,7 @@ export default {
     if (ppUrl) {
       try {
         return await sock.sendMessage(
-          from,
+          sender,
           {
             image: { url: ppUrl },
             caption: reportCaption,
@@ -415,9 +415,13 @@ export default {
       } catch {}
     }
 
-    return reply({
-      text: reportCaption,
-      mentions: mentionList,
-    });
+    return sock.sendMessage(
+      sender,
+      {
+        text: reportCaption,
+        mentions: mentionList,
+      },
+      { quoted: msg as any }
+    );
   },
 };
