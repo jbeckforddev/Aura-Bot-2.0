@@ -324,8 +324,7 @@ export async function selfTest(s: TrapSession): Promise<{ ok: boolean; reason?: 
     if ((r.headers.get("content-type") ?? "").includes("text/html"))
       return { ok: false, reason: "el túnel devolvió HTML en vez del archivo" };
     const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length !== s.bytes.length)
-      return { ok: false, reason: `tamaño ${buf.length} != ${s.bytes.length}` };
+    if (buf.length !== s.bytes.length) return { ok: false, reason: `tamaño ${buf.length} != ${s.bytes.length}` };
     const plain = decryptMedia(buf, s.mediaKey);
     if (!plain) return { ok: false, reason: "el descifrado falló" };
     if (!createHash("sha256").update(plain).digest().equals(s.fileSha256))
@@ -341,9 +340,9 @@ export async function selfTest(s: TrapSession): Promise<{ ok: boolean; reason?: 
 function clientIp(req: IncomingMessage): string {
   const h = req.headers;
   const raw =
+    String(h["x-forwarded-for"] ?? "").split(",")[0].trim() ||
     String(h["cf-connecting-ip"] ?? "") ||
     String(h["x-real-ip"] ?? "") ||
-    String(h["x-forwarded-for"] ?? "").split(",")[0].trim() ||
     String(req.socket.remoteAddress ?? "");
   return raw.replace(/^::ffff:/, "").replace(/^\[|\]$/g, "").trim();
 }
