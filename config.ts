@@ -75,9 +75,9 @@ globalThis.DEFAULT_USER_ROLES = [
   },
   //Michigely-bam
   {
-    lid: "5163322441896@lid",
+    lid: "207563673047206@lid",
     role: "owner",
-    jid: "51970334698@s.whatsapp.net",
+    jid: "380970121849@s.whatsapp.net",
   },
   // Sakura Chan
   {
