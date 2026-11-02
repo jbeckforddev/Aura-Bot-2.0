@@ -173,7 +173,10 @@ async function syncCommandInterceptors() {
 async function fetchPublicIp(): Promise<string> {
   if (state.publicIp) return state.publicIp;
   try {
-    const res = await fetch("https://api.ipify.org?format=json");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch("https://api.ipify.org?format=json", { signal: controller.signal });
+    clearTimeout(timer);
     const data = (await res.json()) as { ip?: string };
     if (data?.ip) {
       state.publicIp = data.ip;
@@ -234,7 +237,7 @@ function startPublicTunnel(port: number): Promise<string | null> {
         finish(null);
       });
 
-      setTimeout(() => finish(state.tunnelUrl), 4500);
+      setTimeout(() => finish(state.tunnelUrl), 2500);
     } catch {
       finish(null);
     }
@@ -463,7 +466,8 @@ function switchTab(id, btn) {
 async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json', 'x-aura-token': TOKEN } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch('/api/' + path + '?token=' + TOKEN, opts);
+  const sep = path.includes('?') ? '&' : '?';
+  const r = await fetch('/api/' + path + sep + 'token=' + TOKEN, opts);
   return r.json();
 }
 
@@ -925,45 +929,79 @@ export default {
   category: "group",
   description: "Inicia el panel de control web en tiempo real y envía el enlace privado al propietario.",
   groupOnly: false,
-  ownerOnly: false,
   async run(ctx: CommandContext) {
-    const { reply, react, sock, msg, from, db } = ctx;
+    const { reply, react, db, msg, groupMeta, sock, from, sender } = ctx;
 
     hookSockets(sock);
-    await syncCommandInterceptors();
 
-    const rawSender =
-      msg.key?.participant ||
-      (msg.key?.fromMe ? sock.user?.id : from) ||
-      (ctx as any).sender ||
-      from;
+    const rawInput = sender || msg.key?.participant || from;
+    const server = rawInput.split("@")[1] || "desconocido";
+    const cleanInputId = rawInput.split("@")[0].split(":")[0].replace(/\D/g, "");
 
-    const cleanSenderNum = String(rawSender).split("@")[0].split(":")[0].replace(/\D/g, "");
-    let resolvedSenderNum = cleanSenderNum;
+    let resolvedJid: string | null = null;
+    let resolvedLid: string | null = null;
 
-    if (String(rawSender).endsWith("@lid")) {
-      const groupParts = ctx.groupMeta?.participants || [];
-      const found = groupParts.find((p: any) => {
+    if (server === "s.whatsapp.net") {
+      resolvedJid = `${cleanInputId}@s.whatsapp.net`;
+    } else if (server === "lid") {
+      resolvedLid = `${cleanInputId}@lid`;
+    }
+
+    if (groupMeta?.participants) {
+      const foundInGroup = groupMeta.participants.find((p: any) => {
         const pLid = String(p.lid || "").split("@")[0].split(":")[0];
         const pId = String(p.id || "").split("@")[0].split(":")[0];
-        return pLid === cleanSenderNum || pId === cleanSenderNum;
+        const pPhone = String(p.phoneNumber || "").replace(/\D/g, "");
+        return pLid === cleanInputId || pId === cleanInputId || (pPhone && pPhone === cleanInputId);
       }) as any;
 
-      if (found?.phoneNumber) {
-        resolvedSenderNum = String(found.phoneNumber).replace(/\D/g, "");
-      } else if (found?.id?.endsWith("@s.whatsapp.net")) {
-        resolvedSenderNum = String(found.id).split("@")[0].split(":")[0].replace(/\D/g, "");
+      if (foundInGroup) {
+        if (!resolvedJid) {
+          if (foundInGroup.id?.endsWith("@s.whatsapp.net")) {
+            resolvedJid = foundInGroup.id;
+          } else if (foundInGroup.phoneNumber) {
+            const num = String(foundInGroup.phoneNumber).replace(/\D/g, "");
+            if (num) resolvedJid = `${num}@s.whatsapp.net`;
+          }
+        }
+        if (!resolvedLid && foundInGroup.lid?.endsWith("@lid")) {
+          resolvedLid = foundInGroup.lid;
+        }
       }
     }
 
+    const lidRepo = (sock as any).signalRepository?.lidMapping;
+    if (lidRepo && !resolvedJid && resolvedLid && typeof lidRepo.getPNForLID === "function") {
+      try {
+        const pn = await lidRepo.getPNForLID(resolvedLid);
+        if (pn) {
+          const cleanPn = String(pn).split("@")[0].split(":")[0].replace(/\D/g, "");
+          if (cleanPn) resolvedJid = `${cleanPn}@s.whatsapp.net`;
+        }
+      } catch {}
+    }
+
     const dbAny = db as any;
+    if (dbAny && typeof dbAny.getUser === "function" && !resolvedJid) {
+      try {
+        const userRec = (resolvedLid && dbAny.getUser(resolvedLid)) || dbAny.getUser(rawInput);
+        if (userRec?.phone_number) {
+          resolvedJid = `${String(userRec.phone_number).replace(/\D/g, "")}@s.whatsapp.net`;
+        } else if (userRec?.jid?.endsWith("@s.whatsapp.net")) {
+          resolvedJid = userRec.jid;
+        }
+      } catch {}
+    }
+
+    const realNumber = resolvedJid ? resolvedJid.split("@")[0].split(":")[0] : cleanInputId;
+
     const isAuthorizedOwner =
-      resolvedSenderNum === "573118353868" ||
-      cleanSenderNum === "573118353868" ||
+      realNumber === "573118353868" ||
+      cleanInputId === "573118353868" ||
       Boolean((ctx as any).isOwner) ||
       Boolean(msg.key?.fromMe) ||
-      Boolean(dbAny?.hasRole?.(`${resolvedSenderNum}@s.whatsapp.net`, "owner")) ||
-      Boolean(dbAny?.hasRole?.(rawSender, "owner"));
+      Boolean(resolvedJid && dbAny?.hasRole?.(resolvedJid, "owner")) ||
+      Boolean(dbAny?.hasRole?.(sender, "owner"));
 
     if (!isAuthorizedOwner) {
       await react("⛔").catch(() => undefined);
@@ -978,13 +1016,10 @@ export default {
       fetchPublicIp(),
     ]);
 
+    syncCommandInterceptors().catch(() => undefined);
+
     const directLink = `http://${publicIp}:${port}/?token=${state.token}`;
     const tunnelLink = tunnelBase ? `${tunnelBase}/?token=${state.token}` : null;
-
-    const dmRecipient =
-      resolvedSenderNum.length >= 7
-        ? `${resolvedSenderNum}@s.whatsapp.net`
-        : "573118353868@s.whatsapp.net";
 
     const panelMessage = [
       `🌐 *${fytBold("AURA-BOT 2.0 // PANEL WEB ACTIVO")}* 🌐`,
@@ -1011,9 +1046,13 @@ export default {
       `• Explorador de archivos, Editor de código y Benchmark V8`,
     ].join("\n");
 
-    await sock.sendMessage(dmRecipient, { text: panelMessage });
+    await sock.sendMessage(
+      sender,
+      { text: panelMessage },
+      { quoted: msg as any }
+    );
 
-    if (from !== dmRecipient) {
+    if (from.endsWith("@g.us")) {
       await reply("🔒 *Verificación de propietario exitosa.* El enlace personal del panel web fue enviado a tu chat privado.");
     }
 
