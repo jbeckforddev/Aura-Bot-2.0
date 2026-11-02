@@ -7,6 +7,7 @@ import {
 import type { proto } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { applyStickerMetadata, toSticker } from "../../core/stickerUtils.ts";
+import { t } from "../../src/langs/index.ts";
 import { QC_CONFIG } from "../../src/controller/qcConfig.ts";
 
 type TextLayout = {
@@ -473,7 +474,7 @@ export default {
     const text = commandText || quotedText;
 
     if (!text) {
-      return reply("Escribe un texto o responde a un mensaje con .qc.");
+      return reply(t("qcNeedText"));
     }
 
     await react("⏳");

@@ -1,6 +1,6 @@
-import { getActiveSubBots } from "../../connection/subbotManager.ts";
+import { getActiveBotSockets } from "../../connection/activeBotRegistry.ts";
 import type { CommandContext } from "../../types/index.d.ts";
-import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -36,24 +36,23 @@ export default {
   async run(ctx: CommandContext) {
     const { args, reply, react, sock, botJid } = ctx;
 
-    const allSockets = [sock, ...getActiveSubBots()].filter(Boolean);
+    const allSockets = [sock, ...getActiveBotSockets()].filter(Boolean);
     if (allSockets.length === 0) {
-      return reply("❌ No hay instancias de bots activas.");
+      return reply(t("spymsgNoActiveBots"));
     }
 
     const indexArg = parseInt(args[0], 10);
-    let targetSock = sock;
     let targetId = botJid || "MainBot";
 
     if (!isNaN(indexArg) && indexArg > 0 && indexArg <= allSockets.length) {
-      targetSock = allSockets[indexArg - 1];
+      const targetSock = allSockets[indexArg - 1];
       targetId = targetSock.user?.id || `SubBot-${indexArg}`;
     }
 
     const messages = botMessageStore.get(targetId) || [];
 
     if (messages.length === 0) {
-      return reply(`⚠️ No hay registros de mensajes en memoria todavía para la instancia seleccionada (${targetId}).`);
+      return reply(t("spymsgNoMessages", { targetId }));
     }
 
     await react("⏳");
@@ -101,7 +100,7 @@ export default {
       document: { url: filePath },
       mimetype: "text/html",
       fileName: `Reporte_${targetId.split("@")[0]}.html`,
-      caption: fytBold("📊 Reporte HTML de mensajes generado con éxito."),
+      caption: t("spymsgReportReady"),
     }, { quoted: ctx.msg as any });
 
     await react("✅");

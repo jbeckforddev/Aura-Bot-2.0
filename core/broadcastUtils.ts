@@ -1,5 +1,5 @@
 import { LRUCache } from "lru-cache";
-import { getActiveSubBots } from "../connection/subbotManager.ts";
+import { getActiveBotSockets } from "../connection/activeBotRegistry.ts";
 import type { ExtendedWASocket } from "../types/index.d.ts";
 
 const claimedMessages = new LRUCache<string, true>({
@@ -14,7 +14,7 @@ export function claimOnce(key: string): boolean {
 }
 
 export function getAllSockets(): ExtendedWASocket[] {
-  const sockets = [globalThis.mainSocket, ...getActiveSubBots()];
+  const sockets = [globalThis.mainSocket, ...getActiveBotSockets()];
   return [...new Set(
     sockets.filter(
       (socket): socket is ExtendedWASocket => Boolean(socket?.user),

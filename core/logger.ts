@@ -1,9 +1,11 @@
 import chalk from "chalk";
+import type { BotType } from "./botType.ts";
 
 export type CmdLogInput = {
   numeroReal?: string | null;
   receivedAt: number;
   rango?: string | null;
+  botType?: BotType;
   cmdName?: string | null;
   isGroup?: boolean;
   text?: string | null;
@@ -15,6 +17,7 @@ export type CmdLogInput = {
   prefix?: string | null;
   sock?: {
     isSubBot?: boolean;
+    botType?: BotType;
     subBotId?: string | number;
   } | null;
 };
@@ -40,6 +43,7 @@ export function cmdLog({
   pushName,
   groupMetadata,
   sock,
+  botType,
   receivedAt,
   prefix,
 }: CmdLogInput) {
@@ -47,7 +51,8 @@ export function cmdLog({
 
   const elapsedMs = Math.round(performance.now() - receivedAt);
   const nombreUsuario = pushName || "Usuario";
-  const botName = sock?.isSubBot ? "Sub-Bot" : "Bot";
+  const botName =
+    botType ?? sock?.botType ?? (sock?.isSubBot ? "Sub-Bot" : "Principal");
   const botNumber = sock?.subBotId ? `+${sock.subBotId}` : "Principal";
   const groupName = groupMetadata?.subject || "Chat privado";
   const commandText = (text ?? "").slice(prefix?.length ?? 0).trimStart();
@@ -71,18 +76,7 @@ export function cmdLog({
 
 export function logInfo(
   message: string,
-  level:
-    | "info"
-    | "warn"
-    | "error"
-    | "alert"
-    | "pairing"
-    | "success"
-    | "SubBotPairing"
-    | "SubBotWarning"
-    | "SubBotError"
-    | "SubBotInfo"
-    | "SubBotSuccess" = "info",
+  level: | "info" | "warn" | "error" | "alert" | "pairing" | "success" | "success" = "info",
 ): void {
   const prefixMap = {
     info: chalk.bgCyan.bold("[INFO]"),
@@ -91,11 +85,6 @@ export function logInfo(
     success: chalk.bgGreen.bold("[SUCCESS]"),
     alert: chalk.bgHex("#ff8000").bold("[ALERT]"),
     pairing: chalk.bgBlue.bold("[PAIRING]"),
-    SubBotPairing: chalk.bgMagenta.bold("[SUB-BOT PAIRING]"),
-    SubBotWarning: chalk.bgYellowBright.bold("[SUB-BOT WARNING]"),
-    SubBotError: chalk.bgRedBright.bold("[SUB-BOT ERROR]"),
-    SubBotInfo: chalk.bgCyanBright.bold("[SUB-BOT INFO]"),
-    SubBotSuccess: chalk.bgGreenBright.bold("[SUB-BOT SUCCESS]"),
   };
   console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }

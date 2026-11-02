@@ -125,6 +125,7 @@ export interface DatabaseBotData {
   customAudio?: BotMediaSetting | null;
   currentBanner?: string | null;
   currentAudio?: string | null;
+  premiumToken?: string;
   sessionName?: string;
   currency?: string;
   currencySymbol?: string;
@@ -268,6 +269,7 @@ export interface IDatabase {
   invalidateBotDbCache?(key?: string): void;
   getAllUsers(): DatabaseUser[];
   getAllBots(): DatabaseBot[];
+  getActiveBots?(): DatabaseBot[];
   hasRoles(jid: string, roles: string[]): Record<string, boolean>;
   hasRole(jid: string, role: UserRole | string): boolean;
   setRole(jid: string, role: UserRole | string): void;

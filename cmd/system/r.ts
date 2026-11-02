@@ -20,6 +20,7 @@ export default {
   category: "system",
   description: t("cmd_ejecuta_comandos_en_la_termina_e4ff4900"),
   ownerOnly: true,
+  hideCmd: true,
 
   async run({ args, usedPrefix, reply, react }: CommandContext) {
     const command = args.join(" ").trim();

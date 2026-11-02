@@ -1,6 +1,10 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import type { DatabaseBot } from "../../types/database.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import {
+  resolveAccountBotType,
+  type BotType,
+} from "../../core/botType.ts";
 import { t } from "../../src/langs/index.ts";
 
 type BotParticipant = {
@@ -92,8 +96,20 @@ async function resolveBotJid(
   return "";
 }
 
+function getEffectiveBotType(bot: DatabaseBot): BotType {
+  return resolveAccountBotType({
+    botType: bot.bot_type,
+    isMain: bot.isMain,
+    isSubBot: Number(bot.isMain) !== 1,
+    premiumToken: bot.data?.premiumToken,
+    jid: bot.jid,
+  });
+}
+
 function getBotType(bot: DatabaseBot): string {
-  return t(Number(bot.isMain) === 1 ? "socketBotsMainType" : "socketBotsSubType");
+  const botType = getEffectiveBotType(bot);
+  if (botType === "Principal") return t("socketBotsMainType");
+  return t(botType === "Prem-Bot" ? "socketBotsPremiumType" : "socketBotsSubType");
 }
 
 export default {
@@ -110,7 +126,7 @@ export default {
     usedPrefix,
     reply,
   }: CommandContext) {
-    const bots = (db.getAllBots?.() || []).filter(
+    const bots = (db.getActiveBots?.() ?? db.getAllBots?.() ?? []).filter(
       (bot: DatabaseBot) =>
         String(bot.status || "offline").toLowerCase() === "active" &&
         (getBotNumber(bot) || bot.bot_id || bot.lid),
@@ -132,15 +148,26 @@ export default {
     }
 
     let text = t("socketBotsHeader", {
-      title: fytBold(
-        t(isGroup ? "socketBotsTitleGroup" : "socketBotsTitle"),
-      ),
+        title: fytBold(
+          t(isGroup ? "socketBotsTitleGroup" : "socketBotsTitle"),
+        ),
+      }) + t("cmd_text_adc83b19");
+    const subCount = bots.filter(
+      (bot: DatabaseBot) => getEffectiveBotType(bot) === "Sub-Bot",
+    ).length;
+    const premiumCount = bots.filter(
+      (bot: DatabaseBot) => getEffectiveBotType(bot) === "Prem-Bot",
+    ).length;
+    text += t("socketBotsTypeCounts", {
+      subCount,
+      premiumCount,
       activeCount: bots.length,
-    }) + t("cmd_text_adc83b19");
+    });
     if (isGroup) {
-      text += t("socketBotsGroupCount", { count: visibleBots.length });
+      text += `\n${t("socketBotsGroupCount", { count: visibleBots.length })}`;
+    } else {
+      text += t("cmd_text_adc83b19");
     }
-    text += t("cmd_text_adc83b19");
 
     if (!visibleBots.length) {
       text += isGroup

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { LRUCache } from "lru-cache";
 import { fytBold } from "./socketText.ts";
-import { getActiveSubBots } from "../connection/subbotManager.ts";
+import { getActiveBotSockets } from "../connection/activeBotRegistry.ts";
 import { GROUP_METADATA_CACHE } from "../handler.ts";
 import { logInfo } from "./logger.ts";
 import type { GroupMetadata, proto } from "baileys";
@@ -118,7 +118,7 @@ export function isPrimaryBotForGroup(
 function getCandidateSockets(current: ExtendedWASocket): ExtendedWASocket[] {
   const seen = new Set<ExtendedWASocket>();
   const list: ExtendedWASocket[] = [];
-  for (const sock of [current, globalThis.mainSocket, ...getActiveSubBots()]) {
+  for (const sock of [current, globalThis.mainSocket, ...getActiveBotSockets()]) {
     if (sock && typeof sock.groupMetadata === "function" && !seen.has(sock)) {
       seen.add(sock);
       list.push(sock);

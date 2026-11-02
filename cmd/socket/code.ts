@@ -7,6 +7,7 @@ export default {
   name: ["code", "pairingcode", "vincularcode"],
   description: t("socketDescriptionCode"),
   category: "socket",
+  cooldown: 60000,
   ownerOnly: false,
 
   async run({ args, sender, reply, copy, usedPrefix }: CommandContext) {
@@ -19,8 +20,12 @@ export default {
     if (!/^[1-9]\d{7,14}$/.test(phoneNumber)) {
       await reply({
         text: requiresManualPhone
-          ? t("socketCodeLidPhone", { example: `${commandPrefix}code 50612345678` })
-          : t("socketCodePhoneMissing", { example: `${commandPrefix}code 50612345678` }),
+          ? t("socketCodeLidPhone", {
+              example: `${commandPrefix}code 50612345678`,
+            })
+          : t("socketCodePhoneMissing", {
+              example: `${commandPrefix}code 50612345678`,
+            }),
       });
       return;
     }
@@ -44,7 +49,9 @@ export default {
         await copy(messageText, code, t("socketCodeCopy"));
       },
       onConnected: () =>
-        void reply({ text: IS_SUBBOT_ONLINE({ prefix: commandPrefix }) }),
+        void reply({
+          text: IS_SUBBOT_ONLINE({ prefix: commandPrefix }),
+        }),
       onPairingError: (error) =>
         void reply({
           text: t("socketCodeRejected", { error: error.message }),
@@ -55,9 +62,13 @@ export default {
         }),
       onSessionClosed: (reason) => {
         if (reason === "loggedOut") {
-          void reply({ text: t("socketSubBotLoggedOut") });
+          void reply({
+            text: t("socketSubBotLoggedOut"),
+          });
         } else {
-          void reply({ text: t("socketSubBotDisconnected", { reason }) });
+          void reply({
+            text: t("socketSubBotDisconnected", { reason }),
+          });
         }
       },
     });

@@ -42,6 +42,7 @@ export const logger = pino({ level: "silent" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const WA_WEB_VERSION_TIMEOUT_MS = 8000;
 const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
@@ -116,8 +117,25 @@ async function removeSessionFolder(sessionName: string) {
 function getWaWebVersion(): Promise<[number, number, number]> {
   if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
     waWebVersionExpiresAt = Date.now() + WA_WEB_VERSION_CACHE_TTL_MS;
-    waWebVersionPromise = fetchLatestWaWebVersion()
-      .then(({ version }) => version as [number, number, number])
+    let timeout: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `La consulta de versión de WhatsApp Web superó ${WA_WEB_VERSION_TIMEOUT_MS} ms.`,
+            ),
+          ),
+        WA_WEB_VERSION_TIMEOUT_MS,
+      );
+    });
+    waWebVersionPromise = Promise.race([
+      fetchLatestWaWebVersion().then(
+        ({ version }) => version as [number, number, number],
+      ),
+      timeoutPromise,
+    ])
+      .finally(() => clearTimeout(timeout))
       .catch((error) => {
         waWebVersionPromise = undefined;
         waWebVersionExpiresAt = 0;
@@ -348,6 +366,7 @@ async function connectSocket(sessionName: string) {
   const extendedSock = sock as ExtendedWASocket;
   globalThis.mainSocket = extendedSock;
   extendedSock.isSubBot = false;
+  extendedSock.botType = "Principal";
   extendedSock.sessionName = sessionName;
 
   let saveTimer: NodeJS.Timeout | null = null;
@@ -484,6 +503,7 @@ async function connectSocket(sessionName: string) {
       const previousBot = db.getBot(botJid);
       const previousBotType = resolveBotType(previousBot?.bot_type);
       const botType = previousBotType === "Prem-Bot" ? "Prem-Bot" : "Principal";
+      extendedSock.botType = botType;
       const botName =
         previousBot?.data?.customBotName && previousBot.bot_name
           ? previousBot.bot_name

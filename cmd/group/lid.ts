@@ -1,6 +1,7 @@
 
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import { t } from "../../src/langs/index.ts";
 
 interface CountryInfo {
   code: string;
@@ -113,7 +114,7 @@ export default {
     }
 
     if (!rawInput) {
-      return reply("⚠️ Etiqueta a un usuario, responde a un mensaje o escribe el código LID / número.");
+      return reply(t("lidNeedTarget"));
     }
 
     await react("🔎").catch(() => undefined);

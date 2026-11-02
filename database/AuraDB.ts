@@ -213,6 +213,7 @@ for (const column of [
 for (const column of [
   ["phone_number", "TEXT"],
   ["lid", "TEXT"],
+  ["UserLang", "TEXT DEFAULT NULL"],
   ["name", "TEXT DEFAULT NULL"],
   ["marriage_to", "TEXT DEFAULT NULL"],
   ["genre", "TEXT DEFAULT 'Unknown'"],
@@ -248,6 +249,7 @@ for (const [table, column, definition] of [
   ["groups", "userWarns", "TEXT DEFAULT '{}'"],
   ["groups", "catBlocked", "TEXT DEFAULT '[\"nsfw\"]'"],
   ["groups", "Muted_Users", "TEXT DEFAULT '[]'"],
+  ["groups", "GroupLang", "TEXT DEFAULT NULL"],
   ["groups", "botOnline", "INTEGER DEFAULT 1"],
   ["groups", "data", "TEXT DEFAULT '{}'"],
   ["bots", "modPrefix", "TEXT"],
@@ -322,6 +324,7 @@ db_instance.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
   CREATE INDEX IF NOT EXISTS idx_bots_bot_id ON bots(bot_id);
   CREATE INDEX IF NOT EXISTS idx_bots_lid ON bots(lid);
+  CREATE INDEX IF NOT EXISTS idx_bots_status_type ON bots(status, bot_type);
 `);
 
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
@@ -398,6 +401,9 @@ const stmts = {
   ),
   getAllBots: db_instance.prepare(
     "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots",
+  ),
+  getActiveBots: db_instance.prepare(
+    "SELECT jid, bot_id, bot_name, phone_number, lid, groups, isMain, bot_type, status, modPrefix, modSelf, currency, currencySymbol, currentBanner, currentAudio, data FROM bots WHERE status = 'active'",
   ),
   updateBotType: db_instance.prepare(
     "UPDATE bots SET bot_type = ?, data = ? WHERE jid = ?",
@@ -1098,6 +1104,16 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
       : {};
   const sessionName = String(input.sessionName ?? data.sessionName ?? "");
   const normalizedSessionName = sessionName.trim().toLowerCase();
+  const candidates = [
+    input.bot_type,
+    data.bot_type,
+    data.botType,
+  ];
+
+  for (const candidate of candidates) {
+    if (resolveBotType(candidate) === "Prem-Bot") return "Prem-Bot";
+  }
+
   const isSubBot =
     input.isSubBot === true ||
     normalizedSessionName.startsWith("sub-") ||
@@ -1105,18 +1121,8 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
 
   if (isSubBot) return "Sub-Bot";
 
-  const candidates = [
-    input.bot_type,
-    data.bot_type,
-    data.botType,
-  ];
   for (const candidate of candidates) {
     if (resolveBotType(candidate) === "Sub-Bot") return "Sub-Bot";
-  }
-
-  for (const candidate of candidates) {
-    const resolvedType = resolveBotType(candidate);
-    if (resolvedType === "Prem-Bot") return resolvedType;
   }
 
   if (
@@ -1129,6 +1135,47 @@ function resolveBotTypeLabel(input: Record<string, unknown> = {}): BotType {
   }
 
   return "Principal";
+}
+
+function mapBotRow(row: Record<string, unknown>): DatabaseBot {
+  const jsonData = safeJson<Record<string, unknown>>(
+    row.data as string | undefined,
+  );
+  const botType = getCachedBotType(String(row.jid), {
+    ...jsonData,
+    ...row,
+    isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+    bot_type: row.bot_type,
+    data: jsonData,
+  });
+
+  return {
+    ...jsonData,
+    jid: String(row.jid),
+    data: jsonData,
+    bot_id: (jsonData.bot_id ?? row.bot_id ?? row.jid) as string,
+    bot_name: (jsonData.bot_name ?? row.bot_name ?? null) as string | null,
+    phone_number: (jsonData.phone_number ?? row.phone_number ?? null) as
+      | string
+      | null,
+    lid: (jsonData.lid ?? row.lid ?? null) as string | null,
+    groups: safeJsonArray(jsonData.groups ?? row.groups),
+    isMain: Number(jsonData.isMain ?? row.isMain ?? 0),
+    bot_type: botType,
+    status: (jsonData.status ?? row.status ?? "offline") as string,
+    modPrefix: (jsonData.modPrefix ?? row.modPrefix ?? null) as string | null,
+    modSelf: Number(jsonData.modSelf ?? row.modSelf ?? 0),
+    currency: (jsonData.currency ?? row.currency ?? "AuraCoins") as string,
+    currencySymbol: (jsonData.currencySymbol ??
+      row.currencySymbol ??
+      "₡") as string,
+    currentBanner: (jsonData.currentBanner ?? row.currentBanner ?? null) as
+      | string
+      | null,
+    currentAudio: (jsonData.currentAudio ?? row.currentAudio ?? null) as
+      | string
+      | null,
+  };
 }
 
 function getBot(jid: string): DatabaseBot {
@@ -1717,6 +1764,11 @@ export const db: IDatabase = {
           | null,
       };
     });
+  },
+
+  getActiveBots(): DatabaseBot[] {
+    const rows = stmts.getActiveBots.all() as Array<Record<string, unknown>>;
+    return rows.map(mapBotRow);
   },
 
   hasRoles(jid: string, roles: string[]) {

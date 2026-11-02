@@ -4,8 +4,10 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { generateWAMessageFromContent, prepareWAMessageMedia, type proto } from "baileys";
 import { fytBold } from "../../core/socketText.ts";
-import { getActiveSubBots } from "../../connection/subbotManager.ts";
-import { resolveBotType } from "../../core/botType.ts";
+import { getActiveBotSockets } from "../../connection/activeBotRegistry.ts";
+import {
+  resolveAccountBotType,
+} from "../../core/botType.ts";
 import { getPlugins } from "../../core/cmdLoader.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 import { formatDuration, formatFileSize } from "../../utils/formatter.ts";
@@ -92,10 +94,13 @@ export default {
     const pushName = msg?.pushName || "Usuario";
     const botRecord = db.getBot?.(sock.user?.id || "");
     const botName = String(botRecord?.bot_name || "Aura Reed").trim() || "Aura Reed";
-    const botType = resolveBotType(
-      botRecord?.bot_type ?? botRecord?.data?.bot_type,
-      sock.isSubBot,
-    );
+    const botType = resolveAccountBotType({
+      botType: botRecord?.bot_type ?? botRecord?.data?.bot_type,
+      isMain: botRecord?.isMain,
+      isSubBot: sock.isSubBot,
+      premiumToken: botRecord?.data?.premiumToken,
+      jid: sock.user?.id,
+    });
 
     const botVersion = "2.5";
     const serverHost = getServerName();
@@ -106,7 +111,25 @@ export default {
     // Conteo de comandos hiper-rápido desde la memoria
     const pluginsMap = getPlugins();
     const uniqueCommands = new Set(pluginsMap.values()).size;
-    const activeSubBots = getActiveSubBots().length;
+    const activeSockets = getActiveBotSockets();
+    const activeTypes = activeSockets.map((socket) => {
+      const activeBot = socket.user?.id
+        ? db.getBot?.(socket.user.id)
+        : undefined;
+      return resolveAccountBotType({
+        botType: activeBot?.bot_type,
+        isMain: activeBot?.isMain,
+        isSubBot: socket.isSubBot,
+        premiumToken: activeBot?.data?.premiumToken,
+        jid: socket.user?.id,
+      });
+    });
+    const activePremBots = activeTypes.filter(
+      (type) => type === "Prem-Bot",
+    ).length;
+    const activeSubBots = activeTypes.filter(
+      (type) => type === "Sub-Bot",
+    ).length;
     const chanellink = "https://aetheryx.xyz/";
     const tituloEstilizado = fytBold(t("cmd_value0_bot_088975d3", { value0: botName.toUpperCase() }));
 
@@ -118,6 +141,7 @@ export default {
     textoInfo += t("cmd_value0_value1_a6fe40aa", { value0: fytBold(t("cmd_prefix_9a21b442")), value1: ctx.usedPrefix ?? ctx.prefix ?? "." });
     textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_fecha_51334726")), value1: new Date().toLocaleDateString("es-CR") });
     textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_sub_bots_7c3aeed5")), value1: activeSubBots });
+    textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_prem_bots_count")), value1: activePremBots });
     textoInfo += t("cmd_value0_value1_a67c398b", { value0: fytBold(t("cmd_url_b7547cc8")), value1: chanellink });
     textoInfo += t("cmd_text_14518c16");
 

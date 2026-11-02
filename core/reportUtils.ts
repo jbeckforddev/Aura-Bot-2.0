@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fytBold } from "./socketText.ts";
-import { getActiveSubBots } from "../connection/subbotManager.ts";
+import { getActiveBotSockets } from "../connection/activeBotRegistry.ts";
 import type { proto } from "baileys";
 import type { ExtendedWASocket } from "../types/index.d.ts";
 import { t } from "../src/langs/index.ts";
@@ -93,7 +93,7 @@ export function getSocketCandidates(
   const candidates = [
     current,
     globalThis.mainSocket,
-    ...getActiveSubBots(),
+    ...getActiveBotSockets(),
   ] as ExtendedWASocket[];
   return candidates.filter(
     (socket, index) =>

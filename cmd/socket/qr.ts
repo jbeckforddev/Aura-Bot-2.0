@@ -8,6 +8,7 @@ export default {
   name: ["qr", "vincularqr"],
   description: t("socketDescriptionQr"),
   category: "socket",
+  cooldown: 60000,
   ownerOnly: false,
 
   async run({ sender, reply, usedPrefix }: CommandContext) {
@@ -22,13 +23,19 @@ export default {
         } as Parameters<typeof reply>[0]);
       },
       onConnected: async () => {
-        void reply({ text: IS_SUBBOT_ONLINE({ prefix: usedPrefix ?? "." }) });
+        void reply({
+          text: IS_SUBBOT_ONLINE({ prefix: usedPrefix ?? "." }),
+        });
       },
       onSessionClosed: (reason) => {
         if (reason === "loggedOut") {
-          void reply({ text: t("socketSubBotLoggedOut") });
+          void reply({
+            text: t("socketSubBotLoggedOut"),
+          });
         } else {
-          void reply({ text: t("socketSubBotDisconnected", { reason }) });
+          void reply({
+            text: t("socketSubBotDisconnected", { reason }),
+          });
         }
       },
     });

@@ -18,6 +18,10 @@ if (typeof (globalThis as any).gc !== "function") {
 
 import { connectMainBot } from "./connection/MainBotManager.ts";
 import { startSavedSubBots } from "./connection/subbotManager.ts";
+import {
+  startPremiumExpiryMonitor,
+  startSavedPremBots,
+} from "./connection/premBotManager.ts";
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import * as AuraDB from "./database/AuraDB.ts";
 import { flushPendingContacts } from "./handler.ts";
@@ -137,7 +141,8 @@ async function mainBot() {
   }
 
   if (shouldStartSubBots) {
-    void startSavedSubBots()
+    startPremiumExpiryMonitor();
+    void Promise.all([startSavedSubBots(), startSavedPremBots()])
       .then(() => {
         runMemoryMaintenance();
       })

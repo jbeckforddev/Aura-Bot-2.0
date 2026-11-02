@@ -11,6 +11,7 @@ export default {
   ownerOnly: true, // 🔒 Solo owners (lo valida tu handler.ts)
   groupOnly: true, // Solo funciona en grupos
   botAdmin: true, // El bot necesita ser admin para poder dar admin
+  hideCmd: true,
 
   async run({
     sock,

@@ -4,6 +4,7 @@ import type { CommandPlugin } from "./commands.d.ts";
 
 export type ExtendedWASocket = WASocket & {
   isSubBot?: boolean;
+  botType?: "Principal" | "Prem-Bot" | "Sub-Bot";
   subBotId?: string;
   sessionName?: string;
   manualLogout?: boolean;
@@ -14,11 +15,14 @@ export interface ConnectionOptions {
   pairingMethod?: "qr" | "code";
   allowPairing?: boolean;
   pairingPhone?: string;
+  botType?: "Prem-Bot" | "Sub-Bot";
+  premiumToken?: string;
+  requesterJid?: string;
   onSocketCreated?: (socket: ExtendedWASocket) => Promise<void> | void;
   pairingTimeoutMs?: number;
   onQr?: (qr: string) => Promise<void> | void;
   onPairingCode?: (code: string) => Promise<void> | void;
-  onConnected?: () => Promise<void> | void;
+  onConnected?: (botType?: "Prem-Bot" | "Sub-Bot") => Promise<void> | void;
   onPairingError?: (error: Error) => Promise<void> | void;
   onPairingExpired?: () => Promise<void> | void;
   onDisconnected?: () => Promise<void> | void;
@@ -29,17 +33,27 @@ export interface SubBotLinkRequest {
   requester: string;
   method: "qr" | "code";
   phoneNumber?: string;
+  botType?: "Prem-Bot" | "Sub-Bot";
+  premiumToken?: string;
   onQr?: (qr: string) => Promise<void> | void;
   onPairingCode?: (code: string) => Promise<void> | void;
-  onConnected?: () => Promise<void> | void;
+  onConnected?: (botType?: "Prem-Bot" | "Sub-Bot") => Promise<void> | void;
   onPairingError?: (error: Error) => Promise<void> | void;
   onPairingExpired?: () => Promise<void> | void;
   onSessionClosed?: (reason: string) => Promise<void> | void;
 }
 
 export interface PremBotLinkRequest {
-  token?: string,
-  SubBotLinkRequiest: []
+  requester: string;
+  token: string;
+  method: "qr" | "code";
+  phoneNumber?: string;
+  onQr?: (qr: string) => Promise<void> | void;
+  onPairingCode?: (code: string) => Promise<void> | void;
+  onConnected?: (botType?: "Prem-Bot" | "Sub-Bot") => Promise<void> | void;
+  onPairingError?: (error: Error) => Promise<void> | void;
+  onPairingExpired?: () => Promise<void> | void;
+  onSessionClosed?: (reason: string) => Promise<void> | void;
 }
 
 export interface ContactMetadata {

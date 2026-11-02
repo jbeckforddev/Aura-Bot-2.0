@@ -3,7 +3,7 @@
     "name": "Ichika Nakano",
     "rarity": "Epic",
     "type": "Asesino",
-    "source": "Gotoubun no Hanayome",
+    "sourge": "Gotoubun no Hanayome",
     "value": 4000,
     "img": [
       {
@@ -52,7 +52,7 @@
     "name": "Yotsuba Nakano",
     "rarity": "Epic",
     "type": "Soporte",
-    "source": "Gotoubun no Hanayome",
+    "sourge": "Gotoubun no Hanayome",
     "value": 4000,
     "img": [
       {
@@ -101,7 +101,7 @@
     "name": "Itsuki Nakano",
     "rarity": "Epic",
     "type": "Defensor",
-    "source": "Gotoubun no Hanayome",
+    "sourge": "Gotoubun no Hanayome",
     "value": 4000,
     "img": [
       {
@@ -150,7 +150,7 @@
     "name": "Ochaco Uraraka",
     "rarity": "Epic",
     "type": "Asesina",
-    "source": "My Hero Academia",
+    "sourge": "My Hero Academia",
     "value": 4000,
     "img": [
       {

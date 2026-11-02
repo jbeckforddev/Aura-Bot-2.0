@@ -3,7 +3,7 @@
     "name": "Miku Nakano",
     "rarity": "Mitic",
     "type": "Support",
-    "source": "Gotoubun no Hanayome",
+    "sourge": "Gotoubun no Hanayome",
     "value": 4500,
     "img": [
       {"id": 21, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Miku%20Nacano/images.jpeg"},
@@ -22,7 +22,7 @@
     "name": "Katsuki Bakugo",
     "rarity": "Mitic",
     "type": "Atacante",
-    "source": "My Hero Academia",
+    "sourge": "My Hero Academia",
     "value": 4500,
     "img": [
       {"id": 151, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Katsuki%20Bakugo/Katsuki%20Bakugo/1.webp"},
@@ -41,7 +41,7 @@
     "name": "Shoto Todoroki",
     "rarity": "Mitic",
     "type": "Atacante",
-    "source": "My Hero Academia",
+    "sourge": "My Hero Academia",
     "value": 4500,
     "img": [
       {"id": 161, "url": "https://ik.imagekit.io/Aurareedimages/Gacha%20Images/Shoto%20Todoroki/Shoto%20Todoroki/1.jpg"},

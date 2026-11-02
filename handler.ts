@@ -22,6 +22,7 @@ import {
 } from "./core/socketText.ts";
 import { db, lookupUserLanguage, lookupGroupLanguage, setGroupUpdateListener } from "./database/AuraDB.ts";
 import { resolveBotType } from "./core/botType.ts";
+import { isPremiumTokenValidForAccount } from "./core/premiumTokens.ts";
 import { withLocale } from "./src/langs/index.ts";
 import {
   handleGroupStatus,
@@ -741,7 +742,19 @@ async function handleMessageInternal(
         ? runtimeDb.hasRole(senderNum, "premium")
         : senderRoles.premium);
 
-    const botType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
+    const storedBotType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
+    const premiumToken = String(storedBot?.data?.premiumToken ?? "");
+    const hasValidPremiumToken =
+      storedBotType === "Prem-Bot" &&
+      Boolean(premiumToken) &&
+      isPremiumTokenValidForAccount(premiumToken, botJid);
+    const botType =
+      sock.botType ??
+      (storedBotType === "Prem-Bot" && !hasValidPremiumToken
+        ? sock.isSubBot
+          ? "Sub-Bot"
+          : "Principal"
+        : storedBotType);
     const isSubBotInstance = botType === "Sub-Bot";
     const isPremBotInstance = botType === "Prem-Bot";
     const isMainBotInstance = !isSubBotInstance && !isPremBotInstance;
@@ -964,6 +977,7 @@ async function handleMessageInternal(
               : isAdmin
                 ? "ADMIN"
                 : "USUARIO",
+        botType,
         cmdName,
         prefix: usedPrefix,
         isGroup,
