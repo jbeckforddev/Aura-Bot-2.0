@@ -11,7 +11,7 @@
     "build": "tsc --noEmit false --outDir dist",
     "refresh:reaction": "tsx scripts/refresh-reaction-videos.ts",
     "refresh:reactionV2": "tsx scripts/refresh-reaction-videos-delirius.ts",
-    "postinstall": "patch-package",
+    "postinstall": "node patch-libsignal.js",
     "format": "prettier --write .",
     "lint": "eslint . --ext .ts"
   },
