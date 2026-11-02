@@ -10,6 +10,7 @@ import makeWASocket, {
 import chalk from "chalk";
 import pino from "pino";
 import { mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import qrcodeTerminal from "qrcode-terminal";
@@ -268,11 +269,16 @@ async function connectSocket(sessionName: string) {
   connectionsInProgress.add(sessionName);
 
   let authState: Awaited<ReturnType<typeof useSQLiteAuthState>>;
+  const sessionDir = path.resolve(
+    globalThis.mainBotSession ?? "./sessions",
+    sessionName,
+  );
+  const hasSavedSession = existsSync(path.join(sessionDir, "session.db"));
 
   try {
-    const sessionDir = path.join(
-      globalThis.mainBotSession ?? "./sessions",
-      sessionName,
+    logInfo(
+      `Buscando sesión ${sessionName} en ${sessionDir}${hasSavedSession ? "" : " (sin archivo de sesión)"}.`,
+      hasSavedSession ? "info" : "warn",
     );
     await mkdir(sessionDir, { recursive: true });
     authState = await useSQLiteAuthState(sessionDir);
@@ -286,6 +292,10 @@ async function connectSocket(sessionName: string) {
 
   const isRegistered = Boolean(
     state.creds && (state.creds.registered || state.creds.me),
+  );
+  logInfo(
+    `Sesión ${sessionName}: ${isRegistered ? "credenciales registradas encontradas" : "no tiene credenciales registradas"}.`,
+    isRegistered ? "success" : "warn",
   );
 
   let pairingMethod: "qr" | "code" | undefined;

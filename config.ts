@@ -3,6 +3,11 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";
 
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = fs.existsSync(path.join(configDir, "package.json"))
+  ? configDir
+  : path.dirname(configDir);
+
 export function setupCustomTmp(): string {
   const customTmpDir =
     process.env.GLOBAL_CUSTOM_TMP || path.join(process.cwd(), "./cache");
@@ -94,12 +99,9 @@ globalThis.DEFAULT_USER_ROLES = [
 ];
 
 // Directorio de sesiones de bots
-globalThis.mainBotSession = "./sessions";
-globalThis.subBotSession = "./sessions/subs";
-globalThis.premBotSession = "./sessions/prem";
-globalThis.DATA_BASE_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "data",
-);
+globalThis.mainBotSession = path.join(projectRoot, "sessions");
+globalThis.subBotSession = path.join(projectRoot, "sessions", "subs");
+globalThis.premBotSession = path.join(projectRoot, "sessions", "prem");
+globalThis.DATA_BASE_DIR = path.join(projectRoot, "data");
 
 globalThis.mainSocket = null;
