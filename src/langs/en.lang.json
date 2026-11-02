@@ -1,4 +1,6 @@
 {
+  "groupLeaveDescription": "Make the bot leave the current group.",
+  "groupLeaveConfirm": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐓𝐇𝐄 𝐁𝐎𝐓 𝐖𝐈𝐋𝐋 𝐋𝐄𝐀𝐕𝐄 𝐓𝐇𝐄 𝐆𝐑𝐎𝐔𝐏\n╰━━━━━━━━━━━━⬣\n┃ > The bot is leaving this group at the owner's request.",
   "commandNotFound": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃\n╰━━━━━━━━━━━━⬣\n┃ > The command `{{cmdName}}` does not exist\n┃ > or is misspelled.\n┃ > Run `{{prefix}}menu` to see\n┃ > the available commands.",
   "commandError": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐄𝐑𝐑𝐎𝐑\n╰━━━━━━━━━━━━⬣\n┃ > An error occurred while running\n┃ > the command `{{cmdName}}`.\n\n> Error details:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐏𝐄𝐑𝐌𝐈𝐒𝐒𝐈𝐎𝐍 𝐃𝐄𝐍𝐈𝐄𝐃\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > when the bot is a group administrator.",
