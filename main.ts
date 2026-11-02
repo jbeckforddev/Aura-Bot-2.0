@@ -131,14 +131,7 @@ async function mainBot() {
 
   const instanceRole = (process.env.INSTANCE_ROLE || "").trim().toLowerCase();
   const shouldStartMainBot = instanceRole !== "sub" && instanceRole !== "subs";
-  const shouldStartSubBots = process.env.DISABLE_SUBBOTS !== "true" && instanceRole !== "main";
-
-  if (shouldStartMainBot) {
-    logInfo("Conectando a WhatsApp...");
-    await connectMainBot("main");
-  } else {
-    logInfo(`Instancia configurada exclusivamente para subbots (INSTANCE_ROLE=${instanceRole}).`, "info");
-  }
+  const shouldStartSubBots = process.env.DISABLE_SUBBOTS !== "true";
 
   if (shouldStartSubBots) {
     startPremiumExpiryMonitor();
@@ -151,6 +144,13 @@ async function mainBot() {
       });
   } else {
     logInfo(`Subbots desactivados para esta instancia (INSTANCE_ROLE=${instanceRole || "main"}).`, "info");
+  }
+
+  if (shouldStartMainBot) {
+    logInfo("Conectando a WhatsApp...");
+    await connectMainBot("main");
+  } else {
+    logInfo(`Instancia configurada exclusivamente para subbots (INSTANCE_ROLE=${instanceRole}).`, "info");
   }
 }
 

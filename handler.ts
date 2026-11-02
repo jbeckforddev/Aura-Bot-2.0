@@ -727,20 +727,15 @@ async function handleMessageInternal(
       rawSenderLid,
       sock,
     );
-    const senderRoles = runtimeDb.hasRoles(sender, [
-      "owner",
-      "coowner",
-      "mod",
-      "premium",
-    ]);
+    const senderRoles = runtimeDb.hasRoles(
+      sender,
+      ["owner", "coowner", "mod", "premium"],
+      senderLid || undefined,
+    );
     const isOwner = configuredOwner || senderRoles.owner;
     const isCoOwner = configuredCoOwner || senderRoles.coowner;
     const isMod = isOwner || isCoOwner || senderRoles.mod;
-    const isPremium =
-      isMod ||
-      (sender.endsWith("@lid")
-        ? runtimeDb.hasRole(senderNum, "premium")
-        : senderRoles.premium);
+    const isPremium = isMod || senderRoles.premium;
 
     const storedBotType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
     const premiumToken = String(storedBot?.data?.premiumToken ?? "");

@@ -270,8 +270,8 @@ export interface IDatabase {
   getAllUsers(): DatabaseUser[];
   getAllBots(): DatabaseBot[];
   getActiveBots?(): DatabaseBot[];
-  hasRoles(jid: string, roles: string[]): Record<string, boolean>;
-  hasRole(jid: string, role: UserRole | string): boolean;
+  hasRoles(jid: string, roles: string[], lid?: string): Record<string, boolean>;
+  hasRole(jid: string, role: UserRole | string, lid?: string): boolean;
   setRole(jid: string, role: UserRole | string): void;
   syncDefaultUserRoles(): void;
   isBanned(jid: string): boolean;

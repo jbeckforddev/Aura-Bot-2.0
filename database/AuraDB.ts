@@ -322,6 +322,7 @@ for (const column of Object.values(ECONOMY_LAST_COLUMNS)) {
 db_instance.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_lid ON users(lid);
   CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
+  CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
   CREATE INDEX IF NOT EXISTS idx_bots_bot_id ON bots(bot_id);
   CREATE INDEX IF NOT EXISTS idx_bots_lid ON bots(lid);
   CREATE INDEX IF NOT EXISTS idx_bots_status_type ON bots(status, bot_type);
@@ -873,39 +874,57 @@ function persistEconomyLasts(
   }
 }
 
-const userStmtCache = new Map<string, ReturnType<typeof db_instance.prepare>>();
+const userStmtCache = new Map<
+  string,
+  DataBase.Statement<unknown[], unknown>
+>();
 
-function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
+function getUserRows(input: string, lid?: string | null): UserDbRow[] {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
-  const candidates = [rawInput, key, key ? `${key}@s.whatsapp.net` : ""].filter(
-    Boolean,
-  );
-  const conditions = candidates.flatMap(() => ["jid = ?", "lid = ?"]);
-  const values = candidates.flatMap((candidate) => [candidate, candidate]);
+  const isLid = rawInput.endsWith("@lid");
+  const candidates = [...new Set(
+    (isLid
+      ? [rawInput]
+      : [rawInput, key, key ? `${key}@s.whatsapp.net` : ""]
+    ).filter(Boolean),
+  )];
+  const conditions: string[] = [];
+  const values: string[] = [];
+  const addIdentity = (identity: string) => {
+    conditions.push("jid = ?", "lid = ?");
+    values.push(identity, identity);
+  };
+  if (rawInput) addIdentity(rawInput);
+  if (lid) addIdentity(lid);
+  for (const candidate of candidates.slice(1)) addIdentity(candidate);
 
-  if (lid) {
-    conditions.push("lid = ?");
-    values.push(lid);
-  }
-
-  // Sin condiciones no se puede construir una WHERE válida → nada que buscar.
-  if (conditions.length === 0) return undefined;
+  if (conditions.length === 0) return [];
 
   const queryKey = conditions.join(" OR ");
   let stmt = userStmtCache.get(queryKey);
   if (!stmt) {
-    stmt = db_instance.prepare(`SELECT * FROM users WHERE ${queryKey} LIMIT 1`);
+    const orderBy = conditions
+      .map((condition, index) => `WHEN ${condition} THEN ${index}`)
+      .join(" ");
+    stmt = db_instance.prepare(
+      `SELECT * FROM users WHERE ${queryKey} ORDER BY CASE ${orderBy} ELSE ${conditions.length} END, CASE WHEN jid IS NOT NULL THEN 0 ELSE 1 END`,
+    );
     userStmtCache.set(queryKey, stmt);
   }
 
-  return (stmt as any).get(...values) as UserDbRow | undefined;
+  const params = [...values, ...values];
+  return stmt.all(...params) as UserDbRow[];
+}
+
+function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
+  return getUserRows(input, lid)[0];
 }
 
 function getUser(input: string): DatabaseUser {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
-  const cached = userMemoryCache.get(rawInput) ?? userMemoryCache.get(key);
+  const cached = userMemoryCache.get(rawInput);
   if (cached) {
     return { ...cached, data: { ...cached.data } };
   }
@@ -945,7 +964,6 @@ function getUser(input: string): DatabaseUser {
     userMemoryCache.set(rawInput, result);
     if (result.jid) userMemoryCache.set(result.jid, result);
     if (result.lid) userMemoryCache.set(result.lid, result);
-    if (key) userMemoryCache.set(key, result);
     return result;
   }
 
@@ -986,7 +1004,6 @@ function getUser(input: string): DatabaseUser {
   userMemoryCache.set(rawInput, result);
   if (result.jid) userMemoryCache.set(result.jid, result);
   if (result.lid) userMemoryCache.set(result.lid, result);
-  if (key) userMemoryCache.set(key, result);
   return result;
 }
 
@@ -1771,19 +1788,32 @@ export const db: IDatabase = {
     return rows.map(mapBotRow);
   },
 
-  hasRoles(jid: string, roles: string[]) {
-    const userRole = getUser(jid)?.role;
+  hasRoles(jid: string, roles: string[], lid?: string) {
+    const users = getUserRows(jid, lid);
     return Object.fromEntries(
-      roles.map((role) => [role, hasRoleLevel(userRole, role)]),
+      roles.map((role) => [
+        role,
+        users.length === 0
+          ? hasRoleLevel("user", role)
+          : users.some((user) => hasRoleLevel(user.role, role)),
+      ]),
     ) as Record<string, boolean>;
   },
 
-  hasRole(jid: string, role: string) {
-    return hasRoleLevel(getUser(jid)?.role, role);
+  hasRole(jid: string, role: string, lid?: string) {
+    const users = getUserRows(jid, lid);
+    return users.length === 0
+      ? hasRoleLevel("user", role)
+      : users.some((user) => hasRoleLevel(user.role, role));
   },
 
   setRole(jid: string, role: string) {
     const normalizedRole = hierarchy.includes(role as UserRole) ? role : "user";
+    const user = getUserRow(jid);
+    if (user?.jid) {
+      this.setUser(user.jid, { role: normalizedRole, lid: user.lid });
+      return;
+    }
     this.setUser(jid, { role: normalizedRole });
   },
 
