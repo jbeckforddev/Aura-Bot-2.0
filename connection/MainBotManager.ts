@@ -258,7 +258,17 @@ const botStartTime = Math.floor(Date.now() / 1000);
 export async function connectMainBot(
   sessionName: string,
 ) {
-  return connectSocket(sessionName);
+  try {
+    return await connectSocket(sessionName);
+  } catch (error) {
+    connectionsInProgress.delete(sessionName);
+    logInfo(
+      `No se pudo iniciar el socket principal para ${sessionName}: ${String(error)}. Se conservará la sesión y se reintentará.`,
+      "error",
+    );
+    scheduleReconnect(5000, sessionName);
+    return null;
+  }
 }
 
 async function connectSocket(sessionName: string) {
@@ -460,6 +470,10 @@ async function connectSocket(sessionName: string) {
   };
 
   sock.ev.on("connection.update", async (u) => {
+    if (u.connection === "connecting") {
+      logInfo(`Conectando el bot principal con la sesión ${sessionName}...`, "info");
+    }
+
     if (u.qr && pairingMethod === "qr") {
       logInfo("Escanea este código QR con WhatsApp para vincular al bot.", "pairing");
       qrcodeTerminal.generate(u.qr, { small: true });
