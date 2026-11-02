@@ -1,3 +1,43 @@
+diff --git a/node_modules/libsignal/src/session_cipher.js b/node_modules/libsignal/src/session_cipher.js
+index 0e6df11..262fbd3 100644
+--- a/node_modules/libsignal/src/session_cipher.js
++++ b/node_modules/libsignal/src/session_cipher.js
+@@ -11,6 +11,7 @@ const protobufs = require('./protobufs');
+ const queueJob = require('./queue_job');
+ 
+ const VERSION = 3;
++let hasLoggedDecryptFailure = false;
+ 
+ function assertBuffer(value) {
+     if (!(value instanceof Buffer)) {
+@@ -140,7 +141,6 @@ class SessionCipher {
+         if (!sessions.length) {
+             throw new errors.SessionError("No sessions available");
+         }
+-        const errs = [];
+         for (const session of sessions) {
+             let plaintext;
+             try {
+@@ -150,13 +150,13 @@ class SessionCipher {
+                     session,
+                     plaintext
+                 };
+-            } catch(e) {
+-                errs.push(e);
+-            }
++            } catch {}
+         }
+-        console.error("Failed to decrypt message with any known session...");
+-        for (const e of errs) {
+-            console.error("Session error:" + e, e.stack);
++        if (!hasLoggedDecryptFailure) {
++            console.warn(
++                "Failed to decrypt a message with known sessions; further libsignal decrypt errors will be suppressed."
++            );
++            hasLoggedDecryptFailure = true;
+         }
+         throw new errors.SessionError("No matching sessions found for message");
+     }
 diff --git a/node_modules/libsignal/src/session_record.js b/node_modules/libsignal/src/session_record.js
 index 7626a39..e9a95f0 100644
 --- a/node_modules/libsignal/src/session_record.js
