@@ -34,6 +34,7 @@ export default {
   ownerOnly: false,
   description: "Reporta y bloquea un número de forma masiva y escalonada usando los subbots activos.",
   cooldown: 8,
+  modOnly: true,
 
   async run(ctx: CommandContext) {
     const { args, reply, react, sock } = ctx;
