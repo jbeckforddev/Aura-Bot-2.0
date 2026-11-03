@@ -716,6 +716,7 @@ async function connectSubBot(
       DisconnectReason.connectionClosed,
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
+      500,
       408,
       428,
       515,

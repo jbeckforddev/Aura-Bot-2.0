@@ -511,6 +511,7 @@ async function connectPremBotNow(
         DisconnectReason.connectionClosed,
         DisconnectReason.timedOut,
         DisconnectReason.restartRequired,
+        500,
         408,
         428,
         515,
