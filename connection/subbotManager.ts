@@ -116,6 +116,19 @@ function enqueueReconnect(task: () => Promise<void>) {
   processReconnectQueue();
 }
 
+export function runWithReconnectSlot<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    reconnectQueue.push(async () => {
+      try {
+        resolve(await task());
+      } catch (error) {
+        reject(error);
+      }
+    });
+    processReconnectQueue();
+  });
+}
+
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 
 function createBoundedCacheStore(max: number, ttl: number) {

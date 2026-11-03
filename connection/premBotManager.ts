@@ -52,6 +52,7 @@ import type {
 import {
   getActiveSubBots,
   reconnectSubBot,
+  runWithReconnectSlot,
   suspendSubBot,
 } from "./subbotManager.ts";
 
@@ -272,6 +273,13 @@ function scheduleReconnect(
 }
 
 async function connectPremBot(
+  sessionName: string,
+  options: ConnectionOptions,
+): Promise<ExtendedWASocket | null> {
+  return runWithReconnectSlot(() => connectPremBotNow(sessionName, options));
+}
+
+async function connectPremBotNow(
   sessionName: string,
   options: ConnectionOptions,
 ): Promise<ExtendedWASocket | null> {
