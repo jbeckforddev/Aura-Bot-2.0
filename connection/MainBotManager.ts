@@ -8,7 +8,6 @@ import makeWASocket, {
   type proto,
 } from "baileys";
 import chalk from "chalk";
-import pino from "pino";
 import { mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -23,7 +22,7 @@ import {
   GROUP_METADATA_CACHE,
 } from "../handler.ts";
 import { getPlugins } from "../core/cmdLoader.ts";
-import { logInfo, pairingMenuLog } from "../core/logger.ts";
+import { logInfo, operationLogger, pairingMenuLog } from "../core/logger.ts";
 import { db } from "../database/AuraDB.ts";
 import { resolveBotType } from "../core/botType.ts";
 import {
@@ -39,7 +38,7 @@ import type {
 } from "../types/index";
 import { t } from "../src/langs/index.ts";
 
-export const logger = pino({ level: "silent" });
+export const logger = operationLogger.child({ component: "main-bot" });
 
 const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -60,6 +59,14 @@ let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
 
 export const GroupCache = new LRUCache({max: 1000, ttl: 5 * 60, ttlAutopurge: true })
+
+function formatDisconnectData(data: unknown): string {
+  try {
+    return JSON.stringify(data) ?? String(data);
+  } catch {
+    return String(data);
+  }
+}
 
 function createBoundedCacheStore(max: number, ttl: number) {
   const cache = new LRUCache<string, any>({ max, ttl });
@@ -592,7 +599,11 @@ async function connectSocket(sessionName: string) {
     }
 
     const error = u.lastDisconnect?.error as
-      | (Error & { output?: { statusCode?: number }; statusCode?: number })
+      | (Error & {
+          data?: unknown;
+          output?: { statusCode?: number };
+          statusCode?: number;
+        })
       | undefined;
     const boomError = error ? new Boom(error) : null;
     const statusCode =
@@ -606,7 +617,7 @@ async function connectSocket(sessionName: string) {
     await closeAuthStateSafely();
     
     logInfo(
-      `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}`,
+      `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}${error?.data === undefined ? "" : `. Datos: ${formatDisconnectData(error.data)}`}`,
       statusCode === 0 ? "warn" : "error",
     );
 

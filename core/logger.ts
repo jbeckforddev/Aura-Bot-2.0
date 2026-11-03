@@ -1,5 +1,72 @@
 import chalk from "chalk";
+import pino from "pino";
+import { createWriteStream, mkdirSync } from "node:fs";
+import path from "node:path";
+import { format, stripVTControlCharacters } from "node:util";
 import type { BotType } from "./botType.ts";
+
+const configuredLogPath = path.resolve(
+  process.env.AURA_LOG_FILE || "data/log/log.log",
+);
+const logPath = path.parse(configuredLogPath);
+const startupId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid}`;
+const logFilePath = path.join(
+  logPath.dir,
+  `${logPath.name}-${startupId}${logPath.ext || ".log"}`,
+);
+mkdirSync(logPath.dir, { recursive: true });
+
+const logFile = createWriteStream(logFilePath, { flags: "wx" });
+const terminal = {
+  log: console.log.bind(console),
+  info: console.info.bind(console),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+  debug: console.debug.bind(console),
+};
+
+logFile.on("error", (error) => {
+  terminal.error(`No se pudo escribir el archivo de logs ${logFilePath}:`, error);
+});
+
+export const operationLogger = pino({ level: "silent" });
+
+type OperationLogLevel =
+  | "info"
+  | "warn"
+  | "error"
+  | "alert"
+  | "pairing"
+  | "success"
+  | "httpError"
+  | "httpWarn"
+  | "httpInfo"
+  | "httpSuccess"
+  | "debug";
+
+function captureConsole(
+  level: OperationLogLevel,
+  output: (...args: any[]) => void,
+  args: any[],
+): void {
+  const message = stripVTControlCharacters(format(...args));
+  logFile.write(
+    `${JSON.stringify({
+      time: new Date().toISOString(),
+      level,
+      source: "console",
+      msg: message,
+    })}\n`,
+  );
+  output(...args);
+}
+
+console.log = (...args) => captureConsole("info", terminal.log, args);
+console.info = (...args) => captureConsole("info", terminal.info, args);
+console.warn = (...args) => captureConsole("warn", terminal.warn, args);
+console.error = (...args) => captureConsole("error", terminal.error, args);
+console.debug = (...args) => captureConsole("debug", terminal.debug, args);
+console.info(`Guardando logs de operación en ${logFilePath}.`);
 
 export type CmdLogInput = {
   numeroReal?: string | null;
@@ -76,7 +143,7 @@ export function cmdLog({
 
 export function logInfo(
   message: string,
-  level: | "info" | "warn" | "error" | "alert" | "pairing" | "success" | "success" | "httpError" | "httpWarn" | "httpInfo" | "httpSuccess" = "info",
+  level: OperationLogLevel = "info",
 ): void {
   const prefixMap = {
     info: chalk.bgCyan.bold("[INFO]"),
@@ -90,7 +157,9 @@ export function logInfo(
     httpInfo: chalk.bgCyan.bold("[HTTP INFO]"),
     httpSuccess: chalk.bgGreen.bold("[HTTP SUCCESS]"),
   };
-  console.log(`${prefixMap[level]} ${chalk.white(message)}`);
+  captureConsole(level, terminal.log, [
+    `${prefixMap[level]} ${chalk.white(message)}`,
+  ]);
 }
 
 export function pairingMenuLog() {

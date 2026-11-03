@@ -8,7 +8,6 @@ import makeWASocket, {
   type proto,
 } from "baileys";
 import { Boom } from "@hapi/boom";
-import pino from "pino";
 import { LRUCache } from "lru-cache";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -33,7 +32,7 @@ import {
   releasePremiumTokenReservation,
   reservePremiumToken,
 } from "../core/premiumTokens.ts";
-import { logInfo } from "../core/logger.ts";
+import { logInfo, operationLogger } from "../core/logger.ts";
 import { resolveBotType } from "../core/botType.ts";
 import {
   registerActiveBot,
@@ -62,7 +61,7 @@ const ACTIVE_PREM_BOTS = new Map<string, ExtendedWASocket>();
 const PENDING_PREM_REQUESTS = new Map<string, Promise<string>>();
 const RECONNECT_PREM_TIMERS = new Map<string, NodeJS.Timeout>();
 const RECONNECT_PREM_ATTEMPTS = new Map<string, number>();
-const PREM_BOT_LOGGER = pino({ level: "silent" });
+const PREM_BOT_LOGGER = operationLogger.child({ component: "prem-bot" });
 const recentMessages = new LRUCache<string, proto.IMessage>({
   max: 1000,
   ttl: 15 * 60 * 1000,

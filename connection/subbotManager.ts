@@ -8,7 +8,6 @@ import makeWASocket, {
   type proto,
 } from "baileys";
 import { Boom } from "@hapi/boom";
-import pino from "pino";
 import { LRUCache } from "lru-cache";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
@@ -39,7 +38,7 @@ import {
   isPremiumTokenValidForAccount,
 } from "../core/premiumTokens.ts";
 import { resolveBotType } from "../core/botType.ts";
-import { logInfo } from "../core/logger.ts";
+import { logInfo, operationLogger } from "../core/logger.ts";
 import { t } from "../src/langs/index.ts";
 import type {
   ConnectionOptions,
@@ -56,7 +55,7 @@ const connectionsInProgress = new Set<string>();
 const reconnectTimers = new Map<string, NodeJS.Timeout>();
 const reconnectAttempts = new Map<string, number>();
 const managedReconnects = new Map<string, Promise<void>>();
-const subBotLogger = pino({ level: "silent" });
+const subBotLogger = operationLogger.child({ component: "sub-bot" });
 
 // Caché en memoria para mensajes recientes (evita fallos de descifrado y permite retransmisión)
 const recentMessagesCache = new LRUCache<string, proto.IMessage>({
