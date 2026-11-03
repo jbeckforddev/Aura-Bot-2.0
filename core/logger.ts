@@ -76,7 +76,7 @@ export function cmdLog({
 
 export function logInfo(
   message: string,
-  level: | "info" | "warn" | "error" | "alert" | "pairing" | "success" | "success" = "info",
+  level: | "info" | "warn" | "error" | "alert" | "pairing" | "success" | "success" | "httpError" | "httpWarn" | "httpInfo" | "httpSuccess" = "info",
 ): void {
   const prefixMap = {
     info: chalk.bgCyan.bold("[INFO]"),
@@ -85,6 +85,10 @@ export function logInfo(
     success: chalk.bgGreen.bold("[SUCCESS]"),
     alert: chalk.bgHex("#ff8000").bold("[ALERT]"),
     pairing: chalk.bgBlue.bold("[PAIRING]"),
+    httpError: chalk.bgRed.bold("[HTTP ERROR]"),
+    httpWarn: chalk.bgYellow.bold("[HTTP WARN]"),
+    httpInfo: chalk.bgCyan.bold("[HTTP INFO]"),
+    httpSuccess: chalk.bgGreen.bold("[HTTP SUCCESS]"),
   };
   console.log(`${prefixMap[level]} ${chalk.white(message)}`);
 }

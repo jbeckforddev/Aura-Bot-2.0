@@ -49,6 +49,10 @@ export const DL_CONFIG = {
     BASE_URL: "https://nekos.best/api/v2",
     API_KEY: null,
   },
+  evogbApi: {
+    BASE_URL: "https://api.evogb.org",
+    API_KEY: "evogb-4lhGsnmK",
+  }
 };
 export const GAMES_CONFIG = {
   pokeApi:{

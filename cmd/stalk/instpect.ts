@@ -31,7 +31,7 @@ function getTextValue(value: unknown, fallback: string): string {
 export default {
   name: ["inspect", "inspeccionar"],
   description: t("cmd_inspecciona_un_enlace_de_grupo_7ad2570a"),
-  category: "herramientas",
+  category: "stalk",
 
   async run({ sock, text, reply }: CommandContext) {
     const link = text.trim();
