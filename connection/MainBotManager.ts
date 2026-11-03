@@ -624,7 +624,7 @@ async function connectSocket(sessionName: string) {
     const currentIsRegistered = Boolean(
       state.creds && (state.creds.registered || state.creds.me),
     );
-    const isNotRegistered = !currentIsRegistered;
+    const isNotRegistered = !hasConnected && !currentIsRegistered;
 
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
     if (disconnectedBotJid) {
@@ -670,6 +670,7 @@ async function connectSocket(sessionName: string) {
       DisconnectReason.connectionClosed,
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
+      500,
       408,
       428,
       515,
