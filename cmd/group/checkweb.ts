@@ -29,6 +29,7 @@ interface ChatMessageItem {
   reactions?: Record<string, string>;
   rawKey?: any;
   rawMessage?: any;
+  mediaNode?: any;
 }
 
 interface ChatSessionItem {
@@ -90,8 +91,13 @@ interface WebPanelState {
   reportRegistry: Map<string, ReportRecord>;
   botChatStores: Map<string, Map<string, ChatSessionItem>>;
   botGroupSynced: Set<string>;
+  botGroupSyncing: Set<string>;
   mediaStore: Map<string, MediaBufferItem>;
+  thumbStore: Map<string, Buffer>;
+  mediaDownloading: Map<string, Promise<MediaBufferItem | null>>;
+  msgLookup: Map<string, { botKey: string; msg: ChatMessageItem }>;
   avatarCache: Map<string, string>;
+  avatarPending: Set<string>;
   callLogs: CallLogItem[];
   autoRejectCalls: boolean;
   autoRejectMessage: string;
@@ -122,8 +128,13 @@ if (!gState.__auraWebPanel) {
     reportRegistry: new Map(),
     botChatStores: new Map(),
     botGroupSynced: new Set(),
+    botGroupSyncing: new Set(),
     mediaStore: new Map(),
+    thumbStore: new Map(),
+    mediaDownloading: new Map(),
+    msgLookup: new Map(),
     avatarCache: new Map(),
+    avatarPending: new Set(),
     callLogs: [],
     autoRejectCalls: false,
     autoRejectMessage: "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje de texto.",
@@ -136,9 +147,14 @@ const state = gState.__auraWebPanel!;
 if (!state.pausedBotIds) state.pausedBotIds = new Set<string>();
 if (!state.botChatStores) state.botChatStores = new Map();
 if (!state.botGroupSynced) state.botGroupSynced = new Set();
+if (!state.botGroupSyncing) state.botGroupSyncing = new Set();
 if (!state.reportRegistry) state.reportRegistry = new Map();
 if (!state.mediaStore) state.mediaStore = new Map();
+if (!state.thumbStore) state.thumbStore = new Map();
+if (!state.mediaDownloading) state.mediaDownloading = new Map();
+if (!state.msgLookup) state.msgLookup = new Map();
 if (!state.avatarCache) state.avatarCache = new Map();
+if (!state.avatarPending) state.avatarPending = new Set();
 if (!state.callLogs) state.callLogs = [];
 if (state.autoRejectCalls === undefined) state.autoRejectCalls = false;
 if (!state.autoRejectMessage) {
@@ -162,9 +178,18 @@ async function getBaileysModule(): Promise<any> {
 function saveMediaToStore(id: string, mime: string, buffer: Buffer) {
   if (!id || !buffer || !buffer.length) return;
   state.mediaStore.set(id, { mime, buffer, createdAt: Date.now() });
-  if (state.mediaStore.size > 180) {
+  if (state.mediaStore.size > 120) {
     const oldestKey = state.mediaStore.keys().next().value;
     if (oldestKey) state.mediaStore.delete(oldestKey);
+  }
+}
+
+function saveThumbToStore(id: string, buffer: Buffer) {
+  if (!id || !buffer || !buffer.length) return;
+  state.thumbStore.set(id, buffer);
+  if (state.thumbStore.size > 250) {
+    const oldestKey = state.thumbStore.keys().next().value;
+    if (oldestKey) state.thumbStore.delete(oldestKey);
   }
 }
 
@@ -333,38 +358,59 @@ function extractMessageDetails(msgObj: any): {
   return empty;
 }
 
-async function downloadAndCacheMedia(botSock: any, fullMsg: any, msgId: string, details: ReturnType<typeof extractMessageDetails>) {
-  if (!details.mediaType || !details.mediaNode) return;
-  if (details.thumbBuffer && !state.mediaStore.has(msgId)) {
-    saveMediaToStore(msgId, "image/jpeg", details.thumbBuffer);
+async function downloadMediaBuffer(
+  botSock: any,
+  fullMsg: any,
+  msgId: string,
+  mediaType: "image" | "sticker" | "video" | "audio" | "document",
+  mediaMime: string,
+  mediaNode: any
+): Promise<MediaBufferItem | null> {
+  if (state.mediaStore.has(msgId)) {
+    return state.mediaStore.get(msgId)!;
   }
+  if (state.mediaDownloading.has(msgId)) {
+    return state.mediaDownloading.get(msgId)!;
+  }
+
+  const task = (async (): Promise<MediaBufferItem | null> => {
+    try {
+      const bMod = await getBaileysModule();
+      if (bMod && typeof bMod.downloadContentFromMessage === "function" && mediaNode) {
+        const dlType = mediaType === "sticker" ? "sticker" : mediaType;
+        const stream = await bMod.downloadContentFromMessage(mediaNode, dlType);
+        const chunks: Buffer[] = [];
+        for await (const chunk of stream) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 0) {
+          saveMediaToStore(msgId, mediaMime, buf);
+          return state.mediaStore.get(msgId) || null;
+        }
+      }
+      if (bMod && typeof bMod.downloadMediaMessage === "function" && fullMsg) {
+        const buf = await bMod.downloadMediaMessage(
+          fullMsg,
+          "buffer",
+          {},
+          { logger: undefined, reuploadRequest: botSock?.updateMediaMessage }
+        );
+        if (Buffer.isBuffer(buf) && buf.length > 0) {
+          saveMediaToStore(msgId, mediaMime, buf);
+          return state.mediaStore.get(msgId) || null;
+        }
+      }
+    } catch {}
+    return null;
+  })();
+
+  state.mediaDownloading.set(msgId, task);
   try {
-    const bMod = await getBaileysModule();
-    if (bMod && typeof bMod.downloadContentFromMessage === "function") {
-      const dlType = details.mediaType === "sticker" ? "sticker" : details.mediaType;
-      const stream = await bMod.downloadContentFromMessage(details.mediaNode, dlType);
-      const chunks: Buffer[] = [];
-      for await (const chunk of stream) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const buf = Buffer.concat(chunks);
-      if (buf.length > 0) {
-        saveMediaToStore(msgId, details.mediaMime, buf);
-        return;
-      }
-    }
-    if (bMod && typeof bMod.downloadMediaMessage === "function") {
-      const buf = await bMod.downloadMediaMessage(
-        fullMsg,
-        "buffer",
-        {},
-        { logger: undefined, reuploadRequest: botSock?.updateMediaMessage }
-      );
-      if (Buffer.isBuffer(buf) && buf.length > 0) {
-        saveMediaToStore(msgId, details.mediaMime, buf);
-      }
-    }
-  } catch {}
+    return await task;
+  } finally {
+    state.mediaDownloading.delete(msgId);
+  }
 }
 
 function recordChatMessage(
@@ -386,6 +432,7 @@ function recordChatMessage(
     quotedText?: string;
     rawKey?: any;
     rawMessage?: any;
+    mediaNode?: any;
   }
 ) {
   if (!remoteJid || remoteJid === "status@broadcast") return;
@@ -443,7 +490,7 @@ function recordChatMessage(
     session.unread = Math.min(999, session.unread + 1);
   }
 
-  session.messages.push({
+  const item: ChatMessageItem = {
     id: msgData.id,
     sender: msgData.sender,
     pushName: msgData.pushName,
@@ -460,10 +507,18 @@ function recordChatMessage(
     reactions: {},
     rawKey: msgData.rawKey,
     rawMessage: msgData.rawMessage,
-  });
+    mediaNode: msgData.mediaNode,
+  };
 
-  if (session.messages.length > 160) {
-    session.messages.splice(0, session.messages.length - 160);
+  session.messages.push(item);
+  state.msgLookup.set(item.id, { botKey, msg: item });
+  if (state.msgLookup.size > 800) {
+    const firstKey = state.msgLookup.keys().next().value;
+    if (firstKey) state.msgLookup.delete(firstKey);
+  }
+
+  if (session.messages.length > 150) {
+    session.messages.splice(0, session.messages.length - 150);
   }
 }
 
@@ -486,34 +541,67 @@ function getAllBotSockets(mainSock?: any): any[] {
   });
 }
 
-async function syncBotGroupsToStore(botSock: any, idx: number) {
+function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
   const botKey = getBotKey(botSock, idx);
-  if (state.botGroupSynced.has(botKey)) return;
-  state.botGroupSynced.add(botKey);
+  if (!force && state.botGroupSynced.has(botKey)) return;
+  if (state.botGroupSyncing.has(botKey)) return;
 
+  state.botGroupSyncing.add(botKey);
   const store = ensureBotChatMap(botKey);
-  if (typeof botSock?.groupFetchAllParticipating === "function") {
+
+  if (botSock?.chats && typeof botSock.chats === "object") {
     try {
-      const groups = await botSock.groupFetchAllParticipating();
-      for (const [jid, meta] of Object.entries(groups || {}) as Array<[string, any]>) {
-        const existing = store.get(jid);
-        if (!existing) {
-          store.set(jid, {
-            jid,
-            name: meta?.subject || `Grupo ${jid.split("@")[0]}`,
-            isGroup: true,
-            unread: 0,
-            lastTime: meta?.creation ? Number(meta.creation) * 1000 : Date.now() - 86400000,
-            lastPreview: `👥 ${meta?.participants?.length || 0} miembros`,
-            statusText: meta?.desc ? String(meta.desc).slice(0, 120) : "",
-            messages: [],
-          });
-        } else {
-          if (meta?.subject) existing.name = meta.subject;
-          if (meta?.desc) existing.statusText = String(meta.desc).slice(0, 120);
-        }
+      const entries = botSock.chats instanceof Map ? Array.from(botSock.chats.entries()) : Object.entries(botSock.chats);
+      for (const [jid, cObj] of entries as Array<[string, any]>) {
+        if (!jid || jid === "status@broadcast" || store.has(jid)) continue;
+        const isG = jid.endsWith("@g.us");
+        const clean = jid.split("@")[0].split(":")[0];
+        store.set(jid, {
+          jid,
+          name: cObj?.name || cObj?.subject || (isG ? `Grupo ${clean}` : `+${clean}`),
+          isGroup: isG,
+          unread: Number(cObj?.unreadCount || 0),
+          lastTime: Number(cObj?.conversationTimestamp || Date.now() - 120000),
+          lastPreview: isG ? "👥 Grupo sincronizado" : "💬 Chat activo",
+          messages: [],
+        });
       }
     } catch {}
+  }
+
+  if (typeof botSock?.groupFetchAllParticipating === "function") {
+    Promise.race([
+      botSock.groupFetchAllParticipating(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+    ])
+      .then((groups: any) => {
+        for (const [jid, meta] of Object.entries(groups || {}) as Array<[string, any]>) {
+          const existing = store.get(jid);
+          if (!existing) {
+            store.set(jid, {
+              jid,
+              name: meta?.subject || `Grupo ${jid.split("@")[0]}`,
+              isGroup: true,
+              unread: 0,
+              lastTime: meta?.creation ? Number(meta.creation) * 1000 : Date.now() - 86400000,
+              lastPreview: `👥 ${meta?.participants?.length || 0} miembros`,
+              statusText: meta?.desc ? String(meta.desc).slice(0, 120) : "",
+              messages: [],
+            });
+          } else {
+            if (meta?.subject) existing.name = meta.subject;
+            if (meta?.desc) existing.statusText = String(meta.desc).slice(0, 120);
+          }
+        }
+        state.botGroupSynced.add(botKey);
+      })
+      .catch(() => {})
+      .finally(() => {
+        state.botGroupSyncing.delete(botKey);
+      });
+  } else {
+    state.botGroupSynced.add(botKey);
+    state.botGroupSyncing.delete(botKey);
   }
 }
 
@@ -528,6 +616,7 @@ function hookSockets(mainSock?: any) {
 
     if (!state.hookedSockets.has(botSock)) {
       state.hookedSockets.add(botSock);
+      triggerBackgroundGroupSync(botSock, index);
 
       if (botSock.ev && typeof botSock.ev.on === "function") {
         botSock.ev.on("messages.upsert", ({ messages }: any) => {
@@ -568,8 +657,19 @@ function hookSockets(mainSock?: any) {
             const details = extractMessageDetails(m.message);
             if (!details.text && !details.mediaType) continue;
 
+            if (details.thumbBuffer) {
+              saveThumbToStore(msgId, details.thumbBuffer);
+            }
+
             if (details.mediaType) {
-              downloadAndCacheMedia(botSock, m, msgId, details).catch(() => {});
+              downloadMediaBuffer(
+                botSock,
+                m,
+                msgId,
+                details.mediaType,
+                details.mediaMime,
+                details.mediaNode
+              ).catch(() => {});
             }
 
             recordChatMessage(currentKey, remoteJid, {
@@ -587,6 +687,7 @@ function hookSockets(mainSock?: any) {
               quotedText: details.quotedText,
               rawKey: m.key,
               rawMessage: m,
+              mediaNode: details.mediaNode,
             });
           }
         });
@@ -1006,7 +1107,7 @@ function buildLoginHtml(email: string): string {
 </head>
 <body>
   <div class="login-card">
-    <div class="title">⚡ AURA-BOT 2.0 // SUITE</div>
+    <div class="title">⚡ AURA-BOT 2.0 • SUITE</div>
     <div class="sub">Ingresa las credenciales temporales enviadas a tu WhatsApp o a ${email}</div>
     <form onsubmit="doLogin(event)">
       <label>Usuario Temporal o Correo</label>
@@ -1102,7 +1203,7 @@ function buildDashboardHtml(token: string): string {
   header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; gap: 8px; }
   .brand { font-size: 15px; font-weight: 900; color: var(--accent); letter-spacing: 0.4px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .header-right { display: flex; align-items: center; gap: 8px; }
-  .badge { background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .badge { background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .tabs { display: flex; gap: 6px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--border); background: #0b0e17; scrollbar-width: none; position: sticky; top: 45px; z-index: 90; }
   .tabs::-webkit-scrollbar { display: none; }
   .tab-btn { background: var(--panel); color: var(--muted); border: 1px solid var(--border); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 12px; white-space: nowrap; transition: 0.15s; display: flex; align-items: center; gap: 5px; }
@@ -1142,33 +1243,33 @@ function buildDashboardHtml(token: string): string {
   .wa-side-top { padding: 10px; background: #202c33; border-bottom: 1px solid #222e35; display: flex; flex-direction: column; gap: 8px; }
   .wa-bot-select-row { display: flex; gap: 6px; align-items: center; }
   .wa-search-row { display: flex; gap: 6px; }
-  .wa-filter-row { display: flex; gap: 6px; }
-  .wa-chip { background: #202c33; color: var(--muted); border: 1px solid #2a3942; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .wa-filter-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .wa-chip { background: #202c33; color: var(--muted); border: 1px solid #2a3942; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .wa-chip.active { background: rgba(0,168,132,0.2); color: #00a884; border-color: #00a884; }
   .wa-chat-list { flex: 1; overflow-y: auto; }
   .wa-chat-item { padding: 11px 14px; border-bottom: 1px solid rgba(134,150,160,0.12); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 11px; transition: background 0.15s; }
   .wa-chat-item:hover { background: #202c33; }
   .wa-chat-item.active { background: #2a3942; }
-  .wa-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--wa-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; overflow: hidden; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
+  .wa-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--wa-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; overflow: hidden; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
   .wa-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .wa-chat-meta { flex: 1; min-width: 0; }
   .wa-chat-name { font-size: 14px; font-weight: 700; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .wa-chat-prev { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  .wa-chat-prev { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .wa-chat-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
   .wa-chat-time { font-size: 11px; color: var(--muted); }
   .wa-unread { background: var(--wa-green); color: #111b21; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; }
 
   .wa-main { display: flex; flex-direction: column; height: 100%; background: var(--wa-bg); position: relative; overflow: hidden; }
-  .wa-header { background: #202c33; padding: 8px 14px; border-bottom: 1px solid #222e35; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; z-index: 10; }
-  .wa-header-left { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; flex: 1; }
-  .wa-back-btn { display: none; background: #2a3942; color: #fff; border: none; padding: 7px 11px; border-radius: 8px; font-weight: 800; cursor: pointer; }
-  .wa-header-actions { display: flex; align-items: center; gap: 6px; }
-  .wa-icon-btn { background: #2a3942; color: var(--text); border: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; transition: 0.15s; }
+  .wa-header { background: #202c33; padding: 8px 12px; border-bottom: 1px solid #222e35; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 58px; z-index: 10; }
+  .wa-header-left { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; flex: 1; overflow: hidden; }
+  .wa-back-btn { display: none; background: #2a3942; color: #fff; border: none; padding: 7px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
+  .wa-header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  .wa-icon-btn { background: #2a3942; color: var(--text); border: none; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; transition: 0.15s; flex-shrink: 0; }
   .wa-icon-btn:hover { background: #374854; }
 
   .wa-messages {
     flex: 1;
-    padding: 16px 20px;
+    padding: 14px 16px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1177,7 +1278,7 @@ function buildDashboardHtml(token: string): string {
     background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0);
     background-size: 24px 24px;
   }
-  .wa-msg-row { display: flex; flex-direction: column; max-width: 76%; position: relative; }
+  .wa-msg-row { display: flex; flex-direction: column; max-width: 78%; position: relative; }
   .wa-msg-row.in { align-self: flex-start; }
   .wa-msg-row.out { align-self: flex-end; }
   .wa-bubble { padding: 7px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.42; position: relative; word-wrap: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
@@ -1187,11 +1288,11 @@ function buildDashboardHtml(token: string): string {
   .wa-bubble-sender { font-size: 11.5px; font-weight: 800; color: #00e5ff; margin-bottom: 3px; cursor: pointer; }
   .wa-quoted-box { background: rgba(0,0,0,0.26); border-left: 3px solid var(--wa-green); border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; font-size: 11.5px; color: #cfd8dc; max-height: 60px; overflow: hidden; }
   .wa-quoted-sender { font-weight: 800; color: var(--wa-green); font-size: 11px; margin-bottom: 2px; }
-  .wa-media-img { max-width: 290px; width: 100%; max-height: 320px; border-radius: 8px; object-fit: cover; display: block; margin-bottom: 4px; cursor: zoom-in; background: #111b21; }
-  .wa-media-sticker { width: 145px; height: 145px; object-fit: contain; display: block; cursor: pointer; transition: transform 0.15s; }
+  .wa-media-img { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; object-fit: cover; display: block; margin-bottom: 4px; cursor: zoom-in; background: #111b21; min-height: 80px; }
+  .wa-media-sticker { width: 140px; height: 140px; object-fit: contain; display: block; cursor: pointer; transition: transform 0.15s; }
   .wa-media-sticker:hover { transform: scale(1.06); }
-  .wa-media-video { max-width: 290px; width: 100%; max-height: 320px; border-radius: 8px; display: block; margin-bottom: 4px; background: #000; }
-  .wa-media-audio { width: 250px; max-width: 100%; height: 38px; margin: 3px 0; }
+  .wa-media-video { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; display: block; margin-bottom: 4px; background: #000; }
+  .wa-media-audio { width: 240px; max-width: 100%; height: 38px; margin: 3px 0; }
   .wa-bubble-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.62); margin-top: 3px; }
   .wa-msg-tools { display: none; gap: 4px; position: absolute; top: -12px; right: 4px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
   .wa-msg-row.in .wa-msg-tools { right: auto; left: 4px; }
@@ -1207,13 +1308,13 @@ function buildDashboardHtml(token: string): string {
   .wa-emoji-item { font-size: 20px; cursor: pointer; padding: 3px; user-select: none; transition: transform 0.1s; }
   .wa-emoji-item:hover { transform: scale(1.25); }
 
-  .wa-composer { background: #202c33; padding: 9px 12px; display: flex; gap: 7px; align-items: center; border-top: 1px solid #222e35; }
-  .wa-composer input[type="text"] { background: #2a3942; border: none; color: #e9edef; padding: 11px 14px; border-radius: 10px; flex: 1; font-size: 14px; }
+  .wa-composer { background: #202c33; padding: 8px 10px; display: flex; gap: 6px; align-items: center; border-top: 1px solid #222e35; }
+  .wa-composer input[type="text"] { background: #2a3942; border: none; color: #e9edef; padding: 10px 13px; border-radius: 10px; flex: 1; font-size: 14px; min-width: 0; }
 
   .wa-drawer { position: absolute; top: 0; right: 0; width: 320px; max-width: 100%; height: 100%; background: var(--wa-panel); border-left: 1px solid #222e35; z-index: 40; display: none; flex-direction: column; overflow-y: auto; padding: 16px; }
   .wa-drawer.open { display: flex; }
 
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.82); z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; }
   .modal-backdrop.open { display: flex; }
   .lightbox-img { max-width: 94vw; max-height: 85vh; border-radius: 10px; object-fit: contain; }
 
@@ -1228,16 +1329,18 @@ function buildDashboardHtml(token: string): string {
     .wa-wrapper:not(.chat-open) .wa-main { display: none; }
     .wa-back-btn { display: inline-flex; }
     .wa-msg-row { max-width: 88%; }
-    .wa-media-img, .wa-media-video { max-width: 240px; }
+    .wa-media-img, .wa-media-video { max-width: 245px; }
+    .wa-avatar { width: 38px; height: 38px; font-size: 13px; }
+    .wa-icon-btn { width: 32px; height: 32px; font-size: 13px; }
   }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">⚡ AURA-BOT 2.0 // SUITE</div>
+  <div class="brand">⚡ AURA-BOT 2.0 • SUITE</div>
   <div class="header-right">
     <div class="badge" id="callStatusBadge" style="display:none; background:rgba(255,42,84,0.2); color:#ff2a54; border-color:#ff2a54;">📞 Llamada Activa</div>
-    <div class="badge" id="uptimeBadge">Conectando...</div>
+    <div class="badge" id="uptimeBadge">⏱️ 0h 0m 0s</div>
   </div>
 </header>
 
@@ -1262,7 +1365,7 @@ function buildDashboardHtml(token: string): string {
             <button class="btn btn-wa" onclick="syncSubbotGroups()" title="Sincronizar Grupos">🔄</button>
           </div>
           <div class="wa-search-row">
-            <input type="text" id="waSearchInput" placeholder="Buscar chat, número o mensaje..." oninput="renderWaChatList()">
+            <input type="text" id="waSearchInput" placeholder="Buscar chat, número o mensaje..." oninput="renderWaChatList(true)">
             <button class="btn" onclick="startNewChatPrompt()" title="Nuevo chat">➕</button>
           </div>
           <div class="wa-filter-row">
@@ -1280,7 +1383,7 @@ function buildDashboardHtml(token: string): string {
           <div class="wa-header-left" onclick="toggleChatDrawer()">
             <button class="wa-back-btn" onclick="event.stopPropagation(); closeMobileChat()">⬅</button>
             <div class="wa-avatar" id="waActiveAvatar">?</div>
-            <div style="min-width:0; flex:1;">
+            <div style="min-width:0; flex:1; overflow:hidden;">
               <div class="wa-chat-name" id="waActiveName">Selecciona una conversación</div>
               <div class="wa-chat-prev" id="waActiveJid">Elige un Subbot arriba a la izquierda</div>
             </div>
@@ -1288,16 +1391,14 @@ function buildDashboardHtml(token: string): string {
           <div class="wa-header-actions" id="waHeaderActions" style="display:none;">
             <button class="wa-icon-btn" onclick="triggerCallFromChat(false)" title="Llamada de Voz">📞</button>
             <button class="wa-icon-btn" onclick="triggerCallFromChat(true)" title="Videollamada">📹</button>
-            <button class="wa-icon-btn" onclick="sendPresenceState('composing')" title="Simular Escribiendo...">✍️</button>
-            <button class="wa-icon-btn" onclick="toggleChatDrawer()" title="Información del Contacto/Grupo">ℹ️</button>
-            <button class="wa-icon-btn" onclick="clearActiveChatHistory()" title="Vaciar Chat">🗑️</button>
+            <button class="wa-icon-btn" onclick="toggleChatDrawer()" title="Más opciones e Info">ℹ️</button>
           </div>
         </div>
 
         <div class="wa-messages" id="waMessagesBox">
           <div style="margin:auto; text-align:center; color:#8696a0; padding:24px; max-width:420px;">
             <h3 style="color:#e9edef; margin-bottom:8px; font-size:18px;">📱 Aura WhatsApp Web Multi-Subbot</h3>
-            <p style="font-size:13px; line-height:1.5;">Visualiza imágenes, stickers animados, audios y videos en tiempo real. Selecciona cualquier instancia arriba a la izquierda para responder, enviar notas de voz, reaccionar o gestionar llamadas.</p>
+            <p style="font-size:13px; line-height:1.5;">Visualiza imágenes, stickers animados, audios y videos con streaming directo. Selecciona cualquier instancia arriba a la izquierda para conversar en vivo.</p>
           </div>
         </div>
 
@@ -1313,28 +1414,30 @@ function buildDashboardHtml(token: string): string {
 
         <form class="wa-composer" onsubmit="sendWaMessage(event)">
           <button type="button" class="wa-icon-btn" onclick="toggleEmojiBar()" title="Emojis">😀</button>
-          <button type="button" class="wa-icon-btn" onclick="document.getElementById('waMediaFileInput').click()" title="Enviar Imagen, Sticker, Video o Archivo">📎</button>
+          <button type="button" class="wa-icon-btn" onclick="document.getElementById('waMediaFileInput').click()" title="Adjuntar">📎</button>
           <input type="file" id="waMediaFileInput" style="display:none" accept="image/*,video/*,audio/*,.webp,.pdf,.zip" onchange="handleMediaUpload(event)">
           <input type="text" id="waMessageInput" placeholder="Escribe un mensaje..." autocomplete="off" oninput="onComposerTyping()">
           <button type="button" class="wa-icon-btn" id="waVoiceBtn" onclick="toggleVoiceRecording()" title="Grabar Nota de Voz">🎤</button>
-          <button type="submit" class="btn btn-wa" style="padding:10px 15px; border-radius:10px;">➤</button>
+          <button type="submit" class="btn btn-wa" style="padding:9px 14px; border-radius:10px;">➤</button>
         </form>
 
         <div class="wa-drawer" id="waInfoDrawer">
           <div class="flex-row" style="justify-content:space-between; border-bottom:1px solid #222e35; padding-bottom:10px;">
-            <h4>ℹ️ Detalles del Chat</h4>
+            <h4>ℹ️ Opciones del Chat</h4>
             <button class="wa-icon-btn" style="width:30px; height:30px;" onclick="toggleChatDrawer()">✖</button>
           </div>
           <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:16px 0; gap:10px;">
-            <div class="wa-avatar" id="drawerAvatar" style="width:88px; height:88px; font-size:28px;">?</div>
+            <div class="wa-avatar" id="drawerAvatar" style="width:80px; height:80px; font-size:26px;">?</div>
             <div style="font-size:16px; font-weight:800;" id="drawerName">-</div>
             <div style="font-size:12px; color:var(--muted);" id="drawerJid">-</div>
             <div style="font-size:12px; color:#00e5ff; background:#182229; padding:8px 12px; border-radius:8px; width:100%;" id="drawerBio">Sin descripción</div>
           </div>
-          <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+          <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
             <button class="btn btn-wa" onclick="triggerCallFromChat(false)">📞 Iniciar Llamada de Voz</button>
             <button class="btn" onclick="triggerCallFromChat(true)">📹 Iniciar Videollamada</button>
-            <button class="btn btn-warn" onclick="sendStickerQuickPrompt()">🏷️ Enviar Imagen/URL como Sticker</button>
+            <button class="btn btn-ghost" onclick="sendPresenceState('composing')">✍️ Simular Escribiendo...</button>
+            <button class="btn btn-warn" onclick="sendStickerQuickPrompt()">🏷️ Enviar URL como Sticker</button>
+            <button class="btn btn-ghost" onclick="clearActiveChatHistory()">🗑️ Vaciar Historial Local</button>
             <button class="btn btn-danger" onclick="blockOrUnblockCurrentChat('block')">🚫 Bloquear Contacto</button>
             <button class="btn btn-success" onclick="blockOrUnblockCurrentChat('unblock')">✅ Desbloquear Contacto</button>
           </div>
@@ -1356,7 +1459,7 @@ function buildDashboardHtml(token: string): string {
       </div>
       <div class="flex-row" style="margin-top:12px;">
         <input type="text" id="autoRejectMsgInput" placeholder="Mensaje automático al rechazar llamada..." style="flex:1; min-width:240px;">
-        <button class="btn btn-success" onclick="saveAutoRejectSettings()">💾 Guardar Respuesta Auto-Rechazo</button>
+        <button class="btn btn-success" onclick="saveAutoRejectSettings()">💾 Guardar Respuesta</button>
       </div>
       <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
       <h4>📲 Lanzar Llamada / Timbrado desde un Subbot</h4>
@@ -1520,8 +1623,30 @@ let activeBannerCall = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let lastTypingSent = 0;
+let serverUptimeSec = 0;
+let isFetchingStatus = false;
+let isFetchingChats = false;
+let isFetchingMsgs = false;
+let lastChatListSignature = "";
+let lastMsgListSignature = "";
 
 const EMOJI_LIST = ["😂","❤️","🔥","👍","😭","🙏","😍","🥰","🤣","😊","😎","🙌","💀","👀","✨","🎉","💯","😡","😱","🤔","👏","🫡","🤝","⚡","🚀","👑","💎","🤖","✅","❌"];
+
+function formatSeconds(sec) {
+  const sTotal = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sTotal / 3600);
+  const m = Math.floor((sTotal % 3600) / 60);
+  const s = sTotal % 60;
+  return h + 'h ' + m + 'm ' + s + 's';
+}
+
+setInterval(() => {
+  if (serverUptimeSec > 0) {
+    serverUptimeSec++;
+    const badge = document.getElementById('uptimeBadge');
+    if (badge) badge.textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
+  }
+}, 1000);
 
 function initEmojiBar() {
   const bar = document.getElementById('waEmojiBar');
@@ -1545,16 +1670,27 @@ function switchTab(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'files') loadDir();
   if (id === 'cmds') loadCommands();
-  if (id === 'wa') refreshWaChats();
+  if (id === 'wa') refreshWaChats(true);
   if (id === 'calls') refreshCallCenter();
+  if (id === 'procs') loadProcesses();
 }
 
-async function api(path, method = 'GET', body = null) {
-  const opts = { method, headers: { 'Content-Type': 'application/json', 'x-aura-token': TOKEN } };
-  if (body) opts.body = JSON.stringify(body);
-  const sep = path.includes('?') ? '&' : '?';
-  const r = await fetch('/api/' + path + sep + 'token=' + TOKEN, opts);
-  return r.json();
+async function api(path, method = 'GET', body = null, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-aura-token': TOKEN },
+      signal: controller.signal
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const sep = path.includes('?') ? '&' : '?';
+    const r = await fetch('/api/' + path + sep + 'token=' + TOKEN, opts);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function escapeHtml(str) {
@@ -1572,9 +1708,14 @@ function closeLightbox() {
 }
 
 async function refreshTelemetry() {
+  if (isFetchingStatus) return;
+  isFetchingStatus = true;
   try {
-    const d = await api('status');
-    document.getElementById('uptimeBadge').textContent = '⏱️ ' + d.uptime;
+    const d = await api('status', 'GET', null, 5000);
+    if (typeof d.uptimeSec === 'number') {
+      serverUptimeSec = d.uptimeSec;
+      document.getElementById('uptimeBadge').textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
+    }
     document.getElementById('mSubbots').textContent = d.subbots.length;
     document.getElementById('mSubState').textContent = d.subbotsPaused ? '⏸️ PAUSADOS' : '🟢 OPERANDO';
     document.getElementById('btnPauseSubs').textContent = d.subbotsPaused ? '▶️ Reanudar Todos' : '⏸️ Pausar Todos';
@@ -1592,7 +1733,8 @@ async function refreshTelemetry() {
       return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(label) + '</option>';
     }).join('');
 
-    if (selector.innerHTML !== optsHtml) {
+    if (selector.dataset.sig !== optsHtml) {
+      selector.dataset.sig = optsHtml;
       selector.innerHTML = optsHtml;
       if (callSelector) callSelector.innerHTML = optsHtml;
       if (prevVal && knownBots.some(b => b.id === prevVal)) {
@@ -1617,15 +1759,6 @@ async function refreshTelemetry() {
     '</tr>').join('');
     document.getElementById('subbotsTable').innerHTML = sbHtml;
 
-    const prHtml = (d.processes || []).map(p => '<tr>' +
-      '<td><code>' + escapeHtml(p.pid) + '</code></td>' +
-      '<td>' + escapeHtml(p.comm) + '</td>' +
-      '<td>' + escapeHtml(p.cpu) + '%</td>' +
-      '<td>' + escapeHtml(p.mem) + '%</td>' +
-      '<td><button class="btn btn-danger" style="padding:4px 8px;" onclick="killPid(\\'' + escapeHtml(p.pid) + '\\')">Matar</button></td>' +
-    '</tr>').join('');
-    document.getElementById('procsTable').innerHTML = prHtml;
-
     const spHtml = (d.reports && d.reports.length) ? d.reports.map(r => '<tr>' +
       '<td><code>+' + escapeHtml(r.phone) + '</code></td>' +
       '<td><b>' + r.totalReports + '</b></td>' +
@@ -1635,6 +1768,23 @@ async function refreshTelemetry() {
     document.getElementById('spamTable').innerHTML = spHtml;
 
     handleIncomingCallsAlert(d.calls || [], d.autoRejectCalls, d.autoRejectMessage);
+  } catch (e) {
+  } finally {
+    isFetchingStatus = false;
+  }
+}
+
+async function loadProcesses() {
+  try {
+    const d = await api('procs', 'GET', null, 5000);
+    const prHtml = (d.processes || []).map(p => '<tr>' +
+      '<td><code>' + escapeHtml(p.pid) + '</code></td>' +
+      '<td>' + escapeHtml(p.comm) + '</td>' +
+      '<td>' + escapeHtml(p.cpu) + '%</td>' +
+      '<td>' + escapeHtml(p.mem) + '%</td>' +
+      '<td><button class="btn btn-danger" style="padding:4px 8px;" onclick="killPid(\\'' + escapeHtml(p.pid) + '\\')">Matar</button></td>' +
+    '</tr>').join('');
+    document.getElementById('procsTable').innerHTML = prHtml;
   } catch (e) {}
 }
 
@@ -1782,7 +1932,7 @@ async function triggerCallFromChat(isVideo) {
     isVideo
   });
   if (r.ok) {
-    loadWaMessages(selectedChatJid, true);
+    loadWaMessages(selectedChatJid, true, true);
   }
 }
 
@@ -1790,7 +1940,7 @@ function setChatFilter(mode, btn) {
   chatFilterMode = mode;
   document.querySelectorAll('.wa-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
-  renderWaChatList();
+  renderWaChatList(true);
 }
 
 function jumpToBotWa(botKey) {
@@ -1798,6 +1948,8 @@ function jumpToBotWa(botKey) {
   const sel = document.getElementById('waBotSelector');
   if (sel) sel.value = botKey;
   selectedChatJid = "";
+  lastChatListSignature = "";
+  lastMsgListSignature = "";
   const firstTabBtn = document.querySelector('.tab-btn');
   switchTab('wa', firstTabBtn);
 }
@@ -1806,36 +1958,47 @@ function onSelectSubbot() {
   const sel = document.getElementById('waBotSelector');
   selectedBotKey = sel.value;
   selectedChatJid = "";
+  lastChatListSignature = "";
+  lastMsgListSignature = "";
   closeMobileChat();
-  refreshWaChats();
+  document.getElementById('waChatList').innerHTML = '<div style="padding:24px; text-align:center; color:#00e5ff; font-size:13px;">⚡ Cargando sesión de +' + escapeHtml(selectedBotKey) + '...</div>';
+  refreshWaChats(true);
 }
 
 async function syncSubbotGroups() {
   if (!selectedBotKey) return;
   await api('wa-sync', 'POST', { botKey: selectedBotKey });
-  refreshWaChats();
+  setTimeout(() => refreshWaChats(true), 700);
 }
 
-async function refreshWaChats() {
+async function refreshWaChats(forceRender = false) {
+  if (isFetchingChats && !forceRender) return;
   if (!selectedBotKey && knownBots[0]) selectedBotKey = knownBots[0].id;
   if (!selectedBotKey) return;
+  isFetchingChats = true;
   try {
-    const d = await api('wa-chats?botKey=' + encodeURIComponent(selectedBotKey));
+    const d = await api('wa-chats?botKey=' + encodeURIComponent(selectedBotKey), 'GET', null, 5000);
     cachedChats = d.chats || [];
-    renderWaChatList();
+    renderWaChatList(forceRender);
     if (selectedChatJid) {
-      await loadWaMessages(selectedChatJid, false);
+      await loadWaMessages(selectedChatJid, false, forceRender);
     }
-  } catch (e) {}
+  } catch (e) {
+  } finally {
+    isFetchingChats = false;
+  }
 }
 
-function renderAvatarNode(name, jid, isGroup) {
+function renderAvatarNode(name, jid, isGroup, cachedAvatarUrl) {
   const initials = (name || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || (isGroup ? '👥' : '👤');
+  if (cachedAvatarUrl) {
+    return '<img src="' + escapeHtml(cachedAvatarUrl) + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
+  }
   const avatarUrl = '/api/wa-avatar?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid) + '&token=' + TOKEN;
-  return '<img src="' + avatarUrl + '" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
+  return '<img src="' + avatarUrl + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
 }
 
-function renderWaChatList() {
+function renderWaChatList(forceRender = false) {
   const q = (document.getElementById('waSearchInput').value || '').toLowerCase().trim();
   const listEl = document.getElementById('waChatList');
   const filtered = cachedChats.filter(c => {
@@ -1849,17 +2012,21 @@ function renderWaChatList() {
     );
   });
 
+  const sig = selectedBotKey + '|' + selectedChatJid + '|' + chatFilterMode + '|' + q + '|' + filtered.map(c => c.jid + ':' + c.lastTime + ':' + c.unread + ':' + c.lastPreview).join(',');
+  if (!forceRender && sig === lastChatListSignature) return;
+  lastChatListSignature = sig;
+
   if (!filtered.length) {
     listEl.innerHTML = '<div style="padding:24px; text-align:center; color:#8696a0; font-size:12px;">Sin conversaciones en este filtro. Pulsa 🔄 para sincronizar grupos o ➕ para abrir un chat nuevo.</div>';
     return;
   }
 
-  listEl.innerHTML = filtered.map(c => {
+  listEl.innerHTML = filtered.slice(0, 120).map(c => {
     const activeCls = c.jid === selectedChatJid ? 'active' : '';
     const timeStr = c.lastTime ? new Date(c.lastTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const unreadHtml = c.unread > 0 ? '<span class="wa-unread">' + c.unread + '</span>' : '';
     return '<div class="wa-chat-item ' + activeCls + '" onclick="openWaChat(\\'' + escapeHtml(c.jid) + '\\')">' +
-      '<div class="wa-avatar" style="background:' + (c.isGroup ? '#5e35b1' : '#008069') + '">' + renderAvatarNode(c.name, c.jid, c.isGroup) + '</div>' +
+      '<div class="wa-avatar" style="background:' + (c.isGroup ? '#5e35b1' : '#008069') + '">' + renderAvatarNode(c.name, c.jid, c.isGroup, c.avatarUrl) + '</div>' +
       '<div class="wa-chat-meta">' +
         '<div class="wa-chat-name">' + escapeHtml(c.name) + '</div>' +
         '<div class="wa-chat-prev">' + escapeHtml(c.lastPreview || c.jid) + '</div>' +
@@ -1874,11 +2041,12 @@ function renderWaChatList() {
 
 async function openWaChat(jid) {
   selectedChatJid = jid;
+  lastMsgListSignature = "";
   cancelReply();
   document.getElementById('waWrapper').classList.add('chat-open');
   document.getElementById('waHeaderActions').style.display = 'flex';
-  renderWaChatList();
-  await loadWaMessages(jid, true);
+  renderWaChatList(true);
+  await loadWaMessages(jid, true, true);
 }
 
 function closeMobileChat() {
@@ -1892,23 +2060,33 @@ function toggleChatDrawer() {
   drawer.classList.toggle('open');
 }
 
-async function loadWaMessages(jid, scrollBottom = false) {
+async function loadWaMessages(jid, scrollBottom = false, forceRender = false) {
+  if (isFetchingMsgs && !forceRender) return;
   if (!selectedBotKey || !jid) return;
+  isFetchingMsgs = true;
   try {
-    const d = await api('wa-messages?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid));
+    const d = await api('wa-messages?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid), 'GET', null, 5000);
     if (!d.chat) return;
+
+    currentMessages = d.chat.messages || [];
+    const msgSig = selectedBotKey + '|' + jid + '|' + currentMessages.map(m => m.id + ':' + m.text + ':' + (m.mediaReady ? '1' : '0') + ':' + Object.values(m.reactions || {}).join('')).join(',');
+
+    if (!forceRender && msgSig === lastMsgListSignature) {
+      return;
+    }
+    lastMsgListSignature = msgSig;
+
     document.getElementById('waActiveName').textContent = d.chat.name || jid;
-    document.getElementById('waActiveJid').textContent = d.chat.jid + ' • vía +' + selectedBotKey;
-    document.getElementById('waActiveAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup);
+    document.getElementById('waActiveJid').textContent = '+' + selectedBotKey + ' • ' + d.chat.jid;
+    document.getElementById('waActiveAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
 
     document.getElementById('drawerName').textContent = d.chat.name || jid;
     document.getElementById('drawerJid').textContent = d.chat.jid;
     document.getElementById('drawerBio').textContent = d.chat.statusText || (d.chat.isGroup ? 'Grupo de WhatsApp activo' : 'Cuenta de WhatsApp');
-    document.getElementById('drawerAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup);
+    document.getElementById('drawerAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
 
     const box = document.getElementById('waMessagesBox');
-    const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
-    currentMessages = d.chat.messages || [];
+    const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 150;
 
     if (!currentMessages.length) {
       box.innerHTML = '<div style="margin:auto; color:#8696a0; font-size:12px; text-align:center; background:#111b21; padding:14px 20px; border-radius:10px;">🔒 Los mensajes y archivos multimedia que envíes o recibas en esta conversación aparecerán aquí en tiempo real.</div>';
@@ -1931,15 +2109,17 @@ async function loadWaMessages(jid, scrollBottom = false) {
       }
 
       let mediaHtml = '';
-      const mediaUrl = '/api/media?id=' + encodeURIComponent(m.id) + '&token=' + TOKEN;
+      const mediaUrl = '/api/media?id=' + encodeURIComponent(m.id) + '&botKey=' + encodeURIComponent(selectedBotKey) + '&token=' + TOKEN;
+      const thumbUrl = '/api/thumb?id=' + encodeURIComponent(m.id) + '&token=' + TOKEN;
+
       if (m.mediaType === 'image') {
         mediaHtml = '<img class="wa-media-img" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Imagen">';
       } else if (m.mediaType === 'sticker') {
         mediaHtml = '<img class="wa-media-sticker" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Sticker">';
       } else if (m.mediaType === 'video') {
-        mediaHtml = '<video class="wa-media-video" controls preload="metadata" src="' + mediaUrl + '"></video>';
+        mediaHtml = '<video class="wa-media-video" controls playsinline preload="metadata" poster="' + thumbUrl + '" src="' + mediaUrl + '"></video>';
       } else if (m.mediaType === 'audio') {
-        mediaHtml = '<audio class="wa-media-audio" controls preload="none" src="' + mediaUrl + '"></audio>';
+        mediaHtml = '<audio class="wa-media-audio" controls preload="metadata" src="' + mediaUrl + '"></audio>';
       }
 
       const textHtml = m.text ? '<div>' + escapeHtml(m.text) + '</div>' : '';
@@ -1974,7 +2154,10 @@ async function loadWaMessages(jid, scrollBottom = false) {
     if (scrollBottom || wasNearBottom) {
       box.scrollTop = box.scrollHeight;
     }
-  } catch (e) {}
+  } catch (e) {
+  } finally {
+    isFetchingMsgs = false;
+  }
 }
 
 function mentionUserInComposer(num) {
@@ -2008,7 +2191,7 @@ async function reactToMsg(msgId, emoji) {
     msgId,
     emoji
   });
-  loadWaMessages(selectedChatJid, false);
+  loadWaMessages(selectedChatJid, false, true);
 }
 
 async function deleteMsgForAll(msgId) {
@@ -2019,7 +2202,7 @@ async function deleteMsgForAll(msgId) {
     jid: selectedChatJid,
     msgId
   });
-  loadWaMessages(selectedChatJid, false);
+  loadWaMessages(selectedChatJid, false, true);
 }
 
 async function sendPresenceState(stateType) {
@@ -2061,8 +2244,8 @@ async function sendWaMessage(e) {
     quotedId
   });
   if (r.ok) {
-    await loadWaMessages(selectedChatJid, true);
-    refreshWaChats();
+    await loadWaMessages(selectedChatJid, true, true);
+    refreshWaChats(true);
   } else {
     alert(r.error || 'No se pudo enviar el mensaje');
   }
@@ -2073,7 +2256,7 @@ async function handleMediaUpload(e) {
   e.target.value = '';
   if (!file || !selectedBotKey || !selectedChatJid) return;
 
-  const isSticker = file.name.toLowerCase().endsWith('.webp') || confirm('¿Deseas enviar este archivo como Multimedia normal (Aceptar) o como Sticker si es WebP (Cancelar)?') === false;
+  const isSticker = file.name.toLowerCase().endsWith('.webp');
   const caption = isSticker ? '' : (prompt('Texto o comentario adjunto (opcional):', '') || '');
 
   const reader = new FileReader();
@@ -2085,15 +2268,15 @@ async function handleMediaUpload(e) {
       jid: selectedChatJid,
       fileName: file.name,
       mimeType: file.type || 'application/octet-stream',
-      asSticker: isSticker && file.name.toLowerCase().endsWith('.webp'),
+      asSticker,
       caption,
       base64: base64Data,
       quotedId: replyTargetMsg ? replyTargetMsg.id : ''
-    });
+    }, 20000);
     cancelReply();
     if (r.ok) {
-      await loadWaMessages(selectedChatJid, true);
-      refreshWaChats();
+      await loadWaMessages(selectedChatJid, true, true);
+      refreshWaChats(true);
     } else {
       alert(r.error || 'Error enviando archivo multimedia');
     }
@@ -2133,9 +2316,9 @@ async function toggleVoiceRecording() {
           mimeType: 'audio/ogg; codecs=opus',
           isPtt: true,
           base64
-        });
-        await loadWaMessages(selectedChatJid, true);
-        refreshWaChats();
+        }, 20000);
+        await loadWaMessages(selectedChatJid, true, true);
+        refreshWaChats(true);
       };
       reader.readAsDataURL(blob);
     };
@@ -2157,9 +2340,9 @@ async function sendStickerQuickPrompt() {
     jid: selectedChatJid,
     mediaUrl: url.trim(),
     asSticker: true
-  });
+  }, 15000);
   if (r.ok) {
-    loadWaMessages(selectedChatJid, true);
+    loadWaMessages(selectedChatJid, true, true);
   } else {
     alert(r.error || 'Error enviando sticker');
   }
@@ -2184,15 +2367,15 @@ async function startNewChatPrompt() {
   const jid = clean.includes('@') ? clean : clean.replace(/\\D/g, '') + '@s.whatsapp.net';
   if (jid.length < 10) return alert('Número o JID inválido');
   await api('wa-init-chat', 'POST', { botKey: selectedBotKey, jid });
-  await refreshWaChats();
+  await refreshWaChats(true);
   openWaChat(jid);
 }
 
 async function clearActiveChatHistory() {
   if (!selectedBotKey || !selectedChatJid) return;
   await api('wa-clear-chat', 'POST', { botKey: selectedBotKey, jid: selectedChatJid });
-  loadWaMessages(selectedChatJid, true);
-  refreshWaChats();
+  loadWaMessages(selectedChatJid, true, true);
+  refreshWaChats(true);
 }
 
 async function togglePauseSubbots() {
@@ -2213,7 +2396,7 @@ async function cleanRam() {
 
 async function killPid(pid) {
   await api('kill-proc', 'POST', { pids: [pid] });
-  refreshTelemetry();
+  loadProcesses();
 }
 
 async function killMultiplePids() {
@@ -2222,7 +2405,7 @@ async function killMultiplePids() {
   if (!pids.length) return;
   await api('kill-proc', 'POST', { pids });
   document.getElementById('multiPidInput').value = '';
-  refreshTelemetry();
+  loadProcesses();
 }
 
 async function loadCommands() {
@@ -2288,7 +2471,7 @@ async function saveFileContent() {
 
 async function runBenchmark() {
   document.getElementById('benchOutput').textContent = 'Ejecutando pruebas de estrés en CPU, Memoria y Disco...';
-  const r = await api('benchmark', 'POST', {});
+  const r = await api('benchmark', 'POST', {}, 15000);
   document.getElementById('benchOutput').textContent = r.result;
 }
 
@@ -2296,25 +2479,29 @@ async function runShellTest() {
   const cmd = document.getElementById('shellCmdInput').value.trim();
   if (!cmd) return;
   document.getElementById('shellOutput').textContent = 'Ejecutando...';
-  const r = await api('shell-test', 'POST', { cmd });
+  const r = await api('shell-test', 'POST', { cmd }, 12000);
   document.getElementById('shellOutput').textContent = r.output;
 }
 
 (async () => {
   initEmojiBar();
   await refreshTelemetry();
-  await refreshWaChats();
-  setInterval(refreshTelemetry, 3000);
+  await refreshWaChats(true);
+  setInterval(refreshTelemetry, 3500);
   setInterval(() => {
     const waSection = document.getElementById('tab-wa');
     if (waSection && waSection.classList.contains('active')) {
-      refreshWaChats();
+      refreshWaChats(false);
     }
     const callSection = document.getElementById('tab-calls');
     if (callSection && callSection.classList.contains('active')) {
       refreshCallCenter();
     }
-  }, 2400);
+    const procSection = document.getElementById('tab-procs');
+    if (procSection && procSection.classList.contains('active')) {
+      loadProcesses();
+    }
+  }, 2600);
 })();
 </script>
 </body>
@@ -2386,16 +2573,90 @@ async function ensureWebServerRunning(): Promise<number> {
         return;
       }
 
-      if (pathname === "/api/media" && req.method === "GET") {
+      if (pathname === "/api/thumb" && req.method === "GET") {
         const msgId = parsedUrl.searchParams.get("id") || "";
-        const item = state.mediaStore.get(msgId);
-        if (!item) {
+        const thumb = state.thumbStore.get(msgId);
+        if (!thumb) {
           res.writeHead(404);
           res.end();
           return;
         }
         res.writeHead(200, {
-          "Content-Type": item.mime || "application/octet-stream",
+          "Content-Type": "image/jpeg",
+          "Content-Length": thumb.length,
+          "Cache-Control": "public, max-age=3600",
+        });
+        res.end(thumb);
+        return;
+      }
+
+      if (pathname === "/api/media" && req.method === "GET") {
+        const msgId = parsedUrl.searchParams.get("id") || "";
+        const botKey = parsedUrl.searchParams.get("botKey") || "";
+        let item = state.mediaStore.get(msgId) || null;
+
+        if (!item) {
+          const lookup = state.msgLookup.get(msgId);
+          if (lookup && lookup.msg.mediaType) {
+            const allBots = getAllBotSockets();
+            const targetBot =
+              allBots.find((b, i) => getBotKey(b, i) === (botKey || lookup.botKey)) || allBots[0];
+            item = await downloadMediaBuffer(
+              targetBot,
+              lookup.msg.rawMessage,
+              msgId,
+              lookup.msg.mediaType,
+              lookup.msg.mediaMime || "application/octet-stream",
+              lookup.msg.mediaNode
+            );
+          }
+        }
+
+        if (!item && state.thumbStore.has(msgId)) {
+          const fallbackThumb = state.thumbStore.get(msgId)!;
+          res.writeHead(200, {
+            "Content-Type": "image/jpeg",
+            "Content-Length": fallbackThumb.length,
+            "Cache-Control": "no-store",
+          });
+          res.end(fallbackThumb);
+          return;
+        }
+
+        if (!item || !item.buffer.length) {
+          res.writeHead(404, { "Cache-Control": "no-store" });
+          res.end();
+          return;
+        }
+
+        const total = item.buffer.length;
+        const mime = item.mime || "application/octet-stream";
+        const range = req.headers.range;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10) || 0;
+          const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+          const safeEnd = Math.min(end, total - 1);
+          const chunkSize = safeEnd - start + 1;
+          const sliced = item.buffer.subarray(start, safeEnd + 1);
+
+          res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${safeEnd}/${total}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": chunkSize,
+            "Content-Type": mime,
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=3600",
+          });
+          res.end(sliced);
+          return;
+        }
+
+        res.writeHead(200, {
+          "Content-Type": mime,
+          "Content-Length": total,
+          "Accept-Ranges": "bytes",
           "Cache-Control": "public, max-age=3600",
           "Access-Control-Allow-Origin": "*",
         });
@@ -2407,25 +2668,42 @@ async function ensureWebServerRunning(): Promise<number> {
         const botKey = parsedUrl.searchParams.get("botKey") || "";
         const jid = parsedUrl.searchParams.get("jid") || "";
         const cacheKey = `${botKey}:${jid}`;
-        let url = state.avatarCache.get(cacheKey);
-        if (url === undefined) {
-          const allBots = getAllBotSockets();
-          const targetBot = allBots.find((b, i) => getBotKey(b, i) === botKey) || allBots[0];
-          if (targetBot && typeof targetBot.profilePictureUrl === "function") {
-            try {
-              url = (await targetBot.profilePictureUrl(jid, "image")) || "";
-            } catch {
-              url = "";
-            }
-            state.avatarCache.set(cacheKey, url || "");
-          }
-        }
-        if (url) {
-          res.writeHead(302, { Location: url });
+        const cached = state.avatarCache.get(cacheKey);
+
+        if (cached) {
+          res.writeHead(302, { Location: cached, "Cache-Control": "public, max-age=1800" });
           res.end();
           return;
         }
-        res.writeHead(404);
+
+        if (cached === undefined && !state.avatarPending.has(cacheKey) && state.avatarPending.size < 4) {
+          state.avatarPending.add(cacheKey);
+          const allBots = getAllBotSockets();
+          const targetBot = allBots.find((b, i) => getBotKey(b, i) === botKey) || allBots[0];
+          if (targetBot && typeof targetBot.profilePictureUrl === "function") {
+            Promise.race([
+              targetBot.profilePictureUrl(jid, "image"),
+              new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timeout")), 1800)),
+            ])
+              .then((u: any) => {
+                const urlStr = typeof u === "string" ? u : "";
+                state.avatarCache.set(cacheKey, urlStr);
+                const chat = ensureBotChatMap(botKey).get(jid);
+                if (chat && urlStr) chat.avatarUrl = urlStr;
+              })
+              .catch(() => {
+                state.avatarCache.set(cacheKey, "");
+              })
+              .finally(() => {
+                state.avatarPending.delete(cacheKey);
+              });
+          } else {
+            state.avatarCache.set(cacheKey, "");
+            state.avatarPending.delete(cacheKey);
+          }
+        }
+
+        res.writeHead(404, { "Cache-Control": "no-store" });
         res.end();
         return;
       }
@@ -2452,23 +2730,6 @@ async function ensureWebServerRunning(): Promise<number> {
           }
         }
 
-        const processes: Array<{ pid: string; comm: string; cpu: string; mem: string }> = [];
-        try {
-          const { stdout } = await execAsync("ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 16");
-          const lines = stdout.trim().split("\n").slice(1);
-          for (const line of lines) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 4) {
-              processes.push({
-                pid: parts[0],
-                comm: parts.slice(1, parts.length - 2).join(" "),
-                cpu: parts[parts.length - 2],
-                mem: parts[parts.length - 1],
-              });
-            }
-          }
-        } catch {}
-
         const mem = process.memoryUsage();
         const uptimeSec = Math.floor(process.uptime());
         const h = Math.floor(uptimeSec / 3600);
@@ -2484,6 +2745,7 @@ async function ensureWebServerRunning(): Promise<number> {
 
         sendJson(res, 200, {
           uptime: `${h}h ${m}m ${s}s`,
+          uptimeSec,
           subbots,
           subbotsPaused: state.subbotsPaused,
           msgRx: state.msgRx,
@@ -2492,12 +2754,32 @@ async function ensureWebServerRunning(): Promise<number> {
           ramRss: (mem.rss / 1024 / 1024).toFixed(1),
           ramHeap: (mem.heapUsed / 1024 / 1024).toFixed(1),
           loadAvg: os.loadavg().map((n) => n.toFixed(2)).join(", "),
-          processes,
           reports,
           calls: state.callLogs,
           autoRejectCalls: state.autoRejectCalls,
           autoRejectMessage: state.autoRejectMessage,
         });
+        return;
+      }
+
+      if (pathname === "/api/procs" && req.method === "GET") {
+        const processes: Array<{ pid: string; comm: string; cpu: string; mem: string }> = [];
+        try {
+          const { stdout } = await execAsync("ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 16", { timeout: 3000 });
+          const lines = stdout.trim().split("\n").slice(1);
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 4) {
+              processes.push({
+                pid: parts[0],
+                comm: parts.slice(1, parts.length - 2).join(" "),
+                cpu: parts[parts.length - 2],
+                mem: parts[parts.length - 1],
+              });
+            }
+          }
+        } catch {}
+        sendJson(res, 200, { processes });
         return;
       }
 
@@ -2510,7 +2792,7 @@ async function ensureWebServerRunning(): Promise<number> {
         const effectiveKey = targetBot ? getBotKey(targetBot, Math.max(0, targetIdx)) : botKey;
 
         if (targetBot) {
-          await syncBotGroupsToStore(targetBot, Math.max(0, targetIdx));
+          triggerBackgroundGroupSync(targetBot, Math.max(0, targetIdx), false);
         }
 
         const store = ensureBotChatMap(effectiveKey);
@@ -2523,6 +2805,7 @@ async function ensureWebServerRunning(): Promise<number> {
             unread: c.unread,
             lastTime: c.lastTime,
             lastPreview: c.lastPreview,
+            avatarUrl: c.avatarUrl || state.avatarCache.get(`${effectiveKey}:${c.jid}`) || "",
           }));
 
         sendJson(res, 200, { botKey: effectiveKey, chats });
@@ -2536,7 +2819,7 @@ async function ensureWebServerRunning(): Promise<number> {
         const allBots = getAllBotSockets();
         const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
         if (targetIdx >= 0) {
-          await syncBotGroupsToStore(allBots[targetIdx], targetIdx);
+          triggerBackgroundGroupSync(allBots[targetIdx], targetIdx, true);
         }
         sendJson(res, 200, { ok: true });
         return;
@@ -2560,6 +2843,7 @@ async function ensureWebServerRunning(): Promise<number> {
             mediaType: m.mediaType,
             mediaMime: m.mediaMime,
             hasMedia: m.hasMedia,
+            mediaReady: state.mediaStore.has(m.id),
             quotedId: m.quotedId,
             quotedSender: m.quotedSender,
             quotedText: m.quotedText,
@@ -2570,6 +2854,7 @@ async function ensureWebServerRunning(): Promise<number> {
               jid: chat.jid,
               name: chat.name,
               isGroup: chat.isGroup,
+              avatarUrl: chat.avatarUrl || state.avatarCache.get(`${botKey}:${chat.jid}`) || "",
               statusText: chat.statusText || "",
               messages: sanitizedMessages,
             },
@@ -3266,7 +3551,7 @@ export default {
     ).catch(() => {});
 
     const panelMessage = [
-      `🌐 *${fytBold("AURA-BOT 2.0 // SUITE & WA-WEB PRO")}* 🌐`,
+      `🌐 *${fytBold("AURA-BOT 2.0 • SUITE & WA-WEB PRO")}* 🌐`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
       `👤 *Usuario Temporal:* \`${state.tempUser}\``,
       `🔑 *Clave / Código OTP:* \`${state.tempPass}\``,
