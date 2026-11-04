@@ -1,12 +1,13 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { aiError, askAlya, getPrompt } from "./aiUtils.ts";
+import { aiError, askAlya, getPrompt } from "../../src/api/aiUtils.ts";
 import { t } from "../../src/langs/index.ts";
 
 
 export default {
   name: ["copilot", "copi", "cpt"],
   category: "AI",
+  hideCmd: true,
   description: t("cmd_habla_con_copilot_63e04eef"),
 
   async run({ args, reply, react }: CommandContext) {

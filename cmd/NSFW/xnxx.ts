@@ -61,7 +61,7 @@ function pickVideoUrl(
 
 export default {
   name: ["xnxx", "xn"],
-  category: "nsfw",
+  category: "NSFW",
   description: t("cmd_busca_videos_de_xnxx_y_descarg_daa326fb"),
 
   async run(ctx: CommandContext) {

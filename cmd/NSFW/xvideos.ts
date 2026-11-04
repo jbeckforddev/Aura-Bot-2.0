@@ -43,7 +43,7 @@ function isXvideosUrl(text: string): boolean {
 
 export default {
   name: ["xv", "xvideos", "xvid"],
-  category: "nsfw",
+  category: "NSFW",
   description: t("cmd_busca_videos_de_xvideos_y_desc_ba1e06ab"),
   premiumOnly: true,
 

@@ -1,4 +1,4 @@
-import type { CommandContext, AlbumItem } from "../../types/index.d.ts";
+import type { CommandContext, AlbumItem } from "../../types/index";
 import { fytBold } from "../../core/socketText.ts";
 import { requestJson } from "../../core/downloadUtils.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
@@ -19,7 +19,7 @@ interface Rule34Post {
 
 export default {
   name: ["rule34", "r34"],
-  category: "nsfw",
+  category: "NSFW",
   description: t("cmd_busca_imagenes_en_rule34_82b5d6a4"),
   premiumOnly: true,
 
@@ -84,4 +84,3 @@ export default {
     }
   },
 };
-

@@ -5,7 +5,7 @@ import { t } from "../../src/langs/index.ts";
 
 export default {
   name: ["fakemsg", "fake", "fmsg", "editfake"],
-  category: "owner",
+  category: "games",
   description: t("cmd_fuerza_la_edicion_visual_de_un_c147ae7b"),
   groupOnly: true,
   ownerOnly: true,

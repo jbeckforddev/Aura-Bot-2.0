@@ -12,7 +12,7 @@ const numOf = (jid = "") => jid.split("@")[0].split(":")[0];
 export default {
   name: ["bc", "difundir", "broadcast"],
   description: "Envía un mensaje a todos los grupos donde haya bots",
-  category: "owner",
+  category: "system",
   ownerOnly: true,
   groupOnly: false,
 

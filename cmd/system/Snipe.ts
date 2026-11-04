@@ -1,4 +1,4 @@
-import type { CommandContext } from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index";
 import { fytBold } from "../../core/socketText.ts";
 import { deletedMessages } from "../../core/SnipeStore.ts";
 import { t } from "../../src/langs/index.ts";

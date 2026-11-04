@@ -4,7 +4,7 @@ import { t } from "../../src/langs/index.ts";
 
 
 export default {
-  name: ["mute", "unmute", "silenciar", "desilenciar"],
+  name: ["mute", "silenciar"],
   category: "group",
   description: t("cmd_silencia_o_desilencia_a_un_usu_ffa68009"),
   groupOnly: true,

@@ -16,7 +16,7 @@ function limitOutput(value: unknown): string {
 }
 
 export default {
-  name: ["r", "run", "exec", "terminal"],
+  name: ["r", "exec", "terminal"],
   category: "system",
   description: t("cmd_ejecuta_comandos_en_la_termina_e4ff4900"),
   ownerOnly: true,

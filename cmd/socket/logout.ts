@@ -2,7 +2,7 @@ import type { CommandContext, CommandPlugin } from "../../types/index.d.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
-  name: ["logout", "cerrar", "cerrarsesion", "desconectar"],
+  name: ["logout", "cerrarsesion", "desconectar"],
   description: t("socketDescriptionLogout"),
   category: "socket",
   botUserOnly: true,

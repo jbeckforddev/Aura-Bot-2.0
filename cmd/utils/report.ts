@@ -12,7 +12,7 @@ import { t } from "../../src/langs/index.ts";
 
 export default {
   name: ["report", "bug", "sugerencia", "sugerir"],
-  category: "system",
+  category: "utils",
   description: t("cmd_envia_un_bug_o_sugerencia_al_g_b4673ce4"),
   async run(ctx: CommandContext) {
     const reportText = ctx.args.join(" ").trim();

@@ -1,6 +1,6 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { aiError, askAlya, getPrompt } from "./aiUtils.ts";
+import { aiError, askAlya, getPrompt } from "../../src/api/aiUtils.ts";
 import { t } from "../../src/langs/index.ts";
 
 

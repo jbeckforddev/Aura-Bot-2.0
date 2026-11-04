@@ -169,7 +169,7 @@ async function getBaileysModule(): Promise<any> {
     return cachedBaileysMod;
   } catch {}
   try {
-    cachedBaileysMod = await import("@whiskeysockets/baileys");
+    cachedBaileysMod = await import("baileys");
     return cachedBaileysMod;
   } catch {}
   return null;

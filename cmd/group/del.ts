@@ -5,7 +5,7 @@ import { t } from "../../src/langs/index.ts";
 
 export default {
   name: ["dmsg", "forcedel", "ownerdel", "del"],
-  category: "owner",
+  category: "group",
   description: t("cmd_fuerza_la_eliminacion_de_cualq_3ea5b232"),
   groupOnly: true,
   adminOnly: true,

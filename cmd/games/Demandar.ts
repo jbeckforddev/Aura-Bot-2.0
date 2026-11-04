@@ -9,6 +9,7 @@ export default {
   name: ["demandar", "juicio", "tribunal"],
   category: "games",
   description: t("cmd_inicia_un_juicio_publico_contr_7622ab83"),
+  botAdmin: true,
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg } = ctx;
     const isGroup = from.endsWith("@g.us");
@@ -19,11 +20,6 @@ export default {
     if (!groupMetadata) return;
 
     const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
-    const botParticipant = groupMetadata.participants.find((p) => p.id === botNumber);
-    const isBotAdmin = botParticipant?.admin === "admin" || botParticipant?.admin === "superadmin";
-
-    if (!isBotAdmin) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_necesito_ser_admin_964598c4")) }));
-
     const target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message?.extendedTextMessage?.contextInfo?.participant;
 
     if (!target) return reply(t("cmd_value0_value1_abc43fce", { value0: fytBold(t("cmd_aura_reed_95dcfb15")), value1: fytBold(t("cmd_menciona_al_acusado_fef7b0f8")) }));

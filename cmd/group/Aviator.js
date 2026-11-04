@@ -201,8 +201,8 @@ function endGame(win) {
 };
 
 export default {
-  name: ["aviator", "juego", "apostar"],
-  category: "games",
+  name: ["aviatorgrupo"],
+  category: "group",
   description: t("cmd_abre_el_minijuego_html_aviator_6c8ba549"),
   async run(ctx) {
     const { reply, react, sock, from, msg } = ctx;

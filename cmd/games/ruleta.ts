@@ -4,7 +4,7 @@ import { t } from "../../src/langs/index.ts";
 
 
 export default {
-  name: ["ruleta", "rr"],
+  name: ["ruletarusa", "rr"],
   category: "games",
   description: t("cmd_juego_de_ruleta_rusa_1_de_6_pr_63648697"),
   async run(ctx: CommandContext) {

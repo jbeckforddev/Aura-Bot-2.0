@@ -38,8 +38,8 @@ const createProgressBar = (percent: number): string => {
 };
 
 export default {
-  name: ["estadohd", "eshd", "hd"],
-  category: "system",
+  name: ["estadohd", "eshd"],
+  category: "utils",
   description: t("cmd_convierte_lote_de_documentos_z_4dbad9c2"),
   async run(ctx: CommandContext) {
     const { reply, react, msg, sock, from } = ctx;

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { WAMessage } from "baileys";
-import type { CommandContext } from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index";
 import { GIF_TO_VIDEO } from "../../utils/converter.ts";
 import { t } from "../../src/langs/index.ts";
 
@@ -78,7 +78,7 @@ function resolveDisplayName(
 export default {
   name: Object.keys(DATA),
   description: Object.values(DATA).map((entry) => entry.description),
-  category: "nsfw",
+  category: "NSFW",
   groupOnly: false,
   showAllNames: true,
 
