@@ -1,4 +1,4 @@
-import type { CommandContext } from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index";
 import { fytBold } from "../../core/socketText.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -210,7 +210,7 @@ function checkStaticSyntaxAndImports(filePath: string, rootDir: string): FileIss
 
 export default {
   name: ["filecheck", "checkbot", "auditarbot", "diagnostico"],
-  category: "group",
+  category: "system",
   description: "Escanea toda la base del bot, verifica sintaxis, rutas, salud de comandos y consumo de almacenamiento.",
   groupOnly: false,
   ownerOnly: false,
