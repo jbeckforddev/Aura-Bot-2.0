@@ -1,7 +1,20 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-function buildImageModalPayload(imageUrl: string) {
+function getBase64Image(): string {
+  try {
+    const imgPath = path.join(process.cwd(), "cmd", "system", "2025-09-30_70f885ec41c878.webp");
+    if (fs.existsSync(imgPath)) {
+      const bitmap = fs.readFileSync(imgPath);
+      return `data:image/webp;base64,${bitmap.toString("base64")}`;
+    }
+  } catch {}
+  return "https://i.ibb.co/6R39z5g/default.png";
+}
+
+function buildImageModalPayload(imageBase64: string) {
   const htmlContent = `<style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;font-family:system-ui,-apple-system,sans-serif}
 body{background:#0b0f17;color:#f1f5f9;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:10px}
@@ -10,7 +23,7 @@ body{background:#0b0f17;color:#f1f5f9;display:flex;justify-content:center;align-
 @keyframes popIn{0%{transform:scale(0.8);opacity:0}100%{transform:scale(1);opacity:1}}
 .modal-header{padding:14px 16px 6px;font-size:16px;font-weight:700;color:#fff}
 .modal-body{padding:0 16px 12px;text-align:center}
-.modal-body img{width:100%;max-height:240px;object-fit:contain;border-radius:8px;background:#000;display:block;margin:0 auto}
+.modal-body img{width:100%;max-height:260px;object-fit:contain;border-radius:8px;background:#000;display:block;margin:0 auto}
 .modal-footer{padding:10px 16px;border-top:1px solid #2d3748;display:flex;justify-content:flex-end}
 .ok-btn{background:none;border:none;color:#ff3b30;font-size:14px;font-weight:700;cursor:pointer;text-transform:uppercase;padding:6px 12px}
 .ok-btn:active{opacity:0.5}
@@ -19,7 +32,7 @@ body{background:#0b0f17;color:#f1f5f9;display:flex;justify-content:center;align-
   <div class="modal">
     <div class="modal-header">JavaScript</div>
     <div class="modal-body">
-      <img src="${imageUrl}" alt="Alert Image">
+      <img src="${imageBase64}" alt="Alert Image">
     </div>
     <div class="modal-footer">
       <button class="ok-btn" onclick="closeModal()">Aceptar</button>
@@ -50,11 +63,11 @@ window.addEventListener('DOMContentLoaded', () => {
 export default {
   name: ["popup", "jsalert", "ventana", "alertjs"],
   category: "system",
-  description: "Lanza una ventana modal simulada con la imagen integrada.",
+  description: "Lanza una ventana modal simulada con la imagen .webp integrada en Base64.",
   groupOnly: false,
   ownerOnly: true,
   async run(ctx: CommandContext) {
-    const { reply, react, sock, from, msg, args, isOwner, sender, db } = ctx;
+    const { reply, react, sock, from, msg, sender, db, isOwner } = ctx;
 
     const rawSender = String(sender || msg.key?.participant || "");
     const cleanNum = rawSender.split("@")[0].split(":")[0].replace(/\D/g, "");
@@ -71,24 +84,17 @@ export default {
       return reply("⛔ *Acceso denegado:* Este comando es exclusivo para los propietarios del bot.");
     }
 
-    let customImgUrl = "https://makerworld.bblmw.com/makerworld/model/USe626629a333a2d/design/2025-09-30_70f885ec41c878.png?x-oss-process=image/resize,w_1000/format,webp";
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === "-img" && args[i + 1]) {
-        customImgUrl = args[i + 1];
-        i++;
-      }
-    }
-
     await react("💀").catch(() => undefined);
 
     try {
+      const base64Image = getBase64Image();
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
 
       const rich = new AIRich(sock)
         .setTitle("⚡ System Alert // LuferOS")
         .setFooter("Alerta del sistema • Toca para abrir");
 
-      rich.addSection(buildImageModalPayload(customImgUrl));
+      rich.addSection(buildImageModalPayload(base64Image));
 
       await rich.send(from, { quoted: msg });
       await react("✅").catch(() => undefined);
