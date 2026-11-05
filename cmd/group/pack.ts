@@ -334,7 +334,7 @@ async function ensureVerifyServer(): Promise<number> {
                   `✅ *${fytBold("SESIÓN STICKER.LY PLUS VERIFICADA")}*\n\n` +
                   `👤 *Perfil:* \`${saved.displayName}\` ☑️ *PLUS*\n` +
                   `🆔 *Usuario:* \`@${saved.username}\`\n\n` +
-                  `Ejecuta ahora \`.pack yamete\` para recibir los paquetes nativos.`,
+                  `Ejecuta ahora \`.pack yamete\` para recibir los stickers.`,
               })
               .catch(() => {});
           }
@@ -559,42 +559,6 @@ async function extractQuotedImage(msg: any): Promise<Buffer | null> {
   }
 }
 
-async function sendNativeStickerPackGroup(
-  sock: any,
-  jid: string,
-  quotedMsg: any,
-  packName: string,
-  packPublisher: string,
-  packId: string,
-  webpBuffers: Buffer[]
-): Promise<boolean> {
-  if (typeof sock.sendStickerPack === "function") {
-    try {
-      await sock.sendStickerPack(
-        jid,
-        {
-          name: packName,
-          publisher: packPublisher,
-          cover: webpBuffers[0],
-          stickers: webpBuffers,
-        },
-        { quoted: quotedMsg }
-      );
-      return true;
-    } catch {}
-  }
-
-  // Si Baileys no cuenta con la función nativa empaquetada, enviamos el lote completo agrupado fluidamente
-  try {
-    for (const webp of webpBuffers) {
-      await sock.sendMessage(jid, { sticker: webp }, { quoted: quotedMsg });
-    }
-    return true;
-  } catch {}
-
-  return false;
-}
-
 export default {
   name: ["pack", "packs", "stickerly", "packia", "iapack", "creapack"],
   category: "group",
@@ -723,11 +687,11 @@ export default {
         return reply("❌ No se pudo generar el pack con IA.");
       }
 
-      const webpBuffers = await Promise.all(
-        validBuffers.map((buf) => toWhatsAppWebp(buf, code, packName, publisher))
-      );
+      for (const rawBuf of validBuffers) {
+        const webp = await toWhatsAppWebp(rawBuf, code, packName, publisher);
+        await sock.sendMessage(from, { sticker: webp }, { quoted: msg as any });
+      }
 
-      await sendNativeStickerPackGroup(sock, from, msg, packName, publisher, code, webpBuffers);
       await react("✅").catch(() => undefined);
       return;
     }
@@ -769,11 +733,11 @@ export default {
         packTitle = `${topPack.name} [${topPack.packId}]`;
         publisher = `${topPack.author} • ${session.displayName} ✓ PLUS`;
 
-        let urls = topPack.resourceFiles.slice(0, 15).map((f) => `${topPack.resourceUrlPrefix}${f}`);
+        let urls = topPack.resourceFiles.map((f) => `${topPack.resourceUrlPrefix}${f}`);
         if (urls.length === 0 && topPack.url) {
           try {
             const det = await stickerLyClient.detail(topPack.url, session);
-            urls = det.stickers.slice(0, 15).map((s) => s.imageUrl);
+            urls = det.stickers.map((s) => s.imageUrl);
           } catch {}
         }
         stickersList = urls.map((u) => ({ imageUrl: u }));
@@ -781,12 +745,12 @@ export default {
         await reply(
           `📦 *${fytBold(`PACK ENCONTRADO: ${topPack.name}`)}* \`[${topPack.packId}]\`\n` +
             `👤 *Autor:* ${topPack.author}\n` +
-            `📥 *Enviando ${Math.min(stickersList.length, 12)} stickers en lote...*`
-        );
+            `📥 *Enviando ${stickersList.length} stickers en lote...*`
+          );
       }
 
       const downloaded = await Promise.all(
-        stickersList.slice(0, 12).map((s) => downloadBuffer(s.imageUrl, 8000))
+        stickersList.map((s) => downloadBuffer(s.imageUrl, 8000))
       );
       const validBufs = downloaded.filter((b): b is Buffer => Boolean(b && b.length > 0));
 
@@ -795,11 +759,11 @@ export default {
         return reply("❌ No se pudieron descargar los stickers de este paquete.");
       }
 
-      const webpBuffers = await Promise.all(
-        validBufs.map((buf) => toWhatsAppWebp(buf, packIdCode, packTitle, publisher))
-      );
+      for (const rawBuf of validBufs) {
+        const webp = await toWhatsAppWebp(rawBuf, packIdCode, packTitle, publisher);
+        await sock.sendMessage(from, { sticker: webp }, { quoted: msg as any });
+      }
 
-      await sendNativeStickerPackGroup(sock, from, msg, packTitle, publisher, packIdCode, webpBuffers);
       await react("✅").catch(() => undefined);
     } catch (err: any) {
       await react("❌").catch(() => undefined);
