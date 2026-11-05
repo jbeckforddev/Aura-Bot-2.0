@@ -85,9 +85,21 @@ async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
         const YT_ID = url.match(YT_REGEX)?.[1];
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
         const res = await undici.fetch(YT_URL,{
+            method: "GET",
             headers: {
                 "User-Agent": UA,
                 "Accept-Language": "es-ES,es;q=0.9",
+                "Accept": "text/css,*/*;q=0.1",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Referer": "https://www.youtube.com/",
+                "Sec-Ch-Ua": '"Not.A/Brand";v="8", "Chromium";v="155", "Google Chrome";v="155"',
+                "Sec-Ch-Ua-Full-Version-List": '"Not-A.Brand";v="99.0.0.0", "Google Chrome";v="157.0.0.0", "Chromium";v="157.0.0.0"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "no-cors",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Gpc": "1",
                 Cookie: "CONSENT=YES+1; SOCS=CAI",
             },
             redirect: "follow",

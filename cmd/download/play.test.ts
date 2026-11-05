@@ -1,18 +1,14 @@
-import yts from "./../../src/api/YouTubeSearch.test.ts";
-import dl from "./../../src/api/YouTubeDL.test.ts";
-import type { CommandContext, } from "../../types/index.d.ts";
-import {
-  generateWAMessageFromContent,
-  prepareWAMessageMedia,
-  type WAMessage,
-} from "baileys";
+import yts from "../../src/api/YouTubeSearch.test.ts";
+import dl from "../../src/api/YouTubeDL.test.ts";
+import type { CommandContext, } from "../../types/index";
+import { generateWAMessageFromContent, prepareWAMessageMedia, type WAMessage, } from "baileys";
 import { createLinkPreviewWithoutChannel } from "../../core/LinkPreview.ts";
 import { t } from "../../src/langs/index.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 
 export default {
-  name: ["ytatest", "ytdltest"],
+  name: ["playtest", "ytdltest"],
   description: t("cmd_busca_y_descarga_audio_de_yout_04475ecb"),
   hideCmd: true,
 
@@ -28,10 +24,7 @@ export default {
 
         const prepared = await prepareWAMessageMedia(
           { image: { url: thumbnail } },
-          {
-            upload: sock.waUploadToServer,
-            mediaTypeOverride: "thumbnail-link",
-          },
+          { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link", },
         );
         if (!prepared.imageMessage) return reply({ text });
 
