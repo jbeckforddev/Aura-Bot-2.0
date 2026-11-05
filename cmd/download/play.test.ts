@@ -90,7 +90,13 @@ export default {
 
       } else {
         const searchResults = await yts(query, 1);
-        if (searchResults.status !== "success" || searchResults.results.length === 0) {
+        if (searchResults.status !== "success") {
+          if (searchResults.statusCode === 404) {
+            return reply(t("cmd_sin_resultados_aafe1c07"));
+          }
+          throw new Error(searchResults.error);
+        }
+        if (searchResults.results.length === 0) {
           return reply(t("cmd_sin_resultados_aafe1c07"));
         }
 

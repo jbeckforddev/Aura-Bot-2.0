@@ -85,12 +85,13 @@ async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
         const YT_ID = url.match(YT_REGEX)?.[1];
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
         const res = await axios.get(YT_URL,{
-            method: "GET",
             headers: {
                 "User-Agent": UA,
                 "Accept-Language": "es-ES,es;q=0.9",
                 Cookie: "CONSENT=YES+1; SOCS=CAI",
             },
+            adapter: "fetch",
+            responseType: "text",
         });
         if (res.status < 200 || res.status >= 300) {
             throw new Error(`HTTP error! status: ${res.status}`);

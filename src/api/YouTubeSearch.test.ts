@@ -1,7 +1,6 @@
 import axios from "axios";
 
-const HEADER =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
+const HEADER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
 const REQUEST_TIMEOUT_MS = 10000;
 type YouTubeVideo = {
   id: string;
@@ -63,6 +62,8 @@ async function getVideoLikes(videoId: string): Promise<string> {
         "Accept-Language": "es-ES,es;q=0.9",
         Cookie: "CONSENT=YES+1; SOCS=CAI",
       },
+      adapter: "fetch",
+      responseType: "text",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     },
   );
@@ -124,6 +125,8 @@ export default async function searchYouTube(
         "Accept-Language": "es-ES,es;q=0.9",
         Cookie: "CONSENT=YES+1; SOCS=CAI",
       },
+      adapter: "fetch",
+      responseType: "text",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const ping = Date.now() - lat;
