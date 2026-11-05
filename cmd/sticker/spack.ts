@@ -28,8 +28,6 @@ import type {
 } from "../../types/index.d.ts";
 import { t } from "../../src/langs/index.ts";
 
-
-// Configuración de endpoints MMS nativos de WhatsApp (igual que spack.js)
 MEDIA_PATH_MAP["sticker-pack"] = "/mms/document";
 MEDIA_HKDF_KEY_MAPPING["sticker-pack"] = "Sticker Pack";
 
@@ -152,7 +150,7 @@ async function sendStickerPack(
 }
 
 export default {
-  name: ["stickersearch", "buscars", "spack"],
+  name: ["pack", "packs", "stickerly", "stickersearch", "buscars", "spack"],
   category: "sticker",
   description:
     t("cmd_busca_un_pack_de_stickers_y_lo_21bd34b0"),
