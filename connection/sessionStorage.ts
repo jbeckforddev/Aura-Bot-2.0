@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { existsSync, statSync } from "node:fs";
+import { cp, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 export type BotSessionType = "Prem-Bot" | "Sub-Bot";
@@ -9,15 +9,60 @@ export interface BotSessionRoots {
   sub: string;
 }
 
+const sessionLocks = new Map<string, Promise<unknown>>();
+
+function withSessionLock<T>(accountId: string, task: () => Promise<T>): Promise<T> {
+  const previous = sessionLocks.get(accountId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(task)
+    .finally(() => {
+      if (sessionLocks.get(accountId) === next) {
+        sessionLocks.delete(accountId);
+      }
+    });
+  sessionLocks.set(accountId, next);
+  return next;
+}
+
+function getAccountId(sessionName: string): string {
+  return String(sessionName || "")
+    .trim()
+    .replace(/^(?:prem|sub)-/i, "");
+}
+
 function getSessionNames(sessionName: string): {
   prem: string;
   sub: string;
 } {
-  const accountId = sessionName.replace(/^(?:prem|sub)-/i, "");
+  const accountId = getAccountId(sessionName);
   return {
     prem: `prem-${accountId}`,
     sub: `sub-${accountId}`,
   };
+}
+
+function getValidSessionDbMtime(dirPath: string): number {
+  const dbPath = path.join(dirPath, "session.db");
+  try {
+    if (!existsSync(dbPath)) return 0;
+    const stats = statSync(dbPath);
+    return stats.isFile() && stats.size > 0 ? stats.mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function safeMoveDirectory(source: string, destination: string): Promise<void> {
+  await rm(destination, { recursive: true, force: true }).catch(() => undefined);
+  await mkdir(path.dirname(destination), { recursive: true });
+
+  try {
+    await rename(source, destination);
+  } catch {
+    await cp(source, destination, { recursive: true, force: true });
+    await rm(source, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export function getBotSessionDirectory(
@@ -26,9 +71,8 @@ export function getBotSessionDirectory(
   roots: BotSessionRoots,
 ): string {
   const names = getSessionNames(sessionName);
-  return path.join(type === "Prem-Bot" ? roots.prem : roots.sub, names[
-    type === "Prem-Bot" ? "prem" : "sub"
-  ]);
+  const baseRoot = path.resolve(type === "Prem-Bot" ? roots.prem : roots.sub);
+  return path.join(baseRoot, names[type === "Prem-Bot" ? "prem" : "sub"]);
 }
 
 export async function moveBotSessionDirectory(
@@ -36,68 +80,96 @@ export async function moveBotSessionDirectory(
   type: BotSessionType,
   roots: BotSessionRoots,
 ): Promise<string> {
-  const destination = getBotSessionDirectory(sessionName, type, roots);
+  const accountId = getAccountId(sessionName);
 
-  const names = getSessionNames(sessionName);
-  const candidates =
-    type === "Prem-Bot"
-      ? [
-          path.join(roots.sub, names.sub),
-          path.join(roots.prem, names.sub),
-          path.join(roots.sub, names.prem),
-        ]
-      : [
-          path.join(roots.prem, names.prem),
-          path.join(roots.prem, names.sub),
-          path.join(roots.sub, names.prem),
-        ];
-  const sourcesWithAuth = candidates.filter((candidate) =>
-    existsSync(path.join(candidate, "session.db")),
-  );
-  if (sourcesWithAuth.length > 1) {
-    throw new Error(
-      `Hay credenciales duplicadas para ${sessionName}; revisa las carpetas de sesión antes de moverlas.`,
+  return withSessionLock(accountId, async () => {
+    const destination = getBotSessionDirectory(sessionName, type, roots);
+    const names = getSessionNames(sessionName);
+    const premRoot = path.resolve(roots.prem);
+    const subRoot = path.resolve(roots.sub);
+
+    const allCandidates = [
+      path.join(subRoot, names.sub),
+      path.join(premRoot, names.prem),
+      path.join(premRoot, names.sub),
+      path.join(subRoot, names.prem),
+    ];
+
+    const candidates = [...new Set(allCandidates)].filter(
+      (candidate) => candidate !== destination,
     );
-  }
-  if (existsSync(destination)) {
-    if (
-      existsSync(path.join(destination, "session.db")) &&
-      sourcesWithAuth.length > 0
-    ) {
-      throw new Error(
-        `Hay credenciales duplicadas para ${sessionName}; revisa las carpetas de sesión antes de moverlas.`,
+
+    const validSources = candidates
+      .map((dir) => ({ dir, mtime: getValidSessionDbMtime(dir) }))
+      .filter((item) => item.mtime > 0)
+      .sort((a, b) => b.mtime - a.mtime);
+
+    const destMtime = getValidSessionDbMtime(destination);
+
+    if (destMtime > 0) {
+      if (validSources.length > 0 && validSources[0].mtime > destMtime) {
+        await safeMoveDirectory(validSources[0].dir, destination);
+      }
+
+      await Promise.all(
+        candidates.map((candidate) =>
+          rm(candidate, { recursive: true, force: true }).catch(() => undefined),
+        ),
       );
+
+      return destination;
     }
-    if (!existsSync(path.join(destination, "session.db")) && sourcesWithAuth.length > 0) {
-      throw new Error(
-        `La carpeta destino de ${sessionName} existe sin una sesión válida; no se movieron las credenciales.`,
+
+    if (validSources.length > 0) {
+      const bestSource = validSources[0].dir;
+      await safeMoveDirectory(bestSource, destination);
+
+      await Promise.all(
+        candidates
+          .filter((candidate) => candidate !== bestSource)
+          .map((candidate) =>
+            rm(candidate, { recursive: true, force: true }).catch(() => undefined),
+          ),
       );
+
+      return destination;
     }
+
+    if (existsSync(destination)) {
+      return destination;
+    }
+
+    const fallbackSource = candidates.find((candidate) => existsSync(candidate));
+    if (fallbackSource) {
+      await safeMoveDirectory(fallbackSource, destination);
+    }
+
     return destination;
-  }
-
-  const source = sourcesWithAuth[0] ?? candidates.find(existsSync);
-  if (!source) return destination;
-
-  await mkdir(path.dirname(destination), { recursive: true });
-  await rename(source, destination);
-  return destination;
+  });
 }
 
 export async function removeBotSessionDirectories(
   sessionName: string,
   roots: BotSessionRoots,
 ): Promise<void> {
-  const names = getSessionNames(sessionName);
-  const directories = new Set([
-    path.join(roots.prem, names.prem),
-    path.join(roots.prem, names.sub),
-    path.join(roots.sub, names.sub),
-    path.join(roots.sub, names.prem),
-  ]);
-  await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
-  );
+  const accountId = getAccountId(sessionName);
+
+  return withSessionLock(accountId, async () => {
+    const names = getSessionNames(sessionName);
+    const premRoot = path.resolve(roots.prem);
+    const subRoot = path.resolve(roots.sub);
+
+    const directories = new Set([
+      path.join(premRoot, names.prem),
+      path.join(premRoot, names.sub),
+      path.join(subRoot, names.sub),
+      path.join(subRoot, names.prem),
+    ]);
+
+    await Promise.all(
+      [...directories].map((directory) =>
+        rm(directory, { recursive: true, force: true }).catch(() => undefined),
+      ),
+    );
+  });
 }
