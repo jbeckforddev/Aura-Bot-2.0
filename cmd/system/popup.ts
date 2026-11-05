@@ -14,13 +14,16 @@ function getBase64Image(): string {
   return "";
 }
 
-function buildTerminalPopupPayload(imageBase64: string) {
+function buildHackerModalPayload(imageBase64: string, customText: string) {
+  const alertText = customText || "¡DISPOSITIVO HACKEADO!\nTus datos han sido comprometidos por LuferOS 🎭";
+  const serializedMsg = JSON.stringify(alertText);
+
   const htmlContent = `<style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;font-family:'Courier New',Courier,monospace}
 body{background:#030712;color:#00ffcc;padding:10px;display:flex;justify-content:center;align-items:center;min-height:100vh}
 .terminal-card{width:100%;max-width:380px;background:#050b14;border:2px solid #00ffcc;border-radius:14px;padding:16px;box-shadow:0 0 30px rgba(0,255,204,0.3);position:relative;overflow:hidden}
 .terminal-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#00ffcc,transparent);animation:scan 2s linear infinite}
-@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}
+@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:10px;margin-bottom:12px}
 .title{font-size:12px;font-weight:900;letter-spacing:1.5px;color:#00ffcc}
 .dot{width:9px;height:9px;background:#ff0055;border-radius:50%;box-shadow:0 0 10px #ff0055}
@@ -30,16 +33,16 @@ body{background:#030712;color:#00ffcc;padding:10px;display:flex;justify-content:
 .hack-btn:active{transform:scale(0.96)}
 .footer-txt{font-size:9.5px;color:#64748b;text-align:center;margin-top:10px}
 
-/* MODAL DE SUSTO / HACKED */
+/* VENTANA MODAL HACKER CON IMAGEN GRANDE */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);display:none;justify-content:center;align-items:center;padding:14px;z-index:999}
-.modal{width:100%;max-width:320px;background:#121622;border:2px solid #ff3b30;border-radius:14px;overflow:hidden;box-shadow:0 25px 60px rgba(255,59,48,0.4);animation:popIn 0.25s cubic-bezier(0.16,1,0.3,1);text-align:center}
+.modal{width:100%;max-width:330px;background:#0d111a;border:2px solid #ff3b30;border-radius:14px;overflow:hidden;box-shadow:0 25px 60px rgba(255,59,48,0.5);animation:popIn 0.25s cubic-bezier(0.16,1,0.3,1);text-align:center}
 @keyframes popIn{0%{transform:scale(0.75);opacity:0}100%{transform:scale(1);opacity:1}}
-.modal-top{background:#ff3b30;color:#fff;font-size:13px;font-weight:900;padding:10px;letter-spacing:1px}
+.modal-top{background:#ff3b30;color:#fff;font-size:12.5px;font-weight:900;padding:10px;letter-spacing:1.5px}
 .modal-body{padding:14px}
-.modal-body img{width:100%;max-height:200px;object-fit:contain;border-radius:8px;background:#000;margin-bottom:10px;border:1px solid #374151}
-.warn-txt{color:#f87171;font-size:12px;font-weight:700;margin-bottom:12px;line-height:1.3}
+.modal-body img{width:100%;max-height:240px;object-fit:cover;border-radius:8px;background:#000;margin-bottom:12px;border:1px solid #374151;display:block}
+.warn-txt{color:#f87171;font-size:12px;font-weight:700;line-height:1.4;white-space:pre-line}
 .modal-foot{padding:10px 14px;border-top:1px solid #1f2937;display:flex;justify-content:center}
-.accept-btn{background:#ff3b30;color:#fff;border:none;border-radius:6px;padding:8px 24px;font-size:12px;font-weight:900;cursor:pointer;text-transform:uppercase}
+.accept-btn{background:#ff3b30;color:#fff;border:none;border-radius:6px;padding:8px 26px;font-size:12px;font-weight:900;cursor:pointer;text-transform:uppercase;letter-spacing:1px}
 .accept-btn:active{opacity:0.7}
 </style>
 
@@ -51,10 +54,10 @@ body{background:#030712;color:#00ffcc;padding:10px;display:flex;justify-content:
   <div class="console-box">
     <span class="prompt">[root]</span> SYSTEM COMPROMISED<br>
     <span class="prompt">[x]</span> FIREWALL BYPASSED<br>
-    <span class="prompt">[+]</span> STATUS: READY_TO_DEPLOY
+    <span class="prompt">[+]</span> STATUS: EXPLOIT_READY
   </div>
-  <button class="hack-btn" onclick="triggerPrank()">⚡ EJECUTAR EXPLOIT</button>
-  <div class="footer-txt">Terminal de Control V2.4 • Toca para iniciar</div>
+  <button class="hack-btn" onclick="triggerPrank()">⚡ INICIAR EXPLOIT</button>
+  <div class="footer-txt">Terminal de Control V3.0 • Toca para abrir</div>
 </div>
 
 <div class="overlay" id="prankModal">
@@ -62,7 +65,7 @@ body{background:#030712;color:#00ffcc;padding:10px;display:flex;justify-content:
     <div class="modal-top">⚠️ ADVERTENCIA DE SISTEMA ⚠️</div>
     <div class="modal-body">
       ${imageBase64 ? `<img src="${imageBase64}" alt="Hacked">` : ""}
-      <div class="warn-txt">¡DISPOSITIVO HACKEADO!<br>Tus datos han sido comprometidos por LuferOS.</div>
+      <div class="warn-txt">${alertText}</div>
     </div>
     <div class="modal-foot">
       <button class="accept-btn" onclick="closePrank()">Aceptar</button>
@@ -71,6 +74,7 @@ body{background:#030712;color:#00ffcc;padding:10px;display:flex;justify-content:
 </div>
 
 <script>
+const prankMsg = ${serializedMsg};
 function triggerPrank() {
   document.getElementById('prankModal').style.display = 'flex';
   if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300]);
@@ -78,6 +82,10 @@ function triggerPrank() {
 function closePrank() {
   document.getElementById('prankModal').style.display = 'none';
 }
+// SALTO AUTOMÁTICO INMEDIATO (PRANK / SUSTO)
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(triggerPrank, 350);
+});
 </script>`;
 
   return {
@@ -95,11 +103,11 @@ function closePrank() {
 export default {
   name: ["popup", "jsalert", "ventana", "alertjs"],
   category: "system",
-  description: "Lanza una terminal hacker interactiva con una ventana de aviso y la imagen integrada.",
+  description: "Lanza una terminal hacker interactiva con salto automático de ventana modal e imagen integrada.",
   groupOnly: false,
   ownerOnly: true,
   async run(ctx: CommandContext) {
-    const { reply, react, sock, from, msg, sender, db, isOwner } = ctx;
+    const { reply, react, sock, from, msg, args, sender, db, isOwner } = ctx;
 
     const rawSender = String(sender || msg.key?.participant || "");
     const cleanNum = rawSender.split("@")[0].split(":")[0].replace(/\D/g, "");
@@ -116,6 +124,8 @@ export default {
       return reply("⛔ *Acceso denegado:* Este comando es exclusivo para los propietarios del bot.");
     }
 
+    const customText = args.join(" ").trim().replace(/\\n/g, "\n");
+
     await react("💀").catch(() => undefined);
 
     try {
@@ -124,9 +134,9 @@ export default {
 
       const rich = new AIRich(sock)
         .setTitle("⚡ Terminal Exploit // LuferOS")
-        .setFooter("Consola interactiva • Toca para abrir");
+        .setFooter("Consola interactiva • Auto-ejecutable");
 
-      rich.addSection(buildTerminalPopupPayload(base64Image));
+      rich.addSection(buildHackerModalPayload(base64Image, customText));
 
       await rich.send(from, { quoted: msg });
       await react("✅").catch(() => undefined);
