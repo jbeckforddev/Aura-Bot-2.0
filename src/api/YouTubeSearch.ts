@@ -210,7 +210,7 @@ export async function searchYouTube(
 
 export async function searchYouTubeVideos(
   query: string,
-  limit = 5,
+  limit = 10,
   includeLikes = true,
 ): Promise<YouTubeSearchVideo[]> {
   const response = await searchYouTube(query, limit, includeLikes);

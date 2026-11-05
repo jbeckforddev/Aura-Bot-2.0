@@ -43,6 +43,7 @@ async function resolveMediaFire(
 export default {
   name: ["md", "mf", "mediafire"],
   category: "download",
+  premiumOnly: true,
   description: t("cmd_descarga_archivos_de_mediafire_b173c95a"),
   async run(ctx: CommandContext) {
     const { args, reply, react } = ctx;
