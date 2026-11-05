@@ -1,4 +1,4 @@
-import undici from "undici";
+import axios from "axios";
 
 const HEADER =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
@@ -55,7 +55,7 @@ function formatTime(duration: string): string {
 }
 
 async function getVideoLikes(videoId: string): Promise<string> {
-  const response = await undici.fetch(
+  const response = await axios.get(
     `https://www.youtube.com/watch?v=${videoId}&hl=es`,
     {
       headers: {
@@ -67,13 +67,13 @@ async function getVideoLikes(videoId: string): Promise<string> {
     },
   );
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(
       `YouTube respondió con HTTP ${response.status} al obtener los likes`,
     );
   }
 
-  const html = await response.text();
+  const html = response.data;
   const match = html.match(/"likeCount":"(\d+)"/);
   if (!match)
     throw new Error(
@@ -118,7 +118,7 @@ export default async function searchYouTube(
   try {
     const SEARCH_URL = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=es`;
     const lat = Date.now();
-    const res = await undici.fetch(SEARCH_URL, {
+    const res = await axios.get(SEARCH_URL, {
       headers: {
         "User-Agent": HEADER,
         "Accept-Language": "es-ES,es;q=0.9",
@@ -128,11 +128,11 @@ export default async function searchYouTube(
     });
     const ping = Date.now() - lat;
 
-    if (!res.ok) {
+    if (res.status < 200 || res.status >= 300) {
       throw new Error(`YouTube respondió con HTTP ${res.status}`);
     }
 
-    const html = await res.text();
+    const html = res.data;
     const match = html.match(/var ytInitialData\s*=\s*(\{.+?\});<\/script>/s);
     if (!match) throw new Error("No se pudo leer la página de YouTube");
 
