@@ -334,7 +334,7 @@ async function ensureVerifyServer(): Promise<number> {
                   `✅ *${fytBold("SESIÓN STICKER.LY PLUS VERIFICADA")}*\n\n` +
                   `👤 *Perfil:* \`${saved.displayName}\` ☑️ *PLUS*\n` +
                   `🆔 *Usuario:* \`@${saved.username}\`\n\n` +
-                  `Ejecuta ahora \`.pack yamete\` para recibir los paquetes nativos.`,
+                  `Ejecuta ahora \`.pack yamete\` para recibir los stickers.`,
               })
               .catch(() => {});
           }
@@ -559,92 +559,10 @@ async function extractQuotedImage(msg: any): Promise<Buffer | null> {
   }
 }
 
-async function sendNativeStickerPackGroup(
-  sock: any,
-  jid: string,
-  quotedMsg: any,
-  packName: string,
-  packPublisher: string,
-  packId: string,
-  webpBuffers: Buffer[]
-): Promise<boolean> {
-  if (typeof sock.sendStickerPack === "function") {
-    try {
-      await sock.sendStickerPack(
-        jid,
-        {
-          name: packName,
-          publisher: packPublisher,
-          cover: webpBuffers[0],
-          stickers: webpBuffers,
-        },
-        { quoted: quotedMsg }
-      );
-      return true;
-    } catch {}
-  }
-
-  try {
-    const bMod: any = await import("baileys").catch(() => null);
-    if (bMod && typeof sock.relayMessage === "function") {
-      const zipEntries: Array<{ name: string; data: Buffer }> = [];
-      const protoStickers: any[] = [];
-      const trayFileName = `${packId}.png`;
-
-      const coverPng = webpBuffers[0];
-      zipEntries.push({ name: trayFileName, data: coverPng });
-
-      for (let i = 0; i < webpBuffers.length; i++) {
-        const sBuf = webpBuffers[i];
-        const shaHex = crypto.createHash("sha256").update(sBuf).digest("hex");
-        const fName = `${shaHex}.webp`;
-        zipEntries.push({ name: fName, data: sBuf });
-        protoStickers.push({
-          fileName: fName,
-          isAnimated: false,
-          emojis: ["✨"],
-          accessibilityLabel: packName,
-          isLottie: false,
-          mimetype: "image/webp",
-        });
-      }
-
-      const zipBuf = Buffer.from(crypto.randomBytes(16)); // Contenedor emulado robusto
-      const stickerPackMessage = {
-        stickerPackId: packId,
-        name: packName,
-        publisher: packPublisher,
-        stickers: protoStickers,
-        fileLength: zipBuf.length,
-        fileSha256: crypto.createHash("sha256").update(zipBuf).digest(),
-        fileEncSha256: crypto.createHash("sha256").update(zipBuf).digest(),
-        mediaKey: crypto.randomBytes(32),
-        directPath: "/v/t62.15575-34/24",
-        packDescription: `Sticker.ly PLUS • Colección Exclusiva`,
-        mediaKeyTimestamp: Math.floor(Date.now() / 1000),
-        trayIconFileName: trayFileName,
-        thumbnailDirectPath: "/v/t62.15575-34/24",
-        thumbnailSha256: crypto.createHash("sha256").update(coverPng).digest(),
-        thumbnailEncSha256: crypto.createHash("sha256").update(coverPng).digest(),
-        thumbnailHeight: 252,
-        thumbnailWidth: 252,
-        imageDataHash: crypto.createHash("sha256").update(coverPng).digest("hex"),
-        stickerPackSize: zipBuf.length,
-        stickerPackOrigin: 1,
-      };
-
-      await sock.relayMessage(jid, { stickerPackMessage }, { quoted: quotedMsg });
-      return true;
-    }
-  } catch {}
-
-  return false;
-}
-
 export default {
   name: ["pack", "packs", "stickerly", "packia", "iapack", "creapack"],
   category: "group",
-  description: "Busca paquetes en Sticker.ly con perfil PLUS y los envía agrupados como paquete nativo.",
+  description: "Busca en Sticker.ly y envía los stickers en lote con metadatos de tu perfil PLUS.",
   groupOnly: false,
   ownerOnly: false,
   async run(ctx: CommandContext) {
@@ -676,7 +594,7 @@ export default {
         `✅ *${fytBold("SESIÓN PERMANENTE ACTIVADA")}*\n\n` +
           `👤 *Perfil:* \`${saved.displayName}\` ☑️ *PLUS*\n` +
           `🆔 *Usuario:* \`@${saved.username}\`\n\n` +
-          `Ya puedes usar \`.pack yamete\` para recibir los paquetes agrupados.`
+          `Ya puedes usar \`.pack yamete\` para recibir los stickers en lote.`
       );
     }
 
@@ -722,10 +640,10 @@ export default {
       const quotedImg = await extractQuotedImage(msg);
       if (!query && !quotedImg) {
         return reply(
-          `✨ *${fytBold("STICKER.LY PLUS // CREA CON IA")}*\n\n` +
-            `Escribe la temática del pack:\n` +
-            `• \`.packIA yamete anime reacciones\`\n` +
-            `• \`.packIA gato soldado táctico\``
+          `✨ *${fytBold("STICKER.LY PLUS // CREA")}*\n\n` +
+            `Escribe la temática:\n` +
+            `• \`.packIA yamete anime\`\n` +
+            `• \`.packIA gato cyberpunk\``
         );
       }
 
@@ -739,11 +657,11 @@ export default {
         `🪄 *${fytBold("GENERANDO PACK CON IA")}*\n` +
           `👤 *Perfil:* \`${session.displayName}\` ☑️ *PLUS*\n` +
           `🎨 *Idea:* \`${promptBase}\`\n` +
-          `⏳ *Creando pack agrupado...*`
+          `⏳ *Enviando stickers en lote...*`
       );
 
       const prompts = [
-        `${promptBase}, happy anime sticker, die-cut white border, isolated`,
+        `${promptBase}, happy anime sticker, die-cut white border`,
         `${promptBase}, laughing funny sticker, die-cut white border`,
         `${promptBase}, blushing shy sticker, die-cut white border`,
         `${promptBase}, angry fire sticker, die-cut white border`,
@@ -769,11 +687,11 @@ export default {
         return reply("❌ No se pudo generar el pack con IA.");
       }
 
-      const webpBuffers = await Promise.all(
-        validBuffers.map((buf) => toWhatsAppWebp(buf, code, packName, publisher))
-      );
+      for (const rawBuf of validBuffers) {
+        const webp = await toWhatsAppWebp(rawBuf, code, packName, publisher);
+        await sock.sendMessage(from, { sticker: webp }, { quoted: msg as any });
+      }
 
-      await sendNativeStickerPackGroup(sock, from, msg, packName, publisher, code, webpBuffers);
       await react("✅").catch(() => undefined);
       return;
     }
@@ -783,9 +701,9 @@ export default {
         `👑 *${fytBold("STICKER.LY PLUS // BUSCADOR")}*\n` +
           `👤 *Perfil:* \`${session.displayName}\` ☑️ *PLUS*\n\n` +
           `📌 *Uso:*\n` +
-          `• \`.pack yamete\` (Busca y envía los 3 paquetes agrupados)\n` +
+          `• \`.pack yamete\` (Busca y envía los stickers en lote)\n` +
           `• \`.pack https://sticker.ly/s/VB7FQI\` (Descarga por link)\n` +
-          `• \`.packIA <idea>\` (Crea un pack agrupado con IA)`
+          `• \`.packIA <idea>\` (Crea un pack con IA)`
       );
     }
 
@@ -793,67 +711,54 @@ export default {
 
     try {
       const isDirectUrlOrCode = query.includes("sticker.ly/s/") || /^[A-Z0-9]{6}$/i.test(query);
+      let stickersList: Array<{ imageUrl: string }> = [];
+      let packTitle = `Sticker Pack [${crypto.randomBytes(3).toString("hex").toUpperCase()}]`;
+      let publisher = `${session.displayName} ✓ PLUS`;
 
       if (isDirectUrlOrCode) {
         const detail = await stickerLyClient.detail(query, session);
-        const publisher = `${detail.author.name} • ${session.displayName} ✓ PLUS`;
-        const packTitle = `${detail.name} [${detail.packId}]`;
-
-        const downloaded = await Promise.all(
-          detail.stickers.slice(0, 15).map((s) => downloadBuffer(s.imageUrl, 8000))
-        );
-        const validBufs = downloaded.filter((b): b is Buffer => Boolean(b && b.length > 0));
-
-        if (!validBufs.length) {
+        packTitle = `${detail.name} [${detail.packId}]`;
+        publisher = `${detail.author.name} • ${session.displayName} ✓ PLUS`;
+        stickersList = detail.stickers;
+      } else {
+        const allPacks = await stickerLyClient.search(query, session);
+        if (allPacks.length === 0) {
           await react("❌").catch(() => undefined);
-          return reply("❌ No se pudieron descargar los stickers de este paquete.");
+          return reply(`❌ No se encontraron paquetes para: \`${query}\`. Usa \`.packIA ${query}\` para crearlo.`);
         }
+        const topPack = allPacks[0];
+        packTitle = `${topPack.name} [${topPack.packId}]`;
+        publisher = `${topPack.author} • ${session.displayName} ✓ PLUS`;
 
-        const webpBuffers = await Promise.all(
-          validBufs.map((buf) => toWhatsAppWebp(buf, detail.packId, packTitle, publisher))
-        );
-
-        await sendNativeStickerPackGroup(sock, from, msg, packTitle, publisher, detail.packId, webpBuffers);
-        await react("✅").catch(() => undefined);
-        return;
-      }
-
-      const allPacks = await stickerLyClient.search(query, session);
-      const top3Packs = allPacks.slice(0, 3);
-
-      if (top3Packs.length === 0) {
-        await react("❌").catch(() => undefined);
-        return reply(
-          `❌ *No se encontraron paquetes para:* \`${query}\`\n\n` +
-            `💡 Usa \`.packIA ${query}\` para crearlo con IA.`
-        );
-      }
-
-      for (let i = 0; i < top3Packs.length; i++) {
-        const pack = top3Packs[i];
-        let stickerUrls = pack.resourceFiles
-          .slice(0, 12)
-          .map((file) => `${pack.resourceUrlPrefix}${file}`);
-
-        if (stickerUrls.length === 0 && pack.url) {
+        let urls = topPack.resourceFiles.slice(0, 15).map((f) => `${topPack.resourceUrlPrefix}${f}`);
+        if (urls.length === 0 && topPack.url) {
           try {
-            const det = await stickerLyClient.detail(pack.url, session);
-            stickerUrls = det.stickers.slice(0, 12).map((s) => s.imageUrl);
+            const det = await stickerLyClient.detail(topPack.url, session);
+            urls = det.stickers.slice(0, 15).map((s) => s.imageUrl);
           } catch {}
         }
+        stickersList = urls.map((u) => ({ imageUrl: u }));
 
-        const downloaded = await Promise.all(stickerUrls.map((u) => downloadBuffer(u, 8000)));
-        const validBufs = downloaded.filter((b): b is Buffer => Boolean(b && b.length > 0));
-        if (!validBufs.length) continue;
-
-        const publisher = `${pack.author} • ${session.displayName} ✓ PLUS`;
-        const packTitle = `${pack.name} [${pack.packId}]`;
-
-        const webpBuffers = await Promise.all(
-          validBufs.map((buf) => toWhatsAppWebp(buf, pack.packId, packTitle, publisher))
+        await reply(
+          `📦 *${fytBold(`PACK ENCONTRADO: ${topPack.name}`)}* \`[${topPack.packId}]\`\n` +
+            `👤 *Autor:* ${topPack.author}\n` +
+            `📥 *Enviando ${Math.min(stickersList.length, 12)} stickers en lote...*`
         );
+      }
 
-        await sendNativeStickerPackGroup(sock, from, msg, packTitle, publisher, pack.packId, webpBuffers);
+      const downloaded = await Promise.all(
+        stickersList.slice(0, 12).map((s) => downloadBuffer(s.imageUrl, 8000))
+      );
+      const validBufs = downloaded.filter((b): b is Buffer => Boolean(b && b.length > 0));
+
+      if (!validBufs.length) {
+        await react("❌").catch(() => undefined);
+        return reply("❌ No se pudieron descargar los stickers de este paquete.");
+      }
+
+      for (const rawBuf of validBufs) {
+        const webp = await toWhatsAppWebp(rawBuf, "PACK", packTitle, publisher);
+        await sock.sendMessage(from, { sticker: webp }, { quoted: msg as any });
       }
 
       await react("✅").catch(() => undefined);
