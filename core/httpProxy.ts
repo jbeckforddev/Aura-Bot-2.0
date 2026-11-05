@@ -91,11 +91,21 @@ function createProxyDispatcher(): RotatingProxyDispatcher | undefined {
 
   const proxies = proxyUrls.map((proxyUrl, index): ProxyDispatcher => {
     let parsedUrl: URL;
-    const normalizedProxyUrl = /^[a-z][a-z\d+.-]*:\/\//i.test(proxyUrl)
-      ? proxyUrl
-      : `http://${proxyUrl}`;
     try {
-      parsedUrl = new URL(normalizedProxyUrl);
+      const credentialsMatch = proxyUrl.match(
+        /^([^:/\s]+):(\d+):([^:\s]+):(.+)$/,
+      );
+      if (credentialsMatch) {
+        const [, host, port, username, password] = credentialsMatch;
+        parsedUrl = new URL(`http://${host}:${port}`);
+        parsedUrl.username = username!;
+        parsedUrl.password = password!;
+      } else {
+        const normalizedProxyUrl = /^[a-z][a-z\d+.-]*:\/\//i.test(proxyUrl)
+          ? proxyUrl
+          : `http://${proxyUrl}`;
+        parsedUrl = new URL(normalizedProxyUrl);
+      }
     } catch (error) {
       throw new Error(
         `La lista de proxies contiene una URL inválida en la posición ${index + 1}.`,
