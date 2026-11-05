@@ -13,9 +13,11 @@ const PROJECT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 class RotatingProxyDispatcher extends Dispatcher {
   private nextProxyIndex = 0;
+  private readonly proxies: ProxyDispatcher[];
 
-  constructor(private readonly proxies: ProxyDispatcher[]) {
+  constructor(proxies: ProxyDispatcher[]) {
     super();
+    this.proxies = proxies;
   }
 
   get proxyCount(): number {
