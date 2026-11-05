@@ -18,7 +18,7 @@ export default {
   groupOnly: false,
   ownerOnly: false,
   async run(ctx: CommandContext) {
-    const { reply, react, args } = ctx;
+    const { reply, react, args, sock, sender, from, msg } = ctx;
 
     await react("🧭").catch(() => undefined);
 
@@ -121,9 +121,9 @@ export default {
 
     await react("✅").catch(() => undefined);
 
-    if (finalReport.length > 3800) {
+    if (finalReport.length > 3800 && sock && typeof sock.sendMessage === "function") {
       return sock.sendMessage(
-        ctx.sender || from,
+        sender || from,
         {
           document: Buffer.from(finalReport, "utf8"),
           mimetype: "text/plain",
