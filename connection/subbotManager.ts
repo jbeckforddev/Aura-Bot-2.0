@@ -57,9 +57,8 @@ const reconnectAttempts = new Map<string, number>();
 const managedReconnects = new Map<string, Promise<void>>();
 const subBotLogger = operationLogger.child({ component: "sub-bot" });
 
-// Caché en memoria para mensajes recientes (evita fallos de descifrado y permite retransmisión)
 const recentMessagesCache = new LRUCache<string, proto.IMessage>({
-  max: 1000,
+  max: 1500,
   ttl: 15 * 60 * 1000,
 });
 
@@ -67,7 +66,8 @@ const STARTUP_CONCURRENCY = 2;
 const STARTUP_STAGGER_MS = 1500;
 const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 const WA_WEB_VERSION_TIMEOUT_MS = 8000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_RECONNECT_ATTEMPTS = 6;
 const SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 const PREM_SESSION_ROOT = globalThis.premBotSession ?? "./sessions/prem";
 
@@ -89,7 +89,6 @@ function deleteActiveSubBot(
   if (socket) unregisterActiveBot(sessionName, socket);
 }
 
-// Semáforo para escalonar reconexiones y evitar bloqueos '503 Stream Errored' por ráfagas concurrentes en la misma IP
 const MAX_CONCURRENT_RECONNECTS = 2;
 let activeReconnects = 0;
 const reconnectQueue: (() => Promise<void>)[] = [];
@@ -129,6 +128,7 @@ export function runWithReconnectSlot<T>(task: () => Promise<T>): Promise<T> {
 }
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
+let waWebVersionExpiresAt = 0;
 
 function createBoundedCacheStore(max: number, ttl: number) {
   const cache = new LRUCache<string, any>({ max, ttl });
@@ -146,8 +146,9 @@ function createBoundedCacheStore(max: number, ttl: number) {
   };
 }
 
-function getSubBotWebVersion() {
-  if (!waWebVersionPromise) {
+function getSubBotWebVersion(): Promise<[number, number, number]> {
+  if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
+    waWebVersionExpiresAt = Date.now() + WA_WEB_VERSION_CACHE_TTL_MS;
     let timeout: NodeJS.Timeout;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeout = setTimeout(
@@ -169,6 +170,7 @@ function getSubBotWebVersion() {
       .finally(() => clearTimeout(timeout))
       .catch((error) => {
         waWebVersionPromise = undefined;
+        waWebVersionExpiresAt = 0;
         throw error;
       });
   }
@@ -182,10 +184,6 @@ function clearReconnectTimer(sessionName: string) {
   reconnectTimers.delete(sessionName);
 }
 
-/**
- * Destruye de forma segura y en el orden correcto un socket.
- * Primero se marcan banderas de cierre, luego eventos y socket WS, y al final se cierra SQLite de forma segura.
- */
 async function safelyDestroySocket(
   sock?: ExtendedWASocket | null,
   reason?: Error,
@@ -202,7 +200,7 @@ async function safelyDestroySocket(
 
   if (sock.ws) {
     try {
-      sock.ws.removeAllListeners?.();
+      (sock.ws as any).removeAllListeners?.();
       if ((sock.ws as any).readyState !== 3) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 1500);
@@ -210,7 +208,12 @@ async function safelyDestroySocket(
             clearTimeout(timeout);
             resolve();
           });
-          sock.ws?.close();
+          try {
+            sock.ws?.close();
+          } catch {
+            clearTimeout(timeout);
+            resolve();
+          }
         });
       }
     } catch {}
@@ -225,9 +228,6 @@ async function safelyDestroySocket(
   } catch {}
 }
 
-/*
- * Desvincula por completo un subbot de memoria, base de datos y disco de forma atómica.
- */
 export async function unlinkSubBot(
   sessionName: string,
   targetSocket?: ExtendedWASocket,
@@ -245,7 +245,6 @@ export async function unlinkSubBot(
     await safelyDestroySocket(socket);
   }
 
-  // Eliminar de la base de datos tanto por JID normalizado como por sessionName
   try {
     if (botJid) db.deleteBot(botJid);
     db.deleteBot(sessionName);
@@ -256,7 +255,6 @@ export async function unlinkSubBot(
     );
   }
 
-  // Eliminar del disco
   try {
     await removeBotSessionDirectories(sessionName, {
       prem: PREM_SESSION_ROOT,
@@ -275,45 +273,38 @@ export async function unlinkSubBot(
   );
 }
 
-/*
- * Limpia la instancia en memoria sin necesariamente purgar la sesión de disco/DB (usado en reconexiones).
- */
 async function cleanSubBot(sessionName: string, targetSocket?: ExtendedWASocket) {
   clearReconnectTimer(sessionName);
   connectionsInProgress.delete(sessionName);
 
   const current = activeSubBots.get(sessionName);
-  deleteActiveSubBot(sessionName, targetSocket ?? current);
   if (targetSocket && current && current !== targetSocket) {
+    unregisterActiveBot(sessionName, targetSocket);
     await safelyDestroySocket(targetSocket);
     return;
   }
+  deleteActiveSubBot(sessionName, targetSocket ?? current);
   if (current) {
     await safelyDestroySocket(current);
   }
 }
 
-/*
- * Programa reconexiones inteligentes con jitter aleatorio para prevenir tormentas
- * y backoff espaciado en lugar de muerte permanente tras 5 intentos.
- */
 function scheduleReconnect(sessionName: string, options: ConnectionOptions) {
   clearReconnectTimer(sessionName);
   const attempts = (reconnectAttempts.get(sessionName) ?? 0) + 1;
   reconnectAttempts.set(sessionName, attempts);
 
-  const jitter = Math.floor(Math.random() * 4000) + 2000;
+  const jitter = Math.floor(Math.random() * 3500) + 1500;
   let delayMs: number;
 
   if (attempts <= MAX_RECONNECT_ATTEMPTS) {
-    delayMs = Math.min(2500 * attempts, 15000) + jitter;
+    delayMs = Math.min(3000 * Math.pow(1.4, attempts - 1), 25000) + jitter;
     logInfo(
       `Reconexión ${attempts}/${MAX_RECONNECT_ATTEMPTS} para ${sessionName} en ${Math.round(delayMs / 1000)}s...`,
       "warn",
     );
   } else {
-    // Backoff de fondo: reintenta cada 5 minutos en lugar de rendirse para siempre
-    delayMs = 5 * 60 * 1000 + jitter;
+    delayMs = 3 * 60 * 1000 + jitter;
     logInfo(
       `${sessionName} superó ${MAX_RECONNECT_ATTEMPTS} intentos rápidos. Reintentando en segundo plano en ${Math.round(delayMs / 60000)} min...`,
       "warn",
@@ -350,6 +341,12 @@ async function connectSubBot(
     return activeSubBots.get(sessionName);
   }
   connectionsInProgress.add(sessionName);
+
+  const existingSocket = activeSubBots.get(sessionName);
+  if (existingSocket) {
+    deleteActiveSubBot(sessionName, existingSocket);
+    await safelyDestroySocket(existingSocket);
+  }
 
   let authState: Awaited<ReturnType<typeof useSQLiteAuthState>>;
   let sessionDir: string;
@@ -388,7 +385,7 @@ async function connectSubBot(
     try {
       closeAuthState?.();
     } catch {}
-    await rm(sessionDir, { recursive: true, force: true });
+    await rm(sessionDir, { recursive: true, force: true }).catch(() => undefined);
     connectionsInProgress.delete(sessionName);
     return null;
   }
@@ -423,7 +420,7 @@ async function connectSubBot(
       logger: subBotLogger,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
+      keepAliveIntervalMs: 25000,
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       disableLinkPreviews: true,
@@ -446,43 +443,24 @@ async function connectSubBot(
   socket.botType = "Sub-Bot";
   socket.subBotId = sessionName;
   socket.sessionName = sessionName;
-  setActiveSubBot(sessionName, socket);
 
-  try {
-    await options.onSocketCreated?.(socket);
-  } finally {
-    connectionsInProgress.delete(sessionName);
-  }
-
-  let connected = isRegistered;
-  let pairingExpired = false;
-  let pairingCodeRequested = false;
-  let connectionClosed = false;
-  let pairingTimer: NodeJS.Timeout | undefined;
-  const knownGroupJids = new Set<string>();
-  try {
-    const existingBot = db.getBot(sessionName);
-    if (Array.isArray(existingBot?.groups)) {
-      for (const g of existingBot.groups) {
-        if (g) knownGroupJids.add(g);
-      }
-    }
-  } catch {}
   let saveTimer: NodeJS.Timeout | null = null;
   let credentialsDirty = false;
   let authStateClosing = false;
   let authStateClosePromise: Promise<void> | null = null;
   let credentialsWriteQueue: Promise<void> = Promise.resolve();
 
-  const persistCredentials = () => {
+  const persistCredentials = (force = false) => {
     if (!credentialsDirty) return credentialsWriteQueue;
+    if (authStateClosing && !force) return credentialsWriteQueue;
     credentialsDirty = false;
     credentialsWriteQueue = credentialsWriteQueue
       .catch(() => {})
       .then(async () => {
         try {
-          if (!authStateClosing) await saveCreds();
+          await saveCreds();
         } catch (error) {
+          credentialsDirty = true;
           logInfo(`Error guardando credenciales de ${sessionName}: ${String(error)}`, "error");
         }
       });
@@ -498,7 +476,7 @@ async function connectSubBot(
         saveTimer = null;
       }
       try {
-        await persistCredentials();
+        await persistCredentials(true);
       } catch (error) {
         logInfo(`Error guardando credenciales antes de cerrar ${sessionName}: ${String(error)}`, "warn");
       }
@@ -524,9 +502,30 @@ async function connectSubBot(
     saveTimer = setTimeout(() => {
       saveTimer = null;
       void persistCredentials();
-    }, 500);
+    }, 800);
     saveTimer.unref?.();
   });
+
+  setActiveSubBot(sessionName, socket);
+
+  let connected = isRegistered;
+  let pairingExpired = false;
+  let pairingCodeRequested = false;
+  let connectionClosed = false;
+  let pairingTimer: NodeJS.Timeout | undefined;
+  const knownGroupJids = new LRUCache<string, true>({
+    max: 500,
+    ttl: 60 * 60 * 1000,
+  });
+
+  try {
+    const existingBot = db.getBot(sessionName);
+    if (Array.isArray(existingBot?.groups)) {
+      for (const g of existingBot.groups) {
+        if (g) knownGroupJids.set(g, true);
+      }
+    }
+  } catch {}
 
   if (!isRegistered) {
     pairingTimer = setTimeout(() => {
@@ -592,7 +591,7 @@ async function connectSubBot(
           rawCode.match(/.{1,4}/g)?.join("-") || rawCode,
         );
       } catch (error) {
-        pairingCodeRequested = false; // Permite reintento si falla la solicitud
+        pairingCodeRequested = false;
         logInfo(
           `Error solicitando el código para ${sessionName}: ${String(error)}`,
           "error",
@@ -605,6 +604,7 @@ async function connectSubBot(
 
     if (update.connection === "open") {
       connected = true;
+      connectionsInProgress.delete(sessionName);
       if (pairingTimer) clearTimeout(pairingTimer);
       reconnectAttempts.delete(sessionName);
       const botJid = jidNormalizedUser(socket.user?.id || "");
@@ -681,9 +681,10 @@ async function connectSubBot(
 
     if (update.connection !== "close") return;
     connectionClosed = true;
+    connectionsInProgress.delete(sessionName);
+    knownGroupJids.clear();
     if (pairingTimer) clearTimeout(pairingTimer);
 
-    await options.onDisconnected?.();
     const error = update.lastDisconnect?.error;
     const statusCode =
       new Boom(error).output?.statusCode ||
@@ -696,10 +697,10 @@ async function connectSubBot(
     const botJid = socket.user?.id ? jidNormalizedUser(socket.user.id) : "";
     if (botJid && connected) db.setBot(botJid, { status: "offline" });
 
-    // Cierre manual por comando
     if (socket.manualLogout) {
       logInfo(`Cierre manual completado para ${sessionName}.`, "info");
       await unlinkSubBot(sessionName, socket, "cierre manual por comando");
+      await options.onDisconnected?.();
       return;
     }
     if (pairingExpired) return;
@@ -729,6 +730,7 @@ async function connectSubBot(
       );
       deleteActiveSubBot(sessionName, socket);
       await safelyDestroySocket(socket);
+      await options.onDisconnected?.();
       scheduleReconnect(sessionName, options);
       return;
     }
@@ -739,6 +741,7 @@ async function connectSubBot(
         socket,
         `sesión inválida o expirada (Código: ${statusCode || "N/A"})`,
       );
+      await options.onDisconnected?.();
       if (!currentRegistered) {
         await options.onPairingExpired?.();
       } else if (connected) {
@@ -764,12 +767,13 @@ async function connectSubBot(
       clearReconnectTimer(sessionName);
       reconnectAttempts.delete(sessionName);
       await safelyDestroySocket(socket);
+      await options.onDisconnected?.();
       return;
     }
 
-    // Desconexión transitoria: limpiar el socket de forma segura y reconectar
     deleteActiveSubBot(sessionName, socket);
     await safelyDestroySocket(socket);
+    await options.onDisconnected?.();
     scheduleReconnect(sessionName, options);
   });
 
@@ -777,7 +781,6 @@ async function connectSubBot(
     if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
     if (socket.user?.id) reconnectAttempts.delete(sessionName);
 
-    // Guardar mensajes entrantes en caché para soporte de reenvío/descifrado
     messages.forEach((msg) => {
       if (msg.key?.id && msg.message) {
         recentMessagesCache.set(msg.key.id, msg.message);
@@ -793,7 +796,7 @@ async function connectSubBot(
           const groupJid = message.key?.remoteJid;
           if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
             if (socket.user?.id) db.addBotGroup(socket.user.id, groupJid);
-            knownGroupJids.add(groupJid);
+            knownGroupJids.set(groupJid, true);
           }
           await handleMessage(
             socket,
@@ -890,6 +893,12 @@ async function connectSubBot(
     }
   });
 
+  try {
+    await options.onSocketCreated?.(socket);
+  } finally {
+    connectionsInProgress.delete(sessionName);
+  }
+
   return socket;
 }
 
@@ -907,9 +916,6 @@ function normalizePhone(value: unknown): string {
   return raw.length >= 7 && raw.length <= 15 ? raw : "";
 }
 
-/**
- * Prioriza el número telefónico destino sobre el solicitante para evitar colisiones.
- */
 function sessionNameFor(requester: string, fallbackPhone?: string): string {
   const cleanId =
     normalizePhone(fallbackPhone) ||
@@ -921,9 +927,6 @@ function sessionNameFor(requester: string, fallbackPhone?: string): string {
   return `sub-${cleanId || "bot"}`;
 }
 
-/**
- * Devuelve únicamente sockets activos y debidamente autenticados con WhatsApp.
- */
 export function getActiveSubBots(): ExtendedWASocket[] {
   const list: ExtendedWASocket[] = [];
   for (const socket of activeSubBots.values()) {
@@ -1010,9 +1013,6 @@ export async function requestSubBotLink(request: LinkRequest): Promise<string> {
       onSessionClosed: async (reason) => {
         await request.onSessionClosed?.(reason);
       },
-      onDisconnected: () => {
-        void cleanSubBot(sessionName, managedSocket);
-      },
     };
 
     const connection = await connectSubBot(sessionName, options);
@@ -1056,9 +1056,6 @@ export async function reconnectSubBot(
       premiumToken,
       onSocketCreated: (nextSocket) => {
         setActiveSubBot(sessionName, nextSocket);
-      },
-      onDisconnected: () => {
-        void cleanSubBot(sessionName);
       },
     };
     try {
@@ -1132,7 +1129,6 @@ export async function startSavedSubBots() {
       continue;
     }
 
-    // Validar pre-existencia en disco antes de crear carpetas o intentar sockets
     const sessionDir = await moveBotSessionDirectory(sessionName, "Sub-Bot", {
       prem: PREM_SESSION_ROOT,
       sub: SESSION_ROOT,
@@ -1182,24 +1178,22 @@ export async function startSavedSubBots() {
       }
 
       let managedSocket: ExtendedWASocket | undefined;
+      const restoreOptions: ConnectionOptions = {
+        allowPairing: false,
+        botType: session.botType,
+        premiumToken: session.premiumToken,
+        onSocketCreated: (socket) => {
+          managedSocket = socket;
+          setActiveSubBot(sessionName, socket);
+        },
+      };
 
       try {
         logInfo(
           `Restaurando ${sessionName} (${idx + 1}/${sessionsToStart.length}).`,
           "info",
         );
-        const connection = await connectSubBot(sessionName, {
-          allowPairing: false,
-          botType: session.botType,
-          premiumToken: session.premiumToken,
-          onSocketCreated: (socket) => {
-            managedSocket = socket;
-            setActiveSubBot(sessionName, socket);
-          },
-          onDisconnected: () => {
-            void cleanSubBot(sessionName, managedSocket);
-          },
-        });
+        const connection = await connectSubBot(sessionName, restoreOptions);
 
         if (connection) {
           managedSocket = connection;
@@ -1214,7 +1208,8 @@ export async function startSavedSubBots() {
           `No se pudo restaurar ${sessionName}: ${String(error)}`,
           "error",
         );
-        void cleanSubBot(sessionName, managedSocket);
+        await cleanSubBot(sessionName, managedSocket);
+        scheduleReconnect(sessionName, restoreOptions);
       }
     }
   };
