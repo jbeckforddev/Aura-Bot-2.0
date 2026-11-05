@@ -1,25 +1,25 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-function buildImageModalPayload(cardTitle: string, cardSub: string, imageUrl: string) {
+function buildImageModalPayload(imageUrl: string) {
   const htmlContent = `<style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;font-family:system-ui,-apple-system,sans-serif}
-body{background:#030712;color:#f1f5f9;padding:10px;display:flex;justify-content:center;align-items:center}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.82);display:flex;justify-content:center;align-items:center;padding:12px;z-index:99}
-.modal{width:100%;max-width:320px;background:#1e222d;border:1px solid #374151;border-radius:14px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.8);animation:popIn 0.2s ease-out}
-@keyframes popIn{0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}
-.modal-header{padding:14px 16px 8px;font-size:16px;font-weight:700;color:#fff}
+body{background:#0b0f17;color:#f1f5f9;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:10px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;justify-content:center;align-items:center;padding:12px;z-index:99}
+.modal{width:100%;max-width:320px;background:#1e222d;border:1px solid #374151;border-radius:14px;overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,0.9);animation:popIn 0.2s cubic-bezier(0.16,1,0.3,1)}
+@keyframes popIn{0%{transform:scale(0.8);opacity:0}100%{transform:scale(1);opacity:1}}
+.modal-header{padding:14px 16px 6px;font-size:16px;font-weight:700;color:#fff}
 .modal-body{padding:0 16px 12px;text-align:center}
-.modal-body img{width:100%;max-height:220px;object-fit:contain;border-radius:8px;background:#000;margin-bottom:10px}
+.modal-body img{width:100%;max-height:240px;object-fit:contain;border-radius:8px;background:#000;display:block;margin:0 auto}
 .modal-footer{padding:10px 16px;border-top:1px solid #2d3748;display:flex;justify-content:flex-end}
-.ok-btn{background:none;border:none;color:#ff3b30;font-size:14px;font-weight:700;cursor:pointer;text-transform:uppercase;padding:4px 8px}
-.ok-btn:active{opacity:0.6}
+.ok-btn{background:none;border:none;color:#ff3b30;font-size:14px;font-weight:700;cursor:pointer;text-transform:uppercase;padding:6px 12px}
+.ok-btn:active{opacity:0.5}
 </style>
 <div class="overlay" id="modalOverlay">
   <div class="modal">
     <div class="modal-header">JavaScript</div>
     <div class="modal-body">
-      <img src="${imageUrl}" alt="Prank Image" onerror="this.style.display='none'">
+      <img src="${imageUrl}" alt="Alert Image">
     </div>
     <div class="modal-footer">
       <button class="ok-btn" onclick="closeModal()">Aceptar</button>
@@ -30,9 +30,8 @@ body{background:#030712;color:#f1f5f9;padding:10px;display:flex;justify-content:
 function closeModal() {
   document.getElementById('modalOverlay').style.display = 'none';
 }
-// Reproduce sonido opcional de alerta o vibración si el navegador lo permite
 window.addEventListener('DOMContentLoaded', () => {
-  if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  if(navigator.vibrate) navigator.vibrate([120, 60, 120]);
 });
 </script>`;
 
@@ -51,7 +50,7 @@ window.addEventListener('DOMContentLoaded', () => {
 export default {
   name: ["popup", "jsalert", "ventana", "alertjs"],
   category: "system",
-  description: "Lanza una ventana modal simulada con la imagen .webp integrada.",
+  description: "Lanza una ventana modal simulada con la imagen integrada.",
   groupOnly: false,
   ownerOnly: true,
   async run(ctx: CommandContext) {
@@ -72,7 +71,7 @@ export default {
       return reply("⛔ *Acceso denegado:* Este comando es exclusivo para los propietarios del bot.");
     }
 
-    let customImgUrl = "2025-09-30_70f885ec41c878.webp";
+    let customImgUrl = "https://makerworld.bblmw.com/makerworld/model/USe626629a333a2d/design/2025-09-30_70f885ec41c878.png?x-oss-process=image/resize,w_1000/format,webp";
     for (let i = 0; i < args.length; i++) {
       if (args[i] === "-img" && args[i + 1]) {
         customImgUrl = args[i + 1];
@@ -89,13 +88,7 @@ export default {
         .setTitle("⚡ System Alert // LuferOS")
         .setFooter("Alerta del sistema • Toca para abrir");
 
-      rich.addSection(
-        buildImageModalPayload(
-          "JavaScript",
-          "Aviso importante del sistema",
-          customImgUrl
-        ),
-      );
+      rich.addSection(buildImageModalPayload(customImgUrl));
 
       await rich.send(from, { quoted: msg });
       await react("✅").catch(() => undefined);
