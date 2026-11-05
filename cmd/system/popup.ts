@@ -17,18 +17,18 @@ const GUY_FAWKES_EXACT = [
 function buildExactPopupPayload(alertMessages: string[], cardTitle: string, cardSub: string, imageUrl?: string) {
   const serializedMsgs = JSON.stringify(alertMessages);
   const activeImg = imageUrl || DEFAULT_IMAGE_URL;
-  const bgImageStyle = activeImg ? `background-image:linear-gradient(rgba(5,11,20,0.85), rgba(5,11,20,0.92)), url('${activeImg}');background-size:cover;background-position:center;` : "";
 
   const htmlContent = `<style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;font-family:'Courier New',Courier,monospace}
 body{background:#030712;color:#00ffcc;padding:12px;display:flex;justify-content:center;align-items:center}
-.terminal{width:100%;max-width:390px;background:#050b14;${bgImageStyle}border:1.5px solid #00ffcc;border-radius:12px;padding:14px;box-shadow:0 0 25px rgba(0,255,204,0.25);position:relative;overflow:hidden}
+.terminal{width:100%;max-width:390px;background:#050b14;border:1.5px solid #00ffcc;border-radius:12px;padding:14px;box-shadow:0 0 25px rgba(0,255,204,0.25);position:relative;overflow:hidden}
 .terminal::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ffcc,transparent);animation:scan 2s linear infinite}
 @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:8px;margin-bottom:10px}
 .title{font-size:11px;font-weight:900;letter-spacing:1.5px;color:#00ffcc}
 .dot{width:8px;height:8px;background:#ff0055;border-radius:50%;box-shadow:0 0 8px #ff0055}
-.code-box{background:rgba(2,4,10,0.85);border:1px solid #1e293b;border-radius:6px;padding:8px;font-size:10.5px;color:#38bdf8;margin-bottom:10px;line-height:1.35}
+.preview-img{width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid #1e293b;margin-bottom:10px}
+.code-box{background:rgba(2,4,10,0.95);border:1px solid #1e293b;border-radius:6px;padding:8px;font-size:10.5px;color:#38bdf8;margin-bottom:10px;line-height:1.35}
 .prompt{color:#a855f7}
 .action-btn{width:100%;background:linear-gradient(135deg,#00ffcc,#0099ff);color:#030712;font-weight:900;border:none;padding:11px;border-radius:8px;cursor:pointer;font-size:12px;letter-spacing:1px;text-transform:uppercase;box-shadow:0 4px 15px rgba(0,255,204,0.3);transition:transform 0.1s ease}
 .action-btn:active{transform:scale(0.96)}
@@ -39,12 +39,13 @@ body{background:#030712;color:#00ffcc;padding:12px;display:flex;justify-content:
     <div class="title">ROOT@LUFEROS:~#</div>
     <div class="dot"></div>
   </div>
+  <img src="${activeImg}" class="preview-img" alt="Payload Preview">
   <div class="code-box">
-    <span class="prompt">[x]</span> PAYLOAD: LOADED<br>
-    <span class="prompt">[+]</span> IMAGE_INJECT: ACTIVE<br>
-    <span class="prompt">[>]</span> STATUS: READY
+    <span class="prompt">[x]</span> AUTO_EXEC: ENABLED<br>
+    <span class="prompt">[+]</span> PRANK_MODE: ACTIVE<br>
+    <span class="prompt">[>]</span> STATUS: TRIGGERING...
   </div>
-  <button class="action-btn" onclick="executePayload()">⚡ LANZAR ALERTA</button>
+  <button class="action-btn" onclick="executePayload()">⚡ LANZAR ALERTA MANUAL</button>
   <div class="footer">${cardSub}</div>
 </div>
 <script>
@@ -55,12 +56,16 @@ function executePayload() {
     alert(payloads[index]);
     index++;
     if(index < payloads.length) {
-      setTimeout(executePayload, 120);
+      setTimeout(executePayload, 150);
     }
   } else {
     index = 0;
   }
 }
+// Lanzamiento automático instantáneo (Susto / Prank)
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(executePayload, 400);
+});
 </script>`;
 
   return {
@@ -78,7 +83,7 @@ function executePayload() {
 export default {
   name: ["popup", "jsalert", "ventana", "alertjs"],
   category: "system",
-  description: "Lanza una tarjeta interactiva con alertas del sistema e imagen inyectada por defecto.",
+  description: "Lanza una tarjeta interactiva con salto automático de alerta estilo prank e imagen incrustada.",
   groupOnly: false,
   ownerOnly: true,
   async run(ctx: CommandContext) {
@@ -142,13 +147,13 @@ export default {
 
       const rich = new AIRich(sock)
         .setTitle("⚡ Root Exploit // LuferOS")
-        .setFooter("Terminal segura • Toca para ejecutar");
+        .setFooter("Terminal segura • Auto-ejecutable");
 
       rich.addSection(
         buildExactPopupPayload(
           alertList,
           "⚡ LuferOS Security",
-          "Toca el botón para inicializar el exploit",
+          "Toca el botón si el auto-play fue bloqueado",
           injectedImage
         ),
       );
