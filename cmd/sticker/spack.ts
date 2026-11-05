@@ -150,7 +150,7 @@ async function sendStickerPack(
 }
 
 export default {
-  name: ["pack", "packs", "stickerly", "stickersearch", "buscars", "spack"],
+  name: ["pack", "packs", "stickerly", "stickersearch", "buscars"],
   category: "sticker",
   description:
     t("cmd_busca_un_pack_de_stickers_y_lo_21bd34b0"),
