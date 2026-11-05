@@ -1,30 +1,34 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-const HACKER_MASK = [
-"    .-'\"'-.    ",
-"  .'       '.  ",
-" /   _   _   \\ ",
-" |  (o) (o)  | ",
-" |     _     | ",
-" \\   \\___/   / ",
-"  '._     _.'  ",
-"     `\"\"\"`     "
+const DEFAULT_IMAGE_URL = "https://makerworld.bblmw.com/makerworld/model/USe626629a333a2d/design/2025-09-30_70f885ec41c878.png?x-oss-process=image/resize,w_1000/format,webp";
+
+const GUY_FAWKES_EXACT = [
+  "       .---.       ",
+  "      /     \\      ",
+  "     |       |     ",
+  "     | (o) (o) |   ",
+  "     |    _    |   ",
+  "     \\  \\___/  /   ",
+  "      '._   _.'    ",
+  "         `\"\"`      "
 ].join("\n");
 
-function buildElitePopupPayload(alertMessages: string[], cardTitle: string, cardSub: string) {
+function buildExactPopupPayload(alertMessages: string[], cardTitle: string, cardSub: string, imageUrl?: string) {
   const serializedMsgs = JSON.stringify(alertMessages);
+  const activeImg = imageUrl || DEFAULT_IMAGE_URL;
+  const bgImageStyle = activeImg ? `background-image:linear-gradient(rgba(5,11,20,0.85), rgba(5,11,20,0.92)), url('${activeImg}');background-size:cover;background-position:center;` : "";
 
   const htmlContent = `<style>
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;font-family:'Courier New',Courier,monospace}
 body{background:#030712;color:#00ffcc;padding:12px;display:flex;justify-content:center;align-items:center}
-.terminal{width:100%;max-width:390px;background:#050b14;border:1.5px solid #00ffcc;border-radius:12px;padding:14px;box-shadow:0 0 25px rgba(0,255,204,0.25);position:relative;overflow:hidden}
+.terminal{width:100%;max-width:390px;background:#050b14;${bgImageStyle}border:1.5px solid #00ffcc;border-radius:12px;padding:14px;box-shadow:0 0 25px rgba(0,255,204,0.25);position:relative;overflow:hidden}
 .terminal::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ffcc,transparent);animation:scan 2s linear infinite}
 @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:8px;margin-bottom:10px}
 .title{font-size:11px;font-weight:900;letter-spacing:1.5px;color:#00ffcc}
 .dot{width:8px;height:8px;background:#ff0055;border-radius:50%;box-shadow:0 0 8px #ff0055}
-.code-box{background:#02040a;border:1px solid #1e293b;border-radius:6px;padding:8px;font-size:10.5px;color:#38bdf8;margin-bottom:10px;line-height:1.35}
+.code-box{background:rgba(2,4,10,0.85);border:1px solid #1e293b;border-radius:6px;padding:8px;font-size:10.5px;color:#38bdf8;margin-bottom:10px;line-height:1.35}
 .prompt{color:#a855f7}
 .action-btn{width:100%;background:linear-gradient(135deg,#00ffcc,#0099ff);color:#030712;font-weight:900;border:none;padding:11px;border-radius:8px;cursor:pointer;font-size:12px;letter-spacing:1px;text-transform:uppercase;box-shadow:0 4px 15px rgba(0,255,204,0.3);transition:transform 0.1s ease}
 .action-btn:active{transform:scale(0.96)}
@@ -36,11 +40,11 @@ body{background:#030712;color:#00ffcc;padding:12px;display:flex;justify-content:
     <div class="dot"></div>
   </div>
   <div class="code-box">
-    <span class="prompt">[x]</span> SYS_TARGET: SECURE<br>
-    <span class="prompt">[+]</span> INJECTION_VECTOR: READY<br>
-    <span class="prompt">[>]</span> STATUS: AWAITING_EXECUTION
+    <span class="prompt">[x]</span> PAYLOAD: LOADED<br>
+    <span class="prompt">[+]</span> IMAGE_INJECT: ACTIVE<br>
+    <span class="prompt">[>]</span> STATUS: READY
   </div>
-  <button class="action-btn" onclick="executePayload()">⚡ INICIAR EXPLOIT</button>
+  <button class="action-btn" onclick="executePayload()">⚡ LANZAR ALERTA</button>
   <div class="footer">${cardSub}</div>
 </div>
 <script>
@@ -51,7 +55,7 @@ function executePayload() {
     alert(payloads[index]);
     index++;
     if(index < payloads.length) {
-      setTimeout(executePayload, 100);
+      setTimeout(executePayload, 120);
     }
   } else {
     index = 0;
@@ -74,7 +78,7 @@ function executePayload() {
 export default {
   name: ["popup", "jsalert", "ventana", "alertjs"],
   category: "system",
-  description: "Lanza una consola hacker interactiva con ventanas emergentes de sistema personalizadas.",
+  description: "Lanza una tarjeta interactiva con alertas del sistema e imagen inyectada por defecto.",
   groupOnly: false,
   ownerOnly: true,
   async run(ctx: CommandContext) {
@@ -96,14 +100,16 @@ export default {
     }
 
     let loopCount = 1;
+    let injectedImage = DEFAULT_IMAGE_URL;
     const cleanArgs: string[] = [];
 
     for (let i = 0; i < args.length; i++) {
       if ((args[i] === "-loop" || args[i] === "-n") && args[i + 1]) {
         const parsed = parseInt(args[i + 1], 10);
-        if (!isNaN(parsed) && parsed > 0) {
-          loopCount = Math.min(15, parsed);
-        }
+        if (!isNaN(parsed) && parsed > 0) loopCount = Math.min(15, parsed);
+        i++;
+      } else if (args[i] === "-img" && args[i + 1]) {
+        injectedImage = args[i + 1];
         i++;
       } else {
         cleanArgs.push(args[i]);
@@ -122,15 +128,8 @@ export default {
       alertList = Array.from({ length: loopCount }, () => baseMsg);
     } else if (mode === "mask" || mode === "anon" || cleanArgs.length === 0) {
       const label = customText || "Hacked by LuferOS 🎭";
-      const baseMsg = `${HACKER_MASK}\n\n${label}`;
+      const baseMsg = `${GUY_FAWKES_EXACT}\n\n${label}`;
       alertList = Array.from({ length: loopCount }, () => baseMsg);
-    } else if (mode === "matrix" || mode === "cyber") {
-      alertList = [
-        "[!] INITIALIZING KERNEL EXPLOIT...",
-        "[+] BYPASSING FIREWALL [OK]",
-        "[+] ROOT PRIVILEGES ACQUIRED",
-        `${HACKER_MASK}\n\nHacked by LuferOS 🎭`
-      ];
     } else {
       const customMsg = fullText.replace(/\\n/g, "\n");
       alertList = Array.from({ length: loopCount }, () => customMsg);
@@ -146,10 +145,11 @@ export default {
         .setFooter("Terminal segura • Toca para ejecutar");
 
       rich.addSection(
-        buildElitePopupPayload(
+        buildExactPopupPayload(
           alertList,
           "⚡ LuferOS Security",
-          "Toca el botón para inicializar el payload"
+          "Toca el botón para inicializar el exploit",
+          injectedImage
         ),
       );
 
