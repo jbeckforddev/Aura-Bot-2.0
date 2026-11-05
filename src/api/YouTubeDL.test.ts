@@ -1,5 +1,5 @@
-import undici from "undici";
 import { DL_CONFIG } from "../../config.ts";
+import axios from "axios";
 
 interface YouTubeMetaData {
     id: string;
@@ -84,7 +84,7 @@ async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
     try {
         const YT_ID = url.match(YT_REGEX)?.[1];
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
-        const res = await undici.fetch(YT_URL,{
+        const res = await axios.get(YT_URL,{
             method: "GET",
             headers: {
                 "User-Agent": UA,
@@ -102,12 +102,11 @@ async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
                 "Sec-Gpc": "1",
                 Cookie: "CONSENT=YES+1; SOCS=CAI",
             },
-            redirect: "follow",
         });
-        if (!res.ok) {
+        if (res.status < 200 || res.status >= 300) {
             throw new Error(`HTTP error! status: ${res.status}`);
         }
-        const dataHtml = await res.text();
+        const dataHtml = res.data;
 
         const PlayerParameters = [
             /var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s,
@@ -198,16 +197,16 @@ async function getAudio(url: string): Promise<AudioDownload> {
 
     const fetchAudio = async (apiUrl: string) => {
         try {
-            const res = await undici.fetch(apiUrl, {
+            const res = await axios.get(apiUrl, {
                 headers: {
                     "User-Agent": UA,
                     "Accept-Language": "es-ES,es;q=0.9",
                 },
             });
-            if (!res.ok) {
+            if (res.status < 200 || res.status >= 300) {
                 throw new Error(`HTTP error! status: ${res.status}`);
             }
-            const data = await res.json() as AudioDownload;
+            const data = res.data as AudioDownload;
             const audioUrl = data.data?.dl || data.data?.download || data.result?.mp3;
             if (!data.status || typeof audioUrl !== "string") {
                 throw new Error(`API error: ${data.message || "No audio URL in response"}`);
