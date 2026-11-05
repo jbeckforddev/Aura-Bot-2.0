@@ -40,7 +40,7 @@ import { t } from "../src/langs/index.ts";
 
 export const logger = operationLogger.child({ component: "main-bot" });
 
-const MAX_MAIN_RECONNECT_ATTEMPTS = 5;
+const MAX_MAIN_RECONNECT_ATTEMPTS = 10;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const WA_WEB_VERSION_TIMEOUT_MS = 8000;
 const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
@@ -84,25 +84,30 @@ function createBoundedCacheStore(max: number, ttl: number) {
   };
 }
 
-// Reemplaza tu función actual por esta versión asíncrona:
 async function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Error) {
   if (!sock) return;
   try {
     if (sock.ev && typeof sock.ev.removeAllListeners === "function") {
-      (sock.ev as any).removeAllListeners();
+      sock.ev.removeAllListeners();
     }
   } catch {}
+  
   if (sock.ws) {
     try {
       (sock.ws as any).removeAllListeners?.();
       if ((sock.ws as any).readyState !== 3) {
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(resolve, 2000);
+          const timeout = setTimeout(resolve, 1500);
           sock.ws?.once('close', () => {
             clearTimeout(timeout);
             resolve();
           });
-          sock.ws?.close();
+          try {
+            sock.ws?.close();
+          } catch {
+            clearTimeout(timeout);
+            resolve();
+          }
         });
       }
     } catch {}
@@ -120,7 +125,6 @@ async function removeSessionFolder(sessionName: string) {
   );
   await rm(authFolder, { recursive: true, force: true }).catch(() => undefined);
 }
-
 
 function getWaWebVersion(): Promise<[number, number, number]> {
   if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
@@ -237,7 +241,7 @@ function getBotDisplayName(
 }
 
 const groupsFetchCache = new Map<string, { groups: string[]; timestamp: number }>();
-const GROUPS_CACHE_TTL = 60 * 60 * 1000; // 1 hora de caché
+const GROUPS_CACHE_TTL = 60 * 60 * 1000;
 
 async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
   const botId = sock.user?.id || "unknown";
@@ -259,28 +263,18 @@ async function getBotGroups(sock: ExtendedWASocket): Promise<string[]> {
   }
 }
 
-
-const botStartTime = Math.floor(Date.now() / 1000);
-
 export async function connectMainBot(
   sessionName: string,
 ) {
-  try {
-    return await connectSocket(sessionName);
-  } catch (error) {
-    connectionsInProgress.delete(sessionName);
-    logInfo(
-      `No se pudo iniciar el socket principal para ${sessionName}: ${String(error)}. Se conservará la sesión y se reintentará.`,
-      "error",
-    );
-    scheduleReconnect(5000, sessionName);
+  if (connectionsInProgress.has(sessionName)) {
     return null;
   }
+  return await connectSocket(sessionName);
 }
 
-async function connectSocket(sessionName: string) {
+async function connectSocket(sessionName: string): Promise<ExtendedWASocket | null> {
   if (connectionsInProgress.has(sessionName)) {
-    return;
+    return null;
   }
 
   connectionsInProgress.add(sessionName);
@@ -301,11 +295,12 @@ async function connectSocket(sessionName: string) {
     authState = await useSQLiteAuthState(sessionDir);
   } catch (error) {
     connectionsInProgress.delete(sessionName);
-    throw error;
+    logInfo(`Error al abrir SQLite AuthState para ${sessionName}: ${String(error)}`, "error");
+    scheduleReconnect(5000, sessionName);
+    return null;
   }
 
   const { state, saveCreds, close: closeAuthState } = authState;
-
 
   const isRegistered = Boolean(
     state.creds && (state.creds.registered || state.creds.me),
@@ -321,7 +316,7 @@ async function connectSocket(sessionName: string) {
   if (!isRegistered) {
     logInfo("Selecciona el método de vinculación:" , "pairing");
     pairingMenuLog();
-    logInfo("Elija el etodo (1 o 2): ", "pairing");
+    logInfo("Elija el metodo (1 o 2): ", "pairing");
 
     const option = await askQuestion("~/aura/method/select $ ");
     if (option === "2") {
@@ -379,7 +374,7 @@ async function connectSocket(sessionName: string) {
     logger,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
+    keepAliveIntervalMs: 25000,
     syncFullHistory: false,
     shouldSyncHistoryMessage: () => false,
     disableLinkPreviews: true,
@@ -584,7 +579,7 @@ async function connectSocket(sessionName: string) {
     connectionClosed = true;
 
     if (extendedSock.manualLogout) {
-      safelyDestroySocket(extendedSock);
+      await safelyDestroySocket(extendedSock);
       await closeAuthStateSafely();
       await removeSessionFolder(sessionName);
 
@@ -595,6 +590,7 @@ async function connectSocket(sessionName: string) {
       globalThis.mainSocket = null;
       logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "pairing");
       void connectMainBot(sessionName);
+      connectionsInProgress.delete(sessionName);
       return;
     }
 
@@ -613,7 +609,7 @@ async function connectSocket(sessionName: string) {
       0;
     const errorMessage = error?.message || "Error desconocido";
 
-    await  safelyDestroySocket(extendedSock, error);
+    await safelyDestroySocket(extendedSock, error);
     await closeAuthStateSafely();
     
     logInfo(
@@ -644,6 +640,7 @@ async function connectSocket(sessionName: string) {
           "alert",
         );
         scheduleReconnect(3000, sessionName);
+        connectionsInProgress.delete(sessionName);
         return;
       }
 
@@ -652,6 +649,7 @@ async function connectSocket(sessionName: string) {
         "WhatsApp volvió a rechazar la sesión (401). Espera antes de volver a intentar.",
         "alert",
       );
+      connectionsInProgress.delete(sessionName);
       return;
     }
 
@@ -662,6 +660,7 @@ async function connectSocket(sessionName: string) {
       );
       clearReconnectTimer(sessionName);
       resetReconnectAttempts(sessionName);
+      connectionsInProgress.delete(sessionName);
       return;
     }
 
@@ -689,11 +688,12 @@ async function connectSocket(sessionName: string) {
 
     if (isTransientDisconnect && !shouldResetSession) {
       const retryCount = registerReconnectAttempt(sessionName);
-      const delayMs = Math.min(2000 * retryCount, 10000);
+      const delayMs = Math.min(3000 * Math.pow(1.5, retryCount - 1), 30000);
       logInfo(
-        `Desconexión temporal detectada (Código: ${statusCode}). Reconectando socket automáticamente...`,
+        `Desconexión temporal detectada (Código: ${statusCode}). Reconectando socket automáticamente en ${Math.round(delayMs)}ms...`,
         "warn",
       );
+      connectionsInProgress.delete(sessionName);
       scheduleReconnect(delayMs, sessionName);
       return;
     }
@@ -709,6 +709,7 @@ async function connectSocket(sessionName: string) {
       await removeSessionFolder(sessionName);
 
       logInfo("Iniciando nuevo proceso de vinculación en 3 segundos...", "warn");
+      connectionsInProgress.delete(sessionName);
       scheduleReconnect(3000, sessionName);
       return;
     }
@@ -718,14 +719,17 @@ async function connectSocket(sessionName: string) {
       logInfo("Se alcanzó el máximo de reintentos. Reiniciando emparejamiento...", "alert");
       await removeSessionFolder(sessionName);
       resetReconnectAttempts(sessionName);
+      connectionsInProgress.delete(sessionName);
       return;
     }
 
+    const delayMs = Math.min(3000 * Math.pow(1.5, retryCount - 1), 30000);
     logInfo(
-      `Conexión interrumpida. Reconectando en 3 segundos... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
+      `Conexión interrumpida. Reconectando en ${Math.round(delayMs)}ms... intento ${retryCount}/${MAX_MAIN_RECONNECT_ATTEMPTS}`,
       "warn",
     );
-    scheduleReconnect(3000, sessionName);
+    connectionsInProgress.delete(sessionName);
+    scheduleReconnect(delayMs, sessionName);
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
