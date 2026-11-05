@@ -2,7 +2,6 @@ import { displayBanner, logInfo } from "./core/logger.ts";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import v8 from "node:v8";
 import vm from "node:vm";
 import "./config.ts";
@@ -26,10 +25,6 @@ import {
 import { loadPlugins, watchPlugins } from "./core/cmdLoader.ts";
 import * as AuraDB from "./database/AuraDB.ts";
 import { flushPendingContacts } from "./handler.ts";
-const envFilePath = path.join(path.dirname(fileURLToPath(import.meta.url)), ".env");
-if (fs.existsSync(envFilePath)) process.loadEnvFile(envFilePath);
-await import("./core/httpProxy.ts");
-
 const TMP_DIR = path.resolve("./cache");
 
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });

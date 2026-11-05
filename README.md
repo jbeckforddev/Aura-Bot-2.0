@@ -30,24 +30,11 @@ cd aura-reed-bot
 npm install
 ```
 
-### Configurar proxies HTTP (opcional)
-
-El bot puede rotar solicitudes HTTP de APIs y descargas entre una lista de proxies. Para cargarla automáticamente, crea `proxies.txt` en la raíz del proyecto (junto a `package.json`) y escribe un proxy por línea:
-
-```text
-http://usuario:clave@proxy1:puerto
-socks5://usuario:clave@proxy2:puerto
-```
-
-También acepta proxies HTTP simples como `192.0.2.10:8080` y el formato `IP:puerto:usuario:contraseña`. Se permiten líneas vacías y comentarios que comiencen con `#`. También puedes indicar otro archivo con `BOT_PROXY_FILE`, o definir las URLs separadas por comas mediante `BOT_PROXY_URLS`. Se admiten `http://`, `https://` y `socks5://`.
-
-No subas archivos con credenciales al repositorio ni compartas sus contenidos. Baileys/WhatsApp no usa esta lista: sus conexiones permanecen directas.
-
 ## 🧩 Estructura de carpetas
 
 ```
 aura-reed-bot/
-├── commands/          # Comandos del bot
+├── commands/          # Comandos
 ├── database/          # Base de datos del bot
 ├── modules/           # Modulos del bot
 ├── sessions/          # Sesiones del bot

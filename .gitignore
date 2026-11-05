@@ -1,7 +1,6 @@
 node_modules
 cache
 .env
-proxies.txt
 package-lock.json
 tests
 /data
