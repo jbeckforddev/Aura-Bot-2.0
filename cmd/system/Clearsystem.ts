@@ -307,6 +307,231 @@ async function getDiskUsage(targetPath: string) {
   }
 }
 
+function buildOptimizerRichPayload(data: {
+  gcMode: string;
+  rssBefore: string;
+  rssAfter: string;
+  heapBefore: string;
+  heapAfter: string;
+  freedRam: string;
+  memObjects: number;
+  containerUsed: string;
+  containerTotal: string;
+  containerPct: number;
+  deletedFiles: number;
+  freedDisk: string;
+  npmFreed: string;
+  retainedFiles: number;
+  diskFree: string;
+  diskTotal: string;
+  diskPct: number;
+  integrityStatus: string;
+  dbStatus: string;
+  loopLag: string;
+  cpuLoad: string;
+  handles: number;
+  elapsedMs: string;
+  killedList: string[];
+  rawTextReport: string;
+}) {
+  const serialized = JSON.stringify(data);
+
+  const html = `<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#05020c;color:#f5f3ff;padding:10px}
+.card{max-width:420px;margin:0 auto;background:linear-gradient(180deg,#130826 0%,#070312 100%);border:1.5px solid #3b1d6e;border-radius:20px;overflow:hidden;box-shadow:0 20px 55px rgba(0,0,0,.85),0 0 30px rgba(139,92,246,.2);position:relative}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#7c3aed,#ec4899,#00ffcc,#7c3aed);background-size:200% 100%;animation:flow 3s linear infinite;z-index:10}
+@keyframes flow{0%{background-position:0% 0%}100%{background-position:200% 0%}}
+.head{padding:14px 16px;background:radial-gradient(circle at 85% 15%,rgba(168,85,247,.28),transparent 60%);border-bottom:1px solid #261447;display:flex;justify-content:space-between;align-items:center}
+.brand{display:flex;align-items:center;gap:10px}
+.orb{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#9333ea,#db2777);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 15px rgba(147,51,234,.5)}
+.brand-txt h1{font-size:13.5px;font-weight:900;letter-spacing:.8px;color:#fff;text-transform:uppercase}
+.brand-txt p{font-size:10.5px;color:#00ffcc;font-weight:800;font-family:'Courier New',monospace}
+.pill{font-size:9.5px;font-weight:900;padding:4px 9px;border-radius:999px;background:rgba(139,92,246,.2);color:#e9d5ff;border:1px solid rgba(168,85,247,.45);font-family:'Courier New',monospace}
+.body{padding:14px 16px}
+.bars-wrap{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.bar-card{background:#0d051c;border:1px solid #28154a;border-radius:12px;padding:9px 10px}
+.bar-top{display:flex;justify-content:space-between;font-size:9.5px;font-weight:900;color:#c4b5fd;margin-bottom:5px;text-transform:uppercase}
+.bar-track{height:6px;background:#190d30;border-radius:999px;overflow:hidden;border:1px solid #2e1854;margin-bottom:5px}
+.bar-fill{height:100%;background:linear-gradient(90deg,#8b5cf6,#ec4899);border-radius:999px;width:0%;transition:width .5s ease}
+.bar-fill.cyan{background:linear-gradient(90deg,#00ffcc,#38bdf8)}
+.bar-sub{font-size:10px;color:#9378bc;font-family:'Courier New',monospace;font-weight:700}
+.sec-lbl{font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:1.1px;color:#a78bfa;margin:10px 0 6px;display:flex;justify-content:space-between}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.box{background:#0f061e;border:1px solid #251345;border-radius:11px;padding:8px 10px}
+.box.wide{grid-column:span 2;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(0,255,204,.08));border-color:#5b21b6}
+.k{font-size:9px;font-weight:800;color:#8b74b0;text-transform:uppercase;letter-spacing:.5px}
+.v{font-size:11.5px;font-weight:900;color:#f3e8ff;margin-top:2px;font-family:'Courier New',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v.hl{color:#00ffcc;font-size:12.5px}
+.proc-box{background:#090414;border:1px solid #28144a;border-left:3px solid #ec4899;border-radius:10px;padding:8px 10px;margin-top:6px;font-size:11px;color:#d8b4fe;font-family:'Courier New',monospace;line-height:1.4}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.btn{border:none;border-radius:11px;padding:10px;font-size:11.5px;font-weight:900;cursor:pointer;text-transform:uppercase;letter-spacing:.7px;transition:transform .1s}
+.btn:active{transform:scale(0.96)}
+.btn-primary{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;box-shadow:0 4px 15px rgba(139,92,246,.35)}
+.btn-sec{background:#170d2b;border:1px solid #3b2166;color:#d8b4fe}
+.toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%) translateY(20px);background:#8b5cf6;color:#fff;font-size:11.5px;font-weight:800;padding:7px 15px;border-radius:999px;opacity:0;pointer-events:none;transition:all .2s;z-index:99;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+
+<div class="card">
+  <div class="head">
+    <div class="brand">
+      <div class="orb">🚀</div>
+      <div class="brand-txt">
+        <h1>Aura VPS Optimizer</h1>
+        <p id="gcBadge"></p>
+      </div>
+    </div>
+    <span class="pill" id="timePill"></span>
+  </div>
+
+  <div class="body">
+    <div class="bars-wrap">
+      <div class="bar-card">
+        <div class="bar-top"><span>🧠 RAM VPS</span><span id="ramPctTxt"></span></div>
+        <div class="bar-track"><div class="bar-fill" id="ramBar"></div></div>
+        <div class="bar-sub" id="ramSubTxt"></div>
+      </div>
+      <div class="bar-card">
+        <div class="bar-top"><span>💾 DISCO</span><span id="diskPctTxt"></span></div>
+        <div class="bar-track"><div class="bar-fill cyan" id="diskBar"></div></div>
+        <div class="bar-sub" id="diskSubTxt"></div>
+      </div>
+    </div>
+
+    <div class="sec-lbl"><span>⚡ MEMORIA & MOTOR V8</span><span>RAM PURGE</span></div>
+    <div class="grid">
+      <div class="box">
+        <div class="k">RAM Bot (RSS)</div>
+        <div class="v" id="vRss"></div>
+      </div>
+      <div class="box">
+        <div class="k">Heap V8</div>
+        <div class="v" id="vHeap"></div>
+      </div>
+      <div class="box wide">
+        <div>
+          <div class="k">Memoria Liberada & Caché RAM</div>
+          <div class="v hl" id="vFreedRam"></div>
+        </div>
+        <span class="pill" id="vObjCleared"></span>
+      </div>
+    </div>
+
+    <div class="sec-lbl"><span>🧹 ALMACENAMIENTO & CACHÉ</span><span>DISK CLEAN</span></div>
+    <div class="grid">
+      <div class="box">
+        <div class="k">Archivos Purgados</div>
+        <div class="v hl" id="vFiles"></div>
+      </div>
+      <div class="box">
+        <div class="k">Caché .npm</div>
+        <div class="v" id="vNpm"></div>
+      </div>
+      <div class="box">
+        <div class="k">Protegidos / Uso</div>
+        <div class="v" id="vRetained"></div>
+      </div>
+      <div class="box">
+        <div class="k">Directorios</div>
+        <div class="v" id="vDirs"></div>
+      </div>
+    </div>
+
+    <div class="sec-lbl"><span>🛡️ TELEMETRÍA & PROCESOS</span><span id="vWal"></span></div>
+    <div class="grid">
+      <div class="box">
+        <div class="k">Event Loop Lag</div>
+        <div class="v" id="vLag"></div>
+      </div>
+      <div class="box">
+        <div class="k">CPU (1m) / Handles</div>
+        <div class="v" id="vCpu"></div>
+      </div>
+    </div>
+    <div class="proc-box" id="procBox"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="copyReport()">📋 Copiar Reporte</button>
+      <button class="btn btn-sec" onclick="showAlertReport()">🔍 Ver Consola</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const D = ${serialized};
+function $(id){ return document.getElementById(id); }
+
+function init(){
+  $("gcBadge").textContent = "V8: " + D.gcMode;
+  $("timePill").textContent = "⏱️ " + D.elapsedMs + " ms";
+  $("ramPctTxt").textContent = D.containerPct + "%";
+  $("ramSubTxt").textContent = D.containerUsed + " / " + D.containerTotal;
+  $("diskPctTxt").textContent = D.diskPct + "%";
+  $("diskSubTxt").textContent = D.diskFree + " libres";
+
+  setTimeout(function(){
+    $("ramBar").style.width = Math.min(100, Math.max(4, D.containerPct)) + "%";
+    $("diskBar").style.width = Math.min(100, Math.max(4, D.diskPct)) + "%";
+  }, 80);
+
+  $("vRss").textContent = D.rssBefore + " ➔ " + D.rssAfter;
+  $("vHeap").textContent = D.heapBefore + " ➔ " + D.heapAfter;
+  $("vFreedRam").textContent = D.freedRam + " liberados";
+  $("vObjCleared").textContent = D.memObjects + " objs";
+  $("vFiles").textContent = D.deletedFiles + " (" + D.freedDisk + ")";
+  $("vNpm").textContent = D.npmFreed;
+  $("vRetained").textContent = D.retainedFiles + " archivos";
+  $("vDirs").textContent = D.integrityStatus;
+  $("vWal").textContent = "WAL: " + D.dbStatus;
+  $("vLag").textContent = D.loopLag + " ms";
+  $("vCpu").textContent = D.cpuLoad + " | " + D.handles + "H";
+
+  if (D.killedList && D.killedList.length > 0) {
+    $("procBox").textContent = "💀 " + D.killedList.length + " aniquilado(s): " + D.killedList.join(", ");
+  } else {
+    $("procBox").textContent = "✅ Sin procesos zombi ni subprocesos colgados.";
+  }
+}
+
+function copyReport(){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(D.rawTextReport).catch(function(){});
+  } else {
+    const t = document.createElement("textarea");
+    t.value = D.rawTextReport;
+    document.body.appendChild(t);
+    t.select();
+    try { document.execCommand("copy"); } catch(e){}
+    document.body.removeChild(t);
+  }
+  const el = $("toast");
+  el.textContent = "Reporte copiado al portapapeles";
+  el.classList.add("show");
+  setTimeout(function(){ el.classList.remove("show"); }, 1600);
+}
+
+function showAlertReport(){
+  alert(D.rawTextReport);
+}
+
+init();
+</script>`;
+
+  return {
+    view_model: {
+      __typename: "GenAISingleLayoutViewModel",
+      primitive: {
+        __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
+        trusted_sources: [],
+        payload: html,
+      },
+    },
+  };
+}
+
 export default {
   name: ["optimize", "clearram", "clean", "optimizervps", "clearsystem"],
   category: "system",
@@ -314,7 +539,7 @@ export default {
   ownerOnly: true,
 
   async run(ctx: CommandContext) {
-    const { reply, react, isOwner, sender, msg, db } = ctx;
+    const { reply, react, isOwner, sender, msg, db, sock, from } = ctx;
 
     const rawSender = String(sender || msg.key?.participant || "");
     const cleanNum = rawSender.split("@")[0].split(":")[0].replace(/\D/g, "");
@@ -426,8 +651,13 @@ export default {
 
       const containerRamPercent =
         containerMem.total > 0
-          ? ((containerMem.used / containerMem.total) * 100).toFixed(1)
-          : "0.0";
+          ? Number(((containerMem.used / containerMem.total) * 100).toFixed(1))
+          : 0;
+
+      const diskUsedPercent =
+        diskInfo && diskInfo.total > 0
+          ? Number(((diskInfo.used / diskInfo.total) * 100).toFixed(1))
+          : 0;
 
       const processReport =
         killedList.length > 0
@@ -462,7 +692,47 @@ export default {
         `${processReport}` +
         `╰━━〔 ⚡ ${fytBold(t("cmd_system_active_e403484a"))} 〕━━⬣`;
 
-      await reply(text).catch(() => undefined);
+      try {
+        const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
+        const rich = new AIRich(sock)
+          .setTitle("🚀 AURA VPS OPTIMIZER // SYSTEM")
+          .setFooter(`Optimizado en ${elapsedMs} ms • ${formatBytes(totalFreedDisk)} liberados`);
+
+        rich.addSection(
+          buildOptimizerRichPayload({
+            gcMode: gcTriggered ? "GC Forzado" : "Automático",
+            rssBefore: formatBytes(memBefore.rss),
+            rssAfter: formatBytes(memAfter.rss),
+            heapBefore: formatBytes(memBefore.heapUsed),
+            heapAfter: formatBytes(memAfter.heapUsed),
+            freedRam: formatBytes(totalFreedRam),
+            memObjects: memoryObjectsCleared,
+            containerUsed: formatBytes(containerMem.used),
+            containerTotal: formatBytes(containerMem.total),
+            containerPct: containerRamPercent,
+            deletedFiles: totalDeletedFiles,
+            freedDisk: formatBytes(totalFreedDisk),
+            npmFreed: formatBytes(cwdNpmStats.freedBytes + homeNpmStats.freedBytes),
+            retainedFiles: mainCacheStats.retainedCount,
+            diskFree: diskInfo ? formatBytes(diskInfo.free) : "N/A",
+            diskTotal: diskInfo ? formatBytes(diskInfo.total) : "N/A",
+            diskPct: diskUsedPercent,
+            integrityStatus,
+            dbStatus: dbSynced ? "OK" : "Sin cambios",
+            loopLag: eventLoopLag.toFixed(2),
+            cpuLoad,
+            handles: activeHandles,
+            elapsedMs,
+            killedList,
+            rawTextReport: text,
+          })
+        );
+
+        await rich.send(from, { quoted: msg });
+      } catch {
+        await reply(text).catch(() => undefined);
+      }
+
       void react("✅").catch(() => undefined);
     } finally {
       gLock.__auraOptimizerRunning = false;
