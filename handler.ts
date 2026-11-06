@@ -615,10 +615,37 @@ async function handleMessageInternal(
     const rawText = isCmd
       ? afterPrefix.slice(cmdName.length).replace(/^\s/, "")
       : "";
-    const args = isCmd
+    const parsedArgs = isCmd
       ? afterPrefix.slice(cmdName.length).trim().split(/\s+/).filter(Boolean)
       : [];
+    const debugMode = parsedArgs.some((arg) => arg.toLowerCase() === "--debug");
+    const args = debugMode
+      ? parsedArgs.filter((arg) => arg.toLowerCase() !== "--debug")
+      : parsedArgs;
     const text = args.join(" ");
+    const commandBody = debugMode
+      ? [usedPrefix, cmdName, text].filter(Boolean).join(" ")
+      : body;
+    const commandDebugEvents: string[] = [];
+    const commandDebug = (
+      stage: string,
+      details?: Record<string, unknown>,
+    ) => {
+      if (!debugMode) return;
+      const detailText = details
+        ? ` ${JSON.stringify(details, (key, value: unknown) =>
+            /api.?key|token|authorization|cookie/i.test(key)
+              ? "[REDACTED]"
+              : value,
+          )}`
+        : "";
+      const event = `${stage}${detailText}`.replace(
+        /([?&](?:key|apikey|api_key)=)[^&\s"]+/gi,
+        "$1[REDACTED]",
+      );
+      if (commandDebugEvents.length < 40) commandDebugEvents.push(event);
+      console.debug(`[command-debug:${cmdName}] ${event}`);
+    };
 
     if (
       isGroup &&
@@ -1072,12 +1099,14 @@ async function handleMessageInternal(
       isGroup,
       groupName,
       groupMeta,
-      body,
+      body: commandBody,
       isCmd,
       cmdName,
       args,
       text,
-      rawText,
+      rawText: debugMode ? args.join(" ") : rawText,
+      debugMode,
+      debugLog: commandDebug,
       usedPrefix,
       modPrefix,
       isOwner,
@@ -1389,6 +1418,11 @@ async function handleMessageInternal(
     }
 
     const start = Date.now();
+    commandDebug("command.started", {
+      command: cmdName,
+      category: pluginCategory || "uncategorized",
+      argumentCount: args.length,
+    });
     try {
       await plugin.run(ctx);
       const downloadState = ctx as Record<string, unknown>;
@@ -1412,8 +1446,13 @@ async function handleMessageInternal(
         ms: Date.now() - start,
         botLabel,
       });
+      commandDebug("command.completed", { durationMs: Date.now() - start });
       if (isGroup) runtimeOptions.handleCommandXp?.(sender);
     } catch (e: unknown) {
+      commandDebug("command.failed", {
+        durationMs: Date.now() - start,
+        error: e instanceof Error ? e.message : String(e),
+      });
       logger.cmdExec?.({
         cmdName,
         sender: senderNum,
@@ -1444,6 +1483,14 @@ async function handleMessageInternal(
       if (BOT_CONFIG_COMMANDS.has(cmdName)) {
         BOT_DB_CACHE.delete(`bot:${botJid}`);
         BOT_DB_CACHE.delete(`bot:${cleanJid(botJid)}`);
+      }
+      if (debugMode) {
+        await ctx.reply({
+          text: [
+            `🛠 DEBUG · ${cmdName}`,
+            ...commandDebugEvents.map((event) => `• ${event}`),
+          ].join("\n").slice(0, 3500),
+        });
       }
     }
   } catch (e: unknown) {

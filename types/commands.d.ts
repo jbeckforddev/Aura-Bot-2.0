@@ -35,6 +35,8 @@ export interface CommandContext {
   args: string[];
   text: string;
   rawText: string;
+  debugMode?: boolean;
+  debugLog?: (stage: string, details?: Record<string, unknown>) => void;
   usedPrefix: string | null;
   modPrefix: string;
   isOwner: boolean;

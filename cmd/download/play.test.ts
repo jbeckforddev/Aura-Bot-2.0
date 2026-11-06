@@ -13,10 +13,10 @@ export default {
   hideCmd: true,
 
   async run(ctx: CommandContext) {
-    const { args, reply, react, sock, from, msg, sender } = ctx;
+    const { args, reply, react, sock, from, msg, sender, debugLog } = ctx;
     const query = args.join(" ").trim();
     if (!query) return reply(t("cmd_escribe_el_nombre_de_una_canci_7d229544"));
-    await react("🎵")
+    await react("🎵");
     try {
       const sendYouTubePreview = async (text: string, metadata: Awaited<ReturnType<typeof dl>>) => {
         const thumbnail = metadata.data?.thumbnail;
@@ -73,7 +73,17 @@ export default {
         });
 
       if (query.startsWith("https://")) {
-        const metadata = await dl(query);
+        debugLog?.("playtest.input.url", { url: query });
+        const metadata = await dl(query, debugLog);
+        debugLog?.("playtest.metadata.result", {
+          status: metadata.status,
+          message: metadata.message,
+          videoId: metadata.data?.id,
+          title: metadata.data?.title,
+          channel: metadata.data?.channel,
+          duration: metadata.data?.duration,
+          hasDownloadUrl: Boolean(metadata.data?.dl_url),
+        });
         const audioUrl = metadata.data?.dl_url;
 
         if (!metadata.status || !audioUrl) {
@@ -89,7 +99,14 @@ export default {
         });
 
       } else {
-        const searchResults = await yts(query, 1);
+        debugLog?.("playtest.search.started", { query });
+        const searchResults = await yts(query, 1, debugLog);
+        debugLog?.("playtest.search.result", {
+          status: searchResults.status,
+          statusCode: searchResults.statusCode,
+          resultCount: searchResults.results.length,
+          error: searchResults.status === "failed" ? searchResults.error : undefined,
+        });
         if (searchResults.status !== "success") {
           if (searchResults.statusCode === 404) {
             return reply(t("cmd_sin_resultados_aafe1c07"));
@@ -101,7 +118,22 @@ export default {
         }
 
         const video = searchResults.results[0];
-        const metadata = await dl(video.url);
+        debugLog?.("playtest.video.selected", {
+          videoId: video.id,
+          title: video.title,
+          channel: video.channel,
+          duration: video.duration,
+        });
+        const metadata = await dl(video.url, debugLog);
+        debugLog?.("playtest.metadata.result", {
+          status: metadata.status,
+          message: metadata.message,
+          videoId: metadata.data?.id,
+          title: metadata.data?.title,
+          channel: metadata.data?.channel,
+          duration: metadata.data?.duration,
+          hasDownloadUrl: Boolean(metadata.data?.dl_url),
+        });
         const audioUrl = metadata.data?.dl_url;
         if (!metadata.status || !audioUrl) {
           throw new Error(metadata.message || t("cmd_error_de_descarga_3b9d228e"));
@@ -118,6 +150,9 @@ export default {
       }
       await react("✅");
     } catch (error) {
+      debugLog?.("playtest.failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return reply(t("commandError", {
         cmdName: "ytatest",
         errorDetails: error instanceof Error ? error.message : String(error),

@@ -15,12 +15,31 @@ export default {
   name: ["ytsearch", "yts", "plays"],
   category: "search",
   description: t("cmd_busca_videos_en_youtube_25e3a1f2"),
-  async run({ args, reply, react, sock, from, msg, sender }: CommandContext) {
+  async run({
+    args,
+    reply,
+    react,
+    sock,
+    from,
+    msg,
+    sender,
+    debugLog,
+  }: CommandContext) {
     const query = args.join(" ").trim();
     if (!query) return reply(t("cmd_debes_especificar_que_buscar_4a8954a4"));
     await react("🔍");
     try {
+      debugLog?.("youtube.search.started", { query });
       const searchResults = await searchYouTubeVideos(query);
+      debugLog?.("youtube.search.completed", {
+        resultCount: searchResults.length,
+        results: searchResults.slice(0, 5).map((video) => ({
+          videoId: video.videoId,
+          title: video.title,
+          author: video.author,
+          duration: video.duration,
+        })),
+      });
       const videos = searchResults.slice(0, 5);
       if (!videos.length) throw new Error("No se encontraron resultados.");
       const text = SEARCH_RESULTS_TEMPLATE({
@@ -71,6 +90,9 @@ export default {
       });
       await react("✅");
     } catch (error: unknown) {
+      debugLog?.("youtube.command.failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       await react("❌");
       return reply({
         text: t("cmd_error_value0_a4bb764e", { value0: error instanceof Error ? error.message : String(error) || "No se pudo buscar en YouTube." }),

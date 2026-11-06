@@ -70,7 +70,7 @@ export default {
   description: t("cmd_busca_y_descarga_audio_de_yout_04475ecb"),
   category: "download",
   async run(ctx: CommandContext) {
-    const { args, reply, react, sock, from, msg, sender } = ctx;
+    const { args, reply, react, sock, from, msg, sender, debugLog } = ctx;
     const query = args.join(" ").trim();
     if (!query)
       return reply(
@@ -83,20 +83,44 @@ export default {
       let finalUrl = query;
 
       if (!isYouTubeUrl(query)) {
+        debugLog?.("youtube.search.started", { query });
         result = await searchYouTubeVideo(query);
         finalUrl = result.url;
+        debugLog?.("youtube.search.completed", {
+          videoId: result.videoId,
+          title: result.title,
+          author: result.author,
+          duration: result.duration,
+        });
       } else {
         const videoId = getYouTubeVideoId(query);
         if (!videoId) throw new Error("URL de YouTube no válida.");
         finalUrl = `https://youtu.be/${videoId}`;
+        debugLog?.("youtube.url.validated", { videoId });
       }
 
+      debugLog?.("youtube.download.started", {
+        videoId: result?.videoId || getYouTubeVideoId(finalUrl),
+        mediaType: "audio",
+        quality: 320,
+      });
       const audio = await downloadYouTube(
         finalUrl,
         "audio",
         320,
         result || undefined,
       );
+      debugLog?.("youtube.metadata.resolved", {
+        videoId: audio.videoId,
+        title: audio.title,
+        author: audio.author,
+        duration: audio.duration,
+        views: audio.views,
+        likes: audio.likes,
+        quality: audio.quality,
+        size: audio.size,
+        hasDownloadUrl: Boolean(audio.dl_url),
+      });
       const title = String(audio.title || result?.title || "audio").trim();
       const author = audio.author || result?.author || "Desconocido";
       const duration = audio.duration || result?.duration || "??";
@@ -180,6 +204,9 @@ export default {
       confirmDownloadCharge(ctx);
       await react("✅");
     } catch (error: unknown) {
+      debugLog?.("youtube.command.failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       await react("❌");
       return reply({
         text: t("cmd_value0_bb624cd4", { value0: error instanceof Error ? error.message : String(error) || "No se pudo descargar el audio." }),
