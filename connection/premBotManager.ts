@@ -59,18 +59,21 @@ const SESSION_ROOT = globalThis.premBotSession ?? "./sessions/prem";
 const LEGACY_SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 const ACTIVE_PREM_BOTS = new Map<string, ExtendedWASocket>();
 const PENDING_PREM_REQUESTS = new Map<string, Promise<string>>();
+const CONNECTIONS_IN_PROGRESS = new Set<string>();
 const RECONNECT_PREM_TIMERS = new Map<string, NodeJS.Timeout>();
 const RECONNECT_PREM_ATTEMPTS = new Map<string, number>();
 const PREM_BOT_LOGGER = operationLogger.child({ component: "prem-bot" });
 const recentMessages = new LRUCache<string, proto.IMessage>({
-  max: 1000,
+  max: 1500,
   ttl: 15 * 60 * 1000,
 });
 const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
 const WA_WEB_VERSION_TIMEOUT_MS = 8000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_RECONNECT_ATTEMPTS = 6;
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
+let waWebVersionExpiresAt = 0;
 
 function deleteActivePremBot(
   sessionName: string,
@@ -126,7 +129,8 @@ function createBoundedCacheStore(max: number, ttl: number) {
 }
 
 async function getWebVersion(): Promise<[number, number, number]> {
-  if (!waWebVersionPromise) {
+  if (!waWebVersionPromise || Date.now() >= waWebVersionExpiresAt) {
+    waWebVersionExpiresAt = Date.now() + WA_WEB_VERSION_CACHE_TTL_MS;
     let timeout: NodeJS.Timeout;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeout = setTimeout(
@@ -148,6 +152,7 @@ async function getWebVersion(): Promise<[number, number, number]> {
       .finally(() => clearTimeout(timeout))
       .catch((error) => {
         waWebVersionPromise = undefined;
+        waWebVersionExpiresAt = 0;
         throw error;
       });
   }
@@ -184,6 +189,7 @@ async function safelyDestroySocket(
     logInfo(`No se pudieron quitar los listeners premium: ${String(error)}`, "warn");
   }
   try {
+    (socket.ws as any)?.removeAllListeners?.();
     if (socket.ws && (socket.ws as any).readyState !== 3) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 1500);
@@ -191,7 +197,12 @@ async function safelyDestroySocket(
           clearTimeout(timer);
           resolve();
         });
-        socket.ws?.close();
+        try {
+          socket.ws?.close();
+        } catch {
+          clearTimeout(timer);
+          resolve();
+        }
       });
     }
   } catch (error) {
@@ -214,13 +225,15 @@ async function cleanPremBot(
   targetSocket?: ExtendedWASocket,
 ): Promise<void> {
   clearReconnectTimer(sessionName);
+  CONNECTIONS_IN_PROGRESS.delete(sessionName);
   const current = ACTIVE_PREM_BOTS.get(sessionName);
   const socket = targetSocket ?? current;
-  deleteActivePremBot(sessionName, socket);
-  if (socket && current && current !== socket) {
-    await safelyDestroySocket(socket);
+  if (targetSocket && current && current !== targetSocket) {
+    unregisterActiveBot(sessionName, targetSocket);
+    await safelyDestroySocket(targetSocket);
     return;
   }
+  deleteActivePremBot(sessionName, socket);
   await safelyDestroySocket(socket);
 }
 
@@ -231,16 +244,19 @@ export async function unlinkPremBot(
 ): Promise<void> {
   clearReconnectTimer(sessionName);
   RECONNECT_PREM_ATTEMPTS.delete(sessionName);
+  CONNECTIONS_IN_PROGRESS.delete(sessionName);
   const socket = targetSocket ?? ACTIVE_PREM_BOTS.get(sessionName);
   deleteActivePremBot(sessionName, socket);
   const botJid = socket?.user?.id ? jidNormalizedUser(socket.user.id) : "";
   await safelyDestroySocket(socket);
-  if (botJid) db.deleteBot(botJid);
-  db.deleteBot(sessionName);
+  try {
+    if (botJid) db.deleteBot(botJid);
+    db.deleteBot(sessionName);
+  } catch {}
   await removeBotSessionDirectories(sessionName, {
     prem: SESSION_ROOT,
     sub: LEGACY_SESSION_ROOT,
-  });
+  }).catch(() => undefined);
   logInfo(`Prem-Bot ${sessionName} eliminado. Motivo: ${reason}.`, "warn");
 }
 
@@ -251,10 +267,11 @@ function scheduleReconnect(
   clearReconnectTimer(sessionName);
   const attempts = (RECONNECT_PREM_ATTEMPTS.get(sessionName) ?? 0) + 1;
   RECONNECT_PREM_ATTEMPTS.set(sessionName, attempts);
+  const jitter = Math.floor(Math.random() * 3500) + 1500;
   const delay =
     attempts <= MAX_RECONNECT_ATTEMPTS
-      ? Math.min(attempts * 2500, 15_000) + Math.floor(Math.random() * 4000)
-      : 5 * 60 * 1000;
+      ? Math.min(3000 * Math.pow(1.4, attempts - 1), 25_000) + jitter
+      : 3 * 60 * 1000 + jitter;
 
   logInfo(
     `Reconexión premium ${attempts}/${MAX_RECONNECT_ATTEMPTS} para ${sessionName} en ${Math.ceil(delay / 1000)} s.`,
@@ -282,20 +299,39 @@ async function connectPremBotNow(
   sessionName: string,
   options: ConnectionOptions,
 ): Promise<ExtendedWASocket | null> {
-  const current = ACTIVE_PREM_BOTS.get(sessionName);
-  if (current && !(current as any).isClosed) return current;
+  if (CONNECTIONS_IN_PROGRESS.has(sessionName)) {
+    return ACTIVE_PREM_BOTS.get(sessionName) ?? null;
+  }
+  CONNECTIONS_IN_PROGRESS.add(sessionName);
 
-  const sessionDir = await moveBotSessionDirectory(sessionName, "Prem-Bot", {
-    prem: SESSION_ROOT,
-    sub: LEGACY_SESSION_ROOT,
-  });
-  await mkdir(sessionDir, { recursive: true });
-  const auth = useSQLiteAuthState(sessionDir);
+  const current = ACTIVE_PREM_BOTS.get(sessionName);
+  if (current) {
+    deleteActivePremBot(sessionName, current);
+    await safelyDestroySocket(current);
+  }
+
+  let auth: Awaited<ReturnType<typeof useSQLiteAuthState>>;
+  let sessionDir: string;
+  try {
+    sessionDir = await moveBotSessionDirectory(sessionName, "Prem-Bot", {
+      prem: SESSION_ROOT,
+      sub: LEGACY_SESSION_ROOT,
+    });
+    await mkdir(sessionDir, { recursive: true });
+    auth = await useSQLiteAuthState(sessionDir);
+  } catch (error) {
+    CONNECTIONS_IN_PROGRESS.delete(sessionName);
+    throw error;
+  }
+
   const { state, saveCreds, close } = auth;
   const registered = Boolean(state.creds?.registered || state.creds?.me);
   logInfo("Preparando sesión premium: " + sessionName, "pairing");
   if (!registered && options.allowPairing === false) {
-    close();
+    try {
+      close?.();
+    } catch {}
+    CONNECTIONS_IN_PROGRESS.delete(sessionName);
     return null;
   }
 
@@ -320,13 +356,13 @@ async function connectPremBotNow(
       msgRetryCounterCache: retryCache,
       userDevicesCache: deviceCache,
       getMessage: async (key) =>
-        key.id ? recentMessages.get(key.id) : undefined,
+        key?.id ? recentMessages.get(key.id) : undefined,
       printQRInTerminal: false,
       browser: Browsers.ubuntu("Chrome"),
       logger: PREM_BOT_LOGGER,
       connectTimeoutMs: 60_000,
       defaultQueryTimeoutMs: 60_000,
-      keepAliveIntervalMs: 30_000,
+      keepAliveIntervalMs: 25_000,
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       disableLinkPreviews: true,
@@ -337,7 +373,10 @@ async function connectPremBotNow(
       cachedGroupMetadata: async (jid) => GROUP_METADATA_CACHE.get(jid),
     }) as ExtendedWASocket;
   } catch (error) {
-    close();
+    CONNECTIONS_IN_PROGRESS.delete(sessionName);
+    try {
+      close?.();
+    } catch {}
     throw error;
   }
 
@@ -345,14 +384,76 @@ async function connectPremBotNow(
   socket.botType = "Sub-Bot";
   socket.sessionName = sessionName;
   socket.subBotId = sessionName;
-  (socket as any).closeAuth = close;
+
+  let saveTimer: NodeJS.Timeout | null = null;
+  let credentialsDirty = false;
+  let authStateClosing = false;
+  let authStateClosePromise: Promise<void> | null = null;
+  let credentialsWriteQueue: Promise<void> = Promise.resolve();
+
+  const persistCredentials = (force = false) => {
+    if (!credentialsDirty) return credentialsWriteQueue;
+    if (authStateClosing && !force) return credentialsWriteQueue;
+    credentialsDirty = false;
+    credentialsWriteQueue = credentialsWriteQueue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await saveCreds();
+        } catch (error) {
+          credentialsDirty = true;
+          logInfo(`No se pudieron guardar credenciales premium: ${String(error)}`, "error");
+        }
+      });
+    return credentialsWriteQueue;
+  };
+
+  const closeAuth = () => {
+    if (authStateClosePromise) return authStateClosePromise;
+    authStateClosing = true;
+    authStateClosePromise = (async () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      try {
+        await persistCredentials(true);
+      } catch {}
+      try {
+        signalCache.flushAll();
+        retryCache.flushAll();
+        deviceCache.flushAll();
+      } catch {}
+      try {
+        close?.();
+      } catch {}
+    })();
+    return authStateClosePromise;
+  };
+
+  (socket as any).closeAuth = closeAuth;
   ACTIVE_PREM_BOTS.set(sessionName, socket);
   registerActiveBot(sessionName, socket);
-  options.onSocketCreated?.(socket);
+
+  socket.ev.on("creds.update", () => {
+    if (authStateClosing) return;
+    credentialsDirty = true;
+    if (saveTimer) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void persistCredentials();
+    }, 800);
+    saveTimer.unref?.();
+  });
 
   let connected = registered;
   let closed = false;
   let pairingCodeRequested = false;
+  const knownGroupJids = new LRUCache<string, true>({
+    max: 500,
+    ttl: 60 * 60 * 1000,
+  });
+
   const pairingTimer = !registered
     ? setTimeout(() => {
         if (connected) return;
@@ -361,11 +462,6 @@ async function connectPremBotNow(
       }, options.pairingTimeoutMs ?? 60_000)
     : undefined;
   pairingTimer?.unref?.();
-  socket.ev.on("creds.update", () => {
-    void saveCreds().catch((error) => {
-      logInfo(`No se pudieron guardar credenciales premium: ${String(error)}`, "error");
-    });
-  });
 
   socket.ev.on("connection.update", async (update) => {
     if (update.qr && options.pairingMethod === "qr") {
@@ -400,6 +496,7 @@ async function connectPremBotNow(
 
     if (update.connection === "open") {
       connected = true;
+      CONNECTIONS_IN_PROGRESS.delete(sessionName);
       if (pairingTimer) clearTimeout(pairingTimer);
       RECONNECT_PREM_ATTEMPTS.delete(sessionName);
       const botJid = jidNormalizedUser(socket.user?.id || "");
@@ -420,14 +517,24 @@ async function connectPremBotNow(
       const userData = socket.user as
         | (typeof socket.user & { lid?: string })
         | undefined;
-      const botLid = String(userData?.lid || previous?.lid || "")
+      let botLid = String(userData?.lid || previous?.lid || "")
         .trim()
         .replace(/@lid$/, "");
+      if (!botLid) {
+        try {
+          botLid = String(
+            (await socket.signalRepository?.lidMapping?.getLIDForPN(botJid)) || "",
+          )
+            .trim()
+            .replace(/@lid$/, "");
+        } catch {}
+      }
       const botId = botLid ? `${botLid}@lid` : botJid;
       const phoneNumber = normalizePhone(botJid);
       const botName = String(
         previous?.bot_name ||
           (socket.user as unknown as Record<string, unknown> | undefined)?.name ||
+          (socket.user as unknown as Record<string, unknown> | undefined)?.notify ||
           "",
       ).trim() || null;
 
@@ -468,6 +575,8 @@ async function connectPremBotNow(
 
     if (update.connection !== "close") return;
     closed = true;
+    CONNECTIONS_IN_PROGRESS.delete(sessionName);
+    knownGroupJids.clear();
     if (pairingTimer) clearTimeout(pairingTimer);
     const error = update.lastDisconnect?.error;
     const statusCode =
@@ -484,77 +593,83 @@ async function connectPremBotNow(
       await unlinkPremBot(sessionName, socket, "cierre manual");
       return;
     }
-    if (!connected) {
-      await cleanPremBot(sessionName, socket);
-      const invalidSession = [
-        DisconnectReason.loggedOut,
-        DisconnectReason.badSession,
-        DisconnectReason.forbidden,
-        DisconnectReason.multideviceMismatch,
-      ].includes(statusCode as never);
-      if (invalidSession) {
-        await unlinkPremBot(
-          sessionName,
-          undefined,
-          `sesión inválida durante la vinculación (${statusCode})`,
-        );
-        await options.onPairingError?.(
-          new Error(
-            `WhatsApp rechazó la vinculación (código ${statusCode}). Intenta iniciar una nueva.`,
-          ),
-        );
-        return;
-      }
 
-      const transientDisconnect = [
-        DisconnectReason.connectionLost,
-        DisconnectReason.connectionClosed,
-        DisconnectReason.timedOut,
-        DisconnectReason.restartRequired,
-        500,
-        408,
-        428,
-        515,
-      ].includes(statusCode as never);
-      if (transientDisconnect) {
-        logInfo(
-          `Conexión premium interrumpida antes de vincular (${statusCode}); se reintentará automáticamente.`,
-          "warn",
-        );
-        scheduleReconnect(sessionName, options);
-        return;
-      }
-
-      await options.onPairingError?.(
-        new Error(
-          `WhatsApp cerró la conexión antes de vincular (código ${statusCode || "desconocido"}): ${error?.message || "sin detalles"}.`,
-        ),
-      );
-      return;
-    }
-    await options.onDisconnected?.();
+    const currentRegistered = Boolean(state.creds?.registered || state.creds?.me);
     const invalidSession = [
       DisconnectReason.loggedOut,
-      DisconnectReason.badSession,
       DisconnectReason.forbidden,
       DisconnectReason.multideviceMismatch,
     ].includes(statusCode as never);
-    if (invalidSession) {
-      await unlinkPremBot(sessionName, socket, `sesión inválida (${statusCode})`);
-      await options.onSessionClosed?.(
-        statusCode === DisconnectReason.loggedOut
-          ? "loggedOut"
-          : `desconectado (${statusCode})`,
+    const transientDisconnect = [
+      DisconnectReason.connectionLost,
+      DisconnectReason.connectionClosed,
+      DisconnectReason.timedOut,
+      DisconnectReason.restartRequired,
+      DisconnectReason.badSession,
+      500,
+      503,
+      408,
+      428,
+      515,
+    ].includes(statusCode as never);
+
+    if (!currentRegistered && transientDisconnect) {
+      deleteActivePremBot(sessionName, socket);
+      await safelyDestroySocket(socket);
+      logInfo(
+        `Conexión premium interrumpida antes de vincular (${statusCode}); se reintentará automáticamente.`,
+        "warn",
       );
+      scheduleReconnect(sessionName, options);
       return;
     }
+
+    if (!currentRegistered || invalidSession) {
+      await unlinkPremBot(
+        sessionName,
+        socket,
+        `sesión inválida (${statusCode || "N/A"})`,
+      );
+      await options.onDisconnected?.();
+      if (!currentRegistered) {
+        await options.onPairingError?.(
+          new Error(
+            `WhatsApp rechazó la vinculación (código ${statusCode || "desconocido"}). Intenta iniciar una nueva.`,
+          ),
+        );
+      } else {
+        await options.onSessionClosed?.(
+          statusCode === DisconnectReason.loggedOut
+            ? "loggedOut"
+            : `desconectado (${statusCode})`,
+        );
+      }
+      return;
+    }
+
+    if (statusCode === DisconnectReason.connectionReplaced) {
+      logInfo(
+        `Sesión premium ${sessionName} fue reemplazada por otra instancia (Código 440). Se suspende la reconexión automática.`,
+        "warn",
+      );
+      deleteActivePremBot(sessionName, socket);
+      clearReconnectTimer(sessionName);
+      RECONNECT_PREM_ATTEMPTS.delete(sessionName);
+      await safelyDestroySocket(socket);
+      await options.onDisconnected?.();
+      return;
+    }
+
     deleteActivePremBot(sessionName, socket);
     await safelyDestroySocket(socket);
+    await options.onDisconnected?.();
     scheduleReconnect(sessionName, options);
   });
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !Array.isArray(messages)) return;
+    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
+    if (socket.user?.id) RECONNECT_PREM_ATTEMPTS.delete(sessionName);
+
     for (const message of messages) {
       if (message.key?.id && message.message) {
         recentMessages.set(message.key.id, message.message);
@@ -565,8 +680,9 @@ async function connectPremBotNow(
         if (!message?.message || (socket as any).isClosed) return;
         try {
           const groupJid = message.key?.remoteJid;
-          if (groupJid?.endsWith("@g.us") && socket.user?.id) {
-            db.addBotGroup(socket.user.id, groupJid);
+          if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
+            if (socket.user?.id) db.addBotGroup(socket.user.id, groupJid);
+            knownGroupJids.set(groupJid, true);
           }
           await handleMessage(socket, message, "SUB", socket.user?.id || null, [], {
             db,
@@ -614,8 +730,9 @@ async function connectPremBotNow(
     }
   });
   socket.ev.on("group-participants.update", async ({ id, participants, action }) => {
+    if (!id) return;
+    invalidateGroupCache(id);
     if (
-      !id ||
       !Array.isArray(participants) ||
       (action !== "add" && action !== "remove") ||
       !isPrimaryBotForGroup(socket, id, db)
@@ -633,6 +750,7 @@ async function connectPremBotNow(
           typeof participant === "string" ? participant : participant.id,
         )
         .filter((participant): participant is string => Boolean(participant));
+      if (mentions.length === 0) return;
       const setting = action === "add" ? group.welcomeMessage : group.goodbyeMessage;
       const text = String(setting || (action === "add" ? "Bienvenido/a @user a @group" : "Adiós @user"))
         .replaceAll("@group", groupName)
@@ -642,6 +760,12 @@ async function connectPremBotNow(
       logInfo(`Error de participantes en sesión premium: ${String(error)}`, "error");
     }
   });
+
+  try {
+    await options.onSocketCreated?.(socket);
+  } finally {
+    CONNECTIONS_IN_PROGRESS.delete(sessionName);
+  }
 
   return socket;
 }
