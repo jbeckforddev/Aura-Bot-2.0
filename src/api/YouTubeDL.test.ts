@@ -76,13 +76,18 @@ function formatCount(valor: number | string): string {
   return numero.toString();
 }
 
-const YT_REGEX: RegExp = /(?:https?:\/\/)?(?:www\.|m\.)?(?:music\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|watch\?v=|watch\?.+&v=))([a-zA-Z0-9_-]{11})/i
+const YT_REGEX: RegExp = /(?:https?:\/\/)?(?:www\.|m\.)?(?:music\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?v=|watch\?.+&v=))([a-zA-Z0-9_-]{11})/i
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
 
-async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
+async function getYouTubeMetaData(
+    url: string,
+    fallback?: Partial<YouTubeMetaData>,
+): Promise<EndpointCreator> {
     try {
         const YT_ID = url.match(YT_REGEX)?.[1];
+        if (!YT_ID) throw new Error("URL de YouTube no válida.");
+        const matchingFallback = fallback?.id === YT_ID ? fallback : undefined;
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
         const res = await axios.get(YT_URL,{
             headers: {
@@ -116,52 +121,80 @@ async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
             }
         }
         const details = playerResponse?.videoDetails || {};
+        const pageMatchesVideo = !details?.videoId || details.videoId === YT_ID;
+        const matchingPlayer = details?.videoId === YT_ID ? details : undefined;
 
-        // Titulo del video
-        const videoTitle = dataHtml.match(/<meta property="og:title" content="(.+?)">/)?.[1]
-        const videoTitleAlt = details?.title || dataHtml.match(/"title":"([^"]+)"/)?.[1]
+        const videoTitle = pageMatchesVideo
+            ? dataHtml.match(/<meta property="og:title" content="(.+?)">/)?.[1]
+            : undefined;
+        const videoTitleAlt = matchingPlayer?.title;
 
         // ID del video
-        const videoId = url.split("v=")[1]?.split("&")[0];
-        const videoIdAlt = details?.videoId || dataHtml.match(/"videoId":"([^"]+)"/)?.[1];
+        const videoId = YT_ID;
+        const videoIdAlt = matchingPlayer?.videoId;
 
         // Nombre del canal
-        const channelName = details?.author || details?.ownerChannelName || dataHtml.match(/"author":"([^"]+)"/)?.[1];
-        const channelNameAlt = dataHtml.match(/<link itemprop="name" content="(.+?)">/)?.[1];
+        const channelName = matchingPlayer?.author || matchingPlayer?.ownerChannelName;
+        const channelNameAlt = pageMatchesVideo
+            ? dataHtml.match(/<link itemprop="name" content="(.+?)">/)?.[1]
+            : undefined;
 
         // Duración del video
-        const duration = formatDuration(dataHtml.match(/<meta itemprop="duration" content="(.+?)">/)?.[1]);
-        const durationAlt = formatDuration(details?.lengthSeconds ? `PT${details.lengthSeconds}S` : dataHtml.match(/"lengthSeconds":"([^"]+)"/)?.[1]);
+        const duration = pageMatchesVideo
+            ? formatDuration(dataHtml.match(/<meta itemprop="duration" content="(.+?)">/)?.[1])
+            : "";
+        const durationAlt = matchingPlayer?.lengthSeconds
+            ? formatDuration(`PT${matchingPlayer.lengthSeconds}S`)
+            : "";
 
         // Vistas del video
-        const views = playerResponse?.videoDetails?.viewCount
-        const viewsAlt = dataHtml.match(/"viewCount":"([^"]+)"/)?.[1];
+        const views = matchingPlayer?.viewCount;
 
         // Likes del video
-        const likes = dataHtml.match(/"likeCount":"([^"]+)"/)?.[1];
+        const likes = pageMatchesVideo
+            ? dataHtml.match(/"likeCount":"([^"]+)"/)?.[1]
+            : undefined;
 
         // Miniatura del video
-        const thumbnail = dataHtml.match(/<link itemprop="thumbnailUrl" href="(.+?)">/)?.[1];
-        const thumbnailAlt = dataHtml.match(/"thumbnailUrl":"([^"]+)"/)?.[1];
+        const thumbnail = pageMatchesVideo
+            ? dataHtml.match(/<link itemprop="thumbnailUrl" href="(.+?)">/)?.[1]
+            : undefined;
+        const thumbnailAlt = matchingPlayer?.thumbnail?.thumbnails?.at(-1)?.url;
 
         // URL del canal
-        const channelUrl = `https://www.youtube.com/channel/${details?.channelId || dataHtml.match(/"channelId":"([^"]+)"/)?.[1]}`;
-        const channelUrlAlt = dataHtml.match(/<link itemprop="url" href="(.+?)">/)?.[1];
+        const channelId = matchingPlayer?.channelId;
+        const channelUrl = channelId
+            ? `https://www.youtube.com/channel/${channelId}`
+            : "";
+        const channelUrlAlt = pageMatchesVideo
+            ? dataHtml.match(/<link itemprop="url" href="(.+?)">/)?.[1]
+            : undefined;
+        const parsedDuration = duration !== "0s" ? duration : "";
+        const isUsable = (value: string | undefined) =>
+            Boolean(value && !/^unknown\b/i.test(value.trim()));
 
         return {
             creator: "Jeriel B., AlyaApi, DeliriusApi, FaaApi",
             status: true,
             message: "YouTube metadata fetched successfully",
             data: {
-                id: videoId || videoIdAlt || "Unknown ID",
-                title: videoTitleAlt || videoTitle || "Unknown Title",
-                channel: channelNameAlt || channelName || "Unknown Channel",
-                duration: duration || durationAlt || "--:--",
-                views: formatCount(views || viewsAlt || "Unknown Views"),
-                likes: formatCount(likes || "Unknown Likes"),
-                url: url,
-                thumbnail: (thumbnail || thumbnailAlt || "Unknown Thumbnail").split("?")[0],
-                channel_url: channelUrl || channelUrlAlt || "Unknown Channel URL",
+                id: matchingFallback?.id || videoId || videoIdAlt || "Unknown ID",
+                title: (isUsable(matchingFallback?.title) && matchingFallback?.title)
+                    || (isUsable(videoTitleAlt) && videoTitleAlt)
+                    || (isUsable(videoTitle) && videoTitle)
+                    || "Unknown Title",
+                channel: (isUsable(matchingFallback?.channel) && matchingFallback?.channel)
+                    || (isUsable(channelName) && channelName)
+                    || (isUsable(channelNameAlt) && channelNameAlt)
+                    || "Unknown Channel",
+                duration: matchingFallback?.duration && matchingFallback.duration !== "0s"
+                    ? matchingFallback.duration
+                    : durationAlt || parsedDuration || "--:--",
+                views: matchingFallback?.views || (views ? formatCount(views) : "Unknown Views"),
+                likes: matchingFallback?.likes || (likes ? formatCount(likes) : "Unknown Likes"),
+                url: `https://youtu.be/${YT_ID}`,
+                thumbnail: (matchingFallback?.thumbnail || thumbnail || thumbnailAlt || `https://i.ytimg.com/vi/${YT_ID}/hqdefault.jpg`).split("?")[0],
+                channel_url: matchingFallback?.channel_url || channelUrl || channelUrlAlt || "Unknown Channel URL",
             }
         }
     } catch (error) {
@@ -210,8 +243,11 @@ async function getAudio(url: string): Promise<AudioDownload> {
     return Promise.any(RaceDLAudioApis.map(fetchAudio));
 }
 
-export default async function YoutubeAudioDownload(url: string): Promise<EndpointCreator> {
-    const metadata = await getYouTubeMetaData(url);
+export default async function YoutubeAudioDownload(
+    url: string,
+    fallback?: Partial<YouTubeMetaData>,
+): Promise<EndpointCreator> {
+    const metadata = await getYouTubeMetaData(url, fallback);
     if (!metadata.status) {
         return metadata;
     }

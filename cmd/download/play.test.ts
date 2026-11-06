@@ -9,6 +9,41 @@ import { DL_TEMPLATE } from "../../utils/template.ts";
 
 const MAX_TEXT = 60000; // límite seguro de WhatsApp por mensaje
 
+function getYouTubeVideoId(value: string): string | undefined {
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "youtu.be") {
+      return url.pathname.split("/").filter(Boolean)[0];
+    }
+    if (!["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
+      return undefined;
+    }
+    if (url.pathname === "/watch") return url.searchParams.get("v") || undefined;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (["embed", "v", "shorts", "live"].includes(parts[0] || "")) {
+      return parts[1];
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+function isYouTubeUrl(value: string): boolean {
+  return /^(?:https?:\/\/)?(?:www\.)?(?:m\.|music\.)?(?:youtube\.com|youtu\.be)\//i.test(
+    value.trim(),
+  );
+}
+
+async function findVideoFallback(
+  videoId: string | undefined,
+): Promise<Parameters<typeof dl>[1]> {
+  if (!videoId || !/^[\w-]{11}$/.test(videoId)) return undefined;
+  const searchResults = await yts(videoId, 1);
+  if (searchResults.status !== "success") return undefined;
+  return searchResults.results.find((video) => video.id === videoId);
+}
+
 export default {
   name: ["playtest", "ytdltest"],
   description: t("cmd_busca_y_descarga_audio_de_yout_04475ecb"),
@@ -31,10 +66,15 @@ export default {
       /* ---------- MODO JSON ---------- */
       if (jsonMode) {
         let searchJson: unknown = null;
+        let fallback: Parameters<typeof dl>[1];
         let videoUrl = query;
 
-        // Si es link, no hay búsqueda; solo se prueba la API de descarga
-        if (!query.startsWith("https://")) {
+        if (isYouTubeUrl(query)) {
+          const videoId = getYouTubeVideoId(query);
+          const exactFallback = await findVideoFallback(videoId);
+          fallback = exactFallback;
+          searchJson = exactFallback ? { status: "success", results: [exactFallback] } : null;
+        } else {
           const searchResults = await yts(query, 1);
           searchJson = searchResults;
           if (searchResults.status !== "success" || !searchResults.results.length) {
@@ -43,10 +83,11 @@ export default {
             );
             return react("❌");
           }
+          fallback = searchResults.results[0];
           videoUrl = searchResults.results[0].url;
         }
 
-        const dlJson = await dl(videoUrl);
+        const dlJson = await dl(videoUrl, fallback);
 
         const output = JSON.stringify(
           { yts: searchJson, dl: dlJson },
@@ -129,7 +170,10 @@ export default {
 
       // Unifica link directo y búsqueda: solo cambia de dónde sale la URL
       let videoUrl = query;
-      if (!query.startsWith("https://")) {
+      let fallback: Parameters<typeof dl>[1];
+      if (isYouTubeUrl(query)) {
+        fallback = await findVideoFallback(getYouTubeVideoId(query));
+      } else {
         const searchResults = await yts(query, 1);
         if (searchResults.status !== "success") {
           if (searchResults.statusCode === 404) return reply(t("cmd_sin_resultados_aafe1c07"));
@@ -138,10 +182,11 @@ export default {
         if (searchResults.results.length === 0) {
           return reply(t("cmd_sin_resultados_aafe1c07"));
         }
+        fallback = searchResults.results[0];
         videoUrl = searchResults.results[0].url;
       }
 
-      const metadata = await dl(videoUrl);
+      const metadata = await dl(videoUrl, fallback);
       const audioUrl = metadata.data?.dl_url;
       if (!metadata.status || !audioUrl) {
         throw new Error(metadata.message || t("cmd_error_de_descarga_3b9d228e"));
