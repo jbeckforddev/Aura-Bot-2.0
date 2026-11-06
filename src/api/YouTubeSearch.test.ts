@@ -1,9 +1,7 @@
-import { fetch } from "undici";
+import axios from "axios";
 
 const HEADER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
 const REQUEST_TIMEOUT_MS = 10000;
-type DebugLog = (stage: string, details?: Record<string, unknown>) => void;
-
 type YouTubeVideo = {
   id: string;
   title: string;
@@ -55,12 +53,8 @@ function formatTime(duration: string): string {
   return formatted.join(" ") || "0s";
 }
 
-async function getVideoLikes(
-  videoId: string,
-  debug?: DebugLog,
-): Promise<string> {
-  const startedAt = Date.now();
-  const response = await fetch(
+async function getVideoLikes(videoId: string): Promise<string> {
+  const response = await axios.get(
     `https://www.youtube.com/watch?v=${videoId}&hl=es`,
     {
       headers: {
@@ -68,38 +62,25 @@ async function getVideoLikes(
         "Accept-Language": "es-ES,es;q=0.9",
         Cookie: "CONSENT=YES+1; SOCS=CAI",
       },
+      adapter: "fetch",
+      responseType: "text",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      redirect: "follow",
     },
   );
 
-  if (!response.ok) {
-    debug?.("youtube.search.likes.failed", {
-      videoId,
-      status: response.status,
-      durationMs: Date.now() - startedAt,
-    });
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(
       `YouTube respondió con HTTP ${response.status} al obtener los likes`,
     );
   }
 
-  const html = await response.text();
+  const html = response.data;
   const match = html.match(/"likeCount":"(\d+)"/);
-  if (!match) {
-    debug?.("youtube.search.likes.unavailable", {
-      videoId,
-      durationMs: Date.now() - startedAt,
-    });
+  if (!match)
     throw new Error(
       `No se pudo obtener el contador de likes del video ${videoId}`,
     );
-  }
 
-  debug?.("youtube.search.likes.completed", {
-    videoId,
-    durationMs: Date.now() - startedAt,
-  });
   return Number(match[1]).toLocaleString("es-MX");
 }
 
@@ -134,40 +115,29 @@ function formatCount(valor: unknown): string {
 export default async function searchYouTube(
   query: string,
   limit = 10,
-  debug?: DebugLog,
 ): Promise<YouTubeSearchResponse> {
   try {
     const SEARCH_URL = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=es`;
     const lat = Date.now();
-    debug?.("youtube.search.request", { query, limit });
-    const res = await fetch(SEARCH_URL, {
+    const res = await axios.get(SEARCH_URL, {
       headers: {
         "User-Agent": HEADER,
         "Accept-Language": "es-ES,es;q=0.9",
         Cookie: "CONSENT=YES+1; SOCS=CAI",
       },
+      adapter: "fetch",
+      responseType: "text",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      redirect: "follow",
     });
     const ping = Date.now() - lat;
-    debug?.("youtube.search.response", {
-      status: res.status,
-      durationMs: ping,
-    });
 
-    if (!res.ok) {
+    if (res.status < 200 || res.status >= 300) {
       throw new Error(`YouTube respondió con HTTP ${res.status}`);
     }
 
-    const html = await res.text();
+    const html = res.data;
     const match = html.match(/var ytInitialData\s*=\s*(\{.+?\});<\/script>/s);
-    if (!match) {
-      debug?.("youtube.search.parse_failed", {
-        responseLength: html.length,
-        containsInitialData: html.includes("ytInitialData"),
-      });
-      throw new Error("No se pudo leer la página de YouTube");
-    }
+    if (!match) throw new Error("No se pudo leer la página de YouTube");
 
     const data = JSON.parse(match[1]);
     const sections =
@@ -195,7 +165,6 @@ export default async function searchYouTube(
       if (results.length >= limit) break;
     }
     if (results.length === 0) {
-      debug?.("youtube.search.completed", { resultCount: 0 });
       return {
         creator: "Jeriel B.",
         status: "failed",
@@ -210,21 +179,11 @@ export default async function searchYouTube(
       results.map(async (video) => {
         let likes = "0";
         try {
-          likes = formatCount(await getVideoLikes(video.id, debug));
-        } catch (error: unknown) {
-          debug?.("youtube.search.likes.error", {
-            videoId: video.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+          likes = formatCount(await getVideoLikes(video.id));
+        } catch {}
         return { ...video, likes };
       }),
     );
-    debug?.("youtube.search.completed", {
-      resultCount: resultsWithLikes.length,
-      firstVideoId: resultsWithLikes[0]?.id,
-      firstTitle: resultsWithLikes[0]?.title,
-    });
     return {
       creator: "Jeriel B.",
       status: "success",
@@ -233,9 +192,6 @@ export default async function searchYouTube(
       results: resultsWithLikes,
     };
   } catch (error: unknown) {
-    debug?.("youtube.search.failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
     return {
       creator: "Jeriel B.",
       status: "failed",

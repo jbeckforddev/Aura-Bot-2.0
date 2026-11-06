@@ -1,5 +1,5 @@
 import { DL_CONFIG } from "../../config.ts";
-import { fetch } from "undici";
+import axios from "axios";
 
 interface YouTubeMetaData {
     id: string;
@@ -27,8 +27,6 @@ interface AudioDownload {
     data?: { dl?: string; download?: string; [key: string]: unknown };
     result?: { mp3?: string; [key: string]: unknown };
 }
-
-type DebugLog = (stage: string, details?: Record<string, unknown>) => void;
 
 // Formateador de duración de video de YouTube (PT#H#M#S) a un formato legible
 function formatDuration(duration?: string): string {
@@ -82,34 +80,23 @@ const YT_REGEX: RegExp = /(?:https?:\/\/)?(?:www\.|m\.)?(?:music\.)?(?:youtu\.be
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
 
-async function getYouTubeMetaData(
-    url: string,
-    debug?: DebugLog,
-): Promise<EndpointCreator> {
+async function getYouTubeMetaData(url: string): Promise<EndpointCreator> {
     try {
         const YT_ID = url.match(YT_REGEX)?.[1];
-        if (!YT_ID) throw new Error("URL de YouTube no válida.");
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
-        const startedAt = Date.now();
-        debug?.("youtube.metadata.request", { videoId: YT_ID });
-        const res = await fetch(YT_URL, {
+        const res = await axios.get(YT_URL,{
             headers: {
                 "User-Agent": UA,
                 "Accept-Language": "es-ES,es;q=0.9",
                 Cookie: "CONSENT=YES+1; SOCS=CAI",
             },
-            signal: AbortSignal.timeout(10000),
-            redirect: "follow",
+            adapter: "fetch",
+            responseType: "text",
         });
-        debug?.("youtube.metadata.response", {
-            videoId: YT_ID,
-            status: res.status,
-            durationMs: Date.now() - startedAt,
-        });
-        if (!res.ok) {
+        if (res.status < 200 || res.status >= 300) {
             throw new Error(`HTTP error! status: ${res.status}`);
         }
-        const dataHtml = await res.text();
+        const dataHtml = res.data;
 
         const PlayerParameters = [
             /var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s,
@@ -129,14 +116,6 @@ async function getYouTubeMetaData(
             }
         }
         const details = playerResponse?.videoDetails || {};
-        debug?.("youtube.metadata.parsed", {
-            videoId: YT_ID,
-            playerResponseFound: Boolean(playerResponse),
-            titleFound: Boolean(details?.title || dataHtml.match(/<meta property="og:title" content="(.+?)">/)?.[1]),
-            channelFound: Boolean(details?.author || details?.ownerChannelName || dataHtml.match(/"author":"([^"]+)"/)?.[1]),
-            durationFound: Boolean(details?.lengthSeconds || dataHtml.match(/<meta itemprop="duration" content="(.+?)">/)?.[1]),
-            responseLength: dataHtml.length,
-        });
 
         // Titulo del video
         const videoTitle = dataHtml.match(/<meta property="og:title" content="(.+?)">/)?.[1]
@@ -186,9 +165,6 @@ async function getYouTubeMetaData(
             }
         }
     } catch (error) {
-        debug?.("youtube.metadata.failed", {
-            error: error instanceof Error ? error.message : String(error),
-        });
         return {
             creator: "Jeriel B., AlyaApi, DeliriusApi, FaaApi",
             status: false,
@@ -198,7 +174,7 @@ async function getYouTubeMetaData(
     }
 }
 
-async function getAudio(url: string, debug?: DebugLog): Promise<AudioDownload> {
+async function getAudio(url: string): Promise<AudioDownload> {
     const RaceDLAudioApis = [
         `${DL_CONFIG.alya.BASE_URL}dl/ytdlmp3?url=${encodeURIComponent(url)}&apikey=${DL_CONFIG.alya.API_KEY}`,
         `${DL_CONFIG.alya.BASE_URL}dl/ytmp3?url=${encodeURIComponent(url)}&apikey=${DL_CONFIG.alya.API_KEY}`,
@@ -209,97 +185,50 @@ async function getAudio(url: string, debug?: DebugLog): Promise<AudioDownload> {
         `${DL_CONFIG.faaApi.BASE_URL}faa/ytplay?query=${encodeURIComponent(url)}`,
     ]
 
-    const fetchAudio = async (apiUrl: string, index: number) => {
-        const startedAt = Date.now();
+    const fetchAudio = async (apiUrl: string) => {
         try {
-            debug?.("youtube.audio.provider.request", {
-                provider: new URL(apiUrl).hostname,
-                endpoint: index + 1,
-            });
-            const res = await fetch(apiUrl, {
+            const res = await axios.get(apiUrl, {
                 headers: {
                     "User-Agent": UA,
                     "Accept-Language": "es-ES,es;q=0.9",
                 },
             });
-            debug?.("youtube.audio.provider.response", {
-                provider: new URL(apiUrl).hostname,
-                endpoint: index + 1,
-                status: res.status,
-                durationMs: Date.now() - startedAt,
-            });
-            if (!res.ok) {
+            if (res.status < 200 || res.status >= 300) {
                 throw new Error(`HTTP error! status: ${res.status}`);
             }
-            const data = (await res.json()) as AudioDownload;
+            const data = res.data as AudioDownload;
             const audioUrl = data.data?.dl || data.data?.download || data.result?.mp3;
             if (!data.status || typeof audioUrl !== "string") {
                 throw new Error(`API error: ${data.message || "No audio URL in response"}`);
             }
-            debug?.("youtube.audio.provider.completed", {
-                provider: new URL(apiUrl).hostname,
-                endpoint: index + 1,
-                hasDownloadUrl: true,
-                durationMs: Date.now() - startedAt,
-            });
             return { ...data, data: { ...data.data, ...data.result, dl: audioUrl } };
         } catch (error) {
-            debug?.("youtube.audio.provider.failed", {
-                provider: new URL(apiUrl).hostname,
-                endpoint: index + 1,
-                durationMs: Date.now() - startedAt,
-                error: error instanceof Error ? error.message : String(error),
-            });
             throw new Error(`Error fetching audio from ${new URL(apiUrl).pathname}: ${error}`, { cause: error });
         }
     }
 
-    try {
-        return await Promise.any(RaceDLAudioApis.map(fetchAudio));
-    } catch (error: unknown) {
-        debug?.("youtube.audio.providers.exhausted", {
-            error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-    }
+    return Promise.any(RaceDLAudioApis.map(fetchAudio));
 }
 
-export default async function YoutubeAudioDownload(
-    url: string,
-    debug?: DebugLog,
-): Promise<EndpointCreator> {
-    debug?.("youtube.download.started", {
-        videoId: url.match(YT_REGEX)?.[1],
-        inputIsUrl: /^https?:\/\//i.test(url),
-    });
-    const metadata = await getYouTubeMetaData(url, debug);
+export default async function YoutubeAudioDownload(url: string): Promise<EndpointCreator> {
+    const metadata = await getYouTubeMetaData(url);
     if (!metadata.status) {
         return metadata;
     }
 
     try {
-        const audio = await getAudio(url, debug);
+        const audio = await getAudio(url);
         const audioUrl = audio.data?.dl;
         if (!audioUrl) {
             throw new Error("Audio API returned no download URL");
         }
 
-        debug?.("youtube.download.completed", {
-            videoId: metadata.data.id,
-            title: metadata.data.title,
-            channel: metadata.data.channel,
-            duration: metadata.data.duration,
-            hasDownloadUrl: true,
-        });
         return {
             ...metadata,
             message: "YouTube metadata and audio fetched successfully",
             data: { ...metadata.data, dl_url: audioUrl },
         };
     } catch (error) {
-        debug?.("youtube.download.failed", {
-            error: error instanceof Error ? error.message : String(error),
-        });
         return {
             ...metadata,
             status: false,
