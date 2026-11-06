@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { requestSubBotLink } from "../../connection/subbotManager.ts";
-import { IS_SUBBOT_ONLINE } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 
-/* ───────────────────────── Servidor Web Desechable de Vinculación ───────────────────────── */
 type PairingSession = {
   id: string;
   code: string | null;
@@ -22,7 +20,7 @@ let serverStarted = false;
 
 function sweepSessions() {
   const now = Date.now();
-  const TTL = 3 * 60 * 1000; // 3 minutos de duración por enlace desechable
+  const TTL = 3 * 60 * 1000; // 3 minutos de expiración (desechable)
   for (const [id, s] of pairingSessions) {
     if (now - s.createdAt > TTL) {
       if (s.timer) clearTimeout(s.timer);
@@ -49,7 +47,7 @@ function startPairingServer() {
       return;
     }
 
-    // Ruta de estado para la interfaz web (Polling)
+    // API de Estado
     const statusMatch = pathname.match(/^\/api\/status\/([A-Za-z0-9]{20,40})$/);
     if (statusMatch) {
       const sessionId = statusMatch[1];
@@ -69,7 +67,7 @@ function startPairingServer() {
       return;
     }
 
-    // Ruta para solicitar el código de vinculación desde la web
+    // API para solicitar código
     const requestMatch = pathname.match(/^\/api\/request\/([A-Za-z0-9]{20,40})$/);
     if (requestMatch && req.method === "POST") {
       const sessionId = requestMatch[1];
@@ -90,13 +88,12 @@ function startPairingServer() {
 
       if (!phone || phone.length < 8) {
         res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "Número de teléfono inválido." }));
+        res.end(JSON.stringify({ ok: false, error: "Número inválido." }));
         return;
       }
 
       session.status = "generating";
 
-      // Disparar la vinculación de Baileys
       void requestSubBotLink({
         requester: `web-${phone}@s.whatsapp.net`,
         method: "code",
@@ -107,7 +104,6 @@ function startPairingServer() {
         },
         onConnected: () => {
           session.status = "connected";
-          // Quemar sesión tras éxito
           setTimeout(() => {
             if (session.timer) clearTimeout(session.timer);
             pairingSessions.delete(sessionId);
@@ -130,14 +126,14 @@ function startPairingServer() {
       return;
     }
 
-    // Interfaz Web Interactiva (Diseño Morado Neón Profundo estilo IDKBOT)
+    // Interfaz Web Estética (Morados Neón Profundo / Estilo IDKBOT)
     const pageMatch = pathname.match(/^\/pair\/([A-Za-z0-9]{20,40})$/);
     if (pageMatch) {
       const sessionId = pageMatch[1];
       const session = pairingSessions.get(sessionId);
       if (!session) {
         res.writeHead(410, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Enlace Expirado</title><style>body{background:#04020a;color:#e9d5ff;font-family:sans-serif;text-align:center;padding-top:50px}</style></head><body><h1>❌ Enlace Desechable Expirado</h1><p>Este enlace ya fue quemado o superó su tiempo de vida.</p></body></html>`);
+        res.end(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Expirado</title><style>body{background:#04020a;color:#f3e8ff;font-family:sans-serif;text-align:center;padding-top:60px}</style></head><body><h1>❌ Enlace Desechable Expirado</h1><p>Este enlace ya fue quemado o superó su tiempo de vida.</p></body></html>`);
         return;
       }
 
@@ -147,76 +143,84 @@ function startPairingServer() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vinculación Neón // LuferOS</title>
+<title>Vinculación // Subbot Neón</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-body{background:#06030f;color:#f3e8ff;padding:16px;display:flex;justify-content:center;align-items:center;min-height:100vh;overflow-x:hidden}
-.container{width:100%;max-width:400px;background:linear-gradient(165deg,#130826,#080314);border:1.5px solid #6b21a8;border-radius:20px;padding:24px;box-shadow:0 0 40px rgba(147,51,234,0.25),inset 0 0 20px rgba(147,51,234,0.1);position:relative}
-.header{text-align:center;margin-bottom:20px}
-.header h1{font-size:20px;font-weight:900;color:#c084fc;letter-spacing:1px;text-transform:uppercase;text-shadow:0 0 10px rgba(192,132,252,0.5)}
-.header p{font-size:12px;color:#a78bfa;margin-top:4px}
-.step-box{background:#0f051d;border:1px solid #3b0764;border-radius:14px;padding:16px;margin-bottom:16px}
+body{background:#04020a;color:#f3e8ff;padding:16px;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.wrapper{width:100%;max-width:400px;border:1px solid #2a124f;background:#090414;border-radius:18px;padding:24px;box-shadow:0 0 40px rgba(139,92,246,0.18),inset 0 0 25px rgba(88,28,135,0.1);position:relative;overflow:hidden}
+.wrapper::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c084fc,transparent)}
+.step-tag{display:inline-block;background:#2e1065;color:#e9d5ff;font-size:10px;font-weight:900;padding:3px 10px;border-radius:6px;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;border:1px solid #7c3aed}
+h1{font-size:22px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:.5px}
+p.sub{font-size:12px;color:#a78bfa;margin-bottom:20px;line-height:1.4}
+
+.form-group{margin-bottom:16px}
 .label{font-size:11px;font-weight:800;color:#c084fc;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.input-group{display:flex;gap:8px}
-input{flex:1;background:#05020a;border:1px solid #581c87;color:#fff;padding:12px;border-radius:10px;font-size:15px;outline:none;transition:all .2s}
-input:focus{border-color:#a855f7;box-shadow:0 0 12px rgba(168,85,247,0.4)}
-.btn{background:linear-gradient(135deg,#9333ea,#7e22ce);color:#fff;border:none;padding:12px 18px;border-radius:10px;font-weight:900;cursor:pointer;font-size:13px;letter-spacing:.8px;text-transform:uppercase;box-shadow:0 4px 15px rgba(147,51,234,0.4);transition:transform .1s}
-.btn:active{transform:scale(0.96)}
-.code-display{background:#05020a;border:2px dashed #a855f7;border-radius:14px;padding:20px;text-align:center;margin-top:16px;display:none;box-shadow:inset 0 0 15px rgba(168,85,247,0.15)}
-.code-text{font-size:26px;font-weight:900;color:#e9d5ff;letter-spacing:3px;font-family:'Courier New',monospace;text-shadow:0 0 12px rgba(233,213,255,0.6)}
-.instructions{font-size:12px;color:#cbd5e1;line-height:1.5;margin-top:14px}
-.instructions ol{padding-left:18px}
-.instructions li{margin-bottom:6px}
-.status-msg{text-align:center;font-size:12px;font-weight:700;color:#c084fc;margin-top:12px}
-.loader{display:inline-block;width:14px;height:14px;border:2px solid #c084fc;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle}
+.input-row{display:flex;gap:8px}
+input{flex:1;background:#05020a;border:1.5px solid #581c87;color:#fff;padding:12px 14px;border-radius:12px;font-size:15px;outline:none;transition:all .2s}
+input:focus{border-color:#c084fc;box-shadow:0 0 15px rgba(192,132,252,0.35)}
+
+.action-btn{width:100%;background:linear-gradient(135deg,#7c3aed,#9333ea);color:#fff;border:none;padding:13px;border-radius:12px;font-weight:900;cursor:pointer;font-size:13px;letter-spacing:1px;text-transform:uppercase;box-shadow:0 5px 20px rgba(124,58,237,0.4);transition:transform .1s}
+.action-btn:active{transform:scale(0.97)}
+
+.code-container{border:2px dashed #7c3aed;background:#06020f;border-radius:14px;padding:22px;text-align:center;margin-top:16px;display:none;box-shadow:inset 0 0 20px rgba(124,58,237,0.15)}
+.code-value{font-size:28px;font-weight:900;color:#f3e8ff;letter-spacing:4px;font-family:'Courier New',monospace;text-shadow:0 0 15px rgba(239,246,255,0.6)}
+.copy-whatsapp-btn{display:block;width:100%;background:#1b0c36;border:1.5px solid #7c3aed;color:#e9d5ff;text-align:center;padding:11px;border-radius:10px;font-weight:800;font-size:12px;text-decoration:none;margin-top:12px;text-transform:uppercase;letter-spacing:.5px}
+
+.steps-list{margin-top:18px;border-top:1px solid #1e1035;padding-top:14px}
+.step-item{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:11.5px;color:#cbd5e1;line-height:1.4}
+.step-num{background:#2e1065;color:#c084fc;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex:none;border:1px solid #7c3aed}
+
+.status-box{text-align:center;font-size:11.5px;font-weight:700;color:#c084fc;margin-top:14px}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #c084fc;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle}
 @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <h1>⚡ Vinculación Neón</h1>
-    <p>Sistema de Subbots Desechable</p>
+<div class="wrapper">
+  <div class="step-tag" id="stepTag">Paso 01</div>
+  <h1 id="mainTitle">Vincula tu subbot</h1>
+  <p class="sub" id="mainSub">Ingresa tu número para generar el código de emparejamiento temporal.</p>
+
+  <div id="inputView">
+    <div class="form-group">
+      <div class="label">Número de WhatsApp</div>
+      <div class="input-row">
+        <input type="tel" id="phoneInput" placeholder="Ej: 573118353868">
+      </div>
+    </div>
+    <button class="action-btn" onclick="requestCode()">Solicitar Código</button>
   </div>
 
-  <div class="step-box" id="phoneSection">
-    <div class="label">Número de WhatsApp (con código de país)</div>
-    <div class="input-group">
-      <input type="tel" id="phoneInput" placeholder="Ej: 50612345678">
-      <button class="btn" onclick="requestPairingCode()">Generar</button>
+  <div id="codeView" style="display:none">
+    <div class="code-container" id="codeBox" style="display:block">
+      <div class="code-value" id="codeDisplay">----</div>
+    </div>
+    <a id="waLink" href="#" class="copy-whatsapp-btn" target="_blank">Copiar y abrir WhatsApp</a>
+
+    <div class="steps-list">
+      <div class="step-item"><div class="step-num">1</div><div>Abre WhatsApp en tu teléfono.</div></div>
+      <div class="step-item"><div class="step-num">2</div><div>Entra en <b>Dispositivos vinculados</b>.</div></div>
+      <div class="step-item"><div class="step-num">3</div><div>Toca vincular con número de teléfono e ingresa el código.</div></div>
     </div>
   </div>
 
-  <div class="step-box" id="codeSection" style="display:none">
-    <div class="label">Tu Código de Vinculación</div>
-    <div class="code-display" id="codeBox" style="display:block">
-      <div class="code-text" id="codeValue">----</div>
-    </div>
-    <div class="instructions">
-      <ol>
-        <li>Abre WhatsApp en tu teléfono.</li>
-        <li>Entra en <b>Dispositivos vinculados</b>.</li>
-        <li>Toca <b>Vincular un dispositivo</b> y elige número de teléfono.</li>
-        <li>Escribe el código mostrado arriba.</li>
-      </ol>
-    </div>
-    <div class="status-msg" id="statusText"><span class="loader"></span> Esperando confirmación de WhatsApp...</div>
-  </div>
+  <div class="status-box" id="statusText" style="display:none"><span class="spinner"></span> Esperando confirmación de WhatsApp...</div>
 </div>
 
 <script>
 const SID = "${sessionId}";
-let pollInterval = null;
+let pollTimer = null;
 
-async function requestPairingCode() {
+async function requestCode() {
   const phone = document.getElementById('phoneInput').value.trim();
   if(!phone || phone.length < 8) {
-    alert("Ingresa un número válido con código de país.");
+    alert("Ingresa un número válido.");
     return;
   }
   
-  document.querySelector('.btn').disabled = true;
-  document.querySelector('.btn').textContent = "Conectando...";
+  const btn = document.querySelector('.action-btn');
+  btn.disabled = true;
+  btn.textContent = "Preparando...";
 
   try {
     const res = await fetch('/api/request/' + SID, {
@@ -224,44 +228,49 @@ async function requestPairingCode() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone })
     });
-    const data = await res.json();
-    if(data.ok) {
-      document.getElementById('phoneSection').style.display = 'none';
-      document.getElementById('codeSection').style.display = 'block';
+    const json = await res.json();
+    if(json.ok) {
+      document.getElementById('stepTag').textContent = "Paso 02";
+      document.getElementById('mainTitle').textContent = "Tu Código Temporal";
+      document.getElementById('mainSub').textContent = "Copia el código e ingrésalo en WhatsApp.";
+      document.getElementById('inputView').style.display = 'none';
+      document.getElementById('codeView').style.display = 'block';
+      document.getElementById('statusText').style.display = 'block';
       startPolling();
     } else {
-      alert(data.error || "Error al solicitar código.");
-      document.querySelector('.btn').disabled = false;
-      document.querySelector('.btn').textContent = "Generar";
+      alert(json.error || "Error al solicitar.");
+      btn.disabled = false;
+      btn.textContent = "Solicitar Código";
     }
   } catch(e) {
-    alert("Error de red.");
-    document.querySelector('.btn').disabled = false;
-    document.querySelector('.btn').textContent = "Generar";
+    alert("Error de conexión con el servidor.");
+    btn.disabled = false;
+    btn.textContent = "Solicitar Código";
   }
 }
 
 function startPolling() {
-  pollInterval = setInterval(async () => {
+  pollTimer = setInterval(async () => {
     try {
       const res = await fetch('/api/status/' + SID);
-      const data = await res.json();
-      if(!data.ok) {
-        clearInterval(pollInterval);
-        document.getElementById('statusText').innerHTML = "❌ " + (data.error || "Enlace expirado.");
+      const json = await res.json();
+      if(!json.ok) {
+        clearInterval(pollTimer);
+        document.getElementById('statusText').innerHTML = "❌ " + (json.error || "Enlace expirado.");
         return;
       }
-      if(data.status === 'ready' && data.code) {
-        document.getElementById('codeValue').textContent = data.code;
+      if(json.status === 'ready' && json.code) {
+        document.getElementById('codeDisplay').textContent = json.code;
+        document.getElementById('waLink').href = "https://wa.me/?text=" + encodeURIComponent(json.code);
       }
-      if(data.status === 'connected') {
-        clearInterval(pollInterval);
-        document.getElementById('statusText').innerHTML = "✅ ¡Vinculado con éxito! Ya puedes cerrar esta ventana.";
-        document.getElementById('codeValue').style.color = "#4ade80";
+      if(json.status === 'connected') {
+        clearInterval(pollTimer);
+        document.getElementById('statusText').innerHTML = "✅ ¡Vinculado con éxito! Ya puedes cerrar esta página.";
+        document.getElementById('codeDisplay').style.color = "#4ade80";
       }
-      if(data.status === 'error') {
-        clearInterval(pollInterval);
-        document.getElementById('statusText').innerHTML = "❌ Error: " + (data.error || "Desconocido");
+      if(json.status === 'error') {
+        clearInterval(pollTimer);
+        document.getElementById('statusText').innerHTML = "❌ Error: " + (json.error || "Desconocido");
       }
     } catch(e) {}
   }, 2000);
@@ -282,7 +291,6 @@ function startPolling() {
   setInterval(sweepSessions, 60 * 1000).unref?.();
 }
 
-/* ───────────────────────── Lógica del Comando .code ───────────────────────── */
 export default {
   name: ["code", "pairingcode", "vincularcode"],
   description: "Genera un enlace web desechable neón para vincular tu subbot.",
@@ -290,7 +298,7 @@ export default {
   cooldown: 15000,
   ownerOnly: false,
 
-  async run({ reply, sock }: CommandContext) {
+  async run({ reply }: CommandContext) {
     startPairingServer();
 
     const sessionId = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 16);
@@ -308,13 +316,13 @@ export default {
     };
     pairingSessions.set(sessionId, session);
 
-    // Obtener la URL base del túnel activo (Cloudflare/LHR/Serveo)
+    // Extracción inteligente del dominio público activo (igual que .webpanel)
     const G_TUNNEL = G.__locTunnel;
-    let baseUrl = process.env.LOCATE_BASE_URL || G_TUNNEL?.url || "";
+    let baseUrl = process.env.WEB_PANEL_URL || process.env.LOCATE_BASE_URL || G_TUNNEL?.url || "";
     
     if (!baseUrl) {
-      // Fallback local si no hay túnel externo activo
-      baseUrl = `http://localhost:${PORT}`;
+      // Intenta autodetectar desde las cabeceras o usa ngrok/localtunnel si está registrado globalmente
+      baseUrl = G.__publicUrl || `http://localhost:${PORT}`;
     }
     baseUrl = baseUrl.replace(/\/+$/, "");
     const pairingUrl = `${baseUrl}/pair/${sessionId}`;
