@@ -16,7 +16,7 @@ const pairingSessions: Map<string, PairingSession> = (G.__pairingSessions ??= ne
 
 function sweepSessions() {
   const now = Date.now();
-  const TTL = 3 * 60 * 1000; // 3 minutos de duración (desechable)
+  const TTL = 3 * 60 * 1000; // 3 minutos de duración (enlace desechable)
   for (const [id, s] of pairingSessions) {
     if (now - s.createdAt > TTL) {
       if (s.timer) clearTimeout(s.timer);
@@ -26,8 +26,9 @@ function sweepSessions() {
 }
 setInterval(sweepSessions, 60 * 1000).unref?.();
 
+// Función exportada que el servidor central del bot puede invocar para manejar las rutas /pair/ y /api/
 export function handlePairingWebRequest(pathname: string, req: any, res: any): boolean {
-  // API Estado
+  // API de Estado del Código
   const statusMatch = pathname.match(/^\/api\/status\/([A-Za-z0-9]{20,40})$/);
   if (statusMatch) {
     const sessionId = statusMatch[1];
@@ -47,7 +48,7 @@ export function handlePairingWebRequest(pathname: string, req: any, res: any): b
     return true;
   }
 
-  // API Solicitar Código
+  // API para solicitar código a Baileys
   const requestMatch = pathname.match(/^\/api\/request\/([A-Za-z0-9]{20,40})$/);
   if (requestMatch && req.method === "POST") {
     const sessionId = requestMatch[1];
@@ -108,7 +109,7 @@ export function handlePairingWebRequest(pathname: string, req: any, res: any): b
     return true;
   }
 
-  // Interfaz Web Estética (Morados Neón Profundo)
+  // Interfaz Web Estética (Morados Neón Profundo / Estilo IDKBOT)
   const pageMatch = pathname.match(/^\/pair\/([A-Za-z0-9]{20,40})$/);
   if (pageMatch) {
     const sessionId = pageMatch[1];
@@ -276,9 +277,9 @@ export default {
   async run({ reply }: CommandContext) {
     const sessionId = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 16);
     const createdAt = Date.now();
-    const TTL = 3 * 60 * 1000;
+    const TTL = 3 * 60 * 1000; // 3 minutos
 
-    const session: PairingSession = {
+    pairingSessions.set(sessionId, {
       id: sessionId,
       code: null,
       status: "waiting",
@@ -286,27 +287,27 @@ export default {
       timer: setTimeout(() => {
         pairingSessions.delete(sessionId);
       }, TTL),
-    };
-    pairingSessions.set(sessionId, session);
+    });
 
-    // Reutiliza exactamente la misma fuente de túneles públicos que usa .webpanel (lhr.life)
-    const G_TUNNEL = G.__locTunnel;
+    // Extrae exactamente el mismo túnel público activo (lhr.life) que usa .webpanel
     let baseUrl = 
       process.env.WEB_PANEL_URL || 
       process.env.LOCATE_BASE_URL || 
-      G_TUNNEL?.url || 
+      G.__locTunnel?.url || 
       G.__publicUrl || 
       "";
 
     baseUrl = baseUrl.replace(/\/+$/, "");
     if (!baseUrl) {
-      baseUrl = `http://localhost:${process.env.PAIRING_PORT || 8788}`;
+      const panelState = G.__auraWebPanel;
+      baseUrl = `http://localhost:${panelState?.port || 8080}`;
     }
+
     const pairingUrl = `${baseUrl}/pair/${sessionId}`;
 
     const text = 
       `🟣 *SISTEMA DE VINCULACIÓN NEÓN* 🟣\n\n` +
-      `Se ha generado un enlace web desechable y seguro para vincular tu subbot.\n\n` +
+      `Se ha generado un enlace web desechable y seguro para vincular tu subbot con diseño estético de élite.\n\n` +
       `🔗 *Enlace de acceso:* \n${pairingUrl}\n\n` +
       `⏳ *Expira en:* 3 minutos (Enlace de un solo uso / Autodestrucción)`;
 
