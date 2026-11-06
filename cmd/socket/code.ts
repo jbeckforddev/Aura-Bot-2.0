@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
 import { requestSubBotLink } from "../../connection/subbotManager.ts";
-import { t } from "../../src/langs/index.ts";
 import type { CommandContext } from "../../types/index.d.ts";
 
 type PairingSession = {
@@ -15,12 +13,10 @@ type PairingSession = {
 
 const G = globalThis as any;
 const pairingSessions: Map<string, PairingSession> = (G.__pairingSessions ??= new Map());
-const PORT = Number(process.env.PAIRING_PORT || 8788);
-let serverStarted = false;
 
 function sweepSessions() {
   const now = Date.now();
-  const TTL = 3 * 60 * 1000; // 3 minutos de expiración (desechable)
+  const TTL = 3 * 60 * 1000; // 3 minutos de duración (desechable)
   for (const [id, s] of pairingSessions) {
     if (now - s.createdAt > TTL) {
       if (s.timer) clearTimeout(s.timer);
@@ -28,58 +24,43 @@ function sweepSessions() {
     }
   }
 }
+setInterval(sweepSessions, 60 * 1000).unref?.();
 
-function startPairingServer() {
-  if (serverStarted) return;
-  serverStarted = true;
+export function handlePairingWebRequest(pathname: string, req: any, res: any): boolean {
+  // API Estado
+  const statusMatch = pathname.match(/^\/api\/status\/([A-Za-z0-9]{20,40})$/);
+  if (statusMatch) {
+    const sessionId = statusMatch[1];
+    const session = pairingSessions.get(sessionId);
+    if (!session) {
+      res.writeHead(410, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Enlace expirado o quemado." }));
+      return true;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      ok: true,
+      status: session.status,
+      code: session.code,
+      error: session.error,
+    }));
+    return true;
+  }
 
-  const server: Server = createServer(async (req, res) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const pathname = url.pathname;
-
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
+  // API Solicitar Código
+  const requestMatch = pathname.match(/^\/api\/request\/([A-Za-z0-9]{20,40})$/);
+  if (requestMatch && req.method === "POST") {
+    const sessionId = requestMatch[1];
+    const session = pairingSessions.get(sessionId);
+    if (!session) {
+      res.writeHead(410, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Enlace expirado." }));
+      return true;
     }
 
-    // API de Estado
-    const statusMatch = pathname.match(/^\/api\/status\/([A-Za-z0-9]{20,40})$/);
-    if (statusMatch) {
-      const sessionId = statusMatch[1];
-      const session = pairingSessions.get(sessionId);
-      if (!session) {
-        res.writeHead(410, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "Enlace expirado o quemado." }));
-        return;
-      }
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        ok: true,
-        status: session.status,
-        code: session.code,
-        error: session.error,
-      }));
-      return;
-    }
-
-    // API para solicitar código
-    const requestMatch = pathname.match(/^\/api\/request\/([A-Za-z0-9]{20,40})$/);
-    if (requestMatch && req.method === "POST") {
-      const sessionId = requestMatch[1];
-      const session = pairingSessions.get(sessionId);
-      if (!session) {
-        res.writeHead(410, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "Enlace expirado." }));
-        return;
-      }
-
-      let body = "";
-      for await (const chunk of req) body += chunk;
+    let body = "";
+    req.on("data", (chunk: any) => { body += chunk; });
+    req.on("end", () => {
       let phone = "";
       try {
         const parsed = JSON.parse(body);
@@ -123,22 +104,23 @@ function startPairingServer() {
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, status: "generating" }));
-      return;
+    });
+    return true;
+  }
+
+  // Interfaz Web Estética (Morados Neón Profundo)
+  const pageMatch = pathname.match(/^\/pair\/([A-Za-z0-9]{20,40})$/);
+  if (pageMatch) {
+    const sessionId = pageMatch[1];
+    const session = pairingSessions.get(sessionId);
+    if (!session) {
+      res.writeHead(410, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Expirado</title><style>body{background:#04020a;color:#f3e8ff;font-family:sans-serif;text-align:center;padding-top:60px}</style></head><body><h1>❌ Enlace Desechable Expirado</h1><p>Este enlace ya fue quemado o superó su tiempo de vida.</p></body></html>`);
+      return true;
     }
 
-    // Interfaz Web Estética (Morados Neón Profundo / Estilo IDKBOT)
-    const pageMatch = pathname.match(/^\/pair\/([A-Za-z0-9]{20,40})$/);
-    if (pageMatch) {
-      const sessionId = pageMatch[1];
-      const session = pairingSessions.get(sessionId);
-      if (!session) {
-        res.writeHead(410, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Expirado</title><style>body{background:#04020a;color:#f3e8ff;font-family:sans-serif;text-align:center;padding-top:60px}</style></head><body><h1>❌ Enlace Desechable Expirado</h1><p>Este enlace ya fue quemado o superó su tiempo de vida.</p></body></html>`);
-        return;
-      }
-
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html>
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(`<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -278,17 +260,10 @@ function startPolling() {
 </script>
 </body>
 </html>`);
-      return;
-    }
+    return true;
+  }
 
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("Not Found");
-  });
-
-  server.listen(PORT, () => {
-    console.log(`[pairing-web] Servidor de vinculación activo en puerto ${PORT}`);
-  });
-  setInterval(sweepSessions, 60 * 1000).unref?.();
+  return false;
 }
 
 export default {
@@ -299,8 +274,6 @@ export default {
   ownerOnly: false,
 
   async run({ reply }: CommandContext) {
-    startPairingServer();
-
     const sessionId = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 16);
     const createdAt = Date.now();
     const TTL = 3 * 60 * 1000;
@@ -316,15 +289,19 @@ export default {
     };
     pairingSessions.set(sessionId, session);
 
-    // Extracción inteligente del dominio público activo (igual que .webpanel)
+    // Reutiliza exactamente la misma fuente de túneles públicos que usa .webpanel (lhr.life)
     const G_TUNNEL = G.__locTunnel;
-    let baseUrl = process.env.WEB_PANEL_URL || process.env.LOCATE_BASE_URL || G_TUNNEL?.url || "";
-    
-    if (!baseUrl) {
-      // Intenta autodetectar desde las cabeceras o usa ngrok/localtunnel si está registrado globalmente
-      baseUrl = G.__publicUrl || `http://localhost:${PORT}`;
-    }
+    let baseUrl = 
+      process.env.WEB_PANEL_URL || 
+      process.env.LOCATE_BASE_URL || 
+      G_TUNNEL?.url || 
+      G.__publicUrl || 
+      "";
+
     baseUrl = baseUrl.replace(/\/+$/, "");
+    if (!baseUrl) {
+      baseUrl = `http://localhost:${process.env.PAIRING_PORT || 8788}`;
+    }
     const pairingUrl = `${baseUrl}/pair/${sessionId}`;
 
     const text = 
