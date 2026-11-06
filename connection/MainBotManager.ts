@@ -58,7 +58,7 @@ const mainMessagesCache = new LRUCache<string, proto.IMessage>({
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
 
-export const GroupCache = new LRUCache({max: 1000, ttl: 5 * 60, ttlAutopurge: true })
+export const GroupCache = new LRUCache({ max: 1000, ttl: 5 * 60, ttlAutopurge: true });
 
 function formatDisconnectData(data: unknown): string {
   try {
@@ -86,19 +86,22 @@ function createBoundedCacheStore(max: number, ttl: number) {
 
 async function safelyDestroySocket(sock?: ExtendedWASocket | null, reason?: Error) {
   if (!sock) return;
+  (sock as any).isClosed = true;
+  (sock as any).isClosing = true;
+
   try {
     if (sock.ev && typeof sock.ev.removeAllListeners === "function") {
-      sock.ev.removeAllListeners();
+      (sock.ev as any).removeAllListeners();
     }
   } catch {}
-  
+
   if (sock.ws) {
     try {
       (sock.ws as any).removeAllListeners?.();
       if ((sock.ws as any).readyState !== 3) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 1500);
-          sock.ws?.once('close', () => {
+          sock.ws?.once("close", () => {
             clearTimeout(timeout);
             resolve();
           });
@@ -314,7 +317,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
   let pairingPhone = "";
 
   if (!isRegistered) {
-    logInfo("Selecciona el método de vinculación:" , "pairing");
+    logInfo("Selecciona el método de vinculación:", "pairing");
     pairingMenuLog();
     logInfo("Elija el metodo (1 o 2): ", "pairing");
 
@@ -382,7 +385,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
     generateHighQualityLinkPreview: false,
     retryRequestDelayMs: 250,
     maxMsgRetryCount: 3,
-    cachedGroupMetadata: async (jid) => GROUP_METADATA_CACHE.get(jid)
+    cachedGroupMetadata: async (jid) => GROUP_METADATA_CACHE.get(jid),
   });
 
   const extendedSock = sock as ExtendedWASocket;
@@ -397,8 +400,9 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
   let authStateClosePromise: Promise<void> | null = null;
   let credentialsWriteQueue: Promise<void> = Promise.resolve();
 
-  const persistCredentials = () => {
+  const persistCredentials = (force = false) => {
     if (!credentialsDirty) return credentialsWriteQueue;
+    if (authStateClosing && !force) return credentialsWriteQueue;
     credentialsDirty = false;
     credentialsWriteQueue = credentialsWriteQueue
       .catch(() => {})
@@ -423,7 +427,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       }
 
       try {
-        await persistCredentials();
+        await persistCredentials(true);
       } catch (error) {
         logInfo(`Error al guardar credenciales antes del cierre: ${String(error)}`, "error");
       }
@@ -451,7 +455,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       } catch (error) {
         logInfo(`Error al guardar credenciales: ${String(error)}`, "error");
       }
-    }, 3000);
+    }, 1000);
     saveTimer.unref?.();
   });
 
@@ -503,11 +507,13 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
         const code = rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
         logInfo(`🔑 CÓDIGO: ${chalk.bgHex("#4c1d95").white.bold(code)}`, "pairing");
       } catch (err) {
+        pairingCodeRequested = false;
         logInfo(`Error al solicitar código: ${String(err)}`, "error");
       }
     }
     if (u.connection === "open") {
       hasConnected = true;
+      connectionsInProgress.delete(sessionName);
       const mainNum = sock.user?.id ?? "desconocido";
       const botJid = jidNormalizedUser(mainNum);
 
@@ -588,9 +594,9 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       logInfo("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
 
       globalThis.mainSocket = null;
+      connectionsInProgress.delete(sessionName);
       logInfo("Iniciando nuevamente el menú de vinculación del bot principal...", "pairing");
       void connectMainBot(sessionName);
-      connectionsInProgress.delete(sessionName);
       return;
     }
 
@@ -611,7 +617,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
 
     await safelyDestroySocket(extendedSock, error);
     await closeAuthStateSafely();
-    
+
     logInfo(
       `Conexión cerrada. Código: ${String(statusCode || "N/A")}. Motivo: ${errorMessage}${error?.data === undefined ? "" : `. Datos: ${formatDisconnectData(error.data)}`}`,
       statusCode === 0 ? "warn" : "error",
@@ -639,8 +645,8 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
           "Sesión rechazada (401). Se limpió la carpeta y se intentará vincular una vez más con llaves nuevas.",
           "alert",
         );
-        scheduleReconnect(3000, sessionName);
         connectionsInProgress.delete(sessionName);
+        scheduleReconnect(3000, sessionName);
         return;
       }
 
@@ -669,7 +675,9 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       DisconnectReason.connectionClosed,
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
+      DisconnectReason.badSession,
       500,
+      503,
       408,
       428,
       515,
@@ -678,7 +686,6 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
     const shouldResetSession =
       [
         DisconnectReason.loggedOut,
-        DisconnectReason.badSession,
         DisconnectReason.forbidden,
         DisconnectReason.multideviceMismatch,
       ].includes(statusCode) || isNotRegistered;
