@@ -708,7 +708,6 @@ async function connectSubBot(
     const currentRegistered = Boolean(state.creds?.registered || state.creds?.me);
     const invalidSession = [
       DisconnectReason.loggedOut,
-      DisconnectReason.badSession,
       DisconnectReason.forbidden,
       DisconnectReason.multideviceMismatch,
     ].includes(statusCode as never);
@@ -717,7 +716,9 @@ async function connectSubBot(
       DisconnectReason.connectionClosed,
       DisconnectReason.timedOut,
       DisconnectReason.restartRequired,
+      DisconnectReason.badSession,
       500,
+      503,
       408,
       428,
       515,
