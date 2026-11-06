@@ -359,7 +359,7 @@ export default {
     try {
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
       const rich = new AIRich(sock)
-        .setTitle("⚠️ ERROR DE UPDATE // GIT")
+        .setTitle("⚠️ ERROR DE ACTUALIZACION // GIT")
         .setFooter(`Usa .fix --force para forzar sincronización`);
 
       rich.addSection(
