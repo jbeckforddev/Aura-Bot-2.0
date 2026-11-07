@@ -438,6 +438,10 @@ type DownloadChargeContext = CommandContext & {
   downloadCharged?: boolean;
 };
 
+function isFreeDownloadInstance(ctx: CommandContext): boolean {
+  return ctx.sock.botType === "Prem-Bot" || ctx.isMod || ctx.sock.botType === "Principal";
+}
+
 export async function prepareDownloadCharge(
   ctx: CommandContext,
   type: DownloadMediaType,
@@ -452,8 +456,12 @@ export function prepareDownloadChargeBySize(
   type: DownloadMediaType,
   size: number,
 ): { cost: number; size: number } {
+  if (isFreeDownloadInstance(ctx)) {
+    return { cost: 0, size: Number.isFinite(size) && size > 0 ? size : 0 };
+  }
+
   if (!Number.isFinite(size) || size <= 0) {
-    throw new Error("No se pudo determinar el tamaño del archivo.");
+    return { cost: 500, size: 1000 * 1024 };
   }
 
   const bag = ctx as DownloadChargeContext;
@@ -486,6 +494,8 @@ export function prepareDownloadChargeBySize(
 }
 
 export function confirmDownloadCharge(ctx: CommandContext): void {
+  if (isFreeDownloadInstance(ctx)) return;
+
   const bag = ctx as DownloadChargeContext;
   if (bag.downloadCharged) return;
   const size = Number(bag._downloadSize) || 0;

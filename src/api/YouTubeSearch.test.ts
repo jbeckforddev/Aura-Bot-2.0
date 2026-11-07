@@ -1,4 +1,4 @@
-import axios from "axios";
+import { fetch } from "undici";
 
 const HEADER =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -139,13 +139,14 @@ function findKey(obj: any, key: string, depth = 0): any {
 }
 
 async function get(url: string): Promise<string> {
-  const res = await axios.get<string>(url, {
+  const res = await fetch(url, {
     headers: REQ_HEADERS,
-    adapter: "fetch",
-    responseType: "text",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  return res.data;
+  if (!res.ok) {
+    throw new Error(`YouTube respondió con HTTP ${res.status}`);
+  }
+  return res.text();
 }
 
 /* ---------- datos extra de la página del video ---------- */

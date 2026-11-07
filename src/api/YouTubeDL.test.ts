@@ -1,5 +1,5 @@
 import { DL_CONFIG } from "../../config.ts";
-import axios from "axios";
+import { fetch } from "undici";
 
 interface YouTubeMetaData {
     id: string;
@@ -8,6 +8,7 @@ interface YouTubeMetaData {
     duration: string;
     views: string;
     likes?: string;
+    size?: number;
     url: string;
     thumbnail: string;
     channel_url: string;
@@ -24,8 +25,9 @@ interface EndpointCreator{
 interface AudioDownload {
     status?: boolean;
     message?: string;
-    data?: { dl?: string; download?: string; [key: string]: unknown };
-    result?: { mp3?: string; [key: string]: unknown };
+    size?: number | string;
+    data?: { dl?: string; download?: string; [key: string]: unknown, size?: number | string; };
+    result?: { mp3?: string; [key: string]: unknown, size?: number | string; };
 }
 
 // Formateador de duración de video de YouTube (PT#H#M#S) a un formato legible
@@ -89,19 +91,17 @@ async function getYouTubeMetaData(
         if (!YT_ID) throw new Error("URL de YouTube no válida.");
         const matchingFallback = fallback?.id === YT_ID ? fallback : undefined;
         const YT_URL = `https://www.youtube.com/watch?v=${YT_ID}`;
-        const res = await axios.get(YT_URL,{
+        const res = await fetch(YT_URL, {
             headers: {
                 "User-Agent": UA,
                 "Accept-Language": "es-ES,es;q=0.9",
                 Cookie: "CONSENT=YES+1; SOCS=CAI",
             },
-            adapter: "fetch",
-            responseType: "text",
         });
-        if (res.status < 200 || res.status >= 300) {
+        if (!res.ok) {
             throw new Error(`HTTP error! status: ${res.status}`);
         }
-        const dataHtml = res.data;
+        const dataHtml = await res.text();
 
         const PlayerParameters = [
             /var ytInitialPlayerResponse\s*=\s*(\{.+?\});<\/script>/s,
@@ -124,6 +124,7 @@ async function getYouTubeMetaData(
         const pageMatchesVideo = !details?.videoId || details.videoId === YT_ID;
         const matchingPlayer = details?.videoId === YT_ID ? details : undefined;
 
+        // Título del Video
         const videoTitle = pageMatchesVideo
             ? dataHtml.match(/<meta property="og:title" content="(.+?)">/)?.[1]
             : undefined;
@@ -148,7 +149,9 @@ async function getYouTubeMetaData(
             : "";
 
         // Vistas del video
-        const views = matchingPlayer?.viewCount;
+        const views = matchingPlayer?.viewCount
+            || dataHtml.match(/"viewCount":"([^"]+)"/)?.[1]
+            || undefined;
 
         // Likes del video
         const likes = pageMatchesVideo
@@ -169,6 +172,7 @@ async function getYouTubeMetaData(
         const channelUrlAlt = pageMatchesVideo
             ? dataHtml.match(/<link itemprop="url" href="(.+?)">/)?.[1]
             : undefined;
+
         const parsedDuration = duration !== "0s" ? duration : "";
         const isUsable = (value: string | undefined) =>
             Boolean(value && !/^unknown\b/i.test(value.trim()));
@@ -178,23 +182,23 @@ async function getYouTubeMetaData(
             status: true,
             message: "YouTube metadata fetched successfully",
             data: {
-                id: matchingFallback?.id || videoId || videoIdAlt || "Unknown ID",
+                id: matchingFallback?.id || videoId || videoIdAlt || "N/A",
                 title: (isUsable(matchingFallback?.title) && matchingFallback?.title)
                     || (isUsable(videoTitleAlt) && videoTitleAlt)
                     || (isUsable(videoTitle) && videoTitle)
-                    || "Unknown Title",
+                    || "N/A",
                 channel: (isUsable(matchingFallback?.channel) && matchingFallback?.channel)
                     || (isUsable(channelName) && channelName)
                     || (isUsable(channelNameAlt) && channelNameAlt)
-                    || "Unknown Channel",
+                    || "N/A",
                 duration: matchingFallback?.duration && matchingFallback.duration !== "0s"
                     ? matchingFallback.duration
                     : durationAlt || parsedDuration || "--:--",
-                views: matchingFallback?.views || (views ? formatCount(views) : "Unknown Views"),
-                likes: matchingFallback?.likes || (likes ? formatCount(likes) : "Unknown Likes"),
+                views: matchingFallback?.views || (views ? formatCount(views) : "N/A"),
+                likes: matchingFallback?.likes || (likes ? formatCount(likes) : "N/A"),
                 url: `https://youtu.be/${YT_ID}`,
                 thumbnail: (matchingFallback?.thumbnail || thumbnail || thumbnailAlt || `https://i.ytimg.com/vi/${YT_ID}/hqdefault.jpg`).split("?")[0],
-                channel_url: matchingFallback?.channel_url || channelUrl || channelUrlAlt || "Unknown Channel URL",
+                channel_url: matchingFallback?.channel_url || channelUrl || channelUrlAlt || "N/A",
             }
         }
     } catch (error) {
@@ -220,27 +224,47 @@ async function getAudio(url: string): Promise<AudioDownload> {
 
     const fetchAudio = async (apiUrl: string) => {
         try {
-            const res = await axios.get(apiUrl, {
+            const res = await fetch(apiUrl, {
                 headers: {
                     "User-Agent": UA,
                     "Accept-Language": "es-ES,es;q=0.9",
                 },
             });
-            if (res.status < 200 || res.status >= 300) {
+            if (!res.ok) {
                 throw new Error(`HTTP error! status: ${res.status}`);
             }
-            const data = res.data as AudioDownload;
+            const data = (await res.json()) as AudioDownload;
             const audioUrl = data.data?.dl || data.data?.download || data.result?.mp3;
             if (!data.status || typeof audioUrl !== "string") {
                 throw new Error(`API error: ${data.message || "No audio URL in response"}`);
             }
-            return { ...data, data: { ...data.data, ...data.result, dl: audioUrl } };
+            return {
+                ...data,
+                data: {
+                    ...data.data,
+                    ...data.result,
+                    dl: audioUrl,
+                    size: data.data?.size ?? data.result?.size ?? data.size,
+                },
+            };
         } catch (error) {
             throw new Error(`Error fetching audio from ${new URL(apiUrl).pathname}: ${error}`, { cause: error });
         }
     }
 
     return Promise.any(RaceDLAudioApis.map(fetchAudio));
+}
+
+async function getAudioSizeFromUrl(url: string): Promise<number | undefined> {
+    const response = await fetch(url, {
+        method: "HEAD",
+        redirect: "follow",
+        signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return undefined;
+
+    const size = Number(response.headers.get("content-length"));
+    return Number.isFinite(size) && size > 0 ? size : undefined;
 }
 
 export default async function YoutubeAudioDownload(
@@ -258,11 +282,38 @@ export default async function YoutubeAudioDownload(
         if (!audioUrl) {
             throw new Error("Audio API returned no download URL");
         }
+        const rawSize = audio.data?.size;
+        const parsedSize = typeof rawSize === "number" ? rawSize : Number(rawSize);
+        const apiSize =
+            Number.isFinite(parsedSize) && parsedSize > 0
+                ? parsedSize
+                : undefined;
+        const size = apiSize ?? await getAudioSizeFromUrl(audioUrl);
+        if (size === undefined) {
+            throw new Error("No se pudo determinar el tamaño del audio.");
+        }
+
+        const audioTitle = audio.data?.title;
+        const audioTitleFallback =
+            typeof audioTitle === "string" &&
+            audioTitle.trim() &&
+            !/^(unknown title|sin título|audio)$/i.test(audioTitle.trim())
+                ? audioTitle.trim()
+                : undefined;
+
+        const currentTitle = metadata.data.title;
+        const titleIsMissing =
+            !currentTitle?.trim() ||
+            /^(unknown title|sin título|audio)$/i.test(currentTitle.trim());
+
+        const title = titleIsMissing
+            ? audioTitleFallback || currentTitle
+            : currentTitle;
 
         return {
             ...metadata,
+            data: { ...metadata.data, size, dl_url: audioUrl, title },
             message: "YouTube metadata and audio fetched successfully",
-            data: { ...metadata.data, dl_url: audioUrl },
         };
     } catch (error) {
         return {
@@ -272,9 +323,3 @@ export default async function YoutubeAudioDownload(
         };
     }
 }
-
-// console.log(YoutubeAudioDownload("https://youtu.be/vXtJkDHEAAc").then(result => {
-//     console.log(result);
-// }).catch(error => {
-//     console.error("Error:", error);
-// }))
