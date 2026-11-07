@@ -10,7 +10,7 @@
   "notGroup": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐇𝐀𝐓 𝐍𝐎 𝐆𝐑𝐔𝐏𝐀𝐋\n╰━━━━━━━━━━━━⬣\n┃ > Este comando solo puede ser usado\n┃ > en grupos.",
   "notOwner": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐒𝐈𝐍 𝐏𝐄𝐑𝐌𝐈𝐒𝐎𝐒\n╰━━━━━━━━━━━━⬣\n┃ > Este comando solo puede ser usado\n┃ > por el dueño del bot.",
   "notMod": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐒𝐈𝐍 𝐏𝐄𝐑𝐌𝐈𝐒𝐎𝐒\n╰━━━━━━━━━━━━⬣\n┃ > Este comando solo puede ser usado\n┃ > por los moderadores del bot.",
-  "notPremium": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐁𝐎𝐓 𝐍𝐎 𝐏𝐑𝐄𝐌𝐈𝐔𝐌\n╰━━━━━━━━━━━━⬣\n┃ > Este comando solo puede ser usado\n┃ > por los Prem-Bots de Aura Reed.",
+  "notPremium": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐅𝐔𝐍𝐂𝐈Ó𝐍 𝐏𝐑𝐄𝐌𝐈𝐔𝐌\n╰━━━━━━━━━━━━⬣\n┃ > Este comando solo puede ser usado\n┃ > por Prem-Bots o usuarios con rol VIP.",
   "subbotOnline": "╭〔  𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ✅𝐒𝐔𝐁-𝐁𝐎𝐓 𝐄𝐍 𝐋Í𝐍𝐄𝐀\n╰━━━━━━━━━━━━⬣\n┃ > El sub-bot ya está en línea y conectado a WhatsApp.\n┃ > Cuando quieras desvincular, escribe `{{prefix}}logout`\n┃ > para cerrar la sesión del sub-bot.",
   "notEnoughCoins": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 💸 𝐒𝐈𝐍 𝐒𝐀𝐋𝐃𝐎\n╰━━━━━━━━━━━━⬣\n┃ > Tus {{currencyName}} no alcanzan\n┃ > para descargar {{typeMedia}}.\n┃ > Debes tener al menos\n┃ > *{{requiredAmount}}*\n┃ > para descargas de {{typeMedia}}.\n\n┃ > Tienes *{{userBalance}}*\n┃ > en la cartera, debes\n┃ > retirar o farmear más.\n┃ > {{currencyName}} para descargar\n┃ > más {{typeMedia}}\n\n╰━━〔 𝐀𝐔𝐑𝐀 𝐄𝐂𝐎𝐍𝐎𝐌𝐘 〕━━⬣\n",
   "pluginsOff": "╭〔 ⚠️ 𝐒𝐎𝐂𝐊𝐄𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣\n┃ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎𝐒 𝐃𝐄𝐒𝐀𝐂𝐓𝐈𝐕𝐀𝐃𝐎𝐒\n╰━━━━━━━━━━━━⬣\n\n┃ > Los comandos {{pluginCategory}}\n┃ > están desactivados en este grupo.\n┣━━━━━━━━━━━━⬣\n┃ > Un administrador del\n┃ > grupo puede activarlos con\n┃ > `{{prefix}}enable {{pluginCategoryPlain}}`\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐋𝐄𝐑𝐓 〕⬣",

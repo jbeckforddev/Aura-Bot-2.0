@@ -394,6 +394,26 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
   extendedSock.botType = "Principal";
   extendedSock.sessionName = sessionName;
 
+  // Auto-ACK unhandled WhatsApp status stanzas to prevent error 500: Stream Errored (ack)
+  extendedSock.ws?.on("CB:status", async (node: any) => {
+    try {
+      if (typeof (extendedSock as any).sendMessageAck === "function") {
+        await (extendedSock as any).sendMessageAck(node);
+      } else if (typeof (extendedSock as any).sendNode === "function") {
+        await (extendedSock as any).sendNode({
+          tag: "ack",
+          attrs: {
+            id: node?.attrs?.id,
+            to: node?.attrs?.from,
+            class: node?.tag || "status",
+            ...(node?.attrs?.participant ? { participant: node.attrs.participant } : {}),
+            ...(node?.attrs?.type ? { type: node.attrs.type } : {}),
+          },
+        });
+      }
+    } catch {}
+  });
+
   let saveTimer: NodeJS.Timeout | null = null;
   let credentialsDirty = false;
   let authStateClosing = false;
@@ -561,6 +581,8 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
         phone_number: botPhoneNumber,
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
+      db.invalidateBotDbCache(botJid);
+      db.invalidateBotDbCache(sessionName);
       resetReconnectAttempts(sessionName);
       pairingRetryAttempts.delete(sessionName);
       void preloadMenuBanner(extendedSock).catch(() => {});
@@ -590,7 +612,10 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       await removeSessionFolder(sessionName);
 
       const logoutBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : sessionName;
-      if (hasConnected) db.setBot(logoutBotJid, { status: "offline" });
+      if (hasConnected) {
+        db.setBot(logoutBotJid, { status: "offline" });
+        db.invalidateBotDbCache(logoutBotJid);
+      }
       logInfo("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
 
       globalThis.mainSocket = null;
@@ -630,7 +655,10 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
 
     const disconnectedBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : "";
     if (disconnectedBotJid) {
-      if (hasConnected) db.setBot(disconnectedBotJid, { status: "offline" });
+      if (hasConnected) {
+        db.setBot(disconnectedBotJid, { status: "offline" });
+        db.invalidateBotDbCache(disconnectedBotJid);
+      }
     }
 
     if (statusCode === DisconnectReason.loggedOut) {
@@ -740,11 +768,22 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) {
+    const isAppend = type === "append";
+    if ((type !== "notify" && !isAppend) || !Array.isArray(messages) || messages.length === 0) {
       return;
     }
 
-    messages.forEach((msg) => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const validMessages = isAppend
+      ? messages.filter((m) => {
+          const ts = Number(m.messageTimestamp || 0);
+          return ts > 0 && nowSec - ts <= 120;
+        })
+      : messages;
+
+    if (validMessages.length === 0) return;
+
+    validMessages.forEach((msg) => {
       if (msg.key?.id && msg.message) {
         mainMessagesCache.set(msg.key.id, msg.message);
       }
@@ -753,7 +792,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
     const connectedBot = sock.user?.id || "";
 
     await Promise.allSettled(
-      messages.map(async (msg) => {
+      validMessages.map(async (msg) => {
         if (!msg?.message) return;
         if ((extendedSock as any).isClosed) return;
 

@@ -105,12 +105,25 @@ export function invalidateGroupDbCache(key?: string): void {
   }
 }
 
+export type BotUpdateListener = (botJid?: string) => void;
+let botUpdateListener: BotUpdateListener | null = null;
+export function setBotUpdateListener(listener: BotUpdateListener | null): void {
+  botUpdateListener = listener;
+}
+
 export function invalidateBotDbCache(key?: string): void {
   if (key) {
     botMemoryCache.delete(key);
     botMemoryCache.delete(normalizeJid(key));
+    try {
+      botUpdateListener?.(key);
+      botUpdateListener?.(normalizeJid(key));
+    } catch {}
   } else {
     botMemoryCache.clear();
+    try {
+      botUpdateListener?.();
+    } catch {}
   }
 }
 

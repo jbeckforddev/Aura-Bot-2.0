@@ -435,6 +435,26 @@ async function connectPremBotNow(
   ACTIVE_PREM_BOTS.set(sessionName, socket);
   registerActiveBot(sessionName, socket);
 
+  // Auto-ACK unhandled WhatsApp status stanzas to prevent error 500: Stream Errored (ack)
+  socket.ws?.on("CB:status", async (node: any) => {
+    try {
+      if (typeof (socket as any).sendMessageAck === "function") {
+        await (socket as any).sendMessageAck(node);
+      } else if (typeof (socket as any).sendNode === "function") {
+        await (socket as any).sendNode({
+          tag: "ack",
+          attrs: {
+            id: node?.attrs?.id,
+            to: node?.attrs?.from,
+            class: node?.tag || "status",
+            ...(node?.attrs?.participant ? { participant: node.attrs.participant } : {}),
+            ...(node?.attrs?.type ? { type: node.attrs.type } : {}),
+          },
+        });
+      }
+    } catch {}
+  });
+
   socket.ev.on("creds.update", () => {
     if (authStateClosing) return;
     credentialsDirty = true;
@@ -569,6 +589,10 @@ async function connectPremBotNow(
         phone_number: phoneNumber,
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
+      ACTIVE_PREM_BOTS.set(sessionName, socket);
+      registerActiveBot(sessionName, socket);
+      db.invalidateBotDbCache(botJid);
+      db.invalidateBotDbCache(sessionName);
       await options.onConnected?.(botType);
       return;
     }
@@ -588,32 +612,47 @@ async function connectPremBotNow(
       `${sessionName} se desconectó. Código: ${statusCode || "N/A"}. Motivo: ${error?.message || "desconocido"}.`,
       statusCode ? "warn" : "info",
     );
-    if (botJid && connected) db.setBot(botJid, { status: "offline" });
+    if (botJid && connected) {
+      db.setBot(botJid, { status: "offline" });
+      db.invalidateBotDbCache(botJid);
+    }
     if (socket.manualLogout) {
       await unlinkPremBot(sessionName, socket, "cierre manual");
       return;
     }
 
-    const currentRegistered = Boolean(state.creds?.registered || state.creds?.me);
-    const invalidSession = [
-      DisconnectReason.loggedOut,
-      DisconnectReason.forbidden,
-      DisconnectReason.multideviceMismatch,
-    ].includes(statusCode as never);
-    const transientDisconnect = [
-      DisconnectReason.connectionLost,
-      DisconnectReason.connectionClosed,
-      DisconnectReason.timedOut,
-      DisconnectReason.restartRequired,
-      DisconnectReason.badSession,
-      500,
-      503,
-      408,
-      428,
-      515,
-    ].includes(statusCode as never);
+    if (statusCode === DisconnectReason.loggedOut) {
+      await unlinkPremBot(
+        sessionName,
+        socket,
+        `sesión cerrada por WhatsApp (Código: 401)`,
+      );
+      await options.onDisconnected?.();
+      await options.onSessionClosed?.("loggedOut");
+      return;
+    }
 
-    if (!currentRegistered && transientDisconnect) {
+    if (!registered && !connected) {
+      const invalidPairing = [
+        DisconnectReason.forbidden,
+        DisconnectReason.multideviceMismatch,
+      ].includes(statusCode as never);
+
+      if (invalidPairing) {
+        await unlinkPremBot(
+          sessionName,
+          socket,
+          `vinculación premium rechazada (${statusCode || "N/A"})`,
+        );
+        await options.onDisconnected?.();
+        await options.onPairingError?.(
+          new Error(
+            `WhatsApp rechazó la vinculación premium (código ${statusCode || "desconocido"}).`,
+          ),
+        );
+        return;
+      }
+
       deleteActivePremBot(sessionName, socket);
       await safelyDestroySocket(socket);
       logInfo(
@@ -621,29 +660,6 @@ async function connectPremBotNow(
         "warn",
       );
       scheduleReconnect(sessionName, options);
-      return;
-    }
-
-    if (!currentRegistered || invalidSession) {
-      await unlinkPremBot(
-        sessionName,
-        socket,
-        `sesión inválida (${statusCode || "N/A"})`,
-      );
-      await options.onDisconnected?.();
-      if (!currentRegistered) {
-        await options.onPairingError?.(
-          new Error(
-            `WhatsApp rechazó la vinculación (código ${statusCode || "desconocido"}). Intenta iniciar una nueva.`,
-          ),
-        );
-      } else {
-        await options.onSessionClosed?.(
-          statusCode === DisconnectReason.loggedOut
-            ? "loggedOut"
-            : `desconectado (${statusCode})`,
-        );
-      }
       return;
     }
 
@@ -667,16 +683,27 @@ async function connectPremBotNow(
   });
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
+    const isAppend = type === "append";
+    if ((type !== "notify" && !isAppend) || !Array.isArray(messages) || messages.length === 0) return;
     if (socket.user?.id) RECONNECT_PREM_ATTEMPTS.delete(sessionName);
 
-    for (const message of messages) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const validMessages = isAppend
+      ? messages.filter((m) => {
+          const ts = Number(m.messageTimestamp || 0);
+          return ts > 0 && nowSec - ts <= 120;
+        })
+      : messages;
+
+    if (validMessages.length === 0) return;
+
+    for (const message of validMessages) {
       if (message.key?.id && message.message) {
         recentMessages.set(message.key.id, message.message);
       }
     }
     await Promise.allSettled(
-      messages.map(async (message) => {
+      validMessages.map(async (message) => {
         if (!message?.message || (socket as any).isClosed) return;
         try {
           const groupJid = message.key?.remoteJid;
@@ -844,13 +871,23 @@ export async function requestPremBotLink(
 
 export function getActivePremBots(): ExtendedWASocket[] {
   return [...ACTIVE_PREM_BOTS.values()].filter((socket) => {
-    const jid = socket.user?.id;
-    if (!jid || (socket as any).isClosed) return false;
-    const bot = db.getBot(jid);
-    const token = String(bot?.data?.premiumToken ?? "");
+    const rawJid = socket.user?.id;
+    if (!rawJid || (socket as any).isClosed) return false;
+    const botJid = jidNormalizedUser(rawJid);
+    const bot = db.getBot(botJid);
+    const token = String(bot?.data?.premiumToken || (socket as any).premiumToken || "").trim().toLowerCase();
+    const botLid = String((socket.user as any)?.lid || bot?.lid || "").trim().replace(/@lid$/, "");
+    const identities = [
+      botJid,
+      rawJid,
+      bot?.phone_number,
+      botLid ? `${botLid}@lid` : "",
+      socket.sessionName?.replace(/^prem-/, ""),
+    ].filter(Boolean) as string[];
+
     return (
-      resolveBotType(bot?.bot_type) === "Prem-Bot" &&
-      isPremiumTokenValidForAccount(token, jid)
+      (resolveBotType(bot?.bot_type) === "Prem-Bot" || socket.botType === "Prem-Bot") &&
+      (!token || isPremiumTokenValidForAccount(token, identities))
     );
   });
 }
@@ -858,11 +895,25 @@ export function getActivePremBots(): ExtendedWASocket[] {
 async function reconnectPremBot(sessionName: string): Promise<void> {
   const current = ACTIVE_PREM_BOTS.get(sessionName);
   if (!current) return;
-  const jid = current.user?.id ? jidNormalizedUser(current.user.id) : "";
+  const rawJid = current.user?.id;
+  const jid = rawJid ? jidNormalizedUser(rawJid) : "";
   const bot = jid ? db.getBot(jid) : null;
-  const premiumToken = String(bot?.data?.premiumToken ?? "");
+  const premiumToken = String(bot?.data?.premiumToken || (current as any).premiumToken || "").trim().toLowerCase();
+  const botLid = String((current.user as any)?.lid || bot?.lid || "").trim().replace(/@lid$/, "");
+  const identities = [
+    jid,
+    rawJid,
+    bot?.phone_number,
+    botLid ? `${botLid}@lid` : "",
+    sessionName.replace(/^prem-/, ""),
+  ].filter(Boolean) as string[];
+
+  const token = getPremiumTokens().find((entry) => entry.id === premiumToken);
+  const tokenStillValid = Boolean(token && token.expiresAt > Date.now());
   const shouldBePremium =
-    Boolean(jid) && isPremiumTokenValidForAccount(premiumToken, jid);
+    Boolean(jid) &&
+    (tokenStillValid || isPremiumTokenValidForAccount(premiumToken, identities));
+
   await cleanPremBot(sessionName, current);
   if (!shouldBePremium) {
     const subSessionName = withSessionPrefix(sessionName, "sub");
@@ -897,22 +948,48 @@ async function reconnectPremBot(sessionName: string): Promise<void> {
 
 export async function syncPremiumBotTypes(): Promise<void> {
   for (const [sessionName, socket] of ACTIVE_PREM_BOTS) {
-    const jid = socket.user?.id;
-    if (!jid) continue;
-    const bot = db.getBot(jid);
-    const tokenId = String(bot?.data?.premiumToken ?? "");
-    const shouldBePremium = isPremiumTokenValidForAccount(tokenId, jid);
-    const currentType = resolveBotType(bot?.bot_type);
+    const rawJid = socket.user?.id;
+    if (!rawJid || (socket as any).isClosed) continue;
+    const botJid = jidNormalizedUser(rawJid);
+    const bot = db.getBot(botJid);
+    const tokenId = String(bot?.data?.premiumToken || (socket as any).premiumToken || "").trim().toLowerCase();
+    const botLid = String((socket.user as any)?.lid || bot?.lid || "").trim().replace(/@lid$/, "");
+    const identities = [
+      botJid,
+      rawJid,
+      bot?.phone_number,
+      botLid ? `${botLid}@lid` : "",
+      sessionName.replace(/^prem-/, ""),
+    ].filter(Boolean) as string[];
+
+    const shouldBePremium = Boolean(
+      tokenId && isPremiumTokenValidForAccount(tokenId, identities),
+    );
+    const currentType = resolveBotType(bot?.bot_type || socket.botType);
     const expectedType = shouldBePremium ? "Prem-Bot" : "Sub-Bot";
-    if (currentType !== expectedType) await reconnectPremBot(sessionName);
+    if (currentType !== expectedType) {
+      await reconnectPremBot(sessionName);
+    }
   }
 
   for (const socket of getActiveSubBots()) {
-    const jid = socket.user?.id ? jidNormalizedUser(socket.user.id) : "";
-    if (!jid) continue;
+    const rawJid = socket.user?.id;
+    if (!rawJid || (socket as any).isClosed) continue;
+    const jid = jidNormalizedUser(rawJid);
     const bot = db.getBot(jid);
-    const tokenId = String(bot?.data?.premiumToken ?? "");
-    if (!isPremiumTokenValidForAccount(tokenId, jid)) continue;
+    const tokenId = String(bot?.data?.premiumToken || (socket as any).premiumToken || "").trim().toLowerCase();
+    if (!tokenId) continue;
+
+    const botLid = String((socket.user as any)?.lid || bot?.lid || "").trim().replace(/@lid$/, "");
+    const identities = [
+      jid,
+      rawJid,
+      bot?.phone_number,
+      botLid ? `${botLid}@lid` : "",
+      socket.sessionName?.replace(/^sub-/, ""),
+    ].filter(Boolean) as string[];
+
+    if (!isPremiumTokenValidForAccount(tokenId, identities)) continue;
 
     const subSessionName = String(
       socket.sessionName ||
@@ -952,17 +1029,24 @@ export async function startSavedPremBots(): Promise<void> {
         (bot.phone_number ? sessionNameFor("", bot.phone_number) : ""),
     ).trim();
     if (!storedSessionName) continue;
-    const isPremium = isPremiumTokenValidForAccount(
-      String(bot.data.premiumToken).trim().toLowerCase(),
+    const tokenId = String(bot.data.premiumToken).trim().toLowerCase();
+    const token = getPremiumTokens().find((entry) => entry.id === tokenId);
+    const tokenStillValid = Boolean(token && token.expiresAt > Date.now());
+    const identities = [
       bot.jid,
-    );
+      bot.phone_number,
+      bot.lid ? `${bot.lid}@lid` : "",
+      storedSessionName.replace(/^(?:prem|sub)-/i, ""),
+    ].filter(Boolean) as string[];
+    const isPremium =
+      tokenStillValid || isPremiumTokenValidForAccount(tokenId, identities);
+
     const sessionName = withSessionPrefix(
       storedSessionName,
       isPremium ? "prem" : "sub",
     );
     if (ACTIVE_PREM_BOTS.has(sessionName)) continue;
 
-    const tokenId = String(bot.data.premiumToken).trim().toLowerCase();
     const expectedType = isPremium ? "Prem-Bot" : "Sub-Bot";
     if (resolveBotType(bot.bot_type) !== expectedType) {
       db.setBot(bot.jid, { bot_type: expectedType });
