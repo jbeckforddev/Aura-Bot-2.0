@@ -1328,7 +1328,9 @@ async function handleMessageInternal(
     const canUsePremiumCommands =
       isMainBotInstance ||
       isPremBotInstance ||
-      (!isSubBotInstance && (isOwner || isMod || isPremium));
+      isOwner ||
+      isMod ||
+      isPremium;
     if (plugin.premiumOnly && !canUsePremiumCommands)
       return ctx.reply({ text: NOT_PREMIUM() });
     if (plugin.groupOnly && !isGroup) return ctx.reply({ text: NOT_GROUP() });

@@ -10,7 +10,7 @@
   "notGroup": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐍𝐎𝐓 𝐀 𝐆𝐑𝐎𝐔𝐏 𝐂𝐇𝐀𝐓\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > in groups.",
   "notOwner": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐏𝐄𝐑𝐌𝐈𝐒𝐒𝐈𝐎𝐍 𝐃𝐄𝐍𝐈𝐄𝐃\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > by the bot owner.",
   "notMod": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐏𝐄𝐑𝐌𝐈𝐒𝐒𝐈𝐎𝐍 𝐃𝐄𝐍𝐈𝐄𝐃\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > by bot moderators.",
-  "notPremium": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐍𝐎𝐓 𝐀 𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐁𝐎𝐓\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > by Aura Reed Prem-Bots.",
+  "notPremium": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐅𝐄𝐀𝐓𝐔𝐑𝐄\n╰━━━━━━━━━━━━⬣\n┃ > This command can only be used\n┃ > by Prem-Bots or VIP users.",
   "subbotOnline": "╭〔  𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ✅𝐒𝐔𝐁-𝐁𝐎𝐓 𝐎𝐍𝐋𝐈𝐍𝐄\n╰━━━━━━━━━━━━⬣\n┃ > The sub-bot is online and connected to WhatsApp.\n┃ > To unlink it, type `{{prefix}}logout`\n┃ > to close the sub-bot session.",
   "notEnoughCoins": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕⬣\n┃ 💸 𝐍𝐎𝐓 𝐄𝐍𝐎𝐔𝐆𝐇 𝐁𝐀𝐋𝐀𝐍𝐂𝐄\n╰━━━━━━━━━━━━⬣\n┃ > You don't have enough {{currencyName}}\n┃ > to download {{typeMedia}}.\n┃ > You need at least\n┃ > *{{requiredAmount}}*\n┃ > to download {{typeMedia}}.\n\n┃ > You have *{{userBalance}}*\n┃ > in your wallet. Deposit or earn\n┃ > more {{currencyName}} to download\n┃ > more {{typeMedia}}.\n\n╰━━〔 𝐀𝐔𝐑𝐀 𝐄𝐂𝐎𝐍𝐎𝐌𝐘 〕━━⬣\n",
   "pluginsOff": "╭〔 ⚠️ 𝐒𝐎𝐂𝐊𝐄𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 〕⬣\n┃ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 𝐃𝐈𝐒𝐀𝐁𝐋𝐄𝐃\n╰━━━━━━━━━━━━⬣\n\n┃ > The {{pluginCategory}} commands\n┃ > are disabled in this group.\n┣━━━━━━━━━━━━⬣\n┃ > A group administrator can\n┃ > enable them with\n┃ > `{{prefix}}enable {{pluginCategoryPlain}}`\n\n╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐋𝐄𝐑𝐓 〕⬣",

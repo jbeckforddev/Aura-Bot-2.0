@@ -439,7 +439,12 @@ type DownloadChargeContext = CommandContext & {
 };
 
 function isFreeDownloadInstance(ctx: CommandContext): boolean {
-  return ctx.sock.botType === "Prem-Bot" || ctx.isMod || ctx.sock.botType === "Principal";
+  return (
+    ctx.sock.botType === "Prem-Bot" ||
+    ctx.sock.botType === "Principal" ||
+    ctx.isMod ||
+    ctx.isPremium
+  );
 }
 
 export async function prepareDownloadCharge(

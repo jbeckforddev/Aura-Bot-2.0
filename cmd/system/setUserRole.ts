@@ -5,10 +5,9 @@ import { db } from "../../database/AuraDB.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
 
+const validRoles = ["user", "premium", "vip", "mod", "coowner", "owner"];
 
-const roles = ["user", "mod", "coowner", "owner"];
-
-function getTarget(ctx: CommandContext): string | null {
+function getTarget(ctx: CommandContext, candidateArgs: string[]): string | null {
   const message = ctx.msg?.message ?? {};
   const infos = Object.values(message)
     .map(
@@ -18,28 +17,60 @@ function getTarget(ctx: CommandContext): string | null {
   const target =
     infos.flatMap((info) => info.mentionedJid ?? [])[0] ??
     infos.find((info) => info.quotedMessage)?.participant;
-  return target ? jidNormalizedUser(target) : null;
+  if (target) return jidNormalizedUser(target);
+
+  for (const arg of candidateArgs) {
+    const digits = String(arg || "").replace(/\D/g, "");
+    if (digits.length >= 8 && digits.length <= 15) {
+      return `${digits}@s.whatsapp.net`;
+    }
+  }
+  return null;
 }
 
 export default {
-  name: ["setuserrole", "setrole", "userrole", "rol"],
+  name: [
+    "setuserrole",
+    "setrole",
+    "userrole",
+    "rol",
+    "addvip",
+    "delvip",
+    "addprem",
+    "delprem",
+  ],
   category: "system",
   description: t("cmd_asigna_un_rol_persistente_a_un_e93f423e"),
   ownerOnly: true,
 
   async run(ctx: CommandContext) {
-    const role = String(ctx.args?.[0] ?? "").toLowerCase();
-    const target = getTarget(ctx);
+    const invokedName = String(ctx.cmdName || "").toLowerCase();
+    let role: string;
+    let targetCandidateArgs: string[];
 
-    if (!roles.includes(role) || !target) {
+    if (["addvip", "addprem"].includes(invokedName)) {
+      role = "premium";
+      targetCandidateArgs = ctx.args ?? [];
+    } else if (["delvip", "delprem"].includes(invokedName)) {
+      role = "user";
+      targetCandidateArgs = ctx.args ?? [];
+    } else {
+      const rawRole = String(ctx.args?.[0] ?? "").toLowerCase();
+      role = rawRole === "vip" ? "premium" : rawRole;
+      targetCandidateArgs = ctx.args?.slice(1) ?? [];
+    }
+
+    const target = getTarget(ctx, targetCandidateArgs);
+
+    if (!validRoles.includes(role) || !target) {
       return ctx.reply(
-        t("cmd_uso_value0_setrole_user_mod_co_7fee5a44", { value0: ctx.usedPrefix ?? "." }),
+        `Uso: ${ctx.usedPrefix ?? "."}setrole <user|premium|vip|mod|coowner|owner> @usuario/número\nO también: ${ctx.usedPrefix ?? "."}addvip @usuario / ${ctx.usedPrefix ?? "."}delvip @usuario`,
       );
     }
 
     db.setRole(target, role);
     const targetUser = db.getUser(target);
-    const roleName = role === "coowner" ? "co-owner" : role;
+    const roleName = role === "coowner" ? "co-owner" : role === "premium" ? "VIP / Premium" : role;
     let text = t("cmd_value0_6d3379fd", { value0: fytBold(t("cmd_gestion_de_roles_c49fbdeb")) });
     text += t("cmd_value0_d3d0980d", { value0: fytBold(t("cmd_rol_actualizado_00d559ac")) });
     text += t("cmd_text_bdfd7fa0");
