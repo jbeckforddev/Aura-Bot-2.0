@@ -758,11 +758,19 @@ async function handleMessageInternal(
     const isPremium = isMod || senderRoles.premium;
 
     const storedBotType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
-    const premiumToken = String(storedBot?.data?.premiumToken ?? "");
+    const premiumToken = String(storedBot?.data?.premiumToken || (sock as any).premiumToken || "");
+    const botLidCleanForToken = String((sock.user as any)?.lid || storedBot?.lid || "").trim().replace(/@lid$/, "");
+    const tokenIdentities = [
+      botJid,
+      sock.user?.id ? cleanJid(sock.user.id) : "",
+      storedBot?.phone_number,
+      botLidCleanForToken ? `${botLidCleanForToken}@lid` : "",
+      sock.sessionName ? cleanJid(sock.sessionName).replace(/^(?:prem|sub)-/i, "") : "",
+    ].filter(Boolean) as string[];
     const hasValidPremiumToken =
       storedBotType === "Prem-Bot" &&
       Boolean(premiumToken) &&
-      isPremiumTokenValidForAccount(premiumToken, botJid);
+      isPremiumTokenValidForAccount(premiumToken, tokenIdentities);
     const botType =
       sock.botType ??
       (storedBotType === "Prem-Bot" && !hasValidPremiumToken

@@ -44,7 +44,8 @@ function generateTokenId(store: TokenStore): string {
 function normalizeJid(value: string): string {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
-  const [user, server = ""] = raw.split("@");
+  const cleaned = raw.startsWith("phone:") ? raw.slice(6) : raw;
+  const [user, server = ""] = cleaned.split("@");
   return `${user.split(":")[0]}${server ? `@${server}` : ""}`;
 }
 
@@ -61,7 +62,17 @@ function normalizeAccountIdentity(value: string): string {
 }
 
 function isSameAccount(first: string, second: string): boolean {
-  return normalizeAccountIdentity(first) === normalizeAccountIdentity(second);
+  if (!first || !second) return false;
+  const normFirst = normalizeAccountIdentity(first);
+  const normSecond = normalizeAccountIdentity(second);
+  if (normFirst === normSecond) return true;
+
+  const digitsFirst = String(first).replace(/\D/g, "");
+  const digitsSecond = String(second).replace(/\D/g, "");
+  if (digitsFirst && digitsSecond && digitsFirst === digitsSecond) {
+    return true;
+  }
+  return false;
 }
 
 function readStore(): TokenStore {
@@ -297,16 +308,18 @@ export function claimPremiumToken(
 
 export function isPremiumTokenValidForAccount(
   id: string,
-  accountJid: string,
+  accountJid: string | string[],
 ): boolean {
   const token = readStore()[normalizeTokenId(id)];
-  return Boolean(
-    token &&
-      token.expiresAt > Date.now() &&
-      token.inUse &&
-      token.claimedBy &&
-      isSameAccount(token.claimedBy, accountJid),
-  );
+  if (!token || token.expiresAt <= Date.now() || !token.inUse || !token.claimedBy) {
+    return false;
+  }
+  const identities = (Array.isArray(accountJid) ? accountJid : [accountJid]).filter(Boolean);
+  return identities.some((identity) => isSameAccount(token.claimedBy!, identity));
+}
+
+export function getPremiumToken(id: string): PremiumToken | null {
+  return readStore()[normalizeTokenId(id)] ?? null;
 }
 
 export function getPremiumTokens(): PremiumToken[] {

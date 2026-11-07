@@ -731,57 +731,44 @@ async function connectSubBot(
     }
     if (pairingExpired) return;
 
-    const currentRegistered = Boolean(state.creds?.registered || state.creds?.me);
-    const invalidSession = [
-      DisconnectReason.loggedOut,
-      DisconnectReason.forbidden,
-      DisconnectReason.multideviceMismatch,
-    ].includes(statusCode as never);
-    const transientDisconnect = [
-      DisconnectReason.connectionLost,
-      DisconnectReason.connectionClosed,
-      DisconnectReason.timedOut,
-      DisconnectReason.restartRequired,
-      DisconnectReason.badSession,
-      500,
-      503,
-      408,
-      428,
-      515,
-    ].includes(statusCode as never);
-
-    if (!currentRegistered && transientDisconnect) {
-      logInfo(
-        `Conexión de ${sessionName} interrumpida antes de vincular (${statusCode}); se reintentará automáticamente.`,
-        "warn",
-      );
-      deleteActiveSubBot(sessionName, socket);
-      await safelyDestroySocket(socket);
-      await options.onDisconnected?.();
-      scheduleReconnect(sessionName, options);
-      return;
-    }
-
-    if (!currentRegistered || invalidSession) {
+    if (statusCode === DisconnectReason.loggedOut) {
       await unlinkSubBot(
         sessionName,
         socket,
-        `sesión inválida o expirada (Código: ${statusCode || "N/A"})`,
+        `sesión cerrada por WhatsApp (Código: 401)`,
       );
       await options.onDisconnected?.();
-      if (!currentRegistered) {
-        await options.onPairingExpired?.();
-      } else if (connected) {
-        await options.onSessionClosed?.(
-          statusCode === DisconnectReason.loggedOut
-            ? "loggedOut"
-            : `desconectado (${statusCode || "sin estado"})`,
+      await options.onSessionClosed?.("loggedOut");
+      return;
+    }
+
+    if (!isRegistered && !connected) {
+      const invalidPairing = [
+        DisconnectReason.forbidden,
+        DisconnectReason.multideviceMismatch,
+      ].includes(statusCode as never);
+
+      if (invalidPairing) {
+        await unlinkSubBot(
+          sessionName,
+          socket,
+          `vinculación rechazada por WhatsApp (Código: ${statusCode || "N/A"})`,
         );
-      } else {
+        await options.onDisconnected?.();
         await options.onPairingError?.(
-          new Error(`Sesión de subbot inválida (${statusCode || "sin estado"}).`),
+          new Error(`WhatsApp rechazó la vinculación (código ${statusCode || "desconocido"}).`),
         );
+        return;
       }
+
+      deleteActiveSubBot(sessionName, socket);
+      await safelyDestroySocket(socket);
+      await options.onDisconnected?.();
+      logInfo(
+        `Conexión de ${sessionName} interrumpida durante vinculación (${statusCode}); se reintentará automáticamente.`,
+        "warn",
+      );
+      scheduleReconnect(sessionName, options);
       return;
     }
 
