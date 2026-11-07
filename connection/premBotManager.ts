@@ -435,6 +435,26 @@ async function connectPremBotNow(
   ACTIVE_PREM_BOTS.set(sessionName, socket);
   registerActiveBot(sessionName, socket);
 
+  // Auto-ACK unhandled WhatsApp status stanzas to prevent error 500: Stream Errored (ack)
+  socket.ws?.on("CB:status", async (node: any) => {
+    try {
+      if (typeof (socket as any).sendMessageAck === "function") {
+        await (socket as any).sendMessageAck(node);
+      } else if (typeof (socket as any).sendNode === "function") {
+        await (socket as any).sendNode({
+          tag: "ack",
+          attrs: {
+            id: node?.attrs?.id,
+            to: node?.attrs?.from,
+            class: node?.tag || "status",
+            ...(node?.attrs?.participant ? { participant: node.attrs.participant } : {}),
+            ...(node?.attrs?.type ? { type: node.attrs.type } : {}),
+          },
+        });
+      }
+    } catch {}
+  });
+
   socket.ev.on("creds.update", () => {
     if (authStateClosing) return;
     credentialsDirty = true;
@@ -569,6 +589,10 @@ async function connectPremBotNow(
         phone_number: phoneNumber,
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
+      ACTIVE_PREM_BOTS.set(sessionName, socket);
+      registerActiveBot(sessionName, socket);
+      db.invalidateBotDbCache(botJid);
+      db.invalidateBotDbCache(sessionName);
       await options.onConnected?.(botType);
       return;
     }
@@ -588,7 +612,10 @@ async function connectPremBotNow(
       `${sessionName} se desconectó. Código: ${statusCode || "N/A"}. Motivo: ${error?.message || "desconocido"}.`,
       statusCode ? "warn" : "info",
     );
-    if (botJid && connected) db.setBot(botJid, { status: "offline" });
+    if (botJid && connected) {
+      db.setBot(botJid, { status: "offline" });
+      db.invalidateBotDbCache(botJid);
+    }
     if (socket.manualLogout) {
       await unlinkPremBot(sessionName, socket, "cierre manual");
       return;
@@ -667,16 +694,27 @@ async function connectPremBotNow(
   });
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
+    const isAppend = type === "append";
+    if ((type !== "notify" && !isAppend) || !Array.isArray(messages) || messages.length === 0) return;
     if (socket.user?.id) RECONNECT_PREM_ATTEMPTS.delete(sessionName);
 
-    for (const message of messages) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const validMessages = isAppend
+      ? messages.filter((m) => {
+          const ts = Number(m.messageTimestamp || 0);
+          return ts > 0 && nowSec - ts <= 120;
+        })
+      : messages;
+
+    if (validMessages.length === 0) return;
+
+    for (const message of validMessages) {
       if (message.key?.id && message.message) {
         recentMessages.set(message.key.id, message.message);
       }
     }
     await Promise.allSettled(
-      messages.map(async (message) => {
+      validMessages.map(async (message) => {
         if (!message?.message || (socket as any).isClosed) return;
         try {
           const groupJid = message.key?.remoteJid;

@@ -20,7 +20,7 @@ import {
   NOT_HAVE_COINS,
   PLUGINS_OFF
 } from "./core/socketText.ts";
-import { db, lookupUserLanguage, lookupGroupLanguage, setGroupUpdateListener } from "./database/AuraDB.ts";
+import { db, lookupUserLanguage, lookupGroupLanguage, setGroupUpdateListener, setBotUpdateListener } from "./database/AuraDB.ts";
 import { resolveBotType } from "./core/botType.ts";
 import { isPremiumTokenValidForAccount } from "./core/premiumTokens.ts";
 import { withLocale } from "./src/langs/index.ts";
@@ -319,8 +319,18 @@ export function invalidateGroupCache(groupJid: string) {
   groupMetaInFlight.delete(normalized);
 }
 
+export function invalidateHandlerBotCache(botJid?: string): void {
+  if (botJid) {
+    BOT_DB_CACHE.delete(`bot:${botJid}`);
+    BOT_DB_CACHE.delete(`bot:${cleanJid(botJid)}`);
+  } else {
+    BOT_DB_CACHE.clear();
+  }
+}
+
 try {
   setGroupUpdateListener(invalidateGroupCache);
+  setBotUpdateListener(invalidateHandlerBotCache);
 } catch {}
 
 const lidToPnCache = new LRUCache<string, string>({
@@ -497,6 +507,16 @@ async function handleMessageInternal(
       botRecord = (runtimeDb.getBot?.(botJid) ?? {}) as DatabaseBot;
       BOT_DB_CACHE.set(`bot:${botJid}`, botRecord);
     }
+    if (botRecord.status !== "active" && sock.user?.id && !(sock as any).isClosed) {
+      const freshRecord = runtimeDb.getBot?.(botJid);
+      if (freshRecord) {
+        botRecord = freshRecord as DatabaseBot;
+        BOT_DB_CACHE.set(`bot:${botJid}`, botRecord);
+      }
+      if (botRecord.status !== "active") {
+        botRecord.status = "active";
+      }
+    }
     const isPrimaryGroupBot = isGroup
       ? isPrimaryBotForGroup(
           sock,
@@ -656,7 +676,7 @@ async function handleMessageInternal(
       const primaryBot = groupData?.primaryBot;
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         if (!isPrimaryGroupBot && isCmd) return;
-        if (botRecord.status !== "active") return;
+        if (botRecord.status && botRecord.status !== "active" && (sock as any).isClosed) return;
       }
     }
 

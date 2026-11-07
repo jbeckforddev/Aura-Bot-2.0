@@ -105,7 +105,13 @@ export function isPrimaryBotForGroup(
       ? storedBotIdOverride
       : db.getBot(botJid)?.bot_id;
 
-  const identities = [botJid, sock.subBotId, storedBotId]
+  const userLid = cleanJid(
+    (sock.user as unknown as Record<string, unknown> | undefined)?.lid ||
+      (sock as any)._cachedBotLid ||
+      "",
+  );
+  const sessionName = cleanJid(sock.sessionName || "");
+  const identities = [botJid, sock.subBotId, storedBotId, userLid, sessionName]
     .map(cleanJid)
     .filter(Boolean);
 
