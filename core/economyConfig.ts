@@ -1,5 +1,8 @@
 import { db } from "../database/AuraDB.ts";
-import { formatMoney as formatNumberMoney, formatDuration } from "../utils/formatter.ts";
+import {
+  formatMoney as formatNumberMoney,
+  formatDuration,
+} from "../utils/formatter.ts";
 import { getFileBytes } from "./downloadUtils.ts";
 import { NOT_HAVE_COINS } from "./socketText.ts";
 import type {
@@ -91,7 +94,7 @@ export function getEconomyUser(
         ? defaults.bolsillo
         : defaults.coins !== undefined && defaults.coins !== 0
           ? defaults.coins
-          : DEFAULT_ECONOMY_USER.bolsillo ?? 100000,
+          : (DEFAULT_ECONOMY_USER.bolsillo ?? 100000),
   );
 
   const rawBank = Number(
@@ -101,7 +104,7 @@ export function getEconomyUser(
         ? defaults.banco
         : defaults.bank !== undefined && defaults.bank !== 0
           ? defaults.bank
-          : DEFAULT_ECONOMY_USER.banco ?? 10000,
+          : (DEFAULT_ECONOMY_USER.banco ?? 10000),
   );
 
   merged.bolsillo = rawCoins;
@@ -214,10 +217,7 @@ export function addBolsillo(groupJid: string, userJid: string, amount: number) {
 
 export function getAuraLevel(points: number): number {
   const aura = Math.max(0, Number(points) || 0);
-  if (aura < 100) return 1;
-  if (aura < 200) return 2;
-  if (aura < 400) return 3;
-  return 4;
+  return Math.max(1, Math.ceil(aura / 100));
 }
 
 export function getBolsillo(groupJid: string, userJid?: string): number {
@@ -287,19 +287,15 @@ export type BotCurrency = {
 };
 
 export type CurrencySource =
-  | CommandContext
-  | string
-  | BotCurrency
-  | null
-  | undefined;
+  CommandContext | string | BotCurrency | null | undefined;
 
 function isBotCurrency(value: unknown): value is BotCurrency {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      "name" in value &&
-      "symbol" in value &&
-      !("botJid" in value),
+    typeof value === "object" &&
+    "name" in value &&
+    "symbol" in value &&
+    !("botJid" in value),
   );
 }
 
@@ -326,9 +322,7 @@ export function getBotCurrency(source?: CurrencySource): BotCurrency {
     DEFAULT_BOT_CURRENCY.name;
   const symbol =
     String(
-      bot.currencySymbol ??
-        data.currencySymbol ??
-        DEFAULT_BOT_CURRENCY.symbol,
+      bot.currencySymbol ?? data.currencySymbol ?? DEFAULT_BOT_CURRENCY.symbol,
     ).trim() || DEFAULT_BOT_CURRENCY.symbol;
   return { name, symbol };
 }
@@ -354,10 +348,7 @@ export function setBotCurrency(
   return currency;
 }
 
-export function formatMoney(
-  value: number,
-  source?: CurrencySource,
-): string {
+export function formatMoney(value: number, source?: CurrencySource): string {
   const currency = getBotCurrency(source);
   return `${currency.symbol}${formatCoins(value)} ${currency.name}`;
 }
@@ -505,11 +496,7 @@ export function confirmDownloadCharge(ctx: CommandContext): void {
   if (bag.downloadCharged) return;
   const size = Number(bag._downloadSize) || 0;
   if (size <= 0) return;
-  chargeDownloadCost(
-    ctx.sender,
-    bag._downloadMediaType || "document",
-    size,
-  );
+  chargeDownloadCost(ctx.sender, bag._downloadMediaType || "document", size);
   bag._downloadSuccess = true;
   bag.downloadCharged = true;
 }

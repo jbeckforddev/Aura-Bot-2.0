@@ -4,13 +4,12 @@ import { getAuraLevel, getBotCurrency, formatMoney } from "./economyConfig.ts";
 import { economyUser } from "./economyRuntime.ts";
 import { sendDownloadPreview } from "./downloadPreview.ts";
 import { LRUCache } from "lru-cache";
-import { formatCount } from "./downloadUtils.ts"
+import { formatCount } from "./downloadUtils.ts";
 import type { WAMessage } from "baileys";
 import type { Profile, PendingProfileAction } from "../types/index.d.ts";
 import type { CommandContext } from "../types/commands.d.ts";
 import type { ExtendedWASocket } from "../types/socket.d.ts";
 import { t } from "../src/langs/index.ts";
-
 
 export type { Profile };
 
@@ -144,7 +143,7 @@ export function formatProfile(
   const age = getAge(String(profile.birthDate ?? ""));
   const aura = Number(profile.aura ?? 0);
   const xp = Number(profile.auraXp ?? aura);
-  const level = Math.max(1, Number(profile.level ?? getAuraLevel(aura)));
+  const level = getAuraLevel(aura);
   const wallet = Number(profile.bolsillo ?? 0);
   const bank = Number(profile.banco ?? profile.bank ?? 0);
   const userId = `WB${jid.split("@")[0]}`;
@@ -155,29 +154,68 @@ export function formatProfile(
   const text = [
     t("core_value0_bb624cd4", { value0: PROFILE_REPOSITORY_URL }),
     t("core_value0_48b5a79f", { value0: fytBold(t("core_perfil_03a87ddd")) }),
-    t("core_value0_value1_7514d96b", { value0: fytBold(t("core_sobre_98fb3749")), value1: about }),
+    t("core_value0_value1_7514d96b", {
+      value0: fytBold(t("core_sobre_98fb3749")),
+      value1: about,
+    }),
     t("core_text_aed5d675"),
     "",
-    t("core_value0_82dc888b", { value0: fytBold(t("core_biografia_7ebf2ce8")) }),
+    t("core_value0_82dc888b", {
+      value0: fytBold(t("core_biografia_7ebf2ce8")),
+    }),
     t("core_value0_66aaf25a", { value0: profile.description }),
     t("core_text_35417185"),
     "",
-    t("core_value0_82dc888b", { value0: fytBold(t("core_info_basica_a1045caf")) }),
-    t("core_value0_value1_4241df89", { value0: fytBold(t("core_nombre_e68491e9")), value1: profile.name }),
-    t("core_value0_value1_54888acf", { value0: fytBold(t("core_id_89f89c02")), value1: userId }),
-    t("core_value0_value1_4f003440", { value0: fytBold(t("core_genero_71354153")), value1: profile.gender }),
-    t("core_value0_value1_96bd6439", { value0: fytBold(t("core_cumpleanos_23dbaffa")), value1: profile.birthDate ?? "No definido" }),
-    t("core_value0_value1_c3b3d195", { value0: fytBold(t("core_edad_0e4333ef")), value1: age ?? "No definida" }),
-    t("core_value0_value1_74947562", { value0: fytBold(t("core_pareja_b6b2b5bf")), value1: spouse }),
+    t("core_value0_82dc888b", {
+      value0: fytBold(t("core_info_basica_a1045caf")),
+    }),
+    t("core_value0_value1_4241df89", {
+      value0: fytBold(t("core_nombre_e68491e9")),
+      value1: profile.name,
+    }),
+    t("core_value0_value1_54888acf", {
+      value0: fytBold(t("core_id_89f89c02")),
+      value1: userId,
+    }),
+    t("core_value0_value1_4f003440", {
+      value0: fytBold(t("core_genero_71354153")),
+      value1: profile.gender,
+    }),
+    t("core_value0_value1_96bd6439", {
+      value0: fytBold(t("core_cumpleanos_23dbaffa")),
+      value1: profile.birthDate ?? "No definido",
+    }),
+    t("core_value0_value1_c3b3d195", {
+      value0: fytBold(t("core_edad_0e4333ef")),
+      value1: age ?? "No definida",
+    }),
+    t("core_value0_value1_74947562", {
+      value0: fytBold(t("core_pareja_b6b2b5bf")),
+      value1: spouse,
+    }),
     t("core_text_35417185"),
     "",
     t("core_value0_82dc888b", { value0: fytBold(t("core_rango_ff517056")) }),
-    t("core_value0_value1_5042af61", { value0: fytBold(t("core_nivel_aura_45a06037")), value1: level }),
-    t("core_value0_value1_86f61dbd", { value0: fytBold(t("core_puntos_aura_ba2bd796")), value1: formatCount(xp) }),
-    t("core_value0_value1_d923e5b5", { value0: fytBold(t("core_cartera_391250d8")), value1: formatMoney(wallet, currency) }),
-    t("core_value0_value1_b83f4c41", { value0: fytBold(t("core_banco_d8e3d19a")), value1: formatMoney(bank, currency) }),
+    t("core_value0_value1_5042af61", {
+      value0: fytBold(t("core_nivel_aura_45a06037")),
+      value1: level,
+    }),
+    t("core_value0_value1_86f61dbd", {
+      value0: fytBold(t("core_puntos_aura_ba2bd796")),
+      value1: formatCount(xp),
+    }),
+    t("core_value0_value1_d923e5b5", {
+      value0: fytBold(t("core_cartera_391250d8")),
+      value1: formatMoney(wallet, currency),
+    }),
+    t("core_value0_value1_b83f4c41", {
+      value0: fytBold(t("core_banco_d8e3d19a")),
+      value1: formatMoney(bank, currency),
+    }),
     "",
-    t("core_value0_92601e2c", { value0: fytBold(t("core_aura_reed_95dcfb15")) }),
+    t("core_value0_92601e2c", {
+      value0: fytBold(t("core_aura_reed_95dcfb15")),
+    }),
   ].join(t("core_text_adc83b19"));
 
   return { text, mentions };
