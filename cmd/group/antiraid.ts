@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { jidNormalizedUser } from "baileys";
@@ -6,7 +6,7 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { getActiveSubBots } from "../../connection/subbotManager.ts";
 import { getActivePremBots } from "../../connection/premBotManager.ts";
-import { isPrimaryBotForGroup } from "../../core/groupModeration.ts";
+import { GROUP_METADATA_CACHE } from "../../handler.ts";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -40,12 +40,14 @@ interface SqlDriver {
   all: (sql: string, params?: any[]) => any[];
 }
 
-const DATA_DIR = path.resolve(globalThis.DATA_BASE_DIR || "./data");
+const DATA_DIR = path.resolve((globalThis as any).DATA_BASE_DIR || "./data");
 const DB_PATH = path.join(DATA_DIR, "AuraAntiRaid.db");
+const STATE_MIRROR_PATH = path.join(DATA_DIR, "AuraAntiRaid.state.json");
 const LEGACY_JSON_PATH = path.join(DATA_DIR, "antiraid_global.json");
 
 const MAX_DEBOUNCE_ENTRIES = 1500;
-const DEBOUNCE_TTL_MS = 15_000;
+const DEBOUNCE_TTL_MS = 10_000;
+const WARN_COOLDOWN_MS = 45_000;
 const META_CACHE_TTL_MS = 20_000;
 
 const gRaid = globalThis as unknown as {
@@ -56,18 +58,29 @@ const gRaid = globalThis as unknown as {
     byJid: Map<string, GlobalBanRecord>;
     byLid: Map<string, GlobalBanRecord>;
     disabledGroups: Set<string>;
+    enabledGroups: Set<string>;
     staffInbox: Set<string>;
   };
+  __auraAntiRaidKnownSockets?: Set<any>;
   __auraAntiRaidHookedSockets?: WeakSet<object>;
   __auraAntiRaidInterval?: NodeJS.Timeout;
-  __auraAntiRaidRecentJoins?: Map<string, number>;
+  __auraAntiRaidRecentActions?: Map<string, number>;
+  __auraAntiRaidWarnCooldown?: Map<string, number>;
   __auraAntiRaidMetaCache?: Map<string, { exp: number; meta: any }>;
   mainSocket?: any;
 };
 
-const recentJoinDebounce =
-  gRaid.__auraAntiRaidRecentJoins ??
-  (gRaid.__auraAntiRaidRecentJoins = new Map<string, number>());
+const knownSockets =
+  gRaid.__auraAntiRaidKnownSockets ??
+  (gRaid.__auraAntiRaidKnownSockets = new Set<any>());
+
+const recentActionDebounce =
+  gRaid.__auraAntiRaidRecentActions ??
+  (gRaid.__auraAntiRaidRecentActions = new Map<string, number>());
+
+const warnCooldownMap =
+  gRaid.__auraAntiRaidWarnCooldown ??
+  (gRaid.__auraAntiRaidWarnCooldown = new Map<string, number>());
 
 const groupMetaShortCache =
   gRaid.__auraAntiRaidMetaCache ??
@@ -75,19 +88,38 @@ const groupMetaShortCache =
 
 function pruneBoundedMaps() {
   const now = Date.now();
-  if (recentJoinDebounce.size > MAX_DEBOUNCE_ENTRIES) {
-    for (const [k, ts] of recentJoinDebounce.entries()) {
-      if (now - ts > DEBOUNCE_TTL_MS) recentJoinDebounce.delete(k);
+  if (recentActionDebounce.size > MAX_DEBOUNCE_ENTRIES) {
+    for (const [k, ts] of recentActionDebounce.entries()) {
+      if (now - ts > DEBOUNCE_TTL_MS) recentActionDebounce.delete(k);
     }
-    if (recentJoinDebounce.size > MAX_DEBOUNCE_ENTRIES) {
-      recentJoinDebounce.clear();
-    }
+    if (recentActionDebounce.size > MAX_DEBOUNCE_ENTRIES) recentActionDebounce.clear();
   }
-  if (groupMetaShortCache.size > 200) {
+  if (warnCooldownMap.size > MAX_DEBOUNCE_ENTRIES) {
+    for (const [k, ts] of warnCooldownMap.entries()) {
+      if (now - ts > WARN_COOLDOWN_MS) warnCooldownMap.delete(k);
+    }
+    if (warnCooldownMap.size > MAX_DEBOUNCE_ENTRIES) warnCooldownMap.clear();
+  }
+  if (groupMetaShortCache.size > 300) {
     for (const [k, v] of groupMetaShortCache.entries()) {
       if (v.exp <= now) groupMetaShortCache.delete(k);
     }
   }
+}
+
+function saveDiskMirror() {
+  try {
+    const idx = gRaid.__auraAntiRaidMemIndex;
+    if (!idx) return;
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    const payload = {
+      bans: Array.from(idx.byCase.values()),
+      disabledGroups: Array.from(idx.disabledGroups),
+      enabledGroups: Array.from(idx.enabledGroups),
+      staffInbox: Array.from(idx.staffInbox),
+    };
+    writeFileSync(STATE_MIRROR_PATH, JSON.stringify(payload, null, 2), "utf8");
+  } catch {}
 }
 
 function initSqlDriver(): SqlDriver {
@@ -123,90 +155,51 @@ function initSqlDriver(): SqlDriver {
         all: (sql: string, params: any[] = []) => db.prepare(sql).all(...params),
       };
     } catch {
-      const memBans = new Map<string, any>();
-      const memGroups = new Map<string, number>();
-      const memInbox = new Set<string>(["573118353868@s.whatsapp.net"]);
       driver = {
         exec: () => {},
-        run: (sql: string, params: any[] = []) => {
-          if (sql.includes("INSERT OR REPLACE INTO antiraid_bans")) {
-            memBans.set(params[0], {
-              case_id: params[0],
-              phone: params[1],
-              jid: params[2],
-              lid: params[3],
-              reason: params[4],
-              evidence: params[5],
-              admin_name: params[6],
-              admin_phone: params[7],
-              created_at: params[8],
-              date_str: params[9],
-              appeal_status: params[10],
-              last_appeal_text: params[11],
-              last_appeal_at: params[12],
-              kicked_count: params[13],
-            });
-          } else if (sql.includes("DELETE FROM antiraid_bans")) {
-            memBans.delete(params[0]);
-          } else if (sql.includes("INSERT OR REPLACE INTO antiraid_groups")) {
-            memGroups.set(params[0], params[1]);
-          } else if (sql.includes("INSERT OR IGNORE INTO antiraid_inbox")) {
-            memInbox.add(params[0]);
-          }
-        },
+        run: () => {},
         get: () => null,
-        all: (sql: string) => {
-          if (sql.includes("FROM antiraid_bans")) return Array.from(memBans.values());
-          if (sql.includes("FROM antiraid_groups")) {
-            return Array.from(memGroups.entries()).map(([group_jid, enabled]) => ({
-              group_jid,
-              enabled,
-            }));
-          }
-          if (sql.includes("FROM antiraid_inbox")) {
-            return Array.from(memInbox).map((admin_jid) => ({ admin_jid }));
-          }
-          return [];
-        },
+        all: () => [],
       };
     }
   }
 
-  driver.exec(`
-    CREATE TABLE IF NOT EXISTS antiraid_bans (
-      case_id TEXT PRIMARY KEY,
-      phone TEXT NOT NULL,
-      jid TEXT NOT NULL,
-      lid TEXT NOT NULL DEFAULT '',
-      reason TEXT NOT NULL,
-      evidence TEXT NOT NULL DEFAULT '',
-      admin_name TEXT NOT NULL,
-      admin_phone TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      date_str TEXT NOT NULL,
-      appeal_status TEXT NOT NULL DEFAULT 'none',
-      last_appeal_text TEXT NOT NULL DEFAULT '',
-      last_appeal_at INTEGER NOT NULL DEFAULT 0,
-      kicked_count INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_antiraid_phone ON antiraid_bans(phone);
-    CREATE INDEX IF NOT EXISTS idx_antiraid_jid ON antiraid_bans(jid);
-    CREATE INDEX IF NOT EXISTS idx_antiraid_lid ON antiraid_bans(lid);
+  try {
+    driver.exec(`
+      CREATE TABLE IF NOT EXISTS antiraid_bans (
+        case_id TEXT PRIMARY KEY,
+        phone TEXT NOT NULL,
+        jid TEXT NOT NULL,
+        lid TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL,
+        evidence TEXT NOT NULL DEFAULT '',
+        admin_name TEXT NOT NULL,
+        admin_phone TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        date_str TEXT NOT NULL,
+        appeal_status TEXT NOT NULL DEFAULT 'none',
+        last_appeal_text TEXT NOT NULL DEFAULT '',
+        last_appeal_at INTEGER NOT NULL DEFAULT 0,
+        kicked_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_antiraid_phone ON antiraid_bans(phone);
+      CREATE INDEX IF NOT EXISTS idx_antiraid_jid ON antiraid_bans(jid);
+      CREATE INDEX IF NOT EXISTS idx_antiraid_lid ON antiraid_bans(lid);
 
-    CREATE TABLE IF NOT EXISTS antiraid_groups (
-      group_jid TEXT PRIMARY KEY,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      updated_at INTEGER NOT NULL
-    );
+      CREATE TABLE IF NOT EXISTS antiraid_groups (
+        group_jid TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL
+      );
 
-    CREATE TABLE IF NOT EXISTS antiraid_inbox (
-      admin_jid TEXT PRIMARY KEY
-    );
-  `);
-
-  driver.run("INSERT OR IGNORE INTO antiraid_inbox (admin_jid) VALUES (?)", [
-    "573118353868@s.whatsapp.net",
-  ]);
+      CREATE TABLE IF NOT EXISTS antiraid_inbox (
+        admin_jid TEXT PRIMARY KEY
+      );
+    `);
+    driver.run("INSERT OR IGNORE INTO antiraid_inbox (admin_jid) VALUES (?)", [
+      "573118353868@s.whatsapp.net",
+    ]);
+  } catch {}
 
   gRaid.__auraAntiRaidSql = driver;
   return driver;
@@ -214,20 +207,20 @@ function initSqlDriver(): SqlDriver {
 
 function rowToRecord(r: any): GlobalBanRecord {
   return {
-    caseId: String(r.case_id || ""),
+    caseId: String(r.case_id || r.caseId || ""),
     phone: String(r.phone || ""),
     jid: String(r.jid || ""),
     lid: String(r.lid || ""),
     reason: String(r.reason || ""),
     evidence: String(r.evidence || ""),
-    adminName: String(r.admin_name || ""),
-    adminPhone: String(r.admin_phone || ""),
-    createdAt: Number(r.created_at || Date.now()),
-    dateStr: String(r.date_str || ""),
-    appealStatus: (r.appeal_status as "none" | "pending" | "rejected") || "none",
-    lastAppealText: String(r.last_appeal_text || ""),
-    lastAppealAt: Number(r.last_appeal_at || 0),
-    kickedCount: Number(r.kicked_count || 0),
+    adminName: String(r.admin_name || r.adminName || ""),
+    adminPhone: String(r.admin_phone || r.adminPhone || ""),
+    createdAt: Number(r.created_at || r.createdAt || Date.now()),
+    dateStr: String(r.date_str || r.dateStr || ""),
+    appealStatus: ((r.appeal_status || r.appealStatus) as "none" | "pending" | "rejected") || "none",
+    lastAppealText: String(r.last_appeal_text || r.lastAppealText || ""),
+    lastAppealAt: Number(r.last_appeal_at || r.lastAppealAt || 0),
+    kickedCount: Number(r.kicked_count || r.kickedCount || 0),
   };
 }
 
@@ -241,10 +234,35 @@ function getMemIndex() {
     byJid: new Map<string, GlobalBanRecord>(),
     byLid: new Map<string, GlobalBanRecord>(),
     disabledGroups: new Set<string>(),
+    enabledGroups: new Set<string>(),
     staffInbox: new Set<string>(["573118353868@s.whatsapp.net"]),
   };
 
   gRaid.__auraAntiRaidMemIndex = index;
+
+  if (existsSync(STATE_MIRROR_PATH)) {
+    try {
+      const mirror = JSON.parse(readFileSync(STATE_MIRROR_PATH, "utf8"));
+      if (Array.isArray(mirror?.bans)) {
+        for (const b of mirror.bans) {
+          if (!b?.caseId) continue;
+          indexRecordInMemory(rowToRecord(b));
+        }
+      }
+      if (Array.isArray(mirror?.disabledGroups)) {
+        for (const g of mirror.disabledGroups) index.disabledGroups.add(String(g));
+      }
+      if (Array.isArray(mirror?.enabledGroups)) {
+        for (const g of mirror.enabledGroups) {
+          index.enabledGroups.add(String(g));
+          index.disabledGroups.delete(String(g));
+        }
+      }
+      if (Array.isArray(mirror?.staffInbox)) {
+        for (const a of mirror.staffInbox) index.staffInbox.add(String(a));
+      }
+    } catch {}
+  }
 
   if (existsSync(LEGACY_JSON_PATH)) {
     try {
@@ -252,48 +270,44 @@ function getMemIndex() {
       if (legacy?.bans && typeof legacy.bans === "object") {
         for (const b of Object.values(legacy.bans) as any[]) {
           if (!b?.caseId) continue;
-          const rec: GlobalBanRecord = {
-            caseId: String(b.caseId),
-            phone: String(b.phone || ""),
-            jid: String(b.jid || `${b.phone}@s.whatsapp.net`),
-            lid: String(b.lid || ""),
-            reason: String(b.reason || "Infracción global"),
-            evidence: String(b.evidence || ""),
-            adminName: String(b.adminName || "Staff Aura Reed"),
-            adminPhone: String(b.adminPhone || ""),
-            createdAt: Number(b.createdAt || Date.now()),
-            dateStr: String(b.dateStr || new Date().toLocaleDateString("es-CR")),
-            appealStatus: b.appealStatus || "none",
-            lastAppealText: String(b.lastAppealText || ""),
-            lastAppealAt: Number(b.lastAppealAt || 0),
-            kickedCount: 0,
-          };
+          const rec = rowToRecord({
+            ...b,
+            jid: b.jid || `${b.phone}@s.whatsapp.net`,
+          });
           upsertBanInSql(rec);
         }
       }
       if (Array.isArray(legacy?.disabledGroups)) {
         for (const gid of legacy.disabledGroups) {
-          sql.run(
-            "INSERT OR REPLACE INTO antiraid_groups (group_jid, enabled, updated_at) VALUES (?, 0, ?)",
-            [String(gid), Date.now()],
-          );
+          index.disabledGroups.add(String(gid));
         }
       }
       renameSync(LEGACY_JSON_PATH, `${LEGACY_JSON_PATH}.migrated`);
     } catch {}
   }
 
-  for (const r of sql.all("SELECT * FROM antiraid_bans")) {
-    const rec = rowToRecord(r);
-    indexRecordInMemory(rec);
-  }
-  for (const g of sql.all("SELECT * FROM antiraid_groups WHERE enabled = 0")) {
-    if (g?.group_jid) index.disabledGroups.add(String(g.group_jid));
-  }
-  for (const a of sql.all("SELECT * FROM antiraid_inbox")) {
-    if (a?.admin_jid) index.staffInbox.add(String(a.admin_jid));
-  }
+  try {
+    for (const r of sql.all("SELECT * FROM antiraid_bans")) {
+      const rec = rowToRecord(r);
+      if (rec.caseId) indexRecordInMemory(rec);
+    }
+    for (const g of sql.all("SELECT * FROM antiraid_groups")) {
+      const gid = String(g?.group_jid || "");
+      if (!gid) continue;
+      if (Number(g.enabled) === 0) {
+        index.disabledGroups.add(gid);
+        index.enabledGroups.delete(gid);
+      } else {
+        index.enabledGroups.add(gid);
+        index.disabledGroups.delete(gid);
+      }
+    }
+    for (const a of sql.all("SELECT * FROM antiraid_inbox")) {
+      if (a?.admin_jid) index.staffInbox.add(String(a.admin_jid));
+    }
+  } catch {}
 
+  saveDiskMirror();
   return index;
 }
 
@@ -321,42 +335,51 @@ function unindexRecordFromMemory(rec: GlobalBanRecord) {
 
 function upsertBanInSql(rec: GlobalBanRecord) {
   const sql = initSqlDriver();
-  sql.run(
-    `INSERT OR REPLACE INTO antiraid_bans (
-      case_id, phone, jid, lid, reason, evidence, admin_name, admin_phone,
-      created_at, date_str, appeal_status, last_appeal_text, last_appeal_at, kicked_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      rec.caseId,
-      rec.phone,
-      rec.jid,
-      rec.lid || "",
-      rec.reason,
-      rec.evidence || "",
-      rec.adminName,
-      rec.adminPhone,
-      rec.createdAt,
-      rec.dateStr,
-      rec.appealStatus,
-      rec.lastAppealText || "",
-      rec.lastAppealAt || 0,
-      rec.kickedCount || 0,
-    ],
-  );
+  try {
+    sql.run(
+      `INSERT OR REPLACE INTO antiraid_bans (
+        case_id, phone, jid, lid, reason, evidence, admin_name, admin_phone,
+        created_at, date_str, appeal_status, last_appeal_text, last_appeal_at, kicked_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        rec.caseId,
+        rec.phone,
+        rec.jid,
+        rec.lid || "",
+        rec.reason,
+        rec.evidence || "",
+        rec.adminName,
+        rec.adminPhone,
+        rec.createdAt,
+        rec.dateStr,
+        rec.appealStatus,
+        rec.lastAppealText || "",
+        rec.lastAppealAt || 0,
+        rec.kickedCount || 0,
+      ],
+    );
+  } catch {}
   indexRecordInMemory(rec);
+  saveDiskMirror();
 }
 
 function deleteBanInSql(rec: GlobalBanRecord) {
   const sql = initSqlDriver();
-  sql.run("DELETE FROM antiraid_bans WHERE case_id = ?", [rec.caseId]);
+  try {
+    sql.run("DELETE FROM antiraid_bans WHERE case_id = ?", [rec.caseId]);
+  } catch {}
   unindexRecordFromMemory(rec);
+  saveDiskMirror();
 }
 
 function addStaffInboxSql(adminJid: string) {
   if (!adminJid.endsWith("@s.whatsapp.net")) return;
   const sql = initSqlDriver();
-  sql.run("INSERT OR IGNORE INTO antiraid_inbox (admin_jid) VALUES (?)", [adminJid]);
+  try {
+    sql.run("INSERT OR IGNORE INTO antiraid_inbox (admin_jid) VALUES (?)", [adminJid]);
+  } catch {}
   getMemIndex().staffInbox.add(adminJid);
+  saveDiskMirror();
 }
 
 function cleanDigits(val: unknown): string {
@@ -389,11 +412,18 @@ function normalizePhoneJid(val: unknown): { phone: string; jid: string } {
 }
 
 async function getCachedGroupMetadata(sock: any, groupId: string): Promise<any> {
+  const cachedGlobal = GROUP_METADATA_CACHE?.get?.(groupId);
+  if (cachedGlobal?.participants?.length) return cachedGlobal;
+
   const now = Date.now();
   const cached = groupMetaShortCache.get(groupId);
   if (cached && cached.exp > now) return cached.meta;
+
   try {
-    const meta = await sock.groupMetadata(groupId);
+    const meta = await Promise.race([
+      sock.groupMetadata(groupId),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+    ]);
     if (meta) {
       groupMetaShortCache.set(groupId, { exp: now + META_CACHE_TTL_MS, meta });
     }
@@ -401,6 +431,38 @@ async function getCachedGroupMetadata(sock: any, groupId: string): Promise<any> 
   } catch {
     return null;
   }
+}
+
+function getBotIdentifiers(sock: any): { jid: string; phone: string; lid: string; lidDigits: string } {
+  const rawId = sock?.user?.id || sock?.authState?.creds?.me?.id || "";
+  const rawLid = sock?.user?.lid || sock?.authState?.creds?.me?.lid || "";
+  const jid = rawId ? jidNormalizedUser(rawId) : "";
+  const phone = cleanDigits(jid);
+  const lid = normalizeLid(rawLid);
+  const lidDigits = cleanDigits(lid);
+  return { jid, phone, lid, lidDigits };
+}
+
+function findParticipantEntry(participants: any[], phone: string, lid: string): any | null {
+  const cleanPhone = phone && !phone.startsWith("LID_") ? cleanDigits(phone) : "";
+  const cleanLid = cleanDigits(lid);
+
+  for (const p of participants) {
+    const pId = String(p?.id || "");
+    const pLid = String(p?.lid || (pId.endsWith("@lid") ? pId : ""));
+    const pPhone = cleanDigits(
+      p?.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""),
+    );
+    const pLidDigits = cleanDigits(pLid);
+
+    if (cleanPhone && (pPhone === cleanPhone || (!pId.endsWith("@lid") && cleanDigits(pId) === cleanPhone))) {
+      return p;
+    }
+    if (cleanLid && (pLidDigits === cleanLid || (pId.endsWith("@lid") && cleanDigits(pId) === cleanLid))) {
+      return p;
+    }
+  }
+  return null;
 }
 
 async function resolveFullIdentity(
@@ -450,29 +512,19 @@ async function resolveFullIdentity(
   }
 
   if (groupParticipants.length > 0) {
-    const lidDigits = cleanDigits(lid);
-    for (const p of groupParticipants) {
-      const pId = String(p?.id || "");
-      const pLid = normalizeLid(p?.lid || (pId.endsWith("@lid") ? pId : ""));
+    const matched = findParticipantEntry(groupParticipants, phone, lid);
+    if (matched) {
+      const pId = String(matched.id || "");
+      const pLid = normalizeLid(matched.lid || (pId.endsWith("@lid") ? pId : ""));
       const pPhoneNorm = normalizePhoneJid(
-        p?.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""),
+        matched.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""),
       );
-
-      const matchesPhone = phone && pPhoneNorm.phone === phone;
-      const matchesLid =
-        (lid && pLid === lid) ||
-        (lidDigits && cleanDigits(pLid) === lidDigits) ||
-        (!phone && !lid && cleanDigits(rawInput) && cleanDigits(pLid) === cleanDigits(rawInput));
-
-      if (matchesPhone || matchesLid) {
-        if (!phone && pPhoneNorm.phone) {
-          phone = pPhoneNorm.phone;
-          jid = pPhoneNorm.jid;
-        }
-        if (!lid && pLid) {
-          lid = pLid;
-        }
-        if (phone && lid) break;
+      if (!phone && pPhoneNorm.phone) {
+        phone = pPhoneNorm.phone;
+        jid = pPhoneNorm.jid;
+      }
+      if (!lid && pLid) {
+        lid = pLid;
       }
     }
   }
@@ -500,12 +552,13 @@ async function resolveFullIdentity(
     } catch {}
   }
 
-  if (db && typeof db.getUser === "function") {
+  const activeDb = db || (globalThis as any).db;
+  if (activeDb && typeof activeDb.getUser === "function") {
     try {
       const uRec =
-        (jid && db.getUser(jid)) ||
-        (lid && db.getUser(lid)) ||
-        (phone && db.getUser(phone));
+        (jid && activeDb.getUser(jid)) ||
+        (lid && activeDb.getUser(lid)) ||
+        (phone && activeDb.getUser(phone));
       if (uRec) {
         if (!phone && (uRec.phone_number || uRec.jid)) {
           const norm = normalizePhoneJid(uRec.phone_number || uRec.jid);
@@ -517,18 +570,6 @@ async function resolveFullIdentity(
         if (!lid && uRec.lid) {
           lid = normalizeLid(uRec.lid);
         }
-      }
-    } catch {}
-  }
-
-  if (phone && !lid && typeof sock?.onWhatsApp === "function") {
-    try {
-      const [waRes] = (await Promise.race([
-        sock.onWhatsApp(jid),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2000)),
-      ])) ?? [];
-      if (waRes?.lid) {
-        lid = normalizeLid(waRes.lid);
       }
     } catch {}
   }
@@ -578,11 +619,18 @@ function findBanByIdentity(identity: Partial<ResolvedIdentity>, rawFallback?: st
   }
 
   if (rawFallback) {
-    const d = cleanDigits(rawFallback);
-    if (d) {
-      if (idx.byPhone.has(d)) return idx.byPhone.get(d)!;
-      if (idx.byPhone.has(`LID_${d}`)) return idx.byPhone.get(`LID_${d}`)!;
-      if (idx.byLid.has(`${d}@lid`)) return idx.byLid.get(`${d}@lid`)!;
+    const str = String(rawFallback).trim();
+    if (str.endsWith("@lid")) {
+      const normLid = normalizeLid(str);
+      if (normLid && idx.byLid.has(normLid)) return idx.byLid.get(normLid)!;
+      const d = cleanDigits(normLid);
+      if (d && idx.byPhone.has(`LID_${d}`)) return idx.byPhone.get(`LID_${d}`)!;
+    } else {
+      const d = cleanDigits(str);
+      if (d) {
+        if (idx.byPhone.has(d)) return idx.byPhone.get(d)!;
+        if (idx.byLid.has(`${d}@lid`)) return idx.byLid.get(`${d}@lid`)!;
+      }
     }
   }
 
@@ -617,58 +665,98 @@ function linkMissingIdentityFields(rec: GlobalBanRecord, discovered: Partial<Res
   }
 }
 
-function isGroupProtectionEnabled(groupId: string, db?: any): boolean {
+function isGroupProtectionEnabled(groupId: string): boolean {
   const idx = getMemIndex();
+  if (idx.enabledGroups.has(groupId)) return true;
   if (idx.disabledGroups.has(groupId)) return false;
-  try {
-    const gRec = db?.getGroup?.(groupId);
-    if (gRec && gRec.antiraid === false) return false;
-  } catch {}
   return true;
 }
 
 function setGroupProtection(groupId: string, enabled: boolean, db?: any) {
   const sql = initSqlDriver();
   const idx = getMemIndex();
-  sql.run(
-    "INSERT OR REPLACE INTO antiraid_groups (group_jid, enabled, updated_at) VALUES (?, ?, ?)",
-    [groupId, enabled ? 1 : 0, Date.now()],
-  );
-  if (enabled) idx.disabledGroups.delete(groupId);
-  else idx.disabledGroups.add(groupId);
   try {
-    db?.setGroup?.(groupId, { antiraid: enabled ? 1 : 0 });
+    sql.run(
+      "INSERT OR REPLACE INTO antiraid_groups (group_jid, enabled, updated_at) VALUES (?, ?, ?)",
+      [groupId, enabled ? 1 : 0, Date.now()],
+    );
+  } catch {}
+  if (enabled) {
+    idx.disabledGroups.delete(groupId);
+    idx.enabledGroups.add(groupId);
+  } else {
+    idx.enabledGroups.delete(groupId);
+    idx.disabledGroups.add(groupId);
+  }
+  saveDiskMirror();
+  try {
+    const activeDb = db || (globalThis as any).db;
+    activeDb?.setGroup?.(groupId, { antiraid: enabled ? 1 : 0 });
   } catch {}
 }
 
-function getAllActiveSockets(currentSock?: any): any[] {
-  const list: any[] = [];
-  if (currentSock) list.push(currentSock);
-  if (gRaid.mainSocket) list.push(gRaid.mainSocket);
+function discoverAllActiveSockets(currentSock?: any): any[] {
+  if (currentSock) knownSockets.add(currentSock);
+
+  const gAny = globalThis as any;
+  const candidates: any[] = [
+    currentSock,
+    gAny.mainSocket,
+    gAny.mainSock,
+    gAny.sock,
+    gAny.conn,
+    gAny.__auraWebPanel?.mainSock,
+    ...Array.from(knownSockets),
+  ];
+
+  try {
+    for (const val of Object.values(gAny)) {
+      if (
+        val &&
+        typeof val === "object" &&
+        typeof (val as any).groupParticipantsUpdate === "function" &&
+        typeof (val as any).sendMessage === "function" &&
+        (val as any).ev
+      ) {
+        candidates.push(val);
+      }
+    }
+  } catch {}
+
   try {
     const prems = getActivePremBots?.() || [];
-    list.push(...prems);
+    candidates.push(...prems);
   } catch {}
   try {
     const subs = getActiveSubBots?.() || [];
-    list.push(...subs);
+    candidates.push(...subs);
   } catch {}
 
   const unique: any[] = [];
   const seenIds = new Set<string>();
-  for (const s of list) {
-    const realSock = s?.sock ?? s;
-    if (!realSock || (realSock as any).isClosed) continue;
-    const id = jidNormalizedUser(realSock.user?.id || "");
-    if (!id || seenIds.has(id)) continue;
-    seenIds.add(id);
+
+  for (const item of candidates) {
+    const realSock = item?.sock ?? item;
+    if (
+      !realSock ||
+      typeof realSock.groupParticipantsUpdate !== "function" ||
+      (realSock as any).isClosed
+    ) {
+      continue;
+    }
+    knownSockets.add(realSock);
+    const bot = getBotIdentifiers(realSock);
+    const key = bot.jid || bot.lid || String(unique.length);
+    if (seenIds.has(key)) continue;
+    seenIds.add(key);
     unique.push(realSock);
   }
+
   return unique;
 }
 
 function buildAntiRaidRichCard(data: {
-  mode: "DM_BANNED" | "GROUP_AUTOKICK" | "APPEAL_TICKET" | "UNBANNED_DM" | "GLOBAL_REPORT";
+  mode: "DM_BANNED" | "GROUP_AUTOKICK" | "GROUP_WARN_NO_ADMIN" | "APPEAL_TICKET" | "UNBANNED_DM" | "GLOBAL_REPORT";
   badgeText: string;
   title: string;
   subtitle: string;
@@ -776,6 +864,7 @@ function $(id){ return document.getElementById(id); }
 function init(){
   if (D.mode === "UNBANNED_DM") $("orbIco").textContent = "✅";
   else if (D.mode === "APPEAL_TICKET") $("orbIco").textContent = "📩";
+  else if (D.mode === "GROUP_WARN_NO_ADMIN") $("orbIco").textContent = "⚠️";
   else $("orbIco").textContent = "🚨";
 
   $("titleTxt").textContent = D.title;
@@ -847,112 +936,267 @@ async function sendRichOrFallback(
     .catch(() => undefined);
 }
 
-async function enforceBanInGroupOnJoin(
+async function sendNonAdminWarningToGroup(
+  sock: any,
+  groupId: string,
+  ban: GlobalBanRecord,
+  mentionJids: string[],
+) {
+  const warnKey = `${groupId}:${ban.caseId}`;
+  const now = Date.now();
+  if (now - (warnCooldownMap.get(warnKey) || 0) < WARN_COOLDOWN_MS) return;
+  warnCooldownMap.set(warnKey, now);
+
+  const displayTag = ban.phone.startsWith("LID_")
+    ? `@${cleanDigits(ban.lid)}`
+    : `@${ban.phone}`;
+
+  const warnText = [
+    `╭〔 ⚠️ ${fytBold("ALERTA DE SEGURIDAD ANTI-RAID")} 〕⬣`,
+    `┃ 🚨 *Usuario Sancionado Detectado en el Grupo*`,
+    `╰━━━━━━━━━━━━⬣`,
+    `┃ 👤 *Usuario:* ${displayTag}`,
+    `┃ 🆔 *Caso SQL:* \`#${ban.caseId}\``,
+    ...(ban.lid ? [`┃ 🔗 *LID:* \`${ban.lid}\``] : []),
+    `┃ 📋 *Motivo:* ${ban.reason}`,
+    `┃ 👮 *Sancionado por:* ${ban.adminName}`,
+    `┃ 📅 *Fecha:* ${ban.dateStr}`,
+    `┃`,
+    `┃ ⚠️ *ATENCIÓN ADMINISTRADORES:*`,
+    `┃ El bot/subbot no posee permisos de *Administrador* en este grupo para expulsar automáticamente a este usuario. Se recomienda eliminarlo de inmediato o darle admin al bot.`,
+    `╰━━〔 ⚡ ${fytBold("AURA REED SECURITY")} 〕━━⬣`,
+  ].join("\n");
+
+  await sendRichOrFallback(
+    sock,
+    groupId,
+    `⚠️ ALERTA ANTI-RAID // #${ban.caseId}`,
+    "El bot requiere permisos de Administrador para expulsar al infractor",
+    {
+      mode: "GROUP_WARN_NO_ADMIN",
+      badgeText: "PELIGRO • BOT SIN PERMISOS DE ADMIN",
+      title: "Alerta Anti-Raid",
+      subtitle: "SE REQUIERE ACCIÓN DE ADMINS",
+      caseId: ban.caseId,
+      targetPhone: ban.phone,
+      targetLid: ban.lid,
+      reason: ban.reason,
+      adminName: ban.adminName,
+      dateStr: ban.dateStr,
+      extraLabel: "Acción Requerida",
+      extraValue: "DAR ADMIN / EXPULSAR",
+      footerNote:
+        "Este usuario está en la Lista Negra Global de Aura Reed, pero ningún bot o subbot en el grupo tiene rango de administrador para sacarlo.",
+      copyCommand: `.checkban ${ban.caseId}`,
+      copyLabel: "🔍 Ver Caso SQL",
+      rawSummary: warnText,
+    },
+    mentionJids,
+  );
+}
+
+async function executeImmediateGroupAction(
+  primarySock: any,
+  groupId: string,
+  ban: GlobalBanRecord,
+  candidateTargetJids: string[],
+  announceKick = true,
+): Promise<"kicked" | "warned" | "none"> {
+  if (!isGroupProtectionEnabled(groupId)) return "none";
+
+  const debounceKey = `${groupId}:${ban.caseId}`;
+  const now = Date.now();
+  if (now - (recentActionDebounce.get(debounceKey) || 0) < 4000) return "none";
+  recentActionDebounce.set(debounceKey, now);
+
+  const allSocks = discoverAllActiveSockets(primarySock);
+  const meta = await getCachedGroupMetadata(primarySock, groupId);
+  const participants: any[] = meta?.participants || [];
+
+  const targetInGroup = findParticipantEntry(participants, ban.phone, ban.lid);
+  if (targetInGroup) {
+    const discoveredPn = normalizePhoneJid(
+      targetInGroup.phoneNumber ||
+        (String(targetInGroup.id || "").endsWith("@s.whatsapp.net") ? targetInGroup.id : ""),
+    );
+    const discoveredLid = normalizeLid(
+      targetInGroup.lid ||
+        (String(targetInGroup.id || "").endsWith("@lid") ? targetInGroup.id : ""),
+    );
+    linkMissingIdentityFields(ban, {
+      phone: discoveredPn.phone,
+      jid: discoveredPn.jid,
+      lid: discoveredLid,
+    });
+  }
+
+  const removeList = Array.from(
+    new Set(
+      [
+        targetInGroup?.id,
+        targetInGroup?.lid,
+        ...candidateTargetJids,
+        ban.lid,
+        ban.jid,
+      ].filter((x) => typeof x === "string" && x.includes("@")),
+    ),
+  );
+
+  if (removeList.length === 0) return "none";
+
+  const socketsInGroup: any[] = [];
+  const adminSockets: any[] = [];
+
+  if (participants.length > 0) {
+    for (const s of allSocks) {
+      const bot = getBotIdentifiers(s);
+      const present = findParticipantEntry(participants, bot.phone, bot.lid);
+      if (present) {
+        socketsInGroup.push(s);
+        if (present.admin === "admin" || present.admin === "superadmin") {
+          adminSockets.push(s);
+        }
+      }
+    }
+  }
+
+  const tryKickSockets = adminSockets.length > 0 ? adminSockets : [primarySock, ...socketsInGroup];
+  let kickingSock: any = null;
+
+  for (const s of tryKickSockets) {
+    if (!s) continue;
+    for (const targetJid of removeList) {
+      try {
+        await s.groupParticipantsUpdate(groupId, [targetJid], "remove");
+        kickingSock = s;
+        break;
+      } catch {}
+    }
+    if (kickingSock) break;
+  }
+
+  if (kickingSock) {
+    ban.kickedCount = (ban.kickedCount || 0) + 1;
+    upsertBanInSql(ban);
+
+    if (announceKick) {
+      const displayUser = ban.phone.startsWith("LID_")
+        ? `@${cleanDigits(ban.lid)}`
+        : `@${ban.phone}`;
+
+      const alertText = [
+        `╭〔 🚨 ${fytBold("AURA REED ANTI-RAID SQL")} 〕⬣`,
+        `┃ 🚫 *Expulsión Automática Ejecutada*`,
+        `╰━━━━━━━━━━━━⬣`,
+        `┃ 👤 *Usuario:* ${displayUser}`,
+        `┃ 🆔 *Caso SQL:* \`#${ban.caseId}\``,
+        ...(ban.lid ? [`┃ 🔗 *LID Vinculado:* \`${ban.lid}\``] : []),
+        `┃ 📋 *Motivo:* ${ban.reason}`,
+        `┃ 👮 *Sancionado por:* ${ban.adminName}`,
+        `┃ 📅 *Fecha:* ${ban.dateStr}`,
+        `┃`,
+        `┃ ⚠️ *Este usuario está en la Lista Negra Global (JID/LID) y tiene prohibido estar en cualquier grupo con Aura Reed.*`,
+        `╰━━〔 ⚡ ${fytBold("PROTECCIÓN ACTIVA")} 〕━━⬣`,
+      ].join("\n");
+
+      void sendRichOrFallback(
+        kickingSock,
+        groupId,
+        `🚨 ANTI-RAID // #${ban.caseId}`,
+        "Usuario expulsado automáticamente por Lista Negra SQL",
+        {
+          mode: "GROUP_AUTOKICK",
+          badgeText: "ACCESO DENEGADO • LISTA NEGRA SQL",
+          title: "Aura Anti-Raid",
+          subtitle: "JID & LID GUARD",
+          caseId: ban.caseId,
+          targetPhone: ban.phone,
+          targetLid: ban.lid,
+          reason: ban.reason,
+          adminName: ban.adminName,
+          dateStr: ban.dateStr,
+          extraLabel: "Intentos Bloqueados",
+          extraValue: `${ban.kickedCount} expulsión(es)`,
+          footerNote:
+            "El usuario fue expulsado inmediatamente mediante verificación cruzada de Número, JID y LID. Usa .antiraid off si deseas apagar esta defensa.",
+          copyCommand: `.checkban ${ban.caseId}`,
+          copyLabel: "🔍 Ver Caso SQL",
+          rawSummary: alertText,
+        },
+        removeList,
+      );
+    }
+
+    return "kicked";
+  }
+
+  const notifierSock = socketsInGroup[0] || primarySock;
+  if (notifierSock) {
+    void sendNonAdminWarningToGroup(notifierSock, groupId, ban, removeList);
+    return "warned";
+  }
+
+  return "none";
+}
+
+async function inspectAndEnforceEntries(
   sock: any,
   groupId: string,
   rawEntries: any[],
   db?: any,
-): Promise<number> {
-  if (!isGroupProtectionEnabled(groupId, db)) return 0;
-  if (db && typeof isPrimaryBotForGroup === "function") {
-    try {
-      if (!isPrimaryBotForGroup(sock, groupId, db)) return 0;
-    } catch {}
-  }
+): Promise<{ kicked: number; warned: number }> {
+  if (!isGroupProtectionEnabled(groupId)) return { kicked: 0, warned: 0 };
 
-  let kickedNow = 0;
+  let kicked = 0;
+  let warned = 0;
 
   for (const entry of rawEntries) {
-    const identity = await resolveFullIdentity(sock, db, entry, groupId);
-    const ban = findBanByIdentity(identity, typeof entry === "string" ? entry : "");
+    const rawStr =
+      typeof entry === "string"
+        ? entry
+        : String(entry?.id || entry?.lid || entry?.phoneNumber || "");
+
+    let ban = findBanByIdentity(
+      {
+        jid: rawStr.endsWith("@s.whatsapp.net") ? rawStr : "",
+        lid: rawStr.endsWith("@lid") ? rawStr : "",
+        phone: !rawStr.endsWith("@lid") ? cleanDigits(rawStr) : "",
+      },
+      rawStr,
+    );
+
+    if (!ban) {
+      const identity = await resolveFullIdentity(sock, db, entry, groupId);
+      ban = findBanByIdentity(identity, rawStr);
+    }
+
     if (!ban) continue;
 
-    const debounceKey = `${groupId}:${ban.caseId}`;
-    const now = Date.now();
-    if (now - (recentJoinDebounce.get(debounceKey) || 0) < DEBOUNCE_TTL_MS) continue;
-    recentJoinDebounce.set(debounceKey, now);
+    const candidates = [
+      typeof entry === "string" ? entry : "",
+      entry?.id,
+      entry?.lid,
+      ban.lid,
+      ban.jid,
+    ].filter(Boolean);
 
-    const targetsToRemove = new Set<string>();
-    if (typeof entry === "string" && entry.includes("@")) targetsToRemove.add(entry);
-    else if (typeof entry === "object" && entry) {
-      if (entry.id) targetsToRemove.add(String(entry.id));
-      if (entry.lid) targetsToRemove.add(String(entry.lid));
-    }
-    if (identity.jid && identity.jid.includes("@")) targetsToRemove.add(identity.jid);
-    if (identity.lid && identity.lid.includes("@")) targetsToRemove.add(identity.lid);
-
-    let removedSuccess = false;
-    for (const candidateJid of targetsToRemove) {
-      try {
-        await sock.groupParticipantsUpdate(groupId, [candidateJid], "remove");
-        removedSuccess = true;
-        break;
-      } catch {}
-    }
-
-    if (!removedSuccess) continue;
-
-    kickedNow++;
-    ban.kickedCount = (ban.kickedCount || 0) + 1;
-    upsertBanInSql(ban);
-
-    const displayUser = ban.phone.startsWith("LID_") ? `@${cleanDigits(ban.lid)}` : `@${ban.phone}`;
-    const mentionList = Array.from(targetsToRemove);
-
-    const alertText = [
-      `╭〔 🚨 ${fytBold("AURA REED ANTI-RAID SQL")} 〕⬣`,
-      `┃ 🚫 *Ingreso Bloqueado Automáticamente*`,
-      `╰━━━━━━━━━━━━⬣`,
-      `┃ 👤 *Usuario:* ${displayUser}`,
-      `┃ 🆔 *Caso SQL:* \`#${ban.caseId}\``,
-      ...(ban.lid ? [`┃ 🔗 *LID Vinculado:* \`${ban.lid}\``] : []),
-      `┃ 📋 *Motivo:* ${ban.reason}`,
-      `┃ 👮 *Sancionado por:* ${ban.adminName}`,
-      `┃ 📅 *Fecha:* ${ban.dateStr}`,
-      `┃`,
-      `┃ ⚠️ *Este usuario está en la Lista Negra Global (JID/LID) y no puede unirse a ningún grupo donde esté Aura Reed.*`,
-      `╰━━〔 ⚡ ${fytBold("PROTECCIÓN ACTIVA")} 〕━━⬣`,
-    ].join("\n");
-
-    await sendRichOrFallback(
-      sock,
-      groupId,
-      `🚨 ANTI-RAID // #${ban.caseId}`,
-      "Usuario expulsado automáticamente por Lista Negra SQL",
-      {
-        mode: "GROUP_AUTOKICK",
-        badgeText: "ACCESO DENEGADO • LISTA NEGRA SQL",
-        title: "Aura Anti-Raid",
-        subtitle: "JID & LID GUARD",
-        caseId: ban.caseId,
-        targetPhone: ban.phone,
-        targetLid: ban.lid,
-        reason: ban.reason,
-        adminName: ban.adminName,
-        dateStr: ban.dateStr,
-        extraLabel: "Intentos Bloqueados",
-        extraValue: `${ban.kickedCount} expulsión(es)`,
-        footerNote:
-          "El usuario fue detectado mediante verificación cruzada de Número, JID y LID. Los administradores pueden usar .antiraid off si desean desactivar el filtro en este grupo.",
-        copyCommand: `.checkban ${ban.caseId}`,
-        copyLabel: "🔍 Ver Caso SQL",
-        rawSummary: alertText,
-      },
-      mentionList,
-    );
+    const res = await executeImmediateGroupAction(sock, groupId, ban, candidates, true);
+    if (res === "kicked") kicked++;
+    else if (res === "warned") warned++;
   }
 
-  return kickedNow;
+  return { kicked, warned };
 }
 
-function attachAntiRaidHooks(db?: any) {
+function attachAntiRaidHooks(db?: any, currentSock?: any) {
   pruneBoundedMaps();
+  getMemIndex();
 
   if (!gRaid.__auraAntiRaidHookedSockets) {
     gRaid.__auraAntiRaidHookedSockets = new WeakSet<object>();
   }
   const hooked = gRaid.__auraAntiRaidHookedSockets;
-  const sockets = getAllActiveSockets();
+  const sockets = discoverAllActiveSockets(currentSock);
 
   for (const sock of sockets) {
     if (!sock || typeof sock !== "object" || hooked.has(sock)) continue;
@@ -964,7 +1208,7 @@ function attachAntiRaidHooks(db?: any) {
         const act = String(ev.action || "").toLowerCase();
         if (act !== "add" && act !== "invite" && act !== "linked_group_join") return;
         groupMetaShortCache.delete(ev.id);
-        await enforceBanInGroupOnJoin(sock, ev.id, ev.participants, db);
+        await inspectAndEnforceEntries(sock, ev.id, ev.participants, db);
       } catch {}
     });
 
@@ -975,39 +1219,66 @@ function attachAntiRaidHooks(db?: any) {
         if (idx.byCase.size === 0) return;
 
         for (const m of messages) {
+          if (!m?.message || m?.key?.fromMe) continue;
           const rJid = String(m?.key?.remoteJid || "");
-          const senderJid = String(m?.key?.participant || m?.key?.remoteJid || "");
-          if (!senderJid || m?.key?.fromMe) continue;
+          const senderJid = String(
+            m?.key?.participant ||
+              (m?.key as any)?.participantPn ||
+              m?.key?.remoteJid ||
+              "",
+          );
+          if (!senderJid) continue;
 
-          const fastHit =
-            findBanByIdentity({
+          const fastBan = findBanByIdentity(
+            {
               jid: senderJid.endsWith("@s.whatsapp.net") ? senderJid : "",
               lid: senderJid.endsWith("@lid") ? senderJid : "",
-              phone: cleanDigits(senderJid),
-            }, senderJid);
+              phone: !senderJid.endsWith("@lid") ? cleanDigits(senderJid) : "",
+            },
+            senderJid,
+          );
 
-          if (!fastHit) continue;
+          if (!fastBan) continue;
 
-          // 1. Si está en un grupo protegido, expulsarlo de inmediato
-          if (rJid.endsWith("@g.us") && isGroupProtectionEnabled(rJid, db)) {
-            await enforceBanInGroupOnJoin(sock, rJid, [senderJid], db);
+          if (rJid.endsWith("@g.us") && isGroupProtectionEnabled(rJid)) {
+            void executeImmediateGroupAction(sock, rJid, fastBan, [senderJid], true);
           }
 
-          // 2. Bloquear ejecución de comandos en cualquier chat
-          const text = m?.message?.conversation || m?.message?.extendedTextMessage?.text || "";
-          if (/^[.!/#\\;,\\-]/.test(text.trim())) {
-            try {
-              if (rJid.endsWith("@g.us")) {
-                await sock.sendMessage(rJid, {
-                  text: `⛔ @${fastHit.phone.startsWith("LID_") ? cleanDigits(fastHit.lid) : fastHit.phone} Estás sancionado globalmente (Caso \`#${fastHit.caseId}\`). No tienes permiso para ejecutar comandos en esta red.`,
-                  mentions: [senderJid],
-                });
-              } else {
-                await sock.sendMessage(rJid, {
-                  text: `⛔ Sanción Global Activa (#${fastHit.caseId}): Tus comandos están bloqueados por violación de seguridad en Aura Reed.`,
-                });
+          const text = String(
+            m.message?.conversation ||
+              m.message?.extendedTextMessage?.text ||
+              m.message?.imageMessage?.caption ||
+              m.message?.videoMessage?.caption ||
+              "",
+          ).trim();
+
+          if (/^[.!/#\\;,\\-]/.test(text)) {
+            const cmdWord = text.slice(1).trim().split(/\s+/)[0]?.toLowerCase() || "";
+            const allowedForBanned =
+              cmdWord === "appeal" || cmdWord === "apelar" || cmdWord === "checkban";
+
+            if (!allowedForBanned) {
+              delete m.message.conversation;
+              delete m.message.extendedTextMessage;
+              delete m.message.imageMessage;
+              delete m.message.videoMessage;
+
+              const warnCmdKey = `cmdblock:${rJid}:${fastBan.caseId}`;
+              const now = Date.now();
+              if (now - (recentActionDebounce.get(warnCmdKey) || 0) > 12_000) {
+                recentActionDebounce.set(warnCmdKey, now);
+                void sock
+                  .sendMessage(rJid, {
+                    text:
+                      `⛔ *COMANDO BLOQUEADO POR ANTI-RAID*\n` +
+                      `Estás en la Lista Negra Global (Caso \`#${fastBan.caseId}\`).\n` +
+                      `• *Motivo:* ${fastBan.reason}\n` +
+                      `• Solo tienes permitido usar \`.appeal <pruebas>\` para apelar tu sanción.`,
+                    ...(rJid.endsWith("@g.us") ? { mentions: [senderJid] } : {}),
+                  })
+                  .catch(() => undefined);
               }
-            } catch {}
+            }
           }
         }
       } catch {}
@@ -1015,126 +1286,96 @@ function attachAntiRaidHooks(db?: any) {
   }
 }
 
+getMemIndex();
+attachAntiRaidHooks((globalThis as any).db);
+
 if (!gRaid.__auraAntiRaidInterval) {
   gRaid.__auraAntiRaidInterval = setInterval(() => {
     try {
       attachAntiRaidHooks((globalThis as any).db);
     } catch {}
-  }, 5000);
+  }, 2500);
   gRaid.__auraAntiRaidInterval.unref?.();
 }
 
 async function sweepAndKickAcrossNetwork(
-  sockets: any[],
+  primarySock: any,
   ban: GlobalBanRecord,
-  db?: any,
-): Promise<number> {
-  let totalKicked = 0;
+  currentGroupJid?: string,
+  currentTargetRaw?: string,
+): Promise<{ kickedGroups: number; warnedGroups: number }> {
+  const sockets = discoverAllActiveSockets(primarySock);
   const visitedGroups = new Set<string>();
-  const targetCleanPhone = ban.phone.startsWith("LID_") ? "" : ban.phone;
-  const targetCleanLid = cleanDigits(ban.lid);
+  let kickedGroups = 0;
+  let warnedGroups = 0;
 
-  for (const s of sockets) {
-    let participating: Record<string, any> = {};
-    try {
-      participating = (await s.groupFetchAllParticipating?.()) || {};
-    } catch {
-      continue;
-    }
+  if (currentGroupJid && currentGroupJid.endsWith("@g.us") && isGroupProtectionEnabled(currentGroupJid)) {
+    visitedGroups.add(currentGroupJid);
+    const res = await executeImmediateGroupAction(
+      primarySock,
+      currentGroupJid,
+      ban,
+      [currentTargetRaw || "", ban.lid, ban.jid].filter(Boolean),
+      true,
+    );
+    if (res === "kicked") kickedGroups++;
+    else if (res === "warned") warnedGroups++;
+  }
 
-    for (const [groupId, meta] of Object.entries(participating)) {
-      if (!groupId.endsWith("@g.us") || visitedGroups.has(groupId)) continue;
-      if (!isGroupProtectionEnabled(groupId, db)) continue;
+  const groupMap = new Map<string, any>();
 
-      const participants: any[] = meta?.participants || [];
-      const botId = jidNormalizedUser(s.user?.id || "");
-      const botLid = cleanDigits(s.user?.lid);
-
-      const botMember = participants.find((p) => {
-        const pId = jidNormalizedUser(p?.id || "");
-        const pLid = cleanDigits(p?.lid);
-        return pId === botId || (botLid && pLid === botLid);
-      });
-
-      const isBotAdmin =
-        botMember?.admin === "admin" || botMember?.admin === "superadmin";
-      if (!isBotAdmin) continue;
-
-      const targetMember = participants.find((p) => {
-        const pId = String(p?.id || "");
-        const pLid = String(p?.lid || (pId.endsWith("@lid") ? pId : ""));
-        const pPhone = cleanDigits(
-          p?.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""),
-        );
-        const pLidDigits = cleanDigits(pLid);
-
-        if (targetCleanPhone && pPhone === targetCleanPhone) return true;
-        if (targetCleanLid && pLidDigits === targetCleanLid) return true;
-        if (targetCleanPhone && cleanDigits(pId) === targetCleanPhone) return true;
-        return false;
-      });
-
-      if (!targetMember) continue;
-
-      const discoveredPn = normalizePhoneJid(
-        targetMember.phoneNumber ||
-          (String(targetMember.id || "").endsWith("@s.whatsapp.net") ? targetMember.id : ""),
-      );
-      const discoveredLid = normalizeLid(
-        targetMember.lid ||
-          (String(targetMember.id || "").endsWith("@lid") ? targetMember.id : ""),
-      );
-      linkMissingIdentityFields(ban, {
-        phone: discoveredPn.phone,
-        jid: discoveredPn.jid,
-        lid: discoveredLid,
-      });
-
-      const candidateJids = [targetMember.id, targetMember.lid].filter(Boolean);
-      let kickedHere = false;
-      for (const cJid of candidateJids) {
-        try {
-          await s.groupParticipantsUpdate(groupId, [cJid], "remove");
-          kickedHere = true;
-          break;
-        } catch {}
+  if (GROUP_METADATA_CACHE && typeof GROUP_METADATA_CACHE.entries === "function") {
+    for (const [gid, meta] of GROUP_METADATA_CACHE.entries()) {
+      if (gid.endsWith("@g.us") && meta?.participants) {
+        groupMap.set(gid, meta);
       }
-
-      if (!kickedHere) continue;
-
-      visitedGroups.add(groupId);
-      totalKicked++;
-
-      const displayTag = ban.phone.startsWith("LID_")
-        ? `@${cleanDigits(ban.lid)}`
-        : `@${ban.phone}`;
-
-      const groupNotice = [
-        `╭〔 🚨 ${fytBold("EXPULSIÓN GLOBAL ANTI-RAID")} 〕⬣`,
-        `┃ 👤 *Usuario:* ${displayTag}`,
-        `┃ 🆔 *Caso SQL:* \`#${ban.caseId}\``,
-        `┃ 📋 *Motivo:* ${ban.reason}`,
-        `┃ 👮 *Sancionado por:* ${ban.adminName}`,
-        `┃`,
-        `┃ 🛡️ *Eliminado permanentemente de todos los grupos protegidos por Aura Reed.*`,
-        `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
-      ].join("\n");
-
-      await s
-        .sendMessage(groupId, {
-          text: groupNotice,
-          mentions: candidateJids,
-        })
-        .catch(() => undefined);
     }
   }
 
-  if (totalKicked > 0) {
-    ban.kickedCount = (ban.kickedCount || 0) + totalKicked;
-    upsertBanInSql(ban);
+  await Promise.allSettled(
+    sockets.map(async (s) => {
+      try {
+        const fetched = await Promise.race([
+          s.groupFetchAllParticipating?.(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500)),
+        ]);
+        if (fetched && typeof fetched === "object") {
+          for (const [gid, meta] of Object.entries(fetched)) {
+            if (gid.endsWith("@g.us") && (meta as any)?.participants) {
+              groupMap.set(gid, meta);
+            }
+          }
+        }
+      } catch {}
+    }),
+  );
+
+  const groupTasks: Promise<void>[] = [];
+
+  for (const [groupId, meta] of groupMap.entries()) {
+    if (visitedGroups.has(groupId) || !isGroupProtectionEnabled(groupId)) continue;
+    const participants: any[] = meta?.participants || [];
+    const targetMember = findParticipantEntry(participants, ban.phone, ban.lid);
+    if (!targetMember) continue;
+
+    visitedGroups.add(groupId);
+    groupTasks.push(
+      (async () => {
+        const res = await executeImmediateGroupAction(
+          primarySock,
+          groupId,
+          ban,
+          [targetMember.id, targetMember.lid, ban.lid, ban.jid].filter(Boolean),
+          true,
+        );
+        if (res === "kicked") kickedGroups++;
+        else if (res === "warned") warnedGroups++;
+      })(),
+    );
   }
 
-  return totalKicked;
+  await Promise.allSettled(groupTasks);
+  return { kickedGroups, warnedGroups };
 }
 
 export default {
@@ -1154,15 +1395,14 @@ export default {
     "raidlist",
   ],
   category: "system",
-  description: "Sistema Global Anti-Raid con motor SQLite, detección dual JID/LID, bloqueo de comandos y barrido total de subbots.",
+  description: "Sistema Global Anti-Raid con motor SQLite, barrido instantáneo en bots/subbots, aviso sin admin y bloqueo de comandos.",
   groupOnly: false,
   ownerOnly: false,
 
   async run(ctx: CommandContext) {
     const { sock, from, sender, msg, args = [], usedPrefix, reply, react, isOwner, isAdmin, db, groupMeta } = ctx;
     const prefix = usedPrefix || ".";
-    getMemIndex();
-    attachAntiRaidHooks(db);
+    attachAntiRaidHooks(db, sock);
 
     const rawBody =
       msg?.message?.conversation ||
@@ -1194,14 +1434,15 @@ export default {
       Boolean(senderIdentity.jid && dbAny?.hasRole?.(senderIdentity.jid, "owner")) ||
       Boolean(senderIdentity.jid && dbAny?.hasRole?.(senderIdentity.jid, "mod"));
 
+    const context = msg?.message?.extendedTextMessage?.contextInfo;
+    const mentioned = context?.mentionedJid?.[0];
+    const quotedParticipant = context?.participant;
+
     if (invokedCmd === "checkban" || (invokedCmd === "antiraid" && args[0]?.toLowerCase() === "info")) {
-      const qRaw =
-        args[invokedCmd === "antiraid" ? 1 : 0] ||
-        msg?.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
-        msg?.message?.extendedTextMessage?.contextInfo?.participant ||
-        "";
+      const argToken = args[invokedCmd === "antiraid" ? 1 : 0] || "";
+      const qRaw = mentioned || quotedParticipant || argToken;
       if (!qRaw) {
-        return reply(`🔍 Indica un número, JID, LID o ID de caso.\n*Ejemplo:* \`${prefix}checkban 573001234567\``);
+        return reply(`🔍 Indica o cita a un usuario, número, LID o ID de caso.\n*Ejemplo:* \`${prefix}checkban 573001234567\``);
       }
       const qIdentity = await resolveFullIdentity(sock, db, qRaw, groupMeta || from);
       const ban = findBanByIdentity(qIdentity, qRaw);
@@ -1230,13 +1471,13 @@ export default {
       const ban = findBanByIdentity(senderIdentity, senderRaw);
       if (!ban) {
         return reply(
-          `✅ *No tienes sanciones activas*\nTu cuenta (Número/LID) no figura en la base de datos SQL de Lista Negra de Aura Reed.`,
+          `✅ *No tienes sanciones activas*\nTu cuenta (Número/LID) no figura en la Lista Negra de Aura Reed.`,
         );
       }
 
       if (ban.appealStatus === "rejected") {
         return reply(
-          `⛔ *Apelación Denegada Definitivamente*\nEl caso \`#${ban.caseId}\` ya fue revisado y rechazado por la administración de Aura Reed.`,
+          `⛔ *Apelación Denegada Definitivamente*\nEl caso \`#${ban.caseId}\` ya fue revisado y rechazado por la administración.`,
         );
       }
 
@@ -1248,7 +1489,7 @@ export default {
             `• *Motivo:* ${ban.reason}\n` +
             `• *Sancionado por:* ${ban.adminName}\n\n` +
             `Para enviar tu apelación escribe:\n` +
-            `\`${prefix}appeal <explicación detallada y enlaces de evidencia>\``,
+            `\`${prefix}appeal <explicación detallada y pruebas>\``,
         );
       }
 
@@ -1256,7 +1497,7 @@ export default {
       if (ban.lastAppealAt && now - ban.lastAppealAt < 15 * 60 * 1000) {
         const waitMin = Math.ceil((15 * 60 * 1000 - (now - ban.lastAppealAt)) / 60000);
         return reply(
-          `⏳ Ya tienes una apelación en cola. Espera *${waitMin} min* mientras el staff revisa las pruebas.`,
+          `⏳ Ya tienes una apelación en revisión. Espera *${waitMin} min* mientras el staff verifica las pruebas.`,
         );
       }
 
@@ -1314,7 +1555,7 @@ export default {
       await react("✅").catch(() => undefined);
       return reply(
         `✅ *Apelación registrada en SQL (Caso #${ban.caseId})*\n\n` +
-          `Tu solicitud fue enviada a los administradores de *Aura Reed*. Recibirás la respuesta en este chat privado.`,
+          `Tu solicitud fue enviada a los administradores de *Aura Reed*. Recibirás la resolución por mensaje privado.`,
       );
     }
 
@@ -1322,7 +1563,8 @@ export default {
       if (!isStaff) {
         return reply("⛔ Solo el staff global de Aura Reed puede denegar apelaciones.");
       }
-      const targetArg = args[0] || "";
+      const firstToken = String(args[0] || "").trim();
+      const targetArg = mentioned || quotedParticipant || firstToken;
       if (!targetArg) {
         return reply(`⚠️ Uso: \`${prefix}rejectappeal <número o #caso> <motivo de rechazo>\``);
       }
@@ -1333,13 +1575,15 @@ export default {
       }
 
       const rejectReason =
-        args.slice(1).join(" ").trim() || "Las pruebas aportadas no desvirtúan el reporte original.";
+        (mentioned || quotedParticipant ? args : args.slice(1)).join(" ").trim() ||
+        "Las pruebas aportadas no desvirtúan el reporte original.";
       ban.appealStatus = "rejected";
       upsertBanInSql(ban);
 
-      if (ban.jid && ban.jid.endsWith("@s.whatsapp.net")) {
+      const dmTarget = ban.jid.endsWith("@s.whatsapp.net") ? ban.jid : ban.lid;
+      if (dmTarget) {
         await sock
-          .sendMessage(ban.jid, {
+          .sendMessage(dmTarget, {
             text:
               `╭〔 ⛔ ${fytBold("APELACIÓN RECHAZADA")} 〕⬣\n` +
               `┃ 🆔 *Caso:* \`#${ban.caseId}\`\n` +
@@ -1373,23 +1617,23 @@ export default {
         await react("🔎").catch(() => undefined);
         const meta = await sock.groupMetadata(from);
         const participants = meta?.participants || [];
-        const kicked = await enforceBanInGroupOnJoin(sock, from, participants, db);
+        const { kicked, warned } = await inspectAndEnforceEntries(sock, from, participants, db);
         await react("✅").catch(() => undefined);
         return reply(
-          kicked > 0
-            ? `🛡️ *Escaneo SQL completado:* Se detectaron y expulsaron a *${kicked}* usuario(s) de la Lista Negra Global.`
-            : `✅ *Grupo limpio:* Ninguno de los ${participants.length} miembros actuales figura en la Lista Negra Global (JID/LID).`,
+          kicked > 0 || warned > 0
+            ? `🛡️ *Escaneo SQL completado:* Expulsados: *${kicked}* | Advertidos (sin admin): *${warned}*.`
+            : `✅ *Grupo limpio:* Ninguno de los ${participants.length} miembros actuales figura en la Lista Negra Global.`,
         );
       }
 
       if (sub === "status" || sub === "estado") {
-        const active = isGroupProtectionEnabled(from, db);
+        const active = isGroupProtectionEnabled(from);
         const totalBans = getMemIndex().byCase.size;
         return reply(
           `🛡️ *ESTADO ANTI-RAID SQL*\n\n` +
-            `• *Protección en este grupo:* ${active ? "✅ ACTIVA" : "❌ DESACTIVADA"}\n` +
+            `• *Protección en este grupo:* ${active ? "✅ ACTIVA (Persistente)" : "❌ DESACTIVADA"}\n` +
             `• *Sancionados en Base SQL:* ${totalBans}\n` +
-            `• *Detección:* Número + JID + LID cruzado\n\n` +
+            `• *Sockets Vigilando:* ${discoverAllActiveSockets(sock).length}\n\n` +
             `Usa \`${prefix}antiraid scan\` para escanear a los miembros actuales.`,
         );
       }
@@ -1400,14 +1644,14 @@ export default {
       if (enable) {
         try {
           const meta = await sock.groupMetadata(from);
-          await enforceBanInGroupOnJoin(sock, from, meta?.participants || [], db);
+          await inspectAndEnforceEntries(sock, from, meta?.participants || [], db);
         } catch {}
       }
 
       return reply(
         enable
-          ? `🛡️ *Anti-Raid SQL Activado:* El bot verificará el Número, JID y LID de cada persona que ingrese y expulsará a cualquier sancionado global.`
-          : `⚠️ *Anti-Raid Desactivado:* Este grupo ya no expulsará automáticamente a los usuarios de la lista negra.`,
+          ? `🛡️ *Anti-Raid SQL Activado y Guardado:* El estado quedó persistido en disco/SQL (no se apagará al reiniciar).`
+          : `⚠️ *Anti-Raid Desactivado en este grupo:* Estado guardado en SQL/disco.`,
       );
     }
 
@@ -1440,11 +1684,17 @@ export default {
         return reply("⛔ Solo los administradores globales de Aura Reed pueden retirar sanciones de la base SQL.");
       }
 
-      const context = msg?.message?.extendedTextMessage?.contextInfo;
-      const rawTarget = args[0] || context?.mentionedJid?.[0] || context?.participant || "";
+      const firstArg = String(args[0] || "").trim();
+      const isFirstArgId =
+        /^#?AR-[A-Z0-9]+$/i.test(firstArg) ||
+        firstArg.endsWith("@s.whatsapp.net") ||
+        firstArg.endsWith("@lid") ||
+        /^\+?\d{7,15}$/.test(firstArg.replace(/[-()\s]/g, ""));
+
+      const rawTarget = mentioned || quotedParticipant || (isFirstArgId ? firstArg : "");
       if (!rawTarget) {
         return reply(
-          `⚠️ Indica el número, LID, mención o código de caso (\`#AR-...\`).\n*Ejemplo:* \`${prefix}ungban 573001234567\``,
+          `⚠️ Responde al mensaje del usuario, menciónalo o indica su número/código de caso (\`#AR-...\`).\n*Ejemplo:* \`${prefix}ungban 573001234567\``,
         );
       }
 
@@ -1463,14 +1713,15 @@ export default {
         `┃ 👤 *Usuario:* +${existing.phone}`,
         `┃ 👮 *Absuelto por:* ${msg?.pushName || "Staff Aura Reed"}`,
         `┃`,
-        `┃ ✨ *Tu registro fue eliminado de la Lista Negra SQL (Número, JID y LID). Ya puedes volver a ingresar a todos los grupos de Aura Reed.*`,
+        `┃ ✨ *Tu registro fue eliminado de la Lista Negra SQL (Número, JID y LID). Ya puedes usar comandos y volver a ingresar a todos los grupos de Aura Reed.*`,
         `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
       ].join("\n");
 
-      if (existing.jid && existing.jid.endsWith("@s.whatsapp.net")) {
-        await sendRichOrFallback(
+      const dmRecipient = existing.jid.endsWith("@s.whatsapp.net") ? existing.jid : existing.lid;
+      if (dmRecipient) {
+        void sendRichOrFallback(
           sock,
-          existing.jid,
+          dmRecipient,
           `✅ BANEO RETIRADO // #${existing.caseId}`,
           "Acceso restaurado en toda la red Aura Reed",
           {
@@ -1508,9 +1759,6 @@ export default {
       );
     }
 
-    const context = msg?.message?.extendedTextMessage?.contextInfo;
-    const mentioned = context?.mentionedJid?.[0];
-    const quotedParticipant = context?.participant;
     const firstToken = String(args[0] || "").trim();
     const isFirstArgTarget =
       firstToken.endsWith("@s.whatsapp.net") ||
@@ -1532,7 +1780,7 @@ export default {
       );
     }
 
-    await react("🚨").catch(() => undefined);
+    void react("🚨").catch(() => undefined);
 
     const targetIdentity = await resolveFullIdentity(sock, db, rawTarget, groupMeta || from);
     if (!targetIdentity.phone && !targetIdentity.lid) {
@@ -1586,8 +1834,12 @@ export default {
       addStaffInboxSql(senderIdentity.jid);
     }
 
-    const allSockets = getAllActiveSockets(sock);
-    const kickedGroups = await sweepAndKickAcrossNetwork(allSockets, record, db);
+    const { kickedGroups, warnedGroups } = await sweepAndKickAcrossNetwork(
+      sock,
+      record,
+      from.endsWith("@g.us") ? from : undefined,
+      rawTarget,
+    );
 
     const dmText = [
       `╭〔 🚨 ${fytBold("NOTIFICACIÓN DE BANEO GLOBAL")} 〕⬣`,
@@ -1608,7 +1860,7 @@ export default {
 
     const dmRecipient = record.jid.endsWith("@s.whatsapp.net") ? record.jid : record.lid;
     if (dmRecipient) {
-      await sendRichOrFallback(
+      void sendRichOrFallback(
         sock,
         dmRecipient,
         `🚨 BANEO GLOBAL // #${record.caseId}`,
@@ -1642,6 +1894,7 @@ export default {
       `┃ 📋 *Motivo:* ${record.reason}`,
       `┃ 👮 *Ejecutor:* ${record.adminName}`,
       `┃ 🏰 *Expulsado de:* ${kickedGroups} grupo(s) en vivo`,
+      ...(warnedGroups > 0 ? [`┃ ⚠️ *Alertados (sin admin):* ${warnedGroups} grupo(s)`] : []),
       `┃ 📩 *Notificación DM:* Enviada con opción a \`.appeal\``,
       `╰━━〔 ⚡ ${fytBold("AURA REED SQL")} 〕━━⬣`,
     ].join("\n");
@@ -1650,7 +1903,7 @@ export default {
       sock,
       from,
       `🛡️ BANEO SQL EJECUTADO // #${record.caseId}`,
-      `Expulsado de ${kickedGroups} grupo(s) • JID & LID bloqueados`,
+      `Expulsado de ${kickedGroups} grupo(s) • Alertados: ${warnedGroups}`,
       {
         mode: "GLOBAL_REPORT",
         badgeText: "OBJETIVO REGISTRADO EN SQL",
@@ -1662,10 +1915,10 @@ export default {
         reason: record.reason,
         adminName: record.adminName,
         dateStr: record.dateStr,
-        extraLabel: "Grupos Limpiados",
-        extraValue: `${kickedGroups} grupo(s)`,
+        extraLabel: "Red Procesada",
+        extraValue: `${kickedGroups} kick / ${warnedGroups} warn`,
         footerNote:
-          "El usuario quedó indexado en SQLite por Número, JID y LID. Cualquier intento de ingreso futuro será bloqueado en el acto.",
+          "El usuario quedó bloqueado de todos los comandos y grupos en SQLite + espejo en disco. Donde el bot no sea admin se envió alerta al grupo.",
         copyCommand: `${prefix}ungban ${record.caseId}`,
         copyLabel: "🔓 Copiar .ungban",
         rawSummary: reportText,
