@@ -430,13 +430,9 @@ export default {
   name: ["wip", "whatsip", "sacip", "ip"],
   category: "system",
   description: "Señuelo de IP: envía un DM y, al abrirlo, te llega su IP y ubicación. Solo premium y owners.",
+  premiumOnly: true,
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
-
-    if (!(await allowed(ctx))) {
-      await reply(`🔒 *${fytBold("Solo premium")}* — este comando es exclusivo de premium y owners.`).catch(() => undefined);
-      return;
-    }
 
     const info: any = (msg.message as any)?.extendedTextMessage?.contextInfo || {};
     const requester: string = (msg.key as any).participant || from;
