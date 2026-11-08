@@ -976,22 +976,38 @@ function attachAntiRaidHooks(db?: any) {
 
         for (const m of messages) {
           const rJid = String(m?.key?.remoteJid || "");
-          if (!rJid.endsWith("@g.us") || m?.key?.fromMe) continue;
-          if (idx.disabledGroups.has(rJid)) continue;
-
-          const participant = String(m?.key?.participant || "");
-          const altParticipant = String((m?.key as any)?.participantPn || (m as any)?.participant || "");
-          if (!participant && !altParticipant) continue;
+          const senderJid = String(m?.key?.participant || m?.key?.remoteJid || "");
+          if (!senderJid || m?.key?.fromMe) continue;
 
           const fastHit =
             findBanByIdentity({
-              jid: participant.endsWith("@s.whatsapp.net") ? participant : altParticipant,
-              lid: participant.endsWith("@lid") ? participant : "",
-              phone: cleanDigits(participant.endsWith("@s.whatsapp.net") ? participant : altParticipant),
-            }) || findBanByIdentity({}, participant);
+              jid: senderJid.endsWith("@s.whatsapp.net") ? senderJid : "",
+              lid: senderJid.endsWith("@lid") ? senderJid : "",
+              phone: cleanDigits(senderJid),
+            }, senderJid);
 
-          if (fastHit) {
-            await enforceBanInGroupOnJoin(sock, rJid, [participant], db);
+          if (!fastHit) continue;
+
+          // 1. Si está en un grupo protegido, expulsarlo de inmediato
+          if (rJid.endsWith("@g.us") && isGroupProtectionEnabled(rJid, db)) {
+            await enforceBanInGroupOnJoin(sock, rJid, [senderJid], db);
+          }
+
+          // 2. Bloquear ejecución de comandos en cualquier chat
+          const text = m?.message?.conversation || m?.message?.extendedTextMessage?.text || "";
+          if (/^[.!/#\\;,\\-]/.test(text.trim())) {
+            try {
+              if (rJid.endsWith("@g.us")) {
+                await sock.sendMessage(rJid, {
+                  text: `⛔ @${fastHit.phone.startsWith("LID_") ? cleanDigits(fastHit.lid) : fastHit.phone} Estás sancionado globalmente (Caso \`#${fastHit.caseId}\`). No tienes permiso para ejecutar comandos en esta red.`,
+                  mentions: [senderJid],
+                });
+              } else {
+                await sock.sendMessage(rJid, {
+                  text: `⛔ Sanción Global Activa (#${fastHit.caseId}): Tus comandos están bloqueados por violación de seguridad en Aura Reed.`,
+                });
+              }
+            } catch {}
           }
         }
       } catch {}
@@ -1004,7 +1020,7 @@ if (!gRaid.__auraAntiRaidInterval) {
     try {
       attachAntiRaidHooks((globalThis as any).db);
     } catch {}
-  }, 6000);
+  }, 5000);
   gRaid.__auraAntiRaidInterval.unref?.();
 }
 
@@ -1013,7 +1029,7 @@ async function sweepAndKickAcrossNetwork(
   ban: GlobalBanRecord,
   db?: any,
 ): Promise<number> {
-  let kickedGroupsCount = 0;
+  let totalKicked = 0;
   const visitedGroups = new Set<string>();
   const targetCleanPhone = ban.phone.startsWith("LID_") ? "" : ban.phone;
   const targetCleanLid = cleanDigits(ban.lid);
@@ -1087,7 +1103,7 @@ async function sweepAndKickAcrossNetwork(
       if (!kickedHere) continue;
 
       visitedGroups.add(groupId);
-      kickedGroupsCount++;
+      totalKicked++;
 
       const displayTag = ban.phone.startsWith("LID_")
         ? `@${cleanDigits(ban.lid)}`
@@ -1113,12 +1129,12 @@ async function sweepAndKickAcrossNetwork(
     }
   }
 
-  if (kickedGroupsCount > 0) {
-    ban.kickedCount = (ban.kickedCount || 0) + kickedGroupsCount;
+  if (totalKicked > 0) {
+    ban.kickedCount = (ban.kickedCount || 0) + totalKicked;
     upsertBanInSql(ban);
   }
 
-  return kickedGroupsCount;
+  return totalKicked;
 }
 
 export default {
@@ -1138,7 +1154,7 @@ export default {
     "raidlist",
   ],
   category: "system",
-  description: "Sistema Global Anti-Raid con motor SQLite, detección dual JID/LID, auto-kick y apelaciones.",
+  description: "Sistema Global Anti-Raid con motor SQLite, detección dual JID/LID, bloqueo de comandos y barrido total de subbots.",
   groupOnly: false,
   ownerOnly: false,
 
@@ -1512,8 +1528,7 @@ export default {
           `• *Desbanear:* \`${prefix}ungban <número/lid/#caso>\`\n` +
           `• *Rechazar apelación:* \`${prefix}rejectappeal <#caso> <motivo>\`\n` +
           `• *Expediente SQL:* \`${prefix}checkban <número/lid/#caso>\`\n` +
-          `• *Lista negra:* \`${prefix}raidlist\`\n` +
-          `• *Escaneo en grupo:* \`${prefix}antiraid scan\``,
+          `• *Lista negra:* \`${prefix}raidlist\``,
       );
     }
 
