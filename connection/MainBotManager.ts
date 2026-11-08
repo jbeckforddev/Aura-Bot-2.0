@@ -9,7 +9,7 @@ import makeWASocket, {
 } from "baileys";
 import chalk from "chalk";
 import { mkdir, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import qrcodeTerminal from "qrcode-terminal";
@@ -54,6 +54,56 @@ const mainMessagesCache = new LRUCache<string, proto.IMessage>({
   max: 1500,
   ttl: 15 * 60 * 1000,
 });
+
+function validSessionDbMtime(directory: string): number {
+  try {
+    const stats = statSync(path.join(directory, "session.db"));
+    return stats.isFile() && stats.size > 0 ? stats.mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function resolveMainSessionDirectory(sessionName: string): string {
+  const sessionRoot = path.resolve(
+    globalThis.mainBotSession ?? "./sessions",
+  );
+  const preferred = path.join(sessionRoot, sessionName);
+  if (validSessionDbMtime(preferred) > 0) return preferred;
+
+  if (validSessionDbMtime(sessionRoot) > 0) {
+    logInfo(
+      `Credenciales principales antiguas encontradas directamente en ${sessionRoot}.`,
+      "info",
+    );
+    return sessionRoot;
+  }
+
+  try {
+    const candidates = readdirSync(sessionRoot, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          !["subs", "prem"].includes(entry.name.toLowerCase()),
+      )
+      .map((entry) => {
+        const directory = path.join(sessionRoot, entry.name);
+        return { directory, mtime: validSessionDbMtime(directory) };
+      })
+      .filter((candidate) => candidate.mtime > 0)
+      .sort((a, b) => b.mtime - a.mtime);
+
+    if (candidates[0]) {
+      logInfo(
+        `Sesión principal recuperada desde ${candidates[0].directory}.`,
+        "info",
+      );
+      return candidates[0].directory;
+    }
+  } catch {}
+
+  return preferred;
+}
 
 let waWebVersionPromise: Promise<[number, number, number]> | undefined;
 let waWebVersionExpiresAt = 0;
@@ -283,11 +333,8 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
   connectionsInProgress.add(sessionName);
 
   let authState: Awaited<ReturnType<typeof useSQLiteAuthState>>;
-  const sessionDir = path.resolve(
-    globalThis.mainBotSession ?? "./sessions",
-    sessionName,
-  );
-  const hasSavedSession = existsSync(path.join(sessionDir, "session.db"));
+  const sessionDir = resolveMainSessionDirectory(sessionName);
+  const hasSavedSession = validSessionDbMtime(sessionDir) > 0;
 
   try {
     logInfo(

@@ -30,6 +30,7 @@ import {
   unregisterActiveBot,
 } from "./activeBotRegistry.ts";
 import {
+  findStoredSessionNames,
   moveBotSessionDirectory,
   removeBotSessionDirectories,
 } from "./sessionStorage.ts";
@@ -1177,6 +1178,23 @@ export async function startSavedSubBots() {
       botType: isPremium ? "Prem-Bot" : "Sub-Bot",
       ...(premiumToken ? { premiumToken } : {}),
     });
+  }
+
+  const storedSessions = await findStoredSessionNames(SESSION_ROOT, "sub");
+  for (const sessionName of storedSessions) {
+    if (
+      seenSessions.has(sessionName) ||
+      activeSubBots.has(sessionName) ||
+      pendingRequests.has(sessionName)
+    ) {
+      continue;
+    }
+    seenSessions.add(sessionName);
+    sessionsToStart.push({ sessionName, botType: "Sub-Bot" });
+    logInfo(
+      `Sesión ${sessionName} recuperada desde disco sin registro en la base de datos.`,
+      "info",
+    );
   }
 
   logInfo(`Iniciando ${sessionsToStart.length} sub-bot(s) guardado(s).`, "info");

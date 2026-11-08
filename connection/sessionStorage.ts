@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { existsSync, statSync, type Dirent } from "node:fs";
+import { cp, mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 export type BotSessionType = "Prem-Bot" | "Sub-Bot";
@@ -51,6 +51,29 @@ function getValidSessionDbMtime(dirPath: string): number {
   } catch {
     return 0;
   }
+}
+
+export async function findStoredSessionNames(
+  root: string,
+  prefix: "sub" | "prem",
+): Promise<string[]> {
+  const resolvedRoot = path.resolve(root);
+  let entries: Dirent<string>[];
+  try {
+    entries = await readdir(resolvedRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name.toLowerCase().startsWith(`${prefix}-`) &&
+        getValidSessionDbMtime(path.join(resolvedRoot, entry.name)) > 0,
+    )
+    .map((entry) => entry.name)
+    .sort();
 }
 
 async function safeMoveDirectory(source: string, destination: string): Promise<void> {

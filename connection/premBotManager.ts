@@ -39,6 +39,7 @@ import {
   unregisterActiveBot,
 } from "./activeBotRegistry.ts";
 import {
+  findStoredSessionNames,
   moveBotSessionDirectory,
   removeBotSessionDirectories,
 } from "./sessionStorage.ts";
@@ -1022,6 +1023,7 @@ export async function syncPremiumBotTypes(): Promise<void> {
 
 export async function startSavedPremBots(): Promise<void> {
   const records = db.getAllBots();
+  const seenSessions = new Set<string>();
   for (const bot of records) {
     if (bot.isMain || !bot.data?.premiumToken) continue;
     const storedSessionName = String(
@@ -1045,6 +1047,7 @@ export async function startSavedPremBots(): Promise<void> {
       storedSessionName,
       isPremium ? "prem" : "sub",
     );
+    seenSessions.add(sessionName);
     if (ACTIVE_PREM_BOTS.has(sessionName)) continue;
 
     const expectedType = isPremium ? "Prem-Bot" : "Sub-Bot";
@@ -1091,6 +1094,35 @@ export async function startSavedPremBots(): Promise<void> {
       });
     } catch (error) {
       logInfo(`No se pudo iniciar Prem-Bot guardado ${sessionName}: ${String(error)}`, "error");
+    }
+  }
+
+  const storedSessions = await findStoredSessionNames(SESSION_ROOT, "prem");
+  for (const sessionName of storedSessions) {
+    if (seenSessions.has(sessionName) || ACTIVE_PREM_BOTS.has(sessionName)) {
+      continue;
+    }
+    logInfo(
+      `Sesión ${sessionName} recuperada desde disco sin registro en la base de datos.`,
+      "info",
+    );
+    const accountId = sessionName.replace(/^prem-/i, "");
+    const premiumToken = getPremiumTokens().find(
+      (token) =>
+        token.expiresAt > Date.now() &&
+        isPremiumTokenValidForAccount(token.id, [accountId, `phone:${accountId}`]),
+    )?.id;
+    try {
+      await connectPremBot(sessionName, {
+        allowPairing: false,
+        botType: "Prem-Bot",
+        ...(premiumToken ? { premiumToken } : {}),
+      });
+    } catch (error) {
+      logInfo(
+        `No se pudo restaurar la sesión descubierta ${sessionName}: ${String(error)}`,
+        "error",
+      );
     }
   }
 }
