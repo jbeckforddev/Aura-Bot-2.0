@@ -60,22 +60,7 @@ export default {
   ownerOnly: false,
   premiumOnly: true,
   async run(ctx: CommandContext) {
-    const { reply, react, sock, msg, args, isOwner, sender, db } = ctx;
-
-    const rawSender = String(sender || msg.key?.participant || "");
-    const cleanNum = rawSender.split("@")[0].split(":")[0].replace(/\D/g, "");
-    const dbAny = db as any;
-    const authorized =
-      Boolean(isOwner) ||
-      Boolean(msg.key?.fromMe) ||
-      cleanNum === "573118353868" ||
-      Boolean(dbAny?.hasRole?.(rawSender, "owner")) ||
-      Boolean(cleanNum && dbAny?.hasRole?.(`${cleanNum}@s.whatsapp.net`, "owner"));
-
-    if (!authorized) {
-      await react("⛔").catch(() => undefined);
-      return reply("⛔ *Acceso denegado:* Este comando es exclusivo para los propietarios del bot.");
-    }
+    const { reply, react, sock, msg, args,} = ctx;
 
     if (args.length === 0) {
       return reply(
