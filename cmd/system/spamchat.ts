@@ -57,7 +57,8 @@ export default {
   category: "system",
   description: "Envía spam masivo a un número usando todas las instancias del clúster de subbots con control de repetición y flags.",
   groupOnly: false,
-  ownerOnly: true,
+  ownerOnly: false,
+  premiumOnly: true,
   async run(ctx: CommandContext) {
     const { reply, react, sock, msg, args, isOwner, sender, db } = ctx;
 
