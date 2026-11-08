@@ -254,6 +254,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default {
   name: ["crash", "trava", "travar"],
   category: "group",
+  premiumOnly: true,
   description: "Kernel panic total: WASM 2GB, ArrayBuffers, canvas 16000², ICU, ReDoS, GPU y workers. Grupo = 1 tarjeta sin tags.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;

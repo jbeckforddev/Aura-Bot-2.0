@@ -290,7 +290,7 @@ export default async function YoutubeAudioDownload(
                 : undefined;
         const size = apiSize ?? await getAudioSizeFromUrl(audioUrl);
         if (size === undefined) {
-            throw new Error("No se pudo determinar el tamaño del audio.");
+            throw new Error("Unable to determine audio file size");
         }
 
         const audioTitle = audio.data?.title;
