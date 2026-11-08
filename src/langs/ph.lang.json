@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Inaayos ang pansamantalang mensahe ng grupo.",
+  "tempMsgDurationOne": "1 araw",
+  "tempMsgDurationMany": "{{days}} araw",
+  "tempMsgDisabled": "Naka-off",
+  "tempMsgHelp": "╭〔 ⏳ PANSAMANTALANG MENSAHE 〕⬣\n┃ ⚙️ MGA SETTING\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 KASALUKUYANG STATUS 〕━⬣\n\n┃ ⏱️ Tagal › {{current}}\n\n┣━━〔 🕒 MGA TAGAL 〕━⬣\n\n┃ ✦ `1d` › 1 araw\n┃ ✦ `7d` › 7 araw\n┃ ✦ `90d` › 90 araw\n┃ ✦ `off` › I-off\n\n┃ > Halimbawa: `{{prefix}}tempmsg 7d`\n┃ > I-off: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DI-WASTONG TAGAL 〕⬣\n┃ ❌ Hindi available ang tagal na iyon.\n╰━━━━━━━━━━━━⬣\n\n┃ > Gamitin: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ NA-UPDATE ANG SETTING 〕⬣\n┃ ⏳ PANSAMANTALANG MENSAHE\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ HINDI Natagpuan ang utos\n╰━━━━━━━━━━━━⬣\n┃ > Ang command na `{{cmdName}}` ay wala\n┃ > o mali ang spelling.\n┃ > Patakbuhin ang `{{prefix}}menu` para makita\n┃ > ang mga available na command.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ COMMAND ERROR\n╰━━━━━━━━━━━━⬣\n┃ > May naganap na error habang tumatakbo\n┃ > ang command na `{{cmdName}}`.\n\n> Mga detalye ng error:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ TINANGGI ANG PAHINTULOT\n╰━━━━━━━━━━━━⬣\n┃ > Magagamit lang ang command na ito\n┃ > kapag ang bot ay isang administrator ng grupo.",

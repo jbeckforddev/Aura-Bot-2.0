@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configurează mesajele temporare ale grupului.",
+  "tempMsgDurationOne": "1 zi",
+  "tempMsgDurationMany": "{{days}} zile",
+  "tempMsgDisabled": "Dezactivate",
+  "tempMsgHelp": "╭〔 ⏳ MESAJE TEMPORARE 〕⬣\n┃ ⚙️ CONFIGURARE\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 STARE CURENTĂ 〕━⬣\n\n┃ ⏱️ Durată › {{current}}\n\n┣━━〔 🕒 DURATE 〕━⬣\n\n┃ ✦ `1d` › 1 zi\n┃ ✦ `7d` › 7 zile\n┃ ✦ `90d` › 90 zile\n┃ ✦ `off` › Dezactivează\n\n┃ > Exemplu: `{{prefix}}tempmsg 7d`\n┃ > Dezactivează: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURATĂ INVALIDĂ 〕⬣\n┃ ❌ Această durată nu este disponibilă.\n╰━━━━━━━━━━━━⬣\n\n┃ > Folosește: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ CONFIGURARE ACTUALIZATĂ 〕⬣\n┃ ⏳ MESAJE TEMPORARE\n┃ ⚙️ Stare › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ COMANDA NU A GĂSIT\n╰━━━━━━━━━━━━⬣\n┃ > Comanda `{{cmdName}}` nu există\n┃ > sau este scris greșit.\n┃ > Rulați `{{prefix}}menu` pentru a vedea\n┃ > comenzile disponibile.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ EROARE DE COMANDĂ\n╰━━━━━━━━━━━━⬣\n┃ > A apărut o eroare în timpul rulării\n┃ > comanda `{{cmdName}}`.\n\n> Detalii despre eroare:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ PERMISIUNEA REFISATĂ\n╰━━━━━━━━━━━━⬣\n┃ > Această comandă poate fi utilizată numai\n┃ > când botul este administrator de grup.",

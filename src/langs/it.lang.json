@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configura i messaggi effimeri del gruppo.",
+  "tempMsgDurationOne": "1 giorno",
+  "tempMsgDurationMany": "{{days}} giorni",
+  "tempMsgDisabled": "Disattivati",
+  "tempMsgHelp": "╭〔 ⏳ MESSAGGI EFFIMERI 〕⬣\n┃ ⚙️ CONFIGURAZIONE\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 STATO ATTUALE 〕━⬣\n\n┃ ⏱️ Durata › {{current}}\n\n┣━━〔 🕒 DURATE 〕━⬣\n\n┃ ✦ `1d` › 1 giorno\n┃ ✦ `7d` › 7 giorni\n┃ ✦ `90d` › 90 giorni\n┃ ✦ `off` › Disattiva\n\n┃ > Esempio: `{{prefix}}tempmsg 7d`\n┃ > Disattiva: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURATA NON VALIDA 〕⬣\n┃ ❌ Questa durata non è disponibile.\n╰━━━━━━━━━━━━⬣\n\n┃ > Usa: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ CONFIGURAZIONE AGGIORNATA 〕⬣\n┃ ⏳ MESSAGGI EFFIMERI\n┃ ⚙️ Stato › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ COMANDO NON TROVATO\n╰━━━━━━━━━━━━⬣\n┃ > Il comando `{{cmdName}}` non esiste\n┃ > o è scritto in modo errato.\n┃ > Esegui `{{prefix}}menu` per vedere\n┃ > i comandi disponibili.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ ERRORE COMANDO\n╰━━━━━━━━━━━━⬣\n┃ > Si è verificato un errore durante l'esecuzione\n┃ > il comando `{{cmdName}}`.\n\n> Dettagli errore:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ AUTORIZZAZIONE NEGATA\n╰━━━━━━━━━━━━⬣\n┃ > Questo comando può essere utilizzato solo\n┃ > quando il bot è un amministratore di gruppo.",

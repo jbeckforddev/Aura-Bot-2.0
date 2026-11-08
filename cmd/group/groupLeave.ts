@@ -2,7 +2,7 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
-  name: ["groupleave", "leavegroup", "salirgrupo"],
+  name: ["groupleave", "leavegroup", "salirgrupo", "abandonargrupo", "salir", "leave", "abandonar"],
   category: "group",
   description: t("groupLeaveDescription"),
   groupOnly: true,

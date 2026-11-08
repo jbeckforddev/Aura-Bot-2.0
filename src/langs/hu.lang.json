@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Beállítja a csoport eltűnő üzeneteit.",
+  "tempMsgDurationOne": "1 nap",
+  "tempMsgDurationMany": "{{days}} nap",
+  "tempMsgDisabled": "Kikapcsolva",
+  "tempMsgHelp": "╭〔 ⏳ ELTŰNŐ ÜZENETEK 〕⬣\n┃ ⚙️ BEÁLLÍTÁSOK\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 JELENLEGI ÁLLAPOT 〕━⬣\n\n┃ ⏱️ Időtartam › {{current}}\n\n┣━━〔 🕒 IDŐTARTAMOK 〕━⬣\n\n┃ ✦ `1d` › 1 nap\n┃ ✦ `7d` › 7 nap\n┃ ✦ `90d` › 90 nap\n┃ ✦ `off` › Kikapcsolás\n\n┃ > Példa: `{{prefix}}tempmsg 7d`\n┃ > Kikapcsolás: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ ÉRVÉNYTELEN IDŐTARTAM 〕⬣\n┃ ❌ Ez az időtartam nem érhető el.\n╰━━━━━━━━━━━━⬣\n\n┃ > Használd: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ BEÁLLÍTÁSOK FRISSÍTVE 〕⬣\n┃ ⏳ ELTŰNŐ ÜZENETEK\n┃ ⚙️ Állapot › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ A PARANCS NEM TALÁLHATÓ\n╰━━━━━━━━━━━━⬣\n┃ > A `{{cmdName}}` parancs nem létezik\n┃ > vagy hibásan van írva.\n┃ > Futtassa a `{{prefix}}menu` parancsot a megtekintéséhez\n┃ > az elérhető parancsokat.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ PARANCSHIBA\n╰━━━━━━━━━━━━⬣\n┃ > Hiba történt futás közben\n┃ > a `{{cmdName}}` parancsot.\n\n> Hiba részletei:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ ENGEDÉLY MEGTAGADVA\n╰━━━━━━━━━━━━⬣\n┃ > Ez a parancs csak akkor használható\n┃ > ha a bot csoportadminisztrátor.",

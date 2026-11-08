@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Stelt tijdelijke berichten voor de groep in.",
+  "tempMsgDurationOne": "1 dag",
+  "tempMsgDurationMany": "{{days}} dagen",
+  "tempMsgDisabled": "Uitgeschakeld",
+  "tempMsgHelp": "╭〔 ⏳ TIJDELIJKE BERICHTEN 〕⬣\n┃ ⚙️ INSTELLINGEN\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 HUIDIGE STATUS 〕━⬣\n\n┃ ⏱️ Duur › {{current}}\n\n┣━━〔 🕒 DUUR 〕━⬣\n\n┃ ✦ `1d` › 1 dag\n┃ ✦ `7d` › 7 dagen\n┃ ✦ `90d` › 90 dagen\n┃ ✦ `off` › Uitschakelen\n\n┃ > Voorbeeld: `{{prefix}}tempmsg 7d`\n┃ > Uitschakelen: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ ONGELDIGE DUUR 〕⬣\n┃ ❌ Deze duur is niet beschikbaar.\n╰━━━━━━━━━━━━⬣\n\n┃ > Gebruik: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ INSTELLINGEN BIJGEWERKT 〕⬣\n┃ ⏳ TIJDELIJKE BERICHTEN\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ OPDRACHT NIET GEVONDEN\n╰━━━━━━━━━━━━⬣\n┃ > Het commando `{{cmdName}}` bestaat niet\n┃ > of is verkeerd gespeld.\n┃ > Voer `{{prefix}}menu` uit om te zien\n┃ > de beschikbare commando's.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ OPDRACHTFOUT\n╰━━━━━━━━━━━━⬣\n┃ > Er is een fout opgetreden tijdens het hardlopen\n┃ > het commando `{{cmdName}}`.\n\n> Foutdetails:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ TOESTEMMING GEWEIGERD\n╰━━━━━━━━━━━━⬣\n┃ > Dit commando kan alleen worden gebruikt\n┃ > wanneer de bot een groepsbeheerder is.",

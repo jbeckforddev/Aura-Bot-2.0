@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Konfiguruje wiadomości tymczasowe grupy.",
+  "tempMsgDurationOne": "1 dzień",
+  "tempMsgDurationMany": "{{days}} dni",
+  "tempMsgDisabled": "Wyłączone",
+  "tempMsgHelp": "╭〔 ⏳ WIADOMOŚCI TYMCZASOWE 〕⬣\n┃ ⚙️ USTAWIENIA\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 OBECNY STAN 〕━⬣\n\n┃ ⏱️ Czas › {{current}}\n\n┣━━〔 🕒 CZASY TRWANIA 〕━⬣\n\n┃ ✦ `1d` › 1 dzień\n┃ ✦ `7d` › 7 dni\n┃ ✦ `90d` › 90 dni\n┃ ✦ `off` › Wyłącz\n\n┃ > Przykład: `{{prefix}}tempmsg 7d`\n┃ > Wyłącz: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ NIEPRAWIDŁOWY CZAS 〕⬣\n┃ ❌ Ten czas jest niedostępny.\n╰━━━━━━━━━━━━⬣\n\n┃ > Użyj: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ USTAWIENIA ZAKTUALIZOWANE 〕⬣\n┃ ⏳ WIADOMOŚCI TYMCZASOWE\n┃ ⚙️ Stan › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ NIE ZNALEZIONO POLECENIA\n╰━━━━━━━━━━━━⬣\n┃ > Polecenie `{{cmdName}}` nie istnieje\n┃ > lub jest błędnie napisane.\n┃ > Uruchom `{{prefix}}menu`, aby zobaczyć\n┃ > dostępne polecenia.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ BŁĄD POLECENIA\n╰━━━━━━━━━━━━⬣\n┃ > Wystąpił błąd podczas pracy\n┃ > polecenie `{{cmdName}}`.\n\n> Szczegóły błędu:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ ODMOWA ZEZWOLENIA\n╰━━━━━━━━━━━━⬣\n┃ > Tego polecenia można użyć tylko\n┃ > gdy bot jest administratorem grupy.",

@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "그룹의 임시 메시지를 설정합니다.",
+  "tempMsgDurationOne": "1 일",
+  "tempMsgDurationMany": "{{days}} 일",
+  "tempMsgDisabled": "꺼짐",
+  "tempMsgHelp": "╭〔 ⏳ 임시 메시지 〕⬣\n┃ ⚙️ 설정\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 현재 상태 〕━⬣\n\n┃ ⏱️ 기간 › {{current}}\n\n┣━━〔 🕒 기간 목록 〕━⬣\n\n┃ ✦ `1d` › 1 일\n┃ ✦ `7d` › 7 일\n┃ ✦ `90d` › 90 일\n┃ ✦ `off` › 끄기\n\n┃ > 예시: `{{prefix}}tempmsg 7d`\n┃ > 끄기: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ 잘못된 기간 〕⬣\n┃ ❌ 해당 기간은 사용할 수 없습니다.\n╰━━━━━━━━━━━━⬣\n\n┃ > 사용 가능: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ 설정 업데이트 완료 〕⬣\n┃ ⏳ 임시 메시지\n┃ ⚙️ 상태 › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED}⬣\n┃ ❌ 명령을 찾을 수 없습니다\n╰━━━━━━━━━━━━━⬣\n┃ > `{{cmdName}}` 명령이 존재하지 않습니다\n┃ > 또는 철자가 틀렸습니다.\n┃ > `{{prefix}}menu`를 실행하여 확인하세요.\n┃ > 사용 가능한 명령.",
   "commandError": "╭〔 ⚠️ AURA REED}⬣\n┃ ❌ 명령 오류\n╰━━━━━━━━━━━━━⬣\n┃ > 실행 중 오류가 발생했습니다.\n┃ > `{{cmdName}}` 명령.\n\n> 오류 세부정보:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED}⬣\n┃ ❌ 권한이 거부되었습니다\n╰━━━━━━━━━━━━━⬣\n┃ > 이 명령은 다음과 같은 경우에만 사용할 수 있습니다.\n┃ > 봇이 그룹 관리자인 경우.",

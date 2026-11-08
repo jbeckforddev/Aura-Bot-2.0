@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Cấu hình tin nhắn tạm thời của nhóm.",
+  "tempMsgDurationOne": "1 ngày",
+  "tempMsgDurationMany": "{{days}} ngày",
+  "tempMsgDisabled": "Đã tắt",
+  "tempMsgHelp": "╭〔 ⏳ TIN NHẮN TẠM THỜI 〕⬣\n┃ ⚙️ CÀI ĐẶT\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 TRẠNG THÁI HIỆN TẠI 〕━⬣\n\n┃ ⏱️ Thời hạn › {{current}}\n\n┣━━〔 🕒 THỜI HẠN 〕━⬣\n\n┃ ✦ `1d` › 1 ngày\n┃ ✦ `7d` › 7 ngày\n┃ ✦ `90d` › 90 ngày\n┃ ✦ `off` › Tắt\n\n┃ > Ví dụ: `{{prefix}}tempmsg 7d`\n┃ > Tắt: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ THỜI HẠN KHÔNG HỢP LỆ 〕⬣\n┃ ❌ Thời hạn đó không khả dụng.\n╰━━━━━━━━━━━━⬣\n\n┃ > Sử dụng: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ ĐÃ CẬP NHẬT CÀI ĐẶT 〕⬣\n┃ ⏳ TIN NHẮN TẠM THỜI\n┃ ⚙️ Trạng thái › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ KHÔNG TÌM THẤY LỆNH\n╰━━━━━━━━━━━━⬣\n┃ > Lệnh `{{cmdName}}` không tồn tại\n┃ > hoặc sai chính tả.\n┃ > Chạy `{{prefix}}menu` để xem\n┃ > các lệnh có sẵn.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ LỖI LỆNH\n╰━━━━━━━━━━━━⬣\n┃ > Đã xảy ra lỗi khi chạy\n┃ > lệnh `{{cmdName}}`.\n\n> Chi tiết lỗi:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ GIẤY PHÉP TỪ CHỐI\n╰━━━━━━━━━━━━⬣\n┃ > Lệnh này chỉ có thể được sử dụng\n┃ > khi bot là quản trị viên nhóm.",

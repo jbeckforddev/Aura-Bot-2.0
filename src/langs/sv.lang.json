@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Konfigurerar gruppens tillfälliga meddelanden.",
+  "tempMsgDurationOne": "1 dag",
+  "tempMsgDurationMany": "{{days}} dagar",
+  "tempMsgDisabled": "Inaktiverade",
+  "tempMsgHelp": "╭〔 ⏳ TILLFÄLLIGA MEDDELANDEN 〕⬣\n┃ ⚙️ INSTÄLLNINGAR\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 AKTUELL STATUS 〕━⬣\n\n┃ ⏱️ Varaktighet › {{current}}\n\n┣━━〔 🕒 VARAKTIGHETER 〕━⬣\n\n┃ ✦ `1d` › 1 dag\n┃ ✦ `7d` › 7 dagar\n┃ ✦ `90d` › 90 dagar\n┃ ✦ `off` › Inaktivera\n\n┃ > Exempel: `{{prefix}}tempmsg 7d`\n┃ > Inaktivera: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ OGILTIG VARAKTIGHET 〕⬣\n┃ ❌ Den varaktigheten är inte tillgänglig.\n╰━━━━━━━━━━━━⬣\n\n┃ > Använd: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ INSTÄLLNINGAR UPPDATERADE 〕⬣\n┃ ⏳ TILLFÄLLIGA MEDDELANDEN\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ KOMMANDO HITTER INTE\n╰━━━━━━━━━━━━⬣\n┃ > Kommandot `{{cmdName}}` finns inte\n┃ > eller är felstavad.\n┃ > Kör `{{prefix}}menu` för att se\n┃ > tillgängliga kommandon.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ KOMMANDOFEL\n╰━━━━━━━━━━━━⬣\n┃ > Ett fel uppstod under körningen\n┃ > kommandot `{{cmdName}}`.\n\n> Feldetaljer:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ TILLSTÅND NEJS\n╰━━━━━━━━━━━━⬣\n┃ > Detta kommando kan endast användas\n┃ > när boten är en gruppadministratör.",

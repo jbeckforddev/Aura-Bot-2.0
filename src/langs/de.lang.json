@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Konfiguriert selbstlöschende Nachrichten der Gruppe.",
+  "tempMsgDurationOne": "1 Tag",
+  "tempMsgDurationMany": "{{days}} Tage",
+  "tempMsgDisabled": "Deaktiviert",
+  "tempMsgHelp": "╭〔 ⏳ SELBSTLÖSCHENDE NACHRICHTEN 〕⬣\n┃ ⚙️ EINSTELLUNGEN\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 AKTUELLER STATUS 〕━⬣\n\n┃ ⏱️ Dauer › {{current}}\n\n┣━━〔 🕒 ZEITRÄUME 〕━⬣\n\n┃ ✦ `1d` › 1 Tag\n┃ ✦ `7d` › 7 Tage\n┃ ✦ `90d` › 90 Tage\n┃ ✦ `off` › Deaktivieren\n\n┃ > Beispiel: `{{prefix}}tempmsg 7d`\n┃ > Deaktivieren: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ UNGÜLTIGE DAUER 〕⬣\n┃ ❌ Diese Dauer ist nicht verfügbar.\n╰━━━━━━━━━━━━⬣\n\n┃ > Verwende: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ EINSTELLUNGEN AKTUALISIERT 〕⬣\n┃ ⏳ SELBSTLÖSCHENDE NACHRICHTEN\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ BEFEHL NICHT GEFUNDEN\n╰━━━━━━━━━━━━⬣\n┃ > Der Befehl `{{cmdName}}` existiert nicht\n┃ > oder ist falsch geschrieben.\n┃ > Führen Sie `{{prefix}}menu` aus, um zu sehen\n┃ > die verfügbaren Befehle.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ BEFEHLSFEHLER\n╰━━━━━━━━━━━━⬣\n┃ > Beim Ausführen ist ein Fehler aufgetreten\n┃ > der Befehl `{{cmdName}}`.\n\n> Fehlerdetails:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ ERLAUBNIS VERWEIGERT\n╰━━━━━━━━━━━━⬣\n┃ > Dieser Befehl kann nur verwendet werden\n┃ > wenn der Bot ein Gruppenadministrator ist.",

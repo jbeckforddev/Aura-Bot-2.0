@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Nastaví dočasné zprávy skupiny.",
+  "tempMsgDurationOne": "1 den",
+  "tempMsgDurationMany": "{{days}} dní",
+  "tempMsgDisabled": "Vypnuto",
+  "tempMsgHelp": "╭〔 ⏳ DOČASNÉ ZPRÁVY 〕⬣\n┃ ⚙️ NASTAVENÍ\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 AKTUÁLNÍ STAV 〕━⬣\n\n┃ ⏱️ Doba › {{current}}\n\n┣━━〔 🕒 DOBY TRVÁNÍ 〕━⬣\n\n┃ ✦ `1d` › 1 den\n┃ ✦ `7d` › 7 dní\n┃ ✦ `90d` › 90 dní\n┃ ✦ `off` › Vypnout\n\n┃ > Příklad: `{{prefix}}tempmsg 7d`\n┃ > Vypnout: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ NEPLATNÁ DOBA 〕⬣\n┃ ❌ Tato doba není dostupná.\n╰━━━━━━━━━━━━⬣\n\n┃ > Použij: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ NASTAVENÍ AKTUALIZOVÁNO 〕⬣\n┃ ⏳ DOČASNÉ ZPRÁVY\n┃ ⚙️ Stav › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ PŘÍKAZ NENÍ NALEZEN\n╰━━━━━━━━━━━━⬣\n┃ > Příkaz `{{cmdName}}` neexistuje\n┃ > nebo je špatně napsáno.\n┃ > Pro zobrazení spusťte `{{prefix}}menu`\n┃ > dostupné příkazy.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ CHYBA PŘÍKAZU\n╰━━━━━━━━━━━━⬣\n┃ > Při běhu došlo k chybě\n┃ > příkaz `{{cmdName}}`.\n\n> Podrobnosti o chybě:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ POVOLENÍ ZAMÍTNUTO\n╰━━━━━━━━━━━━⬣\n┃ > Tento příkaz lze použít pouze\n┃ > když je robot správcem skupiny.",

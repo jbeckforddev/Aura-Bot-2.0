@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configure the group's disappearing messages.",
+  "tempMsgDurationOne": "1 day",
+  "tempMsgDurationMany": "{{days}} days",
+  "tempMsgDisabled": "Disabled",
+  "tempMsgHelp": "╭〔 ⏳ DISAPPEARING MESSAGES 〕⬣\n┃ ⚙️ SETTINGS\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 CURRENT STATUS 〕━⬣\n\n┃ ⏱️ Duration › {{current}}\n\n┣━━〔 🕒 DURATIONS 〕━⬣\n\n┃ ✦ `1d` › 1 day\n┃ ✦ `7d` › 7 days\n┃ ✦ `90d` › 90 days\n┃ ✦ `off` › Disable\n\n┃ > Example: `{{prefix}}tempmsg 7d`\n┃ > Disable: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ INVALID DURATION 〕⬣\n┃ ❌ That duration is not available.\n╰━━━━━━━━━━━━⬣\n\n┃ > Use: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ SETTINGS UPDATED 〕⬣\n┃ ⏳ DISAPPEARING MESSAGES\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "groupLeaveDescription": "Make the bot leave the current group.",
   "groupLeaveConfirm": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐓𝐇𝐄 𝐁𝐎𝐓 𝐖𝐈𝐋𝐋 𝐋𝐄𝐀𝐕𝐄 𝐓𝐇𝐄 𝐆𝐑𝐎𝐔𝐏\n╰━━━━━━━━━━━━⬣\n┃ > The bot is leaving this group at the owner's request.",
   "commandNotFound": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐍𝐎𝐓 𝐅𝐎𝐔𝐍𝐃\n╰━━━━━━━━━━━━⬣\n┃ > The command `{{cmdName}}` does not exist\n┃ > or is misspelled.\n┃ > Run `{{prefix}}menu` to see\n┃ > the available commands.",

@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configure les messages éphémères du groupe.",
+  "tempMsgDurationOne": "1 jour",
+  "tempMsgDurationMany": "{{days}} jours",
+  "tempMsgDisabled": "Désactivés",
+  "tempMsgHelp": "╭〔 ⏳ MESSAGES ÉPHÉMÈRES 〕⬣\n┃ ⚙️ CONFIGURATION\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 ÉTAT ACTUEL 〕━⬣\n\n┃ ⏱️ Durée › {{current}}\n\n┣━━〔 🕒 DURÉES 〕━⬣\n\n┃ ✦ `1d` › 1 jour\n┃ ✦ `7d` › 7 jours\n┃ ✦ `90d` › 90 jours\n┃ ✦ `off` › Désactiver\n\n┃ > Exemple: `{{prefix}}tempmsg 7d`\n┃ > Désactiver: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURÉE INVALIDE 〕⬣\n┃ ❌ Cette durée n'est pas disponible.\n╰━━━━━━━━━━━━⬣\n\n┃ > Utilisez: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ CONFIGURATION MISE À JOUR 〕⬣\n┃ ⏳ MESSAGES ÉPHÉMÈRES\n┃ ⚙️ État › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ COMMANDE INTROUVABLE\n╰━━━━━━━━━━━━⬣\n┃ > La commande `{{cmdName}}` n'existe pas\n┃ > ou est mal orthographié.\n┃ > Exécutez `{{prefix}}menu` pour voir\n┃ > les commandes disponibles.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ ERREUR DE COMMANDE\n╰━━━━━━━━━━━━⬣\n┃ > Une erreur s'est produite lors de l'exécution\n┃ > la commande `{{cmdName}}`.\n\n> Détails de l'erreur :\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ AUTORISATION REFUSÉE\n╰━━━━━━━━━━━━⬣\n┃ > Cette commande ne peut être utilisée que\n┃ > lorsque le bot est administrateur de groupe.",

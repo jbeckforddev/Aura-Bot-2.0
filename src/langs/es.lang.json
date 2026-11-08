@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configura los mensajes temporales del grupo.",
+  "tempMsgDurationOne": "1 día",
+  "tempMsgDurationMany": "{{days}} días",
+  "tempMsgDisabled": "Desactivados",
+  "tempMsgHelp": "╭〔 ⏳ MENSAJES TEMPORALES 〕⬣\n┃ ⚙️ CONFIGURACIÓN\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 ESTADO ACTUAL 〕━⬣\n\n┃ ⏱️ Duración › {{current}}\n\n┣━━〔 🕒 DURACIONES 〕━⬣\n\n┃ ✦ `1d` › 1 día\n┃ ✦ `7d` › 7 días\n┃ ✦ `90d` › 90 días\n┃ ✦ `off` › Desactivar\n\n┃ > Ejemplo: `{{prefix}}tempmsg 7d`\n┃ > Desactivar: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURACIÓN INVÁLIDA 〕⬣\n┃ ❌ Esa duración no está disponible.\n╰━━━━━━━━━━━━⬣\n\n┃ > Usa: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ CONFIGURACIÓN ACTUALIZADA 〕⬣\n┃ ⏳ MENSAJES TEMPORALES\n┃ ⚙️ Estado › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "groupLeaveDescription": "Hace que el bot salga del grupo actual.",
   "groupLeaveConfirm": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐄𝐋 𝐁𝐎𝐓 𝐒𝐀𝐋𝐃𝐑Á 𝐃𝐄𝐋 𝐆𝐑𝐔𝐏𝐎\n╰━━━━━━━━━━━━⬣\n┃ > El bot abandonará este grupo por solicitud del propietario.",
   "commandNotFound": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎\n╰━━━━━━━━━━━━⬣\n┃ > El comando `{{cmdName}}` no existe\n┃ > o está mal escrito.\n┃ > Ejecuta `{{prefix}}menu` para ver\n┃ > los comandos disponibles.",

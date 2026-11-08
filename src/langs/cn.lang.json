@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "配置群组的临时消息。",
+  "tempMsgDurationOne": "1 天",
+  "tempMsgDurationMany": "{{days}} 天",
+  "tempMsgDisabled": "已关闭",
+  "tempMsgHelp": "╭〔 ⏳ 临时消息 〕⬣\n┃ ⚙️ 设置\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 当前状态 〕━⬣\n\n┃ ⏱️ 时长 › {{current}}\n\n┣━━〔 🕒 可选时长 〕━⬣\n\n┃ ✦ `1d` › 1 天\n┃ ✦ `7d` › 7 天\n┃ ✦ `90d` › 90 天\n┃ ✦ `off` › 关闭\n\n┃ > 示例: `{{prefix}}tempmsg 7d`\n┃ > 关闭: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ 无效时长 〕⬣\n┃ ❌ 该时长不可用。\n╰━━━━━━━━━━━━⬣\n\n┃ > 请使用: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ 设置已更新 〕⬣\n┃ ⏳ 临时消息\n┃ ⚙️ 状态 › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ 未找到命令\n╰──────────────────────⬣\n┃ > 命令`{{cmdName}}`不存在\n┃ > 或 拼写错误。\n┃ > 运行 `{{prefix}}menu` 查看\n┃ > 可用命令。",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ 命令错误\n╰──────────────────────⬣\n┃ > 运行时出错\n┃ > 命令`{{cmdName}}`。\n\n> 错误详细信息：\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ 权限被拒绝\n╰──────────────────────⬣\n┃ > 该命令只能使用\n┃ > 当机器人是群组管理员时。",

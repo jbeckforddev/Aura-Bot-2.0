@@ -196,24 +196,31 @@ export default {
       const group = pluginsByCategory.get(cat) || [];
       if (!group.length) continue;
 
-      textoMenu += t("cmd_value0_a58a457f", { value0: fytBold(String(cat).charAt(0).toUpperCase() + String(cat).slice(1)) });
+      textoMenu += t("cmd_value0_a58a457f", { value0: fytBold(String(cat).toUpperCase()) });
 
       for (const cmd of group.sort((a, b) =>
         String(a.name?.[0] ?? "").localeCompare(String(b.name?.[0] ?? "")),
       )) {
         const names = Array.isArray(cmd.name) ? cmd.name : [cmd.name];
-        const visibleNames = cmd.showAllNames ? names : names.slice(0, 1);
+        const visibleNames = cmd.showAllNames ? names : names.slice(0, 3);
 
-        for (const alias of visibleNames) {
-          textoMenu += t("cmd_value0_5c5b5a03", { value0: fytBold(t("cmd_value0_value1_6bbfd3cf", { value0: activePrefix, value1: String(alias) })) });
+        const commandNames = visibleNames
+          .map((alias) =>
+              t("cmd_value0_value1_6bbfd3cf", {
+                value0: `\`${activePrefix}`,
+                value1: `${String(alias)}\``,
+              }),
+            )
+          .join(" › ");
 
-          if (Array.isArray(cmd.description)) {
-            const description = cmd.description[names.indexOf(alias)];
-            if (description) {
-              textoMenu += t("cmd_value0_d9d88ac0", {
-                value0: translateText(description),
-              });
-            }
+        textoMenu += t("cmd_value0_5c5b5a03", { value0: commandNames });
+
+        if (Array.isArray(cmd.description)) {
+          const description = cmd.description[names.indexOf(names[0])] || cmd.description[0];
+          if (description) {
+            textoMenu += t("cmd_value0_d9d88ac0", {
+              value0: translateText(description),
+            });
           }
         }
 

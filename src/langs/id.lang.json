@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Mengatur pesan sementara grup.",
+  "tempMsgDurationOne": "1 hari",
+  "tempMsgDurationMany": "{{days}} hari",
+  "tempMsgDisabled": "Dinonaktifkan",
+  "tempMsgHelp": "╭〔 ⏳ PESAN SEMENTARA 〕⬣\n┃ ⚙️ PENGATURAN\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 STATUS SAAT INI 〕━⬣\n\n┃ ⏱️ Durasi › {{current}}\n\n┣━━〔 🕒 DURASI 〕━⬣\n\n┃ ✦ `1d` › 1 hari\n┃ ✦ `7d` › 7 hari\n┃ ✦ `90d` › 90 hari\n┃ ✦ `off` › Nonaktifkan\n\n┃ > Contoh: `{{prefix}}tempmsg 7d`\n┃ > Nonaktifkan: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURASI TIDAK VALID 〕⬣\n┃ ❌ Durasi tersebut tidak tersedia.\n╰━━━━━━━━━━━━⬣\n\n┃ > Gunakan: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ PENGATURAN DIPERBARUI 〕⬣\n┃ ⏳ PESAN SEMENTARA\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ PERINTAH TIDAK DITEMUKAN\n╰━━━━━━━━━━━━⬣\n┃ > Perintah `{{cmdName}}` tidak ada\n┃ > atau salah eja.\n┃ > Jalankan `{{prefix}}menu` untuk melihatnya\n┃ > perintah yang tersedia.",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ KESALAHAN PERINTAH\n╰━━━━━━━━━━━━⬣\n┃ > Terjadi kesalahan saat berjalan\n┃ > perintah `{{cmdName}}`.\n\n> Detail kesalahan:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ IZIN DITOLAK\n╰━━━━━━━━━━━━⬣\n┃ > Perintah ini hanya dapat digunakan\n┃ > bila bot adalah administrator grup.",

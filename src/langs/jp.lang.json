@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "グループの一時メッセージを設定します。",
+  "tempMsgDurationOne": "1 日",
+  "tempMsgDurationMany": "{{days}} 日",
+  "tempMsgDisabled": "無効",
+  "tempMsgHelp": "╭〔 ⏳ 一時メッセージ 〕⬣\n┃ ⚙️ 設定\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 現在の状態 〕━⬣\n\n┃ ⏱️ 期間 › {{current}}\n\n┣━━〔 🕒 期間一覧 〕━⬣\n\n┃ ✦ `1d` › 1 日\n┃ ✦ `7d` › 7 日\n┃ ✦ `90d` › 90 日\n┃ ✦ `off` › 無効化\n\n┃ > 例: `{{prefix}}tempmsg 7d`\n┃ > 無効化: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ 無効な期間 〕⬣\n┃ ❌ その期間は利用できません。\n╰━━━━━━━━━━━━⬣\n\n┃ > 使用可能: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ 設定を更新しました 〕⬣\n┃ ⏳ 一時メッセージ\n┃ ⚙️ 状態 › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ コマンドが見つかりません\n╰━━━━━━━━━━━━⬣\n┃ > コマンド `{{cmdName}}` は存在しません\n┃ > または のスペルが間違っています。\n┃ > `{{prefix}}menu` を実行して確認してください\n┃ > 使用可能なコマンド。",
   "commandError": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ コマンドエラー\n╰━━━━━━━━━━━━⬣\n┃ > 実行中にエラーが発生しました\n┃ > コマンド `{{cmdName}}`。\n\n> エラーの詳細:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ AURA REED〕⬣\n┃ ❌ 許可が拒否されました\n╰━━━━━━━━━━━━⬣\n┃ > このコマンドはのみ使用できます\n┃ > ボットがグループ管理者の場合。",

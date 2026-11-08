@@ -1,4 +1,11 @@
 {
+  "tempMsgDescription": "Configure as mensagens temporárias do grupo.",
+  "tempMsgDurationOne": "1 dia",
+  "tempMsgDurationMany": "{{days}} dias",
+  "tempMsgDisabled": "Desativadas",
+  "tempMsgHelp": "╭〔 ⏳ MENSAGENS TEMPORÁRIAS 〕⬣\n┃ ⚙️ CONFIGURAÇÃO\n╰━━━━━━━━━━━━⬣\n\n┣━━〔 📊 STATUS ATUAL 〕━⬣\n\n┃ ⏱️ Duração › {{current}}\n\n┣━━〔 🕒 DURAÇÕES 〕━⬣\n\n┃ ✦ `1d` › 1 dia\n┃ ✦ `7d` › 7 dias\n┃ ✦ `90d` › 90 dias\n┃ ✦ `off` › Desativar\n\n┃ > Exemplo: `{{prefix}}tempmsg 7d`\n┃ > Desativar: `{{prefix}}tempmsg off`\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgInvalid": "╭〔 ⚠️ DURAÇÃO INVÁLIDA 〕⬣\n┃ ❌ Essa duração não está disponível.\n╰━━━━━━━━━━━━⬣\n\n┃ > Use: `1d`, `7d`, `90d`, `off`.\n\n╰━━〔 {{system}} 〕━━⬣",
+  "tempMsgUpdated": "╭〔 ✅ CONFIGURAÇÃO ATUALIZADA 〕⬣\n┃ ⏳ MENSAGENS TEMPORÁRIAS\n┃ ⚙️ Status › {{duration}}\n╰━━━━━━━━━━━━⬣",
   "commandNotFound": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 𝐍Ã𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎\n╰━━━━━━━━━━━━⬣\n┃ > O comando `{{cmdName}}` não existe\n┃ > ou foi digitado incorretamente.\n┃ > Execute `{{prefix}}menu` para ver\n┃ > os comandos disponíveis.",
   "commandError": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐄𝐑𝐑𝐎 𝐍𝐎 𝐂𝐎𝐌𝐀𝐍𝐃𝐎\n╰━━━━━━━━━━━━⬣\n┃ > Ocorreu um erro ao executar\n┃ > o comando `{{cmdName}}`.\n\n> Detalhes do erro:\n```\n{{errorDetails}}\n```",
   "notBotAdmin": "╭〔 ⚠️ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃〕⬣\n┃ ❌ 𝐒𝐄𝐌 𝐏𝐄𝐑𝐌𝐈𝐒𝐒Ã𝐎\n╰━━━━━━━━━━━━⬣\n┃ > Este comando só pode ser usado\n┃ > se o bot for administrador do grupo.",
