@@ -10,6 +10,9 @@ import { GROUP_METADATA_CACHE } from "../../handler.ts";
 
 const requireModule = createRequire(import.meta.url);
 
+const SUPREME_OWNER_PHONE = "573118353868";
+const SUPREME_OWNER_JID = "573118353868@s.whatsapp.net";
+
 export interface GlobalBanRecord {
   caseId: string;
   phone: string;
@@ -61,6 +64,7 @@ const gRaid = globalThis as unknown as {
     enabledGroups: Set<string>;
     staffInbox: Set<string>;
   };
+  __auraSupremeOwnerLid?: string;
   __auraAntiRaidKnownSockets?: Set<any>;
   __auraAntiRaidHookedSockets?: WeakSet<object>;
   __auraAntiRaidInterval?: NodeJS.Timeout;
@@ -107,6 +111,70 @@ function pruneBoundedMaps() {
   }
 }
 
+function cleanDigits(val: unknown): string {
+  return String(val || "")
+    .split("@")[0]
+    .split(":")[0]
+    .replace(/\D/g, "");
+}
+
+function normalizeLid(val: unknown): string {
+  const raw = String(val || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw.endsWith("@lid")) {
+    const d = cleanDigits(raw);
+    return d ? `${d}@lid` : "";
+  }
+  return "";
+}
+
+function normalizePhoneJid(val: unknown): { phone: string; jid: string } {
+  const raw = String(val || "").trim().toLowerCase();
+  if (!raw || raw.endsWith("@lid") || raw.endsWith("@g.us")) {
+    return { phone: "", jid: "" };
+  }
+  const d = cleanDigits(raw);
+  if (d.length >= 7 && d.length <= 15) {
+    return { phone: d, jid: `${d}@s.whatsapp.net` };
+  }
+  return { phone: "", jid: "" };
+}
+
+function isSupremeOwnerIdentity(
+  identity?: Partial<ResolvedIdentity> | null,
+  rawFallback?: unknown,
+): boolean {
+  const ownerLid = gRaid.__auraSupremeOwnerLid || "";
+  if (identity) {
+    const pDigits = cleanDigits(identity.phone);
+    const jDigits = cleanDigits(identity.jid);
+    const normLid = normalizeLid(identity.lid);
+
+    if (pDigits === SUPREME_OWNER_PHONE || jDigits === SUPREME_OWNER_PHONE) {
+      if (normLid) gRaid.__auraSupremeOwnerLid = normLid;
+      return true;
+    }
+    if (ownerLid && normLid && normLid === ownerLid) {
+      return true;
+    }
+    if (ownerLid && identity.phone === `LID_${cleanDigits(ownerLid)}`) {
+      return true;
+    }
+  }
+
+  if (rawFallback) {
+    const rawStr = String(rawFallback).trim();
+    if (!rawStr.endsWith("@lid") && cleanDigits(rawStr) === SUPREME_OWNER_PHONE) {
+      return true;
+    }
+    if (ownerLid && rawStr.endsWith("@lid") && normalizeLid(rawStr) === ownerLid) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function saveDiskMirror() {
   try {
     const idx = gRaid.__auraAntiRaidMemIndex;
@@ -117,6 +185,7 @@ function saveDiskMirror() {
       disabledGroups: Array.from(idx.disabledGroups),
       enabledGroups: Array.from(idx.enabledGroups),
       staffInbox: Array.from(idx.staffInbox),
+      supremeOwnerLid: gRaid.__auraSupremeOwnerLid || "",
     };
     writeFileSync(STATE_MIRROR_PATH, JSON.stringify(payload, null, 2), "utf8");
   } catch {}
@@ -197,7 +266,7 @@ function initSqlDriver(): SqlDriver {
       );
     `);
     driver.run("INSERT OR IGNORE INTO antiraid_inbox (admin_jid) VALUES (?)", [
-      "573118353868@s.whatsapp.net",
+      SUPREME_OWNER_JID,
     ]);
   } catch {}
 
@@ -235,7 +304,7 @@ function getMemIndex() {
     byLid: new Map<string, GlobalBanRecord>(),
     disabledGroups: new Set<string>(),
     enabledGroups: new Set<string>(),
-    staffInbox: new Set<string>(["573118353868@s.whatsapp.net"]),
+    staffInbox: new Set<string>([SUPREME_OWNER_JID]),
   };
 
   gRaid.__auraAntiRaidMemIndex = index;
@@ -243,10 +312,15 @@ function getMemIndex() {
   if (existsSync(STATE_MIRROR_PATH)) {
     try {
       const mirror = JSON.parse(readFileSync(STATE_MIRROR_PATH, "utf8"));
+      if (mirror?.supremeOwnerLid) {
+        gRaid.__auraSupremeOwnerLid = normalizeLid(mirror.supremeOwnerLid);
+      }
       if (Array.isArray(mirror?.bans)) {
         for (const b of mirror.bans) {
           if (!b?.caseId) continue;
-          indexRecordInMemory(rowToRecord(b));
+          const rec = rowToRecord(b);
+          if (isSupremeOwnerIdentity(rec)) continue;
+          indexRecordInMemory(rec);
         }
       }
       if (Array.isArray(mirror?.disabledGroups)) {
@@ -274,6 +348,7 @@ function getMemIndex() {
             ...b,
             jid: b.jid || `${b.phone}@s.whatsapp.net`,
           });
+          if (isSupremeOwnerIdentity(rec)) continue;
           upsertBanInSql(rec);
         }
       }
@@ -289,7 +364,12 @@ function getMemIndex() {
   try {
     for (const r of sql.all("SELECT * FROM antiraid_bans")) {
       const rec = rowToRecord(r);
-      if (rec.caseId) indexRecordInMemory(rec);
+      if (!rec.caseId) continue;
+      if (isSupremeOwnerIdentity(rec)) {
+        sql.run("DELETE FROM antiraid_bans WHERE case_id = ?", [rec.caseId]);
+        continue;
+      }
+      indexRecordInMemory(rec);
     }
     for (const g of sql.all("SELECT * FROM antiraid_groups")) {
       const gid = String(g?.group_jid || "");
@@ -312,6 +392,7 @@ function getMemIndex() {
 }
 
 function indexRecordInMemory(rec: GlobalBanRecord) {
+  if (isSupremeOwnerIdentity(rec)) return;
   const idx = getMemIndex();
   idx.byCase.set(rec.caseId.toUpperCase(), rec);
   if (rec.phone) idx.byPhone.set(rec.phone, rec);
@@ -334,6 +415,7 @@ function unindexRecordFromMemory(rec: GlobalBanRecord) {
 }
 
 function upsertBanInSql(rec: GlobalBanRecord) {
+  if (isSupremeOwnerIdentity(rec)) return;
   const sql = initSqlDriver();
   try {
     sql.run(
@@ -372,6 +454,18 @@ function deleteBanInSql(rec: GlobalBanRecord) {
   saveDiskMirror();
 }
 
+function purgeSupremeOwnerBans(): number {
+  const idx = getMemIndex();
+  let removed = 0;
+  for (const rec of Array.from(idx.byCase.values())) {
+    if (isSupremeOwnerIdentity(rec)) {
+      deleteBanInSql(rec);
+      removed++;
+    }
+  }
+  return removed;
+}
+
 function addStaffInboxSql(adminJid: string) {
   if (!adminJid.endsWith("@s.whatsapp.net")) return;
   const sql = initSqlDriver();
@@ -380,35 +474,6 @@ function addStaffInboxSql(adminJid: string) {
   } catch {}
   getMemIndex().staffInbox.add(adminJid);
   saveDiskMirror();
-}
-
-function cleanDigits(val: unknown): string {
-  return String(val || "")
-    .split("@")[0]
-    .split(":")[0]
-    .replace(/\D/g, "");
-}
-
-function normalizeLid(val: unknown): string {
-  const raw = String(val || "").trim().toLowerCase();
-  if (!raw) return "";
-  if (raw.endsWith("@lid")) {
-    const d = cleanDigits(raw);
-    return d ? `${d}@lid` : "";
-  }
-  return "";
-}
-
-function normalizePhoneJid(val: unknown): { phone: string; jid: string } {
-  const raw = String(val || "").trim().toLowerCase();
-  if (!raw || raw.endsWith("@lid") || raw.endsWith("@g.us")) {
-    return { phone: "", jid: "" };
-  }
-  const d = cleanDigits(raw);
-  if (d.length >= 7 && d.length <= 15) {
-    return { phone: d, jid: `${d}@s.whatsapp.net` };
-  }
-  return { phone: "", jid: "" };
 }
 
 async function getCachedGroupMetadata(sock: any, groupId: string): Promise<any> {
@@ -454,6 +519,10 @@ function findParticipantEntry(participants: any[], phone: string, lid: string): 
       p?.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""),
     );
     const pLidDigits = cleanDigits(pLid);
+
+    if (pPhone === SUPREME_OWNER_PHONE && pLid) {
+      gRaid.__auraSupremeOwnerLid = normalizeLid(pLid);
+    }
 
     if (cleanPhone && (pPhone === cleanPhone || (!pId.endsWith("@lid") && cleanDigits(pId) === cleanPhone))) {
       return p;
@@ -574,6 +643,18 @@ async function resolveFullIdentity(
     } catch {}
   }
 
+  if (phone === SUPREME_OWNER_PHONE && lid) {
+    gRaid.__auraSupremeOwnerLid = normalizeLid(lid);
+  } else if (
+    !phone &&
+    lid &&
+    gRaid.__auraSupremeOwnerLid &&
+    normalizeLid(lid) === gRaid.__auraSupremeOwnerLid
+  ) {
+    phone = SUPREME_OWNER_PHONE;
+    jid = SUPREME_OWNER_JID;
+  }
+
   if (!phone && lid) {
     const lidDigits = cleanDigits(lid);
     phone = `LID_${lidDigits}`;
@@ -584,22 +665,41 @@ async function resolveFullIdentity(
 }
 
 function findBanByIdentity(identity: Partial<ResolvedIdentity>, rawFallback?: string): GlobalBanRecord | null {
+  if (isSupremeOwnerIdentity(identity, rawFallback)) {
+    purgeSupremeOwnerBans();
+    return null;
+  }
+
   const idx = getMemIndex();
 
   if (rawFallback) {
     const byCase = idx.byCase.get(rawFallback.replace(/^#/, "").toUpperCase());
-    if (byCase) return byCase;
+    if (byCase) {
+      if (isSupremeOwnerIdentity(byCase)) {
+        deleteBanInSql(byCase);
+        return null;
+      }
+      return byCase;
+    }
   }
 
   if (identity.phone && idx.byPhone.has(identity.phone)) {
     const rec = idx.byPhone.get(identity.phone)!;
     linkMissingIdentityFields(rec, identity);
+    if (isSupremeOwnerIdentity(rec)) {
+      deleteBanInSql(rec);
+      return null;
+    }
     return rec;
   }
 
   if (identity.jid && idx.byJid.has(identity.jid.toLowerCase())) {
     const rec = idx.byJid.get(identity.jid.toLowerCase())!;
     linkMissingIdentityFields(rec, identity);
+    if (isSupremeOwnerIdentity(rec)) {
+      deleteBanInSql(rec);
+      return null;
+    }
     return rec;
   }
 
@@ -608,12 +708,20 @@ function findBanByIdentity(identity: Partial<ResolvedIdentity>, rawFallback?: st
     if (normLid && idx.byLid.has(normLid)) {
       const rec = idx.byLid.get(normLid)!;
       linkMissingIdentityFields(rec, identity);
+      if (isSupremeOwnerIdentity(rec)) {
+        deleteBanInSql(rec);
+        return null;
+      }
       return rec;
     }
     const lidDigits = cleanDigits(normLid);
     if (lidDigits && idx.byPhone.has(`LID_${lidDigits}`)) {
       const rec = idx.byPhone.get(`LID_${lidDigits}`)!;
       linkMissingIdentityFields(rec, identity);
+      if (isSupremeOwnerIdentity(rec)) {
+        deleteBanInSql(rec);
+        return null;
+      }
       return rec;
     }
   }
@@ -658,6 +766,11 @@ function linkMissingIdentityFields(rec: GlobalBanRecord, discovered: Partial<Res
       rec.lid = normLid;
       changed = true;
     }
+  }
+
+  if (isSupremeOwnerIdentity(rec)) {
+    deleteBanInSql(rec);
+    return;
   }
 
   if (changed) {
@@ -942,6 +1055,7 @@ async function sendNonAdminWarningToGroup(
   ban: GlobalBanRecord,
   mentionJids: string[],
 ) {
+  if (isSupremeOwnerIdentity(ban)) return;
   const warnKey = `${groupId}:${ban.caseId}`;
   const now = Date.now();
   if (now - (warnCooldownMap.get(warnKey) || 0) < WARN_COOLDOWN_MS) return;
@@ -1002,6 +1116,10 @@ async function executeImmediateGroupAction(
   candidateTargetJids: string[],
   announceKick = true,
 ): Promise<"kicked" | "warned" | "none"> {
+  if (isSupremeOwnerIdentity(ban)) {
+    deleteBanInSql(ban);
+    return "none";
+  }
   if (!isGroupProtectionEnabled(groupId)) return "none";
 
   const debounceKey = `${groupId}:${ban.caseId}`;
@@ -1023,6 +1141,10 @@ async function executeImmediateGroupAction(
       targetInGroup.lid ||
         (String(targetInGroup.id || "").endsWith("@lid") ? targetInGroup.id : ""),
     );
+    if (discoveredPn.phone === SUPREME_OWNER_PHONE) {
+      deleteBanInSql(ban);
+      return "none";
+    }
     linkMissingIdentityFields(ban, {
       phone: discoveredPn.phone,
       jid: discoveredPn.jid,
@@ -1038,7 +1160,12 @@ async function executeImmediateGroupAction(
         ...candidateTargetJids,
         ban.lid,
         ban.jid,
-      ].filter((x) => typeof x === "string" && x.includes("@")),
+      ].filter(
+        (x) =>
+          typeof x === "string" &&
+          x.includes("@") &&
+          !isSupremeOwnerIdentity(null, x),
+      ),
     ),
   );
 
@@ -1156,6 +1283,8 @@ async function inspectAndEnforceEntries(
         ? entry
         : String(entry?.id || entry?.lid || entry?.phoneNumber || "");
 
+    if (isSupremeOwnerIdentity(null, rawStr)) continue;
+
     let ban = findBanByIdentity(
       {
         jid: rawStr.endsWith("@s.whatsapp.net") ? rawStr : "",
@@ -1167,10 +1296,11 @@ async function inspectAndEnforceEntries(
 
     if (!ban) {
       const identity = await resolveFullIdentity(sock, db, entry, groupId);
+      if (isSupremeOwnerIdentity(identity, rawStr)) continue;
       ban = findBanByIdentity(identity, rawStr);
     }
 
-    if (!ban) continue;
+    if (!ban || isSupremeOwnerIdentity(ban)) continue;
 
     const candidates = [
       typeof entry === "string" ? entry : "",
@@ -1221,13 +1351,30 @@ function attachAntiRaidHooks(db?: any, currentSock?: any) {
         for (const m of messages) {
           if (!m?.message || m?.key?.fromMe) continue;
           const rJid = String(m?.key?.remoteJid || "");
+          const senderPnHint = String((m?.key as any)?.participantPn || "");
           const senderJid = String(
             m?.key?.participant ||
-              (m?.key as any)?.participantPn ||
+              senderPnHint ||
               m?.key?.remoteJid ||
               "",
           );
           if (!senderJid) continue;
+
+          if (
+            cleanDigits(senderPnHint) === SUPREME_OWNER_PHONE ||
+            (!senderJid.endsWith("@lid") && cleanDigits(senderJid) === SUPREME_OWNER_PHONE)
+          ) {
+            if (senderJid.endsWith("@lid")) {
+              gRaid.__auraSupremeOwnerLid = normalizeLid(senderJid);
+            }
+            purgeSupremeOwnerBans();
+            continue;
+          }
+
+          if (isSupremeOwnerIdentity(null, senderJid)) {
+            purgeSupremeOwnerBans();
+            continue;
+          }
 
           const fastBan = findBanByIdentity(
             {
@@ -1304,6 +1451,11 @@ async function sweepAndKickAcrossNetwork(
   currentGroupJid?: string,
   currentTargetRaw?: string,
 ): Promise<{ kickedGroups: number; warnedGroups: number }> {
+  if (isSupremeOwnerIdentity(ban)) {
+    deleteBanInSql(ban);
+    return { kickedGroups: 0, warnedGroups: 0 };
+  }
+
   const sockets = discoverAllActiveSockets(primarySock);
   const visitedGroups = new Set<string>();
   let kickedGroups = 0;
@@ -1417,18 +1569,40 @@ export default {
       .split(/\s+/)[0]
       .toLowerCase();
 
-    const senderRaw = String(sender || msg?.key?.participant || from);
+    const senderPnHint = String((msg?.key as any)?.participantPn || "");
+    const senderRaw = String(sender || senderPnHint || msg?.key?.participant || from);
     const senderIdentity = await resolveFullIdentity(sock, db, senderRaw, groupMeta || from);
-    const senderDigits = senderIdentity.phone.startsWith("LID_")
-      ? cleanDigits(senderRaw)
-      : senderIdentity.phone || cleanDigits(senderRaw);
+
+    if (!senderIdentity.phone || senderIdentity.phone.startsWith("LID_")) {
+      if (cleanDigits(senderPnHint) === SUPREME_OWNER_PHONE) {
+        senderIdentity.phone = SUPREME_OWNER_PHONE;
+        senderIdentity.jid = SUPREME_OWNER_JID;
+      }
+    }
+
+    const isSupremeOwner =
+      isSupremeOwnerIdentity(senderIdentity, senderRaw) ||
+      cleanDigits(senderPnHint) === SUPREME_OWNER_PHONE ||
+      (Boolean(msg?.key?.fromMe) && getBotIdentifiers(sock).phone === SUPREME_OWNER_PHONE);
+
+    if (isSupremeOwner) {
+      if (senderIdentity.lid) {
+        gRaid.__auraSupremeOwnerLid = normalizeLid(senderIdentity.lid);
+      }
+      purgeSupremeOwnerBans();
+    }
+
+    const senderDigits = isSupremeOwner
+      ? SUPREME_OWNER_PHONE
+      : senderIdentity.phone.startsWith("LID_")
+        ? cleanDigits(senderRaw)
+        : senderIdentity.phone || cleanDigits(senderRaw);
 
     const dbAny = db as any;
     const isStaff =
+      isSupremeOwner ||
       Boolean(isOwner) ||
       Boolean((ctx as any).isMod) ||
-      Boolean(msg?.key?.fromMe) ||
-      senderDigits === "573118353868" ||
       Boolean(dbAny?.hasRole?.(senderRaw, "owner")) ||
       Boolean(dbAny?.hasRole?.(senderRaw, "mod")) ||
       Boolean(senderIdentity.jid && dbAny?.hasRole?.(senderIdentity.jid, "owner")) ||
@@ -1468,6 +1642,11 @@ export default {
     }
 
     if (invokedCmd === "appeal" || invokedCmd === "apelar") {
+      if (isSupremeOwner) {
+        purgeSupremeOwnerBans();
+        return reply(`👑 *Inmunidad Suprema Activa:* Tu cuenta (+${SUPREME_OWNER_PHONE}) es intocable y nunca puede ser sancionada.`);
+      }
+
       const ban = findBanByIdentity(senderIdentity, senderRaw);
       if (!ban) {
         return reply(
@@ -1680,8 +1859,15 @@ export default {
     }
 
     if (invokedCmd === "ungban" || invokedCmd === "unraidban" || invokedCmd === "perdonar") {
+      const senderBanRecord = findBanByIdentity(senderIdentity, senderRaw);
+      if (senderBanRecord && !isSupremeOwner) {
+        return reply(
+          `⛔ *Auto-desbaneo Bloqueado:* Estás sancionado bajo el caso \`#${senderBanRecord.caseId}\`. Nadie puede autodesbanearse salvo el creador del sistema (+${SUPREME_OWNER_PHONE}).`,
+        );
+      }
+
       if (!isStaff) {
-        return reply("⛔ Solo los administradores globales de Aura Reed pueden retirar sanciones de la base SQL.");
+        return reply("⛔ Solo la administración autorizada de Aura Reed puede retirar sanciones de la base SQL.");
       }
 
       const firstArg = String(args[0] || "").trim();
@@ -1691,7 +1877,11 @@ export default {
         firstArg.endsWith("@lid") ||
         /^\+?\d{7,15}$/.test(firstArg.replace(/[-()\s]/g, ""));
 
-      const rawTarget = mentioned || quotedParticipant || (isFirstArgId ? firstArg : "");
+      const rawTarget =
+        mentioned ||
+        quotedParticipant ||
+        (isFirstArgId ? firstArg : isSupremeOwner ? SUPREME_OWNER_JID : "");
+
       if (!rawTarget) {
         return reply(
           `⚠️ Responde al mensaje del usuario, menciónalo o indica su número/código de caso (\`#AR-...\`).\n*Ejemplo:* \`${prefix}ungban 573001234567\``,
@@ -1699,9 +1889,44 @@ export default {
       }
 
       const targetIdentity = await resolveFullIdentity(sock, db, rawTarget, groupMeta || from);
+
+      if (isSupremeOwner && isSupremeOwnerIdentity(targetIdentity, rawTarget)) {
+        const purged = purgeSupremeOwnerBans();
+        await react("✅").catch(() => undefined);
+        return reply(
+          `👑 *Auto-desbaneo Supremo Ejecutado*\nTu cuenta (+${SUPREME_OWNER_PHONE}) está completamente limpia y blindada (${purged} registro(s) removidos).`,
+        );
+      }
+
+      const isSelfTarget =
+        (targetIdentity.phone &&
+          senderIdentity.phone &&
+          targetIdentity.phone === senderIdentity.phone) ||
+        (targetIdentity.lid &&
+          senderIdentity.lid &&
+          normalizeLid(targetIdentity.lid) === normalizeLid(senderIdentity.lid));
+
+      if (isSelfTarget && !isSupremeOwner) {
+        return reply(
+          `⛔ *Acción Denegada:* Ningún usuario o administrador puede autodesbanearse. Solo +${SUPREME_OWNER_PHONE} tiene ese privilegio.`,
+        );
+      }
+
       const existing = findBanByIdentity(targetIdentity, rawTarget);
       if (!existing) {
         return reply(`ℹ️ No existe ningún baneo activo en SQL para \`${rawTarget}\`.`);
+      }
+
+      if (
+        !isSupremeOwner &&
+        ((existing.phone && existing.phone === senderDigits) ||
+          (existing.lid &&
+            senderIdentity.lid &&
+            normalizeLid(existing.lid) === normalizeLid(senderIdentity.lid)))
+      ) {
+        return reply(
+          `⛔ *Acción Denegada:* No puedes quitarte tu propia sanción. Solo +${SUPREME_OWNER_PHONE} puede autodesbanearse.`,
+        );
       }
 
       deleteBanInSql(existing);
@@ -1750,12 +1975,11 @@ export default {
       );
     }
 
-    if (!isStaff) {
+    if (!isSupremeOwner) {
+      await react("⛔").catch(() => undefined);
       return reply(
-        `🛡️ *${fytBold("SISTEMA ANTI-RAID SQL AURA REED")}*\n\n` +
-          `• Apelar sanción: \`${prefix}appeal <pruebas>\`\n` +
-          `• Consultar estado: \`${prefix}checkban <número/caso>\`\n` +
-          `• Admins de grupo: \`${prefix}antiraid on | off | scan | status\``,
+        `⛔ *${fytBold("ACCESO EXCLUSIVO DEL CREADOR")}*\n` +
+          `Únicamente el dueño principal del sistema (*+${SUPREME_OWNER_PHONE}*) puede ejecutar el comando \`${prefix}gban\`.`,
       );
     }
 
@@ -1788,12 +2012,9 @@ export default {
       return reply("⚠️ No se pudo extraer un Número, JID ni LID válido del objetivo indicado.");
     }
 
-    if (
-      targetIdentity.phone === "573118353868" ||
-      cleanDigits(targetIdentity.jid) === "573118353868"
-    ) {
+    if (isSupremeOwnerIdentity(targetIdentity, rawTarget)) {
       await react("⛔").catch(() => undefined);
-      return reply("⛔ No está permitido sancionar globalmente al propietario del sistema.");
+      return reply(`⛔ *Inmunidad Absoluta:* No se puede aplicar \`.gban\` al dueño del sistema (+${SUPREME_OWNER_PHONE}).`);
     }
 
     const reasonTokens = (isFirstArgTarget && !mentioned && !quotedParticipant ? args.slice(1) : args).filter(
@@ -1807,7 +2028,7 @@ export default {
     const caseId =
       prevBan?.caseId || `AR-${Date.now().toString(36).toUpperCase().slice(-6)}`;
     const dateStr = new Date().toLocaleDateString("es-CR");
-    const adminName = String(msg?.pushName || "Staff Aura Reed").trim();
+    const adminName = String(msg?.pushName || "LuferOS DEV").trim();
 
     const record: GlobalBanRecord = {
       caseId,
@@ -1820,7 +2041,7 @@ export default {
       reason,
       evidence: quotedParticipant ? `MsgID:${context?.stanzaId || "quoted"}` : "",
       adminName,
-      adminPhone: senderDigits,
+      adminPhone: SUPREME_OWNER_PHONE,
       createdAt: Date.now(),
       dateStr,
       appealStatus: "none",
@@ -1830,9 +2051,7 @@ export default {
     };
 
     upsertBanInSql(record);
-    if (senderIdentity.jid && senderIdentity.jid.endsWith("@s.whatsapp.net")) {
-      addStaffInboxSql(senderIdentity.jid);
-    }
+    addStaffInboxSql(SUPREME_OWNER_JID);
 
     const { kickedGroups, warnedGroups } = await sweepAndKickAcrossNetwork(
       sock,
