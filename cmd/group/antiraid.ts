@@ -10,8 +10,8 @@ import { GROUP_METADATA_CACHE } from "../../handler.ts";
 
 const requireModule = createRequire(import.meta.url);
 
-const SUPREME_OWNER_PHONE = "573118353868";
-const SUPREME_OWNER_JID = "573118353868@s.whatsapp.net";
+const SUPREME_OWNER_PHONE = "525538176300";
+const SUPREME_OWNER_JID = "5215538176300@s.whatsapp.net";
 
 export interface GlobalBanRecord {
   caseId: string;
