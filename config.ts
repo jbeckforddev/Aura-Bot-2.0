@@ -64,6 +64,7 @@ export const GAMES_CONFIG = {
 
 // Configuracion de fabrica de los bots
 globalThis.DEFAULT_PREFIXES = [".", "#", "/", "!", "-", "%", "$"];
+globalThis.CHANNEL_ID = "120363410945728976@newsletter"
 globalThis.DEFAULT_BOT_NAME = "AURA REED";
 globalThis.DEFAULT_BOT_VERSION = "2.0.0";
 globalThis.DEFAULT_BOT_AUTHOR = "𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝑩𝒚: Jeriel B.";

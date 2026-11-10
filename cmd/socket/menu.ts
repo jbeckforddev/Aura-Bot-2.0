@@ -87,7 +87,7 @@ export default {
     const botName = botRecord?.bot_name || "Aura Reed";
     const botType = resolveBotType(botRecord?.bot_type, sock.isSubBot);
     const tituloEstilizado = fytBold(t("cmd_value0_bb624cd4", { value0: String(botName).toUpperCase() }));
-    const chanellink = "https://aetheryx.xyz/";
+    const chanellink = "https://api.aetheryx.xyz/";
     const requested = args && args[0] ? args[0].toLowerCase() : null;
     const AutorBot = globalThis.DEFAULT_BOT_AUTHOR;
 
@@ -337,7 +337,7 @@ export default {
           isForwarded: true,
           forwardingScore: 1,
           forwardedNewsletterMessageInfo: {
-            newsletterJid: "120363410945728976@newsletter",
+            newsletterJid: globalThis.CHANNEL_ID,
             newsletterName: "⬣〔 𝑨̰𝑼̰𝑹̰𝑨̰ 𝑹̰𝑬̰𝑬̰𝑫̰ 𝑪̰𝑯̰𝑨̰𝑵̰𝑬̰𝑳̰ 〕⬣",
             serverMessageId: -1,
           },

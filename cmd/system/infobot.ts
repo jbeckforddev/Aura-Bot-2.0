@@ -130,7 +130,7 @@ export default {
     const activeSubBots = activeTypes.filter(
       (type) => type === "Sub-Bot",
     ).length;
-    const chanellink = "https://aetheryx.xyz/";
+    const chanellink = "https://api.aetheryx.xyz/";
     const tituloEstilizado = fytBold(t("cmd_value0_bot_088975d3", { value0: botName.toUpperCase() }));
 
     let textoInfo = t("cmd_value0_8aed6a3b", { value0: tituloEstilizado });
@@ -218,7 +218,7 @@ export default {
           isForwarded: true,
           forwardingScore: 2,
           forwardedNewsletterMessageInfo: {
-            newsletterJid: "120363410945728976@newsletter",
+            newsletterJid: globalThis.CHANNEL_ID,
             newsletterName: "⬣〔 𝑨̰𝑼̰𝑹̰𝑨̰ 𝑹̰𝑬̰𝑬̰𝑫̰ 𝑪̰𝑯̰𝑨̰𝑵̰𝑬̰𝑳̰ 〕⬣",
             serverMessageId: -1,
           },
