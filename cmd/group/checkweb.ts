@@ -1,25 +1,32 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { getActiveSubBots } from "../../connection/subbotManager.ts";
+import { getActivePremBots } from "../../connection/premBotManager.ts";
+import { GROUP_METADATA_CACHE } from "../../handler.ts";
 import * as http from "node:http";
-import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { exec, spawn, type ChildProcess } from "node:child_process";
-import { promisify } from "node:util";
+import * as os from "node:os";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { pathToFileURL } from "node:url";
 
-const execAsync = promisify(exec);
+interface IdentityProfile {
+  phone: string;
+  lid: string;
+  name: string;
+}
 
 interface ChatMessageItem {
   id: string;
-  sender: string;
+  senderJid: string;
+  senderPhone: string;
+  senderLid: string;
   pushName: string;
   text: string;
   time: string;
   timestamp: number;
   fromMe: boolean;
+  isViewOnce?: boolean;
   mediaType?: "image" | "sticker" | "video" | "audio" | "document" | null;
   mediaMime?: string;
   hasMedia?: boolean;
@@ -32,29 +39,35 @@ interface ChatMessageItem {
   mediaNode?: any;
 }
 
+interface GroupMemberItem {
+  jid: string;
+  phone: string;
+  lid: string;
+  name: string;
+  isAdmin: boolean;
+}
+
 interface ChatSessionItem {
   jid: string;
   name: string;
   isGroup: boolean;
+  peerPhone: string;
+  peerLid: string;
   unread: number;
   lastTime: number;
   lastPreview: string;
   avatarUrl?: string | null;
   statusText?: string;
+  members?: GroupMemberItem[];
   messages: ChatMessageItem[];
 }
 
-interface CallLogItem {
-  id: string;
-  botKey: string;
-  peerJid: string;
-  peerName: string;
-  isVideo: boolean;
+interface ContactEntry {
+  jid: string;
+  phone: string;
+  lid: string;
+  name: string;
   isGroup: boolean;
-  direction: "incoming" | "outgoing";
-  status: string;
-  timestamp: number;
-  timeStr: string;
 }
 
 interface MediaBufferItem {
@@ -63,103 +76,75 @@ interface MediaBufferItem {
   createdAt: number;
 }
 
-interface ReportRecord {
-  phone: string;
-  totalReports: number;
-  subbotsUsed: Set<string>;
-  lastTimestamp: string;
-}
-
-interface WebPanelState {
+interface WaWebSuiteState {
   server: http.Server | null;
   port: number;
   token: string;
   tempUser: string;
   tempPass: string;
-  ownerEmail: string;
   tunnelUrl: string | null;
   publicIp: string | null;
   tunnelProcess: ChildProcess | null;
-  msgRx: number;
-  msgTx: number;
-  subbotsPaused: boolean;
-  pausedBotIds: Set<string>;
-  blockedCommands: Set<string>;
-  wrappedCommands: Map<string, (...args: any[]) => Promise<any>>;
+  tunnelWatchdogTimer: NodeJS.Timeout | null;
+  presenceLoops: Map<string, NodeJS.Timeout>;
   hookedSockets: WeakSet<object>;
+  knownSockets: Set<any>;
   originalSenders: WeakMap<object, (...args: any[]) => Promise<any>>;
-  reportRegistry: Map<string, ReportRecord>;
   botChatStores: Map<string, Map<string, ChatSessionItem>>;
+  botContacts: Map<string, Map<string, ContactEntry>>;
   botGroupSynced: Set<string>;
   botGroupSyncing: Set<string>;
+  identityByPhone: Map<string, IdentityProfile>;
+  identityByLid: Map<string, IdentityProfile>;
   mediaStore: Map<string, MediaBufferItem>;
   thumbStore: Map<string, Buffer>;
   mediaDownloading: Map<string, Promise<MediaBufferItem | null>>;
   msgLookup: Map<string, { botKey: string; msg: ChatMessageItem }>;
   avatarCache: Map<string, string>;
-  avatarPending: Set<string>;
-  callLogs: CallLogItem[];
-  autoRejectCalls: boolean;
-  autoRejectMessage: string;
+  avatarQueue: Array<{ botKey: string; jid: string }>;
+  avatarWorkerBusy: boolean;
+  sseClients: Set<http.ServerResponse>;
+  ownerJid: string;
   lastSock: any;
 }
 
-const gState = globalThis as unknown as { __auraWebPanel?: WebPanelState };
+const gState = globalThis as unknown as { __auraWaWebSuite?: WaWebSuiteState };
 
-if (!gState.__auraWebPanel) {
-  gState.__auraWebPanel = {
+if (!gState.__auraWaWebSuite) {
+  gState.__auraWaWebSuite = {
     server: null,
     port: 0,
     token: randomBytes(12).toString("hex"),
     tempUser: `lufer_${randomBytes(2).toString("hex")}`,
     tempPass: String(Math.floor(100000 + Math.random() * 900000)),
-    ownerEmail: "luisfernandoguzmannino@gmail.com",
     tunnelUrl: null,
     publicIp: null,
     tunnelProcess: null,
-    msgRx: 0,
-    msgTx: 0,
-    subbotsPaused: false,
-    pausedBotIds: new Set<string>(),
-    blockedCommands: new Set<string>(),
-    wrappedCommands: new Map(),
+    tunnelWatchdogTimer: null,
+    presenceLoops: new Map(),
     hookedSockets: new WeakSet(),
+    knownSockets: new Set(),
     originalSenders: new WeakMap(),
-    reportRegistry: new Map(),
     botChatStores: new Map(),
+    botContacts: new Map(),
     botGroupSynced: new Set(),
     botGroupSyncing: new Set(),
+    identityByPhone: new Map(),
+    identityByLid: new Map(),
     mediaStore: new Map(),
     thumbStore: new Map(),
     mediaDownloading: new Map(),
     msgLookup: new Map(),
     avatarCache: new Map(),
-    avatarPending: new Set(),
-    callLogs: [],
-    autoRejectCalls: false,
-    autoRejectMessage: "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje de texto.",
+    avatarQueue: [],
+    avatarWorkerBusy: false,
+    sseClients: new Set(),
+    ownerJid: "573118353868@s.whatsapp.net",
     lastSock: null,
   };
 }
 
-const state = gState.__auraWebPanel!;
-
-if (!state.pausedBotIds) state.pausedBotIds = new Set<string>();
-if (!state.botChatStores) state.botChatStores = new Map();
-if (!state.botGroupSynced) state.botGroupSynced = new Set();
-if (!state.botGroupSyncing) state.botGroupSyncing = new Set();
-if (!state.reportRegistry) state.reportRegistry = new Map();
-if (!state.mediaStore) state.mediaStore = new Map();
-if (!state.thumbStore) state.thumbStore = new Map();
-if (!state.mediaDownloading) state.mediaDownloading = new Map();
-if (!state.msgLookup) state.msgLookup = new Map();
-if (!state.avatarCache) state.avatarCache = new Map();
-if (!state.avatarPending) state.avatarPending = new Set();
-if (!state.callLogs) state.callLogs = [];
-if (state.autoRejectCalls === undefined) state.autoRejectCalls = false;
-if (!state.autoRejectMessage) {
-  state.autoRejectMessage = "⚠️ No puedo responder llamadas en este momento. Envíame un mensaje de texto.";
-}
+const state = gState.__auraWaWebSuite!;
 
 let cachedBaileysMod: any = null;
 async function getBaileysModule(): Promise<any> {
@@ -168,17 +153,177 @@ async function getBaileysModule(): Promise<any> {
     cachedBaileysMod = await import("baileys");
     return cachedBaileysMod;
   } catch {}
-  try {
-    cachedBaileysMod = await import("baileys");
-    return cachedBaileysMod;
-  } catch {}
   return null;
+}
+
+function cleanDigits(val: unknown): string {
+  return String(val || "")
+    .split("@")[0]
+    .split(":")[0]
+    .replace(/\D/g, "");
+}
+
+function normalizeLid(val: unknown): string {
+  const raw = String(val || "").trim().toLowerCase();
+  if (!raw || !raw.endsWith("@lid")) return "";
+  const d = cleanDigits(raw);
+  return d ? `${d}@lid` : "";
+}
+
+function normalizePhoneDigits(val: unknown): string {
+  const raw = String(val || "").trim().toLowerCase();
+  if (!raw || raw.endsWith("@lid") || raw.endsWith("@g.us") || raw.includes("broadcast")) return "";
+  const d = cleanDigits(raw);
+  return d.length >= 7 && d.length <= 15 ? d : "";
+}
+
+function getBotInfo(botSock: any, fallbackIndex = 0): { key: string; jid: string; lid: string; name: string } {
+  const rawId = botSock?.user?.id || botSock?.authState?.creds?.me?.id || "";
+  const rawLid = botSock?.user?.lid || botSock?.authState?.creds?.me?.lid || "";
+  const key = cleanDigits(rawId) || `bot_${fallbackIndex}`;
+  const jid = key.startsWith("bot_") ? "" : `${key}@s.whatsapp.net`;
+  const lid = normalizeLid(rawLid);
+  const name = String(botSock?.user?.name || botSock?.authState?.creds?.me?.name || (fallbackIndex === 0 ? "MainBot" : `SubBot-${fallbackIndex}`)).trim();
+  return { key, jid, lid, name };
+}
+
+function isSameAsBot(botSock: any, candidatePhone: string, candidateLid: string, candidateName?: string): boolean {
+  const info = getBotInfo(botSock);
+  if (candidatePhone && info.key && candidatePhone === info.key) return true;
+  if (candidateLid && info.lid && candidateLid === info.lid) return true;
+  if (candidateName && info.name && candidateName.toLowerCase() === info.name.toLowerCase()) return true;
+  return false;
+}
+
+function registerIdentity(phoneInput?: unknown, lidInput?: unknown, nameInput?: unknown, botSock?: any): IdentityProfile {
+  const phone = normalizePhoneDigits(phoneInput);
+  const lid = normalizeLid(lidInput);
+  const rawName = String(nameInput || "").trim();
+  const validName = rawName && !rawName.startsWith("+") && !rawName.startsWith("Grupo ") && (!botSock || !isSameAsBot(botSock, "", "", rawName)) ? rawName : "";
+
+  let profile: IdentityProfile | undefined =
+    (phone ? state.identityByPhone.get(phone) : undefined) ||
+    (lid ? state.identityByLid.get(lid) : undefined);
+
+  if (!profile) {
+    profile = {
+      phone: phone || "",
+      lid: lid || "",
+      name: validName || "",
+    };
+  } else {
+    if (phone && !profile.phone) profile.phone = phone;
+    if (lid && !profile.lid) profile.lid = lid;
+    if (validName && (!profile.name || profile.name.length < 2)) profile.name = validName;
+  }
+
+  if (profile.phone) state.identityByPhone.set(profile.phone, profile);
+  if (profile.lid) state.identityByLid.set(profile.lid, profile);
+
+  if (botSock && (profile.phone || profile.lid)) {
+    const botKey = getBotInfo(botSock).key;
+    if (botKey && !isSameAsBot(botSock, profile.phone, profile.lid)) {
+      const cMap = ensureBotContactsMap(botKey);
+      const cKey = profile.phone ? `${profile.phone}@s.whatsapp.net` : profile.lid;
+      if (cKey) {
+        const existing = cMap.get(cKey);
+        cMap.set(cKey, {
+          jid: cKey,
+          phone: profile.phone || existing?.phone || "",
+          lid: profile.lid || existing?.lid || "",
+          name: profile.name || existing?.name || (profile.phone ? `+${profile.phone}` : profile.lid),
+          isGroup: false,
+        });
+      }
+    }
+  }
+
+  return profile;
+}
+
+async function resolvePeerIdentity(
+  botSock: any,
+  rawJid: string,
+  altJid?: string,
+  pushNameHint?: string,
+  fromMe?: boolean
+): Promise<IdentityProfile> {
+  if (!rawJid || rawJid.endsWith("@g.us")) {
+    return { phone: "", lid: "", name: "" };
+  }
+
+  const p1 = normalizePhoneDigits(rawJid);
+  const p2 = normalizePhoneDigits(altJid);
+  const l1 = normalizeLid(rawJid);
+  const l2 = normalizeLid(altJid);
+
+  let phone = p1 || p2;
+  let lid = l1 || l2;
+  const safeName = !fromMe ? String(pushNameHint || "").trim() : "";
+
+  const memHit =
+    (phone ? state.identityByPhone.get(phone) : undefined) ||
+    (lid ? state.identityByLid.get(lid) : undefined);
+
+  if (memHit) {
+    if (!phone && memHit.phone) phone = memHit.phone;
+    if (!lid && memHit.lid) lid = memHit.lid;
+  }
+
+  const lidRepo = botSock?.signalRepository?.lidMapping;
+  if (lid && !phone && typeof lidRepo?.getPNForLID === "function") {
+    try {
+      const mappedPn = await lidRepo.getPNForLID(lid);
+      if (mappedPn) phone = normalizePhoneDigits(mappedPn);
+    } catch {}
+  }
+  if (phone && !lid && typeof lidRepo?.getLIDForPN === "function") {
+    try {
+      const mappedLid = await lidRepo.getLIDForPN(`${phone}@s.whatsapp.net`);
+      if (mappedLid) lid = normalizeLid(mappedLid);
+    } catch {}
+  }
+
+  const activeDb = (globalThis as any).db;
+  if (activeDb && typeof activeDb.getUser === "function" && (!phone || !lid || !safeName)) {
+    try {
+      const uRec =
+        (phone && activeDb.getUser(`${phone}@s.whatsapp.net`)) ||
+        (lid && activeDb.getUser(lid)) ||
+        activeDb.getUser(rawJid);
+      if (uRec) {
+        if (!phone && (uRec.phone_number || uRec.jid)) {
+          phone = normalizePhoneDigits(uRec.phone_number || uRec.jid);
+        }
+        if (!lid && uRec.lid) {
+          lid = normalizeLid(uRec.lid);
+        }
+        if (!safeName && (uRec.pushName || uRec.username || uRec.name)) {
+          return registerIdentity(phone, lid, uRec.pushName || uRec.username || uRec.name, botSock);
+        }
+      }
+    } catch {}
+  }
+
+  return registerIdentity(phone, lid, safeName, botSock);
+}
+
+function broadcastSse(event: string, data: any) {
+  if (state.sseClients.size === 0) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of Array.from(state.sseClients)) {
+    try {
+      res.write(payload);
+    } catch {
+      state.sseClients.delete(res);
+    }
+  }
 }
 
 function saveMediaToStore(id: string, mime: string, buffer: Buffer) {
   if (!id || !buffer || !buffer.length) return;
   state.mediaStore.set(id, { mime, buffer, createdAt: Date.now() });
-  if (state.mediaStore.size > 120) {
+  if (state.mediaStore.size > 150) {
     const oldestKey = state.mediaStore.keys().next().value;
     if (oldestKey) state.mediaStore.delete(oldestKey);
   }
@@ -187,7 +332,7 @@ function saveMediaToStore(id: string, mime: string, buffer: Buffer) {
 function saveThumbToStore(id: string, buffer: Buffer) {
   if (!id || !buffer || !buffer.length) return;
   state.thumbStore.set(id, buffer);
-  if (state.thumbStore.size > 250) {
+  if (state.thumbStore.size > 300) {
     const oldestKey = state.thumbStore.keys().next().value;
     if (oldestKey) state.thumbStore.delete(oldestKey);
   }
@@ -199,11 +344,6 @@ function rotateCredentials() {
   state.tempPass = String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function getBotKey(botSock: any, fallbackIndex = 0): string {
-  const raw = botSock?.user?.id || `bot_${fallbackIndex}`;
-  return String(raw).split("@")[0].split(":")[0] || `bot_${fallbackIndex}`;
-}
-
 function ensureBotChatMap(botKey: string): Map<string, ChatSessionItem> {
   if (!state.botChatStores.has(botKey)) {
     state.botChatStores.set(botKey, new Map());
@@ -211,20 +351,36 @@ function ensureBotChatMap(botKey: string): Map<string, ChatSessionItem> {
   return state.botChatStores.get(botKey)!;
 }
 
-function unwrapMessage(msgObj: any): any {
-  if (!msgObj) return null;
-  return (
-    msgObj.ephemeralMessage?.message ||
-    msgObj.viewOnceMessage?.message ||
-    msgObj.viewOnceMessageV2?.message ||
-    msgObj.viewOnceMessageV2Extension?.message ||
-    msgObj.documentWithCaptionMessage?.message ||
-    msgObj
-  );
+function ensureBotContactsMap(botKey: string): Map<string, ContactEntry> {
+  if (!state.botContacts.has(botKey)) {
+    state.botContacts.set(botKey, new Map());
+  }
+  return state.botContacts.get(botKey)!;
+}
+
+function unwrapMessage(msgObj: any): { unwrapped: any; isViewOnce: boolean } {
+  if (!msgObj) return { unwrapped: null, isViewOnce: false };
+  if (msgObj.viewOnceMessage?.message) {
+    return { unwrapped: msgObj.viewOnceMessage.message, isViewOnce: true };
+  }
+  if (msgObj.viewOnceMessageV2?.message) {
+    return { unwrapped: msgObj.viewOnceMessageV2.message, isViewOnce: true };
+  }
+  if (msgObj.viewOnceMessageV2Extension?.message) {
+    return { unwrapped: msgObj.viewOnceMessageV2Extension.message, isViewOnce: true };
+  }
+  if (msgObj.ephemeralMessage?.message) {
+    return unwrapMessage(msgObj.ephemeralMessage.message);
+  }
+  if (msgObj.documentWithCaptionMessage?.message) {
+    return unwrapMessage(msgObj.documentWithCaptionMessage.message);
+  }
+  return { unwrapped: msgObj, isViewOnce: false };
 }
 
 function extractMessageDetails(msgObj: any): {
   text: string;
+  isViewOnce: boolean;
   mediaType: "image" | "sticker" | "video" | "audio" | "document" | null;
   mediaMime: string;
   mediaNode: any;
@@ -235,6 +391,7 @@ function extractMessageDetails(msgObj: any): {
 } {
   const empty = {
     text: "",
+    isViewOnce: false,
     mediaType: null as any,
     mediaMime: "",
     mediaNode: null,
@@ -243,7 +400,7 @@ function extractMessageDetails(msgObj: any): {
     quotedSender: "",
     quotedText: "",
   };
-  const m = unwrapMessage(msgObj);
+  const { unwrapped: m, isViewOnce } = unwrapMessage(msgObj);
   if (!m) return empty;
 
   const ctxInfo =
@@ -261,8 +418,11 @@ function extractMessageDetails(msgObj: any): {
 
   if (ctxInfo?.quotedMessage) {
     quotedId = ctxInfo.stanzaId || "";
-    quotedSender = String(ctxInfo.participant || "").split("@")[0].split(":")[0];
-    const qUnwrapped = unwrapMessage(ctxInfo.quotedMessage);
+    const qPart = String(ctxInfo.participant || "");
+    const qDigits = cleanDigits(qPart);
+    const qProf = state.identityByPhone.get(qDigits) || state.identityByLid.get(normalizeLid(qPart));
+    quotedSender = qProf?.phone ? `+${qProf.phone}` : qDigits ? `+${qDigits}` : "Cita";
+    const { unwrapped: qUnwrapped } = unwrapMessage(ctxInfo.quotedMessage);
     quotedText =
       qUnwrapped?.conversation ||
       qUnwrapped?.extendedTextMessage?.text ||
@@ -274,16 +434,24 @@ function extractMessageDetails(msgObj: any): {
       "[Mensaje citado]";
   }
 
+  const voFlag = Boolean(
+    isViewOnce ||
+      m.imageMessage?.viewOnce ||
+      m.videoMessage?.viewOnce ||
+      m.audioMessage?.viewOnce
+  );
+
   if (typeof m.conversation === "string" && m.conversation) {
-    return { ...empty, text: m.conversation, quotedId, quotedSender, quotedText };
+    return { ...empty, text: m.conversation, isViewOnce: voFlag, quotedId, quotedSender, quotedText };
   }
   if (typeof m.extendedTextMessage?.text === "string" && m.extendedTextMessage.text) {
-    return { ...empty, text: m.extendedTextMessage.text, quotedId, quotedSender, quotedText };
+    return { ...empty, text: m.extendedTextMessage.text, isViewOnce: voFlag, quotedId, quotedSender, quotedText };
   }
   if (m.imageMessage) {
     const thumb = m.imageMessage.jpegThumbnail ? Buffer.from(m.imageMessage.jpegThumbnail) : null;
     return {
       text: m.imageMessage.caption || "",
+      isViewOnce: voFlag,
       mediaType: "image",
       mediaMime: m.imageMessage.mimetype || "image/jpeg",
       mediaNode: m.imageMessage,
@@ -296,6 +464,7 @@ function extractMessageDetails(msgObj: any): {
   if (m.stickerMessage) {
     return {
       text: "",
+      isViewOnce: false,
       mediaType: "sticker",
       mediaMime: m.stickerMessage.mimetype || "image/webp",
       mediaNode: m.stickerMessage,
@@ -309,6 +478,7 @@ function extractMessageDetails(msgObj: any): {
     const thumb = m.videoMessage.jpegThumbnail ? Buffer.from(m.videoMessage.jpegThumbnail) : null;
     return {
       text: m.videoMessage.caption || "",
+      isViewOnce: voFlag,
       mediaType: "video",
       mediaMime: m.videoMessage.mimetype || "video/mp4",
       mediaNode: m.videoMessage,
@@ -321,6 +491,7 @@ function extractMessageDetails(msgObj: any): {
   if (m.audioMessage) {
     return {
       text: m.audioMessage.ptt ? "🎤 Nota de voz" : "🎵 Audio",
+      isViewOnce: voFlag,
       mediaType: "audio",
       mediaMime: m.audioMessage.mimetype || "audio/ogg; codecs=opus",
       mediaNode: m.audioMessage,
@@ -333,6 +504,7 @@ function extractMessageDetails(msgObj: any): {
   if (m.documentMessage) {
     return {
       text: `📄 ${m.documentMessage.fileName || "Documento"}`,
+      isViewOnce: voFlag,
       mediaType: "document",
       mediaMime: m.documentMessage.mimetype || "application/octet-stream",
       mediaNode: m.documentMessage,
@@ -345,15 +517,16 @@ function extractMessageDetails(msgObj: any): {
   if (m.contactMessage) {
     return { ...empty, text: `👤 Contacto: ${m.contactMessage.displayName || ""}` };
   }
-  if (m.locationMessage) {
-    return { ...empty, text: `📍 Ubicación (${m.locationMessage.degreesLatitude}, ${m.locationMessage.degreesLongitude})` };
+  if (m.locationMessage || m.liveLocationMessage) {
+    const loc = m.locationMessage || m.liveLocationMessage;
+    return { ...empty, text: `📍 Ubicación: ${loc.name || ""} (${loc.degreesLatitude}, ${loc.degreesLongitude})` };
   }
   if (m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3) {
     const poll = m.pollCreationMessage || m.pollCreationMessageV2 || m.pollCreationMessageV3;
     return { ...empty, text: `📊 Encuesta: ${poll.name || ""}` };
   }
-  if (m.interactiveMessage || m.buttonsMessage || m.templateMessage) {
-    return { ...empty, text: "🎛️ [Mensaje Interactivo]" };
+  if (m.interactiveMessage || m.buttonsMessage || m.templateMessage || m.botForwardedMessage) {
+    return { ...empty, text: "🎛️ [Tarjeta Interactiva / Embed]" };
   }
   return empty;
 }
@@ -366,12 +539,8 @@ async function downloadMediaBuffer(
   mediaMime: string,
   mediaNode: any
 ): Promise<MediaBufferItem | null> {
-  if (state.mediaStore.has(msgId)) {
-    return state.mediaStore.get(msgId)!;
-  }
-  if (state.mediaDownloading.has(msgId)) {
-    return state.mediaDownloading.get(msgId)!;
-  }
+  if (state.mediaStore.has(msgId)) return state.mediaStore.get(msgId)!;
+  if (state.mediaDownloading.has(msgId)) return state.mediaDownloading.get(msgId)!;
 
   const task = (async (): Promise<MediaBufferItem | null> => {
     try {
@@ -413,16 +582,51 @@ async function downloadMediaBuffer(
   }
 }
 
+function findConsolidatedSession(
+  store: Map<string, ChatSessionItem>,
+  remoteJid: string,
+  peerPhone: string,
+  peerLid: string
+): { canonicalJid: string; session: ChatSessionItem | undefined } {
+  if (remoteJid.endsWith("@g.us")) {
+    return { canonicalJid: remoteJid, session: store.get(remoteJid) };
+  }
+  if (store.has(remoteJid)) {
+    return { canonicalJid: remoteJid, session: store.get(remoteJid) };
+  }
+  if (peerPhone) {
+    const pnJid = `${peerPhone}@s.whatsapp.net`;
+    if (store.has(pnJid)) return { canonicalJid: pnJid, session: store.get(pnJid) };
+  }
+  if (peerLid && store.has(peerLid)) {
+    return { canonicalJid: peerLid, session: store.get(peerLid) };
+  }
+  for (const [k, s] of store.entries()) {
+    if (s.isGroup) continue;
+    if ((peerPhone && s.peerPhone === peerPhone) || (peerLid && s.peerLid === peerLid)) {
+      return { canonicalJid: k, session: s };
+    }
+  }
+  const preferredJid = peerPhone ? `${peerPhone}@s.whatsapp.net` : remoteJid;
+  return { canonicalJid: preferredJid, session: undefined };
+}
+
 function recordChatMessage(
+  botSock: any,
   botKey: string,
   remoteJid: string,
   msgData: {
     id: string;
-    sender: string;
+    senderJid: string;
+    senderPhone: string;
+    senderLid: string;
     pushName: string;
     text: string;
     fromMe: boolean;
+    isViewOnce?: boolean;
     chatName?: string;
+    peerPhone?: string;
+    peerLid?: string;
     timestamp?: number;
     mediaType?: "image" | "sticker" | "video" | "audio" | "document" | null;
     mediaMime?: string;
@@ -435,20 +639,31 @@ function recordChatMessage(
     mediaNode?: any;
   }
 ) {
-  if (!remoteJid || remoteJid === "status@broadcast") return;
+  if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.includes("newsletter")) return;
   if (!msgData.text && !msgData.mediaType) return;
 
   const store = ensureBotChatMap(botKey);
   const isGroup = remoteJid.endsWith("@g.us");
-  const cleanRemote = remoteJid.split("@")[0].split(":")[0];
+  const cleanRemote = cleanDigits(remoteJid);
   const nowTs = msgData.timestamp || Date.now();
   const timeStr = new Date(nowTs).toLocaleTimeString("es-CO", {
     hour: "2-digit",
     minute: "2-digit",
   });
 
+  const peerPhone = !isGroup
+    ? msgData.peerPhone || (!msgData.fromMe ? msgData.senderPhone : "") || normalizePhoneDigits(remoteJid)
+    : "";
+  const peerLid = !isGroup
+    ? msgData.peerLid || (!msgData.fromMe ? msgData.senderLid : "") || normalizeLid(remoteJid)
+    : "";
+
+  const { canonicalJid, session: foundSession } = findConsolidatedSession(store, remoteJid, peerPhone, peerLid);
+  let session = foundSession;
+
   const previewLabel =
-    msgData.mediaType === "sticker"
+    (msgData.isViewOnce ? "👁️ " : "") +
+    (msgData.mediaType === "sticker"
       ? "🏷️ Sticker"
       : msgData.mediaType === "image"
       ? `📷 ${msgData.text || "Foto"}`
@@ -456,25 +671,43 @@ function recordChatMessage(
       ? `🎥 ${msgData.text || "Video"}`
       : msgData.mediaType === "audio"
       ? "🎤 Audio"
-      : msgData.text;
+      : msgData.text);
 
-  let session = store.get(remoteJid);
+  const peerIdentity = !isGroup
+    ? (peerPhone ? state.identityByPhone.get(peerPhone) : undefined) ||
+      (peerLid ? state.identityByLid.get(peerLid) : undefined)
+    : undefined;
+
+  const resolvedPeerName = !isGroup
+    ? peerIdentity?.name ||
+      (!msgData.fromMe && msgData.pushName && !isSameAsBot(botSock, "", "", msgData.pushName) ? msgData.pushName : "") ||
+      (peerPhone ? `+${peerPhone}` : peerLid ? `LID ${cleanDigits(peerLid)}` : `+${cleanRemote}`)
+    : msgData.chatName || `Grupo ${cleanRemote}`;
+
   if (!session) {
     session = {
-      jid: remoteJid,
-      name: msgData.chatName || (isGroup ? `Grupo ${cleanRemote}` : msgData.pushName || `+${cleanRemote}`),
+      jid: canonicalJid,
+      name: resolvedPeerName,
       isGroup,
+      peerPhone: peerPhone || "",
+      peerLid: peerLid || "",
       unread: 0,
       lastTime: nowTs,
-      lastPreview: previewLabel.slice(0, 70),
+      lastPreview: previewLabel.slice(0, 75),
       messages: [],
     };
-    store.set(remoteJid, session);
+    store.set(canonicalJid, session);
   } else {
-    if (msgData.chatName && (session.name.startsWith("Grupo ") || session.name.startsWith("+"))) {
+    if (peerPhone && !session.peerPhone) session.peerPhone = peerPhone;
+    if (peerLid && !session.peerLid) session.peerLid = peerLid;
+    if (isGroup && msgData.chatName && session.name.startsWith("Grupo ")) {
       session.name = msgData.chatName;
-    } else if (!isGroup && !msgData.fromMe && msgData.pushName && session.name.startsWith("+")) {
-      session.name = msgData.pushName;
+    } else if (!isGroup) {
+      const currentNameIsBot = isSameAsBot(botSock, "", "", session.name);
+      const currentNameIsGeneric = session.name.startsWith("+") || session.name.startsWith("LID ");
+      if (currentNameIsBot || (currentNameIsGeneric && resolvedPeerName && !resolvedPeerName.startsWith("+"))) {
+        session.name = resolvedPeerName;
+      }
     }
   }
 
@@ -485,19 +718,22 @@ function recordChatMessage(
   }
 
   session.lastTime = nowTs;
-  session.lastPreview = previewLabel.slice(0, 70);
+  session.lastPreview = previewLabel.slice(0, 75);
   if (!msgData.fromMe) {
     session.unread = Math.min(999, session.unread + 1);
   }
 
   const item: ChatMessageItem = {
     id: msgData.id,
-    sender: msgData.sender,
+    senderJid: msgData.senderJid,
+    senderPhone: msgData.senderPhone,
+    senderLid: msgData.senderLid,
     pushName: msgData.pushName,
     text: msgData.text,
     time: timeStr,
     timestamp: nowTs,
     fromMe: msgData.fromMe,
+    isViewOnce: Boolean(msgData.isViewOnce),
     mediaType: msgData.mediaType || null,
     mediaMime: msgData.mediaMime || "",
     hasMedia: Boolean(msgData.hasMedia || msgData.mediaType),
@@ -512,88 +748,229 @@ function recordChatMessage(
 
   session.messages.push(item);
   state.msgLookup.set(item.id, { botKey, msg: item });
-  if (state.msgLookup.size > 800) {
+  if (state.msgLookup.size > 1000) {
     const firstKey = state.msgLookup.keys().next().value;
     if (firstKey) state.msgLookup.delete(firstKey);
   }
 
-  if (session.messages.length > 150) {
-    session.messages.splice(0, session.messages.length - 150);
+  if (session.messages.length > 180) {
+    session.messages.splice(0, session.messages.length - 180);
   }
-}
 
-function getAllBotSockets(mainSock?: any): any[] {
-  const base = mainSock || state.lastSock;
-  let subs: any[] = [];
-  try {
-    if (typeof getActiveSubBots === "function") {
-      subs = getActiveSubBots() || [];
-    }
-  } catch {
-    subs = [];
-  }
-  const combined = [base, ...subs].filter(Boolean);
-  const seen = new Set<any>();
-  return combined.filter((s) => {
-    if (seen.has(s)) return false;
-    seen.add(s);
-    return true;
+  broadcastSse("chat_update", {
+    botKey,
+    jid: session.jid,
+    name: session.name,
+    peerPhone: session.peerPhone,
+    peerLid: session.peerLid,
+    unread: session.unread,
+    lastTime: session.lastTime,
+    lastPreview: session.lastPreview,
+    msgId: item.id,
   });
 }
 
-function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
-  const botKey = getBotKey(botSock, idx);
-  if (!force && state.botGroupSynced.has(botKey)) return;
-  if (state.botGroupSyncing.has(botKey)) return;
+function getAllBotSockets(mainSock?: any): any[] {
+  if (mainSock) {
+    state.lastSock = mainSock;
+    state.knownSockets.add(mainSock);
+  }
 
-  state.botGroupSyncing.add(botKey);
+  const gAny = globalThis as any;
+  const rawList: any[] = [
+    mainSock,
+    state.lastSock,
+    gAny.mainSocket,
+    gAny.mainSock,
+    gAny.sock,
+    ...Array.from(state.knownSockets),
+  ];
+
+  try {
+    if (typeof getActiveSubBots === "function") {
+      rawList.push(...(getActiveSubBots() || []));
+    }
+  } catch {}
+
+  try {
+    if (typeof getActivePremBots === "function") {
+      rawList.push(...(getActivePremBots() || []));
+    }
+  } catch {}
+
+  const unique: any[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const item of rawList) {
+    const realSock = item?.sock ?? item;
+    if (!realSock || typeof realSock.sendMessage !== "function" || (realSock as any).isClosed) {
+      continue;
+    }
+    state.knownSockets.add(realSock);
+    const info = getBotInfo(realSock, unique.length);
+    if (seenKeys.has(info.key)) continue;
+    seenKeys.add(info.key);
+    unique.push(realSock);
+  }
+
+  return unique;
+}
+
+function ingestGroupMetadata(botSock: any, botKey: string, jid: string, meta: any) {
+  if (!jid || !jid.endsWith("@g.us") || !meta) return;
   const store = ensureBotChatMap(botKey);
+  const participants: any[] = Array.isArray(meta.participants) ? meta.participants : [];
+  const members: GroupMemberItem[] = [];
+
+  for (const p of participants) {
+    const pId = String(p?.id || "");
+    const pLid = normalizeLid(p?.lid || (pId.endsWith("@lid") ? pId : ""));
+    const pPhone = normalizePhoneDigits(p?.phoneNumber || (pId.endsWith("@s.whatsapp.net") ? pId : ""));
+    const pName = String(p?.name || p?.notify || p?.verifiedName || "").trim();
+    const prof = registerIdentity(pPhone, pLid, pName, botSock);
+    members.push({
+      jid: pPhone ? `${pPhone}@s.whatsapp.net` : pLid || pId,
+      phone: prof.phone || pPhone,
+      lid: prof.lid || pLid,
+      name: prof.name || (pPhone ? `+${pPhone}` : pLid || "Miembro"),
+      isAdmin: p?.admin === "admin" || p?.admin === "superadmin",
+    });
+  }
+
+  const existing = store.get(jid);
+  if (!existing) {
+    store.set(jid, {
+      jid,
+      name: meta.subject || `Grupo ${cleanDigits(jid)}`,
+      isGroup: true,
+      peerPhone: "",
+      peerLid: "",
+      unread: 0,
+      lastTime: meta.creation ? Number(meta.creation) * 1000 : Date.now() - 86400000,
+      lastPreview: `👥 ${participants.length} miembros`,
+      statusText: meta.desc ? String(meta.desc).slice(0, 140) : "",
+      members,
+      messages: [],
+    });
+  } else {
+    if (meta.subject) existing.name = meta.subject;
+    if (meta.desc) existing.statusText = String(meta.desc).slice(0, 140);
+    if (members.length) existing.members = members;
+  }
+}
+
+function hydrateFastMemoryForBot(botSock: any, idx: number) {
+  const info = getBotInfo(botSock, idx);
+  const botKey = info.key;
+  const store = ensureBotChatMap(botKey);
+  const contactsMap = ensureBotContactsMap(botKey);
+
+  if (GROUP_METADATA_CACHE && typeof GROUP_METADATA_CACHE.entries === "function") {
+    for (const [gid, meta] of GROUP_METADATA_CACHE.entries()) {
+      if (gid.endsWith("@g.us") && meta?.participants) {
+        const hasBot = meta.participants.some((p: any) => {
+          const pPhone = cleanDigits(p?.phoneNumber || p?.id);
+          const pLid = normalizeLid(p?.lid || p?.id);
+          return (info.key && pPhone === info.key) || (info.lid && pLid === info.lid);
+        });
+        if (hasBot) {
+          ingestGroupMetadata(botSock, botKey, gid, meta);
+        }
+      }
+    }
+  }
+
+  if (botSock?.contacts && typeof botSock.contacts === "object") {
+    try {
+      const entries = botSock.contacts instanceof Map ? Array.from(botSock.contacts.entries()) : Object.entries(botSock.contacts);
+      for (const [cJid, cObj] of entries as Array<[string, any]>) {
+        if (!cJid || cJid.endsWith("@g.us") || cJid === "status@broadcast") continue;
+        const cPhone = normalizePhoneDigits(cObj?.phoneNumber || cObj?.id || cJid);
+        const cLid = normalizeLid(cObj?.lid || cJid);
+        const cName = String(cObj?.name || cObj?.notify || cObj?.verifiedName || "").trim();
+        registerIdentity(cPhone, cLid, cName, botSock);
+      }
+    } catch {}
+  }
+
+  const activeDb = (globalThis as any).db;
+  if (activeDb && typeof activeDb.getAllUsers === "function") {
+    try {
+      const users = activeDb.getAllUsers() || [];
+      for (const u of users.slice(0, 400)) {
+        const uPhone = normalizePhoneDigits(u?.phone_number || u?.jid);
+        const uLid = normalizeLid(u?.lid);
+        const uName = String(u?.pushName || u?.username || "").trim();
+        if (uPhone || uLid) {
+          registerIdentity(uPhone, uLid, uName, botSock);
+        }
+      }
+    } catch {}
+  }
 
   if (botSock?.chats && typeof botSock.chats === "object") {
     try {
       const entries = botSock.chats instanceof Map ? Array.from(botSock.chats.entries()) : Object.entries(botSock.chats);
       for (const [jid, cObj] of entries as Array<[string, any]>) {
-        if (!jid || jid === "status@broadcast" || store.has(jid)) continue;
+        if (!jid || jid === "status@broadcast" || jid.includes("newsletter") || store.has(jid)) continue;
         const isG = jid.endsWith("@g.us");
-        const clean = jid.split("@")[0].split(":")[0];
+        const pPhone = !isG ? normalizePhoneDigits(cObj?.phoneNumber || jid) : "";
+        const pLid = !isG ? normalizeLid(cObj?.lid || jid) : "";
+        const cName = String(cObj?.name || cObj?.subject || cObj?.notify || "").trim();
+        const prof = !isG ? registerIdentity(pPhone, pLid, cName, botSock) : null;
+
         store.set(jid, {
           jid,
-          name: cObj?.name || cObj?.subject || (isG ? `Grupo ${clean}` : `+${clean}`),
+          name: isG
+            ? cName || `Grupo ${cleanDigits(jid)}`
+            : prof?.name || (pPhone ? `+${pPhone}` : pLid ? `LID ${cleanDigits(pLid)}` : `+${cleanDigits(jid)}`),
           isGroup: isG,
+          peerPhone: prof?.phone || pPhone,
+          peerLid: prof?.lid || pLid,
           unread: Number(cObj?.unreadCount || 0),
-          lastTime: Number(cObj?.conversationTimestamp || Date.now() - 120000),
-          lastPreview: isG ? "👥 Grupo sincronizado" : "💬 Chat activo",
+          lastTime: Number(cObj?.conversationTimestamp ? Number(cObj.conversationTimestamp) * 1000 : Date.now() - 180000),
+          lastPreview: isG ? "👥 Grupo activo" : "💬 Conversación directa",
           messages: [],
         });
       }
     } catch {}
   }
 
+  for (const s of store.values()) {
+    if (!s.isGroup && (s.peerPhone || s.peerLid)) {
+      const key = s.peerPhone ? `${s.peerPhone}@s.whatsapp.net` : s.peerLid;
+      if (key && !contactsMap.has(key)) {
+        contactsMap.set(key, {
+          jid: key,
+          phone: s.peerPhone,
+          lid: s.peerLid,
+          name: s.name,
+          isGroup: false,
+        });
+      }
+    }
+  }
+}
+
+function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
+  hydrateFastMemoryForBot(botSock, idx);
+  const botKey = getBotInfo(botSock, idx).key;
+  if (!force && state.botGroupSynced.has(botKey)) return;
+  if (state.botGroupSyncing.has(botKey)) return;
+
+  state.botGroupSyncing.add(botKey);
+
   if (typeof botSock?.groupFetchAllParticipating === "function") {
     Promise.race([
       botSock.groupFetchAllParticipating(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 5000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 5500)),
     ])
       .then((groups: any) => {
         for (const [jid, meta] of Object.entries(groups || {}) as Array<[string, any]>) {
-          const existing = store.get(jid);
-          if (!existing) {
-            store.set(jid, {
-              jid,
-              name: meta?.subject || `Grupo ${jid.split("@")[0]}`,
-              isGroup: true,
-              unread: 0,
-              lastTime: meta?.creation ? Number(meta.creation) * 1000 : Date.now() - 86400000,
-              lastPreview: `👥 ${meta?.participants?.length || 0} miembros`,
-              statusText: meta?.desc ? String(meta.desc).slice(0, 120) : "",
-              messages: [],
-            });
-          } else {
-            if (meta?.subject) existing.name = meta.subject;
-            if (meta?.desc) existing.statusText = String(meta.desc).slice(0, 120);
-          }
+          ingestGroupMetadata(botSock, botKey, jid, meta);
         }
         state.botGroupSynced.add(botKey);
+        broadcastSse("sync_done", { botKey });
       })
       .catch(() => {})
       .finally(() => {
@@ -605,23 +982,85 @@ function triggerBackgroundGroupSync(botSock: any, idx: number, force = false) {
   }
 }
 
+function enqueueAvatarLookup(botKey: string, jid: string) {
+  const cacheKey = `${botKey}:${jid}`;
+  if (state.avatarCache.has(cacheKey)) return;
+  if (state.avatarQueue.some((q) => q.botKey === botKey && q.jid === jid)) return;
+  if (state.avatarQueue.length > 60) return;
+  state.avatarQueue.push({ botKey, jid });
+  processAvatarQueue();
+}
+
+async function processAvatarQueue() {
+  if (state.avatarWorkerBusy) return;
+  state.avatarWorkerBusy = true;
+  try {
+    while (state.avatarQueue.length > 0) {
+      const item = state.avatarQueue.shift()!;
+      const cacheKey = `${item.botKey}:${item.jid}`;
+      if (state.avatarCache.has(cacheKey)) continue;
+
+      const allBots = getAllBotSockets();
+      const targetBot = allBots.find((b, i) => getBotInfo(b, i).key === item.botKey) || allBots[0];
+      if (!targetBot || typeof targetBot.profilePictureUrl !== "function") {
+        state.avatarCache.set(cacheKey, "");
+        continue;
+      }
+
+      try {
+        const url = await Promise.race([
+          targetBot.profilePictureUrl(item.jid, "image"),
+          new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timeout")), 1600)),
+        ]);
+        const validUrl = typeof url === "string" ? url : "";
+        state.avatarCache.set(cacheKey, validUrl);
+        if (validUrl) {
+          const chat = ensureBotChatMap(item.botKey).get(item.jid);
+          if (chat) chat.avatarUrl = validUrl;
+        }
+      } catch {
+        state.avatarCache.set(cacheKey, "");
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  } finally {
+    state.avatarWorkerBusy = false;
+  }
+}
+
 function hookSockets(mainSock?: any) {
-  if (mainSock) state.lastSock = mainSock;
   const sockets = getAllBotSockets(mainSock);
 
   sockets.forEach((botSock, index) => {
     if (!botSock || typeof botSock !== "object") return;
-    const botKey = getBotKey(botSock, index);
-    ensureBotChatMap(botKey);
+    const info = getBotInfo(botSock, index);
+    ensureBotChatMap(info.key);
+    ensureBotContactsMap(info.key);
 
     if (!state.hookedSockets.has(botSock)) {
       state.hookedSockets.add(botSock);
       triggerBackgroundGroupSync(botSock, index);
 
       if (botSock.ev && typeof botSock.ev.on === "function") {
-        botSock.ev.on("messages.upsert", ({ messages }: any) => {
+        botSock.ev.on("contacts.upsert", (contacts: any[]) => {
+          if (!Array.isArray(contacts)) return;
+          for (const c of contacts) {
+            registerIdentity(c?.phoneNumber || c?.id, c?.lid || c?.id, c?.name || c?.notify || c?.verifiedName, botSock);
+          }
+        });
+
+        botSock.ev.on("contacts.update", (updates: any[]) => {
+          if (!Array.isArray(updates)) return;
+          for (const c of updates) {
+            registerIdentity(c?.phoneNumber || c?.id, c?.lid || c?.id, c?.name || c?.notify || c?.verifiedName, botSock);
+          }
+        });
+
+        botSock.ev.on("messages.upsert", async ({ messages }: any) => {
           if (!Array.isArray(messages)) return;
-          const currentKey = getBotKey(botSock, index);
+          const currentInfo = getBotInfo(botSock, index);
+          const currentKey = currentInfo.key;
+
           for (const m of messages) {
             if (!m?.message) continue;
 
@@ -630,27 +1069,53 @@ function hookSockets(mainSock?: any) {
               const targetId = reactObj.key?.id;
               const rJid = reactObj.key?.remoteJid || m.key?.remoteJid;
               const emoji = reactObj.text || "";
-              const reactor = String(m.key?.participant || m.key?.remoteJid || "user").split("@")[0];
+              const reactor = cleanDigits(m.key?.participant || m.key?.remoteJid || "user");
               if (rJid && targetId) {
-                const chat = ensureBotChatMap(currentKey).get(rJid);
-                const targetMsg = chat?.messages.find((x) => x.id === targetId);
-                if (targetMsg) {
-                  if (!targetMsg.reactions) targetMsg.reactions = {};
-                  if (emoji) targetMsg.reactions[reactor] = emoji;
-                  else delete targetMsg.reactions[reactor];
+                const lookup = state.msgLookup.get(targetId);
+                if (lookup) {
+                  if (!lookup.msg.reactions) lookup.msg.reactions = {};
+                  if (emoji) lookup.msg.reactions[reactor] = emoji;
+                  else delete lookup.msg.reactions[reactor];
+                  broadcastSse("reaction", { botKey: currentKey, jid: rJid, msgId: targetId, reactions: lookup.msg.reactions });
                 }
               }
               continue;
             }
 
             const fromMe = Boolean(m.key?.fromMe);
-            if (fromMe) state.msgTx++;
-            else state.msgRx++;
+            const remoteJid = String(m.key?.remoteJid || "");
+            if (!remoteJid || remoteJid === "status@broadcast") continue;
 
-            const remoteJid = m.key?.remoteJid || "";
-            const participant = m.key?.participant || (fromMe ? botSock?.user?.id : remoteJid) || "";
-            const senderNum = String(participant).split("@")[0].split(":")[0];
-            const pushName = fromMe ? (botSock?.user?.name || "Bot") : (m.pushName || `+${senderNum}`);
+            const isGroup = remoteJid.endsWith("@g.us");
+            const rawParticipant = String(
+              m.key?.participant ||
+                (m as any)?.participant ||
+                (fromMe ? currentInfo.jid : remoteJid) ||
+                ""
+            );
+            const altParticipant = String(
+              (m.key as any)?.participantPn ||
+                (m.key as any)?.senderPn ||
+                (m as any)?.participantPn ||
+                ""
+            );
+
+            const senderProfile = fromMe
+              ? { phone: currentInfo.key, lid: currentInfo.lid, name: currentInfo.name }
+              : await resolvePeerIdentity(botSock, rawParticipant || remoteJid, altParticipant, m.pushName, false);
+
+            const peerProfile = !isGroup
+              ? fromMe
+                ? await resolvePeerIdentity(botSock, remoteJid, altParticipant, undefined, true)
+                : senderProfile
+              : { phone: "", lid: "", name: "" };
+
+            const senderPhone = senderProfile.phone || cleanDigits(rawParticipant);
+            const senderLid = senderProfile.lid || normalizeLid(rawParticipant);
+            const pushName = fromMe
+              ? currentInfo.name
+              : senderProfile.name || m.pushName || (senderPhone ? `+${senderPhone}` : `LID ${cleanDigits(senderLid)}`);
+
             const msgId = m.key?.id || randomBytes(6).toString("hex");
             const rawTs = typeof m.messageTimestamp === "number" ? m.messageTimestamp * 1000 : Date.now();
 
@@ -672,12 +1137,17 @@ function hookSockets(mainSock?: any) {
               ).catch(() => {});
             }
 
-            recordChatMessage(currentKey, remoteJid, {
+            recordChatMessage(botSock, currentKey, remoteJid, {
               id: msgId,
-              sender: senderNum,
+              senderJid: rawParticipant || remoteJid,
+              senderPhone,
+              senderLid,
               pushName,
               text: details.text,
               fromMe,
+              isViewOnce: details.isViewOnce,
+              peerPhone: peerProfile.phone,
+              peerLid: peerProfile.lid,
               timestamp: rawTs,
               mediaType: details.mediaType,
               mediaMime: details.mediaMime,
@@ -691,69 +1161,6 @@ function hookSockets(mainSock?: any) {
             });
           }
         });
-
-        botSock.ev.on("call", async (calls: any[]) => {
-          if (!Array.isArray(calls)) return;
-          const currentKey = getBotKey(botSock, index);
-          for (const c of calls) {
-            const callId = String(c.id || randomBytes(4).toString("hex"));
-            const peerJid = String(c.from || c.chatId || "");
-            const cleanPeer = peerJid.split("@")[0].split(":")[0];
-            const status = String(c.status || "offer");
-            const isVideo = Boolean(c.isVideo);
-            const isGroup = Boolean(c.isGroup || peerJid.endsWith("@g.us"));
-            const now = Date.now();
-            const timeStr = new Date(now).toLocaleTimeString("es-CO", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            });
-
-            const existingCall = state.callLogs.find((x) => x.id === callId && x.botKey === currentKey);
-            if (existingCall) {
-              existingCall.status = status;
-              existingCall.timestamp = now;
-              existingCall.timeStr = timeStr;
-            } else {
-              const store = ensureBotChatMap(currentKey);
-              const knownName = store.get(peerJid)?.name || `+${cleanPeer}`;
-              state.callLogs.unshift({
-                id: callId,
-                botKey: currentKey,
-                peerJid,
-                peerName: knownName,
-                isVideo,
-                isGroup,
-                direction: "incoming",
-                status,
-                timestamp: now,
-                timeStr,
-              });
-              if (state.callLogs.length > 80) state.callLogs.pop();
-
-              recordChatMessage(currentKey, peerJid, {
-                id: `call_${callId}`,
-                sender: cleanPeer,
-                pushName: knownName,
-                text: `${isVideo ? "📹 Videollamada" : "📞 Llamada de voz"} entrante (${status.toUpperCase()})`,
-                fromMe: false,
-                timestamp: now,
-              });
-            }
-
-            if (status === "offer" && state.autoRejectCalls) {
-              try {
-                if (typeof botSock.rejectCall === "function") {
-                  await botSock.rejectCall(callId, peerJid);
-                }
-                if (state.autoRejectMessage && peerJid) {
-                  const origSend = state.originalSenders.get(botSock) || botSock.sendMessage.bind(botSock);
-                  await origSend(peerJid, { text: state.autoRejectMessage });
-                }
-              } catch {}
-            }
-          }
-        });
       }
 
       if (typeof botSock.sendMessage === "function") {
@@ -761,12 +1168,8 @@ function hookSockets(mainSock?: any) {
         state.originalSenders.set(botSock, origSend);
 
         botSock.sendMessage = async (jid: string, content: any, options?: any) => {
-          const currentKey = getBotKey(botSock, index);
-          const isSub = Boolean(botSock.isSubBot || index > 0);
-          if ((state.subbotsPaused && isSub) || state.pausedBotIds.has(currentKey)) {
-            return undefined;
-          }
-          state.msgTx++;
+          const currentInfo = getBotInfo(botSock, index);
+          const currentKey = currentInfo.key;
           const res = await origSend(jid, content, options);
 
           try {
@@ -800,15 +1203,28 @@ function hookSockets(mainSock?: any) {
               mediaType = "document";
               mediaMime = content.mimetype || "application/octet-stream";
               textPreview = `📄 ${content.fileName || "Documento"}`;
+            } else if (content?.location) {
+              textPreview = `📍 Ubicación: ${content.location.name || ""}`;
+            } else if (content?.contacts) {
+              textPreview = `👤 Contacto: ${content.contacts.displayName || ""}`;
             }
 
             if (textPreview || mediaType) {
-              recordChatMessage(currentKey, jid, {
+              const peerProf = !jid.endsWith("@g.us")
+                ? await resolvePeerIdentity(botSock, jid, undefined, undefined, true)
+                : { phone: "", lid: "", name: "" };
+
+              recordChatMessage(botSock, currentKey, jid, {
                 id: msgId,
-                sender: currentKey,
-                pushName: botSock?.user?.name || "Bot",
+                senderJid: currentInfo.jid,
+                senderPhone: currentInfo.key,
+                senderLid: currentInfo.lid,
+                pushName: currentInfo.name,
                 text: textPreview,
                 fromMe: true,
+                isViewOnce: Boolean(content?.viewOnce),
+                peerPhone: peerProf.phone,
+                peerLid: peerProf.lid,
                 timestamp: Date.now(),
                 mediaType,
                 mediaMime,
@@ -824,58 +1240,6 @@ function hookSockets(mainSock?: any) {
       }
     }
   });
-}
-
-async function syncCommandInterceptors() {
-  const cmdRoot = path.resolve(process.cwd(), "cmd");
-  if (!fs.existsSync(cmdRoot)) return [];
-
-  const allCmdNames: string[] = [];
-  const categories = fs.readdirSync(cmdRoot, { withFileTypes: true });
-
-  for (const cat of categories) {
-    if (!cat.isDirectory()) continue;
-    const catDir = path.join(cmdRoot, cat.name);
-    const files = fs.readdirSync(catDir).filter((f) => f.endsWith(".ts") || f.endsWith(".js"));
-
-    for (const file of files) {
-      const fullPath = path.join(catDir, file);
-      try {
-        const mod = await import(pathToFileURL(fullPath).href);
-        const plugin = mod?.default;
-        if (!plugin || typeof plugin.run !== "function") continue;
-
-        const names: string[] = Array.isArray(plugin.name) ? plugin.name : [String(plugin.name || "")];
-        const primaryName = names[0];
-        if (!primaryName) continue;
-
-        names.forEach((n) => {
-          if (n) allCmdNames.push(n.toLowerCase());
-        });
-
-        if (!state.wrappedCommands.has(fullPath)) {
-          const originalRun = plugin.run.bind(plugin);
-          state.wrappedCommands.set(fullPath, originalRun);
-
-          plugin.run = async (ctx: CommandContext) => {
-            const invoked = String(ctx.cmdName || primaryName).toLowerCase();
-            const isBlocked =
-              state.blockedCommands.has(invoked) ||
-              names.some((alias) => state.blockedCommands.has(alias.toLowerCase()));
-
-            if (isBlocked) {
-              return ctx.reply(
-                `🛠️ *${fytBold("MANTENIMIENTO ACTIVO")}*\n\nEl comando *${invoked}* se encuentra temporalmente deshabilitado desde el Panel Web.`
-              );
-            }
-            return originalRun(ctx);
-          };
-        }
-      } catch {}
-    }
-  }
-
-  return Array.from(new Set(allCmdNames)).sort();
 }
 
 async function fetchPublicIp(): Promise<string> {
@@ -895,7 +1259,10 @@ async function fetchPublicIp(): Promise<string> {
 }
 
 function extractValidTunnelUrl(text: string): string | null {
-  const regex = /https:\/\/[a-zA-Z0-9.-]+\.(?:lhr\.life|localhost\.run|serveo\.net|serveousercontent\.com|pinggy\.link|a\.pinggy\.io|trycloudflare\.com)/g;
+  const regex = new RegExp(
+    "https:\\/\\/[a-zA-Z0-9.-]+\\.(?:trycloudflare\\.com|lhr\\.life|localhost\\.run|serveo\\.net|serveousercontent\\.com|pinggy\\.link|a\\.pinggy\\.io)",
+    "g"
+  );
   const matches = text.match(regex);
   if (!matches) return null;
   for (const m of matches) {
@@ -910,6 +1277,48 @@ function extractValidTunnelUrl(text: string): string | null {
     }
   }
   return null;
+}
+
+function spawnCloudflaredTunnel(port: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (url: string | null) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(url);
+      }
+    };
+
+    const binCandidates = ["cloudflared", path.join(os.tmpdir(), "cloudflared")];
+    const bin = binCandidates.find((b) => (b.startsWith("/") ? fs.existsSync(b) : true)) || "cloudflared";
+
+    try {
+      const proc = spawn(bin, ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate"], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      state.tunnelProcess = proc;
+
+      const parseChunk = (chunk: Buffer) => {
+        const found = extractValidTunnelUrl(chunk.toString("utf8"));
+        if (found) {
+          state.tunnelUrl = found;
+          finish(found);
+        }
+      };
+
+      proc.stdout?.on("data", parseChunk);
+      proc.stderr?.on("data", parseChunk);
+      proc.on("error", () => finish(null));
+      proc.on("exit", () => {
+        if (!resolved) finish(null);
+      });
+
+      setTimeout(() => finish(null), 5000);
+    } catch {
+      finish(null);
+    }
+  });
 }
 
 function spawnSshTunnel(port: number, hostTarget: string, extraArgs: string[] = []): Promise<string | null> {
@@ -931,7 +1340,13 @@ function spawnSshTunnel(port: number, hostTarget: string, extraArgs: string[] = 
           "-o",
           "UserKnownHostsFile=/dev/null",
           "-o",
-          "ServerAliveInterval=30",
+          "ServerAliveInterval=15",
+          "-o",
+          "ServerAliveCountMax=3",
+          "-o",
+          "ExitOnForwardFailure=yes",
+          "-o",
+          "TCPKeepAlive=yes",
           ...extraArgs,
           "-R",
           `80:127.0.0.1:${port}`,
@@ -953,36 +1368,39 @@ function spawnSshTunnel(port: number, hostTarget: string, extraArgs: string[] = 
 
       sshProc.stdout?.on("data", parseChunk);
       sshProc.stderr?.on("data", parseChunk);
-
       sshProc.on("error", () => finish(null));
       sshProc.on("exit", () => {
         if (!resolved) finish(null);
       });
 
-      setTimeout(() => finish(null), 5500);
+      setTimeout(() => finish(null), 5000);
     } catch {
       finish(null);
     }
   });
 }
 
-async function startPublicTunnel(port: number): Promise<string | null> {
+async function startPublicTunnel(port: number, forceRestart = false): Promise<string | null> {
   if (
+    !forceRestart &&
     state.tunnelUrl &&
-    !state.tunnelUrl.includes("admin.localhost.run") &&
     state.tunnelProcess &&
-    !state.tunnelProcess.killed
+    !state.tunnelProcess.killed &&
+    state.tunnelProcess.exitCode === null
   ) {
     return state.tunnelUrl;
   }
 
   if (state.tunnelProcess) {
     try {
-      state.tunnelProcess.kill();
+      state.tunnelProcess.kill("SIGKILL");
     } catch {}
     state.tunnelProcess = null;
     state.tunnelUrl = null;
   }
+
+  const cf = await spawnCloudflaredTunnel(port);
+  if (cf) return cf;
 
   const primary = await spawnSshTunnel(port, "nokey@localhost.run");
   if (primary) return primary;
@@ -994,48 +1412,53 @@ async function startPublicTunnel(port: number): Promise<string | null> {
   return tertiary;
 }
 
-async function sendCredentialsEmail(email: string, url: string, user: string, pass: string, token: string): Promise<boolean> {
-  const subject = "Aura-Bot 2.0 - Credenciales Temporales Panel Web";
-  const body = [
-    `Hola Luis Fernando,`,
-    ``,
-    `Credenciales activas para el Panel Web y WhatsApp Web Multi-Subbot de Aura-Bot 2.0:`,
-    ``,
-    `Enlace de Acceso: ${url}`,
-    `Usuario Temporal: ${user}`,
-    `Clave / Codigo OTP: ${pass}`,
-    `Token Directo: ${token}`,
-    ``,
-    `Acceso directo en un clic: ${url}/?token=${token}`,
-  ].join("\n");
+function ensureTunnelWatchdog(port: number) {
+  if (state.tunnelWatchdogTimer) return;
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        _subject: subject,
-        _captcha: "false",
-        usuario_temporal: user,
-        clave_otp: pass,
-        enlace_panel: `${url}/?token=${token}`,
-        mensaje: body,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (res.ok) return true;
-  } catch {}
+  state.tunnelWatchdogTimer = setInterval(async () => {
+    try {
+      const procDead =
+        !state.tunnelProcess ||
+        state.tunnelProcess.killed ||
+        state.tunnelProcess.exitCode !== null;
 
-  try {
-    const escapedBody = body.replace(/"/g, '\\"');
-    await execAsync(`printf "Subject: ${subject}\\nTo: ${email}\\n\\n${escapedBody}\\n" | sendmail -t 2>/dev/null`);
-    return true;
-  } catch {}
+      let httpDead = false;
+      if (!procDead && state.tunnelUrl) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          const r = await fetch(`${state.tunnelUrl}/api/ping`, { signal: controller.signal });
+          clearTimeout(timer);
+          if (!r.ok && r.status !== 401) httpDead = true;
+        } catch {
+          httpDead = true;
+        }
+      }
 
-  return false;
+      if (procDead || httpDead) {
+        const oldUrl = state.tunnelUrl;
+        const newUrl = await startPublicTunnel(port, true);
+        if (newUrl && newUrl !== oldUrl) {
+          broadcastSse("tunnel_update", { url: `${newUrl}/?token=${state.token}` });
+          if (state.lastSock) {
+            const origSend = state.originalSenders.get(state.lastSock) || state.lastSock.sendMessage?.bind(state.lastSock);
+            if (origSend) {
+              await origSend(state.ownerJid, {
+                text: [
+                  `🔄 *${fytBold("TÚNEL AUTO-RECONECTADO")}*`,
+                  ``,
+                  `El túnel anterior expiró y el Watchdog levantó uno nuevo automáticamente:`,
+                  `⚡ ${newUrl}/?token=${state.token}`,
+                ].join("\n"),
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {}
+  }, 22000);
+
+  state.tunnelWatchdogTimer.unref?.();
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<any> {
@@ -1043,7 +1466,7 @@ async function readJsonBody(req: http.IncomingMessage): Promise<any> {
     let raw = "";
     req.on("data", (chunk) => {
       raw += chunk.toString("utf8");
-      if (raw.length > 25 * 1024 * 1024) req.destroy();
+      if (raw.length > 30 * 1024 * 1024) req.destroy();
     });
     req.on("end", () => {
       try {
@@ -1066,65 +1489,46 @@ function sendJson(res: http.ServerResponse, status: number, payload: any) {
   res.end(data);
 }
 
-function safeResolvePath(relPath: string): string {
-  const root = process.cwd();
-  const target = path.resolve(root, relPath || ".");
-  if (!target.startsWith(root)) return root;
-  return target;
-}
-
-function buildLoginHtml(email: string): string {
+function buildLoginHtml(): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Aura-Bot 2.0 | Acceso Propietario</title>
+<title>Aura WhatsApp Web | Acceso</title>
 <style>
-  :root {
-    --bg: #07090e;
-    --panel: #10141f;
-    --border: #1e2638;
-    --accent: #00e5ff;
-    --danger: #ff2a54;
-    --success: #00e676;
-    --text: #e2e8f0;
-    --muted: #8b9bb4;
-  }
+  :root { --bg: #080d11; --panel: #111b21; --border: #222e35; --accent: #00a884; --text: #e9edef; --muted: #8696a0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: radial-gradient(circle at top, #121a2d 0%, #07090e 100%); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .login-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 30px 24px; width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,0.65); }
-  .title { font-size: 21px; font-weight: 900; color: var(--accent); margin-bottom: 6px; text-align: center; letter-spacing: 0.5px; }
-  .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; line-height: 1.45; }
+  body { background: radial-gradient(circle at top, #112229 0%, #080d11 100%); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 30px 24px; width: 100%; max-width: 400px; box-shadow: 0 24px 60px rgba(0,0,0,0.65); }
+  .title { font-size: 20px; font-weight: 900; color: var(--accent); margin-bottom: 6px; text-align: center; }
+  .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; }
   label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; margin-top: 14px; }
-  input { width: 100%; background: #07090e; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; transition: 0.2s; }
-  input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,229,255,0.15); }
-  .btn { width: 100%; background: var(--accent); color: #000; border: none; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: 20px; transition: 0.2s; }
-  .btn:hover { opacity: 0.92; }
-  .btn-sec { background: transparent; color: var(--accent); border: 1px solid var(--accent); margin-top: 10px; }
+  input { width: 100%; background: #0b141a; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .btn { width: 100%; background: var(--accent); color: #080d11; border: none; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: 20px; }
   .msg { margin-top: 14px; font-size: 13px; text-align: center; font-weight: 600; }
 </style>
 </head>
 <body>
-  <div class="login-card">
-    <div class="title">⚡ AURA-BOT 2.0 • SUITE</div>
-    <div class="sub">Ingresa las credenciales temporales enviadas a tu WhatsApp o a ${email}</div>
+  <div class="card">
+    <div class="title">💬 AURA WHATSAPP WEB</div>
+    <div class="sub">Ingresa tu usuario temporal o código OTP enviado a tu WhatsApp</div>
     <form onsubmit="doLogin(event)">
-      <label>Usuario Temporal o Correo</label>
-      <input type="text" id="userInp" placeholder="Ej: lufer_a1b2" required autocomplete="off">
-      <label>Clave / Código OTP</label>
-      <input type="password" id="passInp" placeholder="Código de 6 dígitos" required autocomplete="off">
-      <button type="submit" class="btn">🔓 Iniciar Sesión</button>
+      <label>Usuario Temporal</label>
+      <input type="text" id="userInp" placeholder="lufer_xxxx" required autocomplete="off">
+      <label>Código OTP / Token</label>
+      <input type="password" id="passInp" placeholder="6 dígitos" required autocomplete="off">
+      <button type="submit" class="btn">🔓 Entrar a WhatsApp Web</button>
     </form>
-    <button type="button" class="btn btn-sec" onclick="sendNewCode()">📲 Generar y Enviar Nuevas Credenciales</button>
     <div class="msg" id="statusMsg"></div>
   </div>
 <script>
 async function doLogin(e) {
   e.preventDefault();
   const msg = document.getElementById('statusMsg');
-  msg.style.color = '#8b9bb4';
-  msg.textContent = 'Verificando credenciales...';
+  msg.style.color = '#8696a0';
+  msg.textContent = 'Verificando...';
   const user = document.getElementById('userInp').value.trim();
   const pass = document.getElementById('passInp').value.trim();
   try {
@@ -1135,36 +1539,14 @@ async function doLogin(e) {
     });
     const d = await r.json();
     if (d.ok && d.token) {
-      msg.style.color = '#00e676';
-      msg.textContent = 'Acceso concedido...';
       window.location.href = '/?token=' + encodeURIComponent(d.token);
     } else {
       msg.style.color = '#ff2a54';
-      msg.textContent = d.error || 'Credenciales incorrectas.';
+      msg.textContent = d.error || 'Credenciales inválidas.';
     }
   } catch (err) {
     msg.style.color = '#ff2a54';
-    msg.textContent = 'Error de conexión.';
-  }
-}
-
-async function sendNewCode() {
-  const msg = document.getElementById('statusMsg');
-  msg.style.color = '#00e5ff';
-  msg.textContent = 'Enviando nuevas credenciales al chat privado y correo...';
-  try {
-    const r = await fetch('/api/request-otp', { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      msg.style.color = '#00e676';
-      msg.textContent = 'Credenciales enviadas a tu WhatsApp y a ' + d.email;
-    } else {
-      msg.style.color = '#ff2a54';
-      msg.textContent = 'No se pudo enviar.';
-    }
-  } catch (e) {
-    msg.style.color = '#ff2a54';
-    msg.textContent = 'Error al solicitar código.';
+    msg.textContent = 'Error de red.';
   }
 }
 </script>
@@ -1172,423 +1554,312 @@ async function sendNewCode() {
 </html>`;
 }
 
-function buildDashboardHtml(token: string): string {
+function buildWaWebHtml(token: string): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Aura-Bot 2.0 | WhatsApp Web & Control Suite</title>
+<title>Aura WhatsApp Web Multi-Subbot</title>
 <style>
   :root {
-    --bg: #07090e;
-    --panel: #10141f;
-    --panel2: #161c2b;
-    --border: #1e2638;
-    --accent: #00e5ff;
+    --bg: #0b141a;
+    --panel: #111b21;
+    --panel-head: #202c33;
+    --border: #222e35;
     --wa-green: #00a884;
     --wa-teal: #008069;
     --wa-out: #005c4b;
     --wa-in: #202c33;
-    --wa-bg: #0b141a;
-    --wa-panel: #111b21;
+    --accent: #00e5ff;
+    --troll: #b388ff;
     --danger: #ff2a54;
-    --success: #00e676;
-    --warn: #ffab00;
     --text: #e9edef;
     --muted: #8696a0;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100dvh; display: flex; flex-direction: column; overflow-x: hidden; }
-  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; gap: 8px; }
-  .brand { font-size: 15px; font-weight: 900; color: var(--accent); letter-spacing: 0.4px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .header-right { display: flex; align-items: center; gap: 8px; }
-  .badge { background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .tabs { display: flex; gap: 6px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--border); background: #0b0e17; scrollbar-width: none; position: sticky; top: 45px; z-index: 90; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab-btn { background: var(--panel); color: var(--muted); border: 1px solid var(--border); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 12px; white-space: nowrap; transition: 0.15s; display: flex; align-items: center; gap: 5px; }
-  .tab-btn.active, .tab-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(0,229,255,0.12); }
-  .container { width: 100%; max-width: 1440px; margin: 10px auto; padding: 0 12px 24px; flex: 1; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow: hidden; }
-  .card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; font-weight: 700; }
-  .card-val { font-size: 20px; font-weight: 800; color: var(--text); }
-  .card-sub { font-size: 11px; color: var(--accent); margin-top: 4px; }
-  .section { display: none; }
-  .section.active { display: block; }
-  .table-wrap { width: 100%; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 500px; }
-  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: 11px; }
-  .btn { background: var(--accent); color: #000; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; transition: 0.15s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
-  .btn:hover { opacity: 0.88; }
-  .btn-danger { background: var(--danger); color: #fff; }
-  .btn-warn { background: var(--warn); color: #000; }
-  .btn-success { background: var(--success); color: #000; }
-  .btn-wa { background: var(--wa-green); color: #fff; }
+  body { background: #060a0d; color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .top-bar { background: #111b21; border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; z-index: 50; }
+  .brand { font-size: 14px; font-weight: 900; color: var(--wa-green); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .bot-switcher { display: flex; align-items: center; gap: 6px; flex: 1; max-width: 460px; }
+  select, input, textarea { background: #202c33; color: var(--text); border: 1px solid #2a3942; border-radius: 8px; padding: 8px 11px; font-size: 13px; outline: none; width: 100%; }
+  select:focus, input:focus, textarea:focus { border-color: var(--wa-green); }
+  .btn { background: var(--wa-green); color: #081014; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; transition: 0.15s; }
+  .btn:hover { opacity: 0.9; }
   .btn-ghost { background: #2a3942; color: var(--text); }
-  input, select, textarea { background: #07090e; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 13px; width: 100%; outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-  textarea { font-family: monospace; min-height: 280px; resize: vertical; }
-  .flex-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-  .pill { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; }
-  .pill-on { background: rgba(0,230,118,0.15); color: var(--success); }
-  .pill-off { background: rgba(255,42,84,0.15); color: var(--danger); }
-  .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; margin-top: 12px; }
-  .cmd-item { background: #0b0e17; border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-  pre { background: #05070b; border: 1px solid var(--border); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; color: #00e676; max-height: 320px; }
+  .btn-troll { background: linear-gradient(135deg, #7c4dff, #ff2a54); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .status-pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: rgba(0,168,132,0.15); color: var(--wa-green); border: 1px solid rgba(0,168,132,0.4); white-space: nowrap; }
 
-  .wa-wrapper { display: grid; grid-template-columns: 360px 1fr; height: calc(100dvh - 118px); min-height: 520px; background: var(--wa-bg); border: 1px solid #222e35; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.5); position: relative; }
-  .wa-sidebar { background: var(--wa-panel); border-right: 1px solid #222e35; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .wa-side-top { padding: 10px; background: #202c33; border-bottom: 1px solid #222e35; display: flex; flex-direction: column; gap: 8px; }
-  .wa-bot-select-row { display: flex; gap: 6px; align-items: center; }
-  .wa-search-row { display: flex; gap: 6px; }
-  .wa-filter-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-  .wa-chip { background: #202c33; color: var(--muted); border: 1px solid #2a3942; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-  .wa-chip.active { background: rgba(0,168,132,0.2); color: #00a884; border-color: #00a884; }
-  .wa-chat-list { flex: 1; overflow-y: auto; }
-  .wa-chat-item { padding: 11px 14px; border-bottom: 1px solid rgba(134,150,160,0.12); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 11px; transition: background 0.15s; }
-  .wa-chat-item:hover { background: #202c33; }
-  .wa-chat-item.active { background: #2a3942; }
-  .wa-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--wa-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; overflow: hidden; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
-  .wa-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .wa-chat-meta { flex: 1; min-width: 0; }
-  .wa-chat-name { font-size: 14px; font-weight: 700; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .wa-chat-prev { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-  .wa-chat-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
-  .wa-chat-time { font-size: 11px; color: var(--muted); }
-  .wa-unread { background: var(--wa-green); color: #111b21; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; }
+  .wa-layout { flex: 1; display: grid; grid-template-columns: 370px 1fr; overflow: hidden; position: relative; background: var(--bg); }
+  .wa-sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .side-controls { padding: 10px; background: #111b21; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .search-row { display: flex; gap: 6px; }
+  .filter-tabs { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .chip { background: #202c33; color: var(--muted); border: 1px solid #2a3942; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .chip.active { background: rgba(0,168,132,0.2); color: var(--wa-green); border-color: var(--wa-green); }
 
-  .wa-main { display: flex; flex-direction: column; height: 100%; background: var(--wa-bg); position: relative; overflow: hidden; }
-  .wa-header { background: #202c33; padding: 8px 12px; border-bottom: 1px solid #222e35; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 58px; z-index: 10; }
-  .wa-header-left { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; flex: 1; overflow: hidden; }
-  .wa-back-btn { display: none; background: #2a3942; color: #fff; border: none; padding: 7px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
-  .wa-header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-  .wa-icon-btn { background: #2a3942; color: var(--text); border: none; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; transition: 0.15s; flex-shrink: 0; }
-  .wa-icon-btn:hover { background: #374854; }
+  .chat-list { flex: 1; overflow-y: auto; }
+  .chat-item { padding: 10px 13px; border-bottom: 1px solid rgba(134,150,160,0.1); cursor: pointer; display: flex; align-items: center; gap: 11px; transition: background 0.12s; }
+  .chat-item:hover { background: #202c33; }
+  .chat-item.active { background: #2a3942; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--wa-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; overflow: hidden; position: relative; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .chat-meta { flex: 1; min-width: 0; }
+  .chat-title-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .chat-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-time { font-size: 10.5px; color: var(--muted); flex-shrink: 0; }
+  .chat-id-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+  .id-tag { font-size: 10px; font-family: monospace; padding: 1px 5px; border-radius: 4px; background: rgba(0,229,255,0.1); color: #00e5ff; border: 1px solid rgba(0,229,255,0.22); }
+  .id-tag.lid { background: rgba(179,136,255,0.12); color: #d1c4e9; border-color: rgba(179,136,255,0.25); }
+  .chat-prev-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 3px; }
+  .chat-prev { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .unread-badge { background: var(--wa-green); color: #0b141a; font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 999px; flex-shrink: 0; }
 
-  .wa-messages {
+  .wa-main { display: flex; flex-direction: column; height: 100%; position: relative; overflow: hidden; background: var(--bg); }
+  .chat-header { background: var(--panel-head); padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; z-index: 15; }
+  .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; cursor: pointer; }
+  .back-btn { display: none; background: #2a3942; color: #fff; border: none; padding: 7px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; }
+  .header-info { min-width: 0; flex: 1; }
+  .header-name { font-size: 14.5px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-sub { font-size: 11.5px; color: #00e5ff; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .icon-btn { background: #2a3942; color: var(--text); border: none; width: 35px; height: 35px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; transition: 0.15s; }
+  .icon-btn:hover { background: #374854; }
+
+  .messages-box {
     flex: 1;
-    padding: 14px 16px;
+    padding: 14px 18px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
     background-color: #0b141a;
     background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0);
-    background-size: 24px 24px;
+    background-size: 22px 22px;
   }
-  .wa-msg-row { display: flex; flex-direction: column; max-width: 78%; position: relative; }
-  .wa-msg-row.in { align-self: flex-start; }
-  .wa-msg-row.out { align-self: flex-end; }
-  .wa-bubble { padding: 7px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.42; position: relative; word-wrap: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
-  .wa-msg-row.in .wa-bubble { background: var(--wa-in); color: #e9edef; border-top-left-radius: 2px; }
-  .wa-msg-row.out .wa-bubble { background: var(--wa-out); color: #e9edef; border-top-right-radius: 2px; }
-  .wa-bubble.sticker-bubble { background: transparent !important; box-shadow: none !important; padding: 2px !important; }
-  .wa-bubble-sender { font-size: 11.5px; font-weight: 800; color: #00e5ff; margin-bottom: 3px; cursor: pointer; }
-  .wa-quoted-box { background: rgba(0,0,0,0.26); border-left: 3px solid var(--wa-green); border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; font-size: 11.5px; color: #cfd8dc; max-height: 60px; overflow: hidden; }
-  .wa-quoted-sender { font-weight: 800; color: var(--wa-green); font-size: 11px; margin-bottom: 2px; }
-  .wa-media-img { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; object-fit: cover; display: block; margin-bottom: 4px; cursor: zoom-in; background: #111b21; min-height: 80px; }
-  .wa-media-sticker { width: 140px; height: 140px; object-fit: contain; display: block; cursor: pointer; transition: transform 0.15s; }
-  .wa-media-sticker:hover { transform: scale(1.06); }
-  .wa-media-video { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; display: block; margin-bottom: 4px; background: #000; }
-  .wa-media-audio { width: 240px; max-width: 100%; height: 38px; margin: 3px 0; }
-  .wa-bubble-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.62); margin-top: 3px; }
-  .wa-msg-tools { display: none; gap: 4px; position: absolute; top: -12px; right: 4px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-  .wa-msg-row.in .wa-msg-tools { right: auto; left: 4px; }
-  .wa-msg-row:hover .wa-msg-tools { display: flex; }
-  .wa-tool-btn { background: transparent; border: none; color: #e9edef; cursor: pointer; font-size: 12px; padding: 2px 4px; }
-  .wa-tool-btn:hover { transform: scale(1.2); }
-  .wa-reactions-pill { display: inline-flex; gap: 3px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; font-size: 11px; margin-top: -6px; align-self: flex-end; z-index: 5; }
+  .msg-row { display: flex; flex-direction: column; max-width: 78%; position: relative; }
+  .msg-row.in { align-self: flex-start; }
+  .msg-row.out { align-self: flex-end; }
+  .bubble { padding: 7px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.42; position: relative; word-wrap: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+  .msg-row.in .bubble { background: var(--wa-in); color: var(--text); border-top-left-radius: 2px; }
+  .msg-row.out .bubble { background: var(--wa-out); color: var(--text); border-top-right-radius: 2px; }
+  .bubble.sticker-bubble { background: transparent !important; box-shadow: none !important; padding: 2px !important; }
+  .sender-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; font-size: 11px; font-weight: 800; color: var(--accent); cursor: pointer; }
+  .sender-badge { font-family: monospace; font-size: 10px; font-weight: 600; background: rgba(0,0,0,0.3); color: #cbd5e1; padding: 1px 5px; border-radius: 4px; }
+  .vo-badge { display: inline-block; background: rgba(255,42,84,0.2); color: #ff6b8b; border: 1px solid #ff2a54; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 5px; margin-bottom: 4px; }
+  .quoted-box { background: rgba(0,0,0,0.28); border-left: 3px solid var(--wa-green); border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; font-size: 11.5px; color: #cfd8dc; }
+  .quoted-sender { font-weight: 800; color: var(--wa-green); font-size: 11px; margin-bottom: 2px; }
+  .media-img { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; object-fit: cover; display: block; margin-bottom: 4px; cursor: zoom-in; background: #111b21; }
+  .media-sticker { width: 140px; height: 140px; object-fit: contain; display: block; cursor: pointer; }
+  .media-video { max-width: 280px; width: 100%; max-height: 320px; border-radius: 8px; display: block; margin-bottom: 4px; background: #000; }
+  .media-audio { width: 245px; max-width: 100%; height: 38px; margin: 3px 0; }
+  .bubble-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.62); margin-top: 3px; }
+  .msg-tools { display: none; gap: 4px; position: absolute; top: -13px; right: 4px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 7px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.45); }
+  .msg-row.in .msg-tools { right: auto; left: 4px; }
+  .msg-row:hover .msg-tools { display: flex; }
+  .tool-btn { background: transparent; border: none; color: var(--text); cursor: pointer; font-size: 12px; padding: 2px 4px; }
+  .tool-btn:hover { transform: scale(1.2); }
+  .reactions-pill { display: inline-flex; gap: 3px; background: #202c33; border: 1px solid #2a3942; border-radius: 999px; padding: 2px 6px; font-size: 11px; margin-top: -6px; align-self: flex-end; z-index: 5; }
 
-  .wa-reply-bar { display: none; background: #182229; border-top: 1px solid #222e35; border-left: 4px solid var(--wa-green); padding: 8px 14px; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
-  .wa-reply-bar.active { display: flex; }
-  .wa-emoji-bar { display: none; background: #182229; border-top: 1px solid #222e35; padding: 8px 12px; gap: 8px; flex-wrap: wrap; align-items: center; max-height: 130px; overflow-y: auto; }
-  .wa-emoji-bar.active { display: flex; }
-  .wa-emoji-item { font-size: 20px; cursor: pointer; padding: 3px; user-select: none; transition: transform 0.1s; }
-  .wa-emoji-item:hover { transform: scale(1.25); }
+  .reply-bar { display: none; background: #182229; border-top: 1px solid var(--border); border-left: 4px solid var(--wa-green); padding: 8px 14px; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+  .reply-bar.active { display: flex; }
+  .emoji-bar { display: none; background: #182229; border-top: 1px solid var(--border); padding: 8px 12px; gap: 8px; flex-wrap: wrap; max-height: 130px; overflow-y: auto; }
+  .emoji-bar.active { display: flex; }
+  .emoji-item { font-size: 20px; cursor: pointer; padding: 3px; user-select: none; }
 
-  .wa-composer { background: #202c33; padding: 8px 10px; display: flex; gap: 6px; align-items: center; border-top: 1px solid #222e35; }
-  .wa-composer input[type="text"] { background: #2a3942; border: none; color: #e9edef; padding: 10px 13px; border-radius: 10px; flex: 1; font-size: 14px; min-width: 0; }
+  .composer { background: var(--panel-head); padding: 8px 10px; display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--border); }
+  .composer input[type="text"] { background: #2a3942; border: none; padding: 10px 13px; border-radius: 10px; flex: 1; font-size: 14px; }
+  .vo-toggle.active { background: var(--danger); color: #fff; box-shadow: 0 0 10px rgba(255,42,84,0.5); }
 
-  .wa-drawer { position: absolute; top: 0; right: 0; width: 320px; max-width: 100%; height: 100%; background: var(--wa-panel); border-left: 1px solid #222e35; z-index: 40; display: none; flex-direction: column; overflow-y: auto; padding: 16px; }
-  .wa-drawer.open { display: flex; }
+  .drawer { position: absolute; top: 0; right: 0; width: 350px; max-width: 100%; height: 100%; background: #111b21; border-left: 1px solid var(--border); z-index: 40; display: none; flex-direction: column; overflow-y: auto; padding: 14px; gap: 12px; box-shadow: -10px 0 30px rgba(0,0,0,0.6); }
+  .drawer.open { display: flex; }
+  .troll-box { background: #182229; border: 1px solid #263540; border-radius: 11px; padding: 11px; display: flex; flex-direction: column; gap: 7px; }
+  .troll-box h5 { font-size: 12px; color: var(--troll); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+  .troll-lbl { font-size: 10.5px; color: var(--muted); font-weight: 700; }
 
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; }
   .modal-backdrop.open { display: flex; }
-  .lightbox-img { max-width: 94vw; max-height: 85vh; border-radius: 10px; object-fit: contain; }
+  .lightbox-img { max-width: 94vw; max-height: 88vh; border-radius: 10px; object-fit: contain; }
 
-  .call-banner { position: fixed; bottom: 20px; right: 20px; background: #161f2c; border: 2px solid var(--wa-green); border-radius: 16px; padding: 16px 20px; z-index: 950; width: 320px; box-shadow: 0 18px 45px rgba(0,0,0,0.75); display: none; flex-direction: column; gap: 10px; animation: pulseBorder 1.5s infinite; }
-  .call-banner.active { display: flex; }
-  @keyframes pulseBorder { 0% { box-shadow: 0 0 0 0 rgba(0,168,132,0.6); } 70% { box-shadow: 0 0 0 14px rgba(0,168,132,0); } 100% { box-shadow: 0 0 0 0 rgba(0,168,132,0); } }
-
-  @media (max-width: 860px) {
-    .container { padding: 0 6px 14px; margin: 6px auto; }
-    .wa-wrapper { grid-template-columns: 1fr; height: calc(100dvh - 108px); border-radius: 8px; }
-    .wa-wrapper.chat-open .wa-sidebar { display: none; }
-    .wa-wrapper:not(.chat-open) .wa-main { display: none; }
-    .wa-back-btn { display: inline-flex; }
-    .wa-msg-row { max-width: 88%; }
-    .wa-media-img, .wa-media-video { max-width: 245px; }
-    .wa-avatar { width: 38px; height: 38px; font-size: 13px; }
-    .wa-icon-btn { width: 32px; height: 32px; font-size: 13px; }
+  @media (max-width: 840px) {
+    .wa-layout { grid-template-columns: 1fr; }
+    .wa-layout.chat-open .wa-sidebar { display: none; }
+    .wa-layout:not(.chat-open) .wa-main { display: none; }
+    .back-btn { display: inline-flex; }
+    .msg-row { max-width: 88%; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">⚡ AURA-BOT 2.0 • SUITE</div>
-  <div class="header-right">
-    <div class="badge" id="callStatusBadge" style="display:none; background:rgba(255,42,84,0.2); color:#ff2a54; border-color:#ff2a54;">📞 Llamada Activa</div>
-    <div class="badge" id="uptimeBadge">⏱️ 0h 0m 0s</div>
+<div class="top-bar">
+  <div class="brand">⚡ AURA WA-WEB PRO</div>
+  <div class="bot-switcher">
+    <select id="waBotSelector" onchange="onSelectSubbot()"></select>
+    <button class="btn" onclick="syncSubbotGroups()" title="Sincronizar Grupos y Contactos">🔄</button>
+    <button class="btn btn-ghost" onclick="startNewChatPrompt()" title="Abrir chat por número o LID">➕</button>
   </div>
-</header>
-
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('wa', this)">💬 WhatsApp Web</button>
-  <button class="tab-btn" onclick="switchTab('calls', this)">📞 Central de Llamadas <span id="callCountPill" class="pill pill-on" style="display:none">0</span></button>
-  <button class="tab-btn" onclick="switchTab('dash', this)">📊 Clúster & Subbots</button>
-  <button class="tab-btn" onclick="switchTab('procs', this)">💀 Procesos & RAM</button>
-  <button class="tab-btn" onclick="switchTab('cmds', this)">🛠️ Comandos</button>
-  <button class="tab-btn" onclick="switchTab('spam', this)">🚨 Reportes / Spam</button>
-  <button class="tab-btn" onclick="switchTab('files', this)">📁 Archivos & Editor</button>
-  <button class="tab-btn" onclick="switchTab('bench', this)">⚡ Benchmark & Shell</button>
+  <div class="status-pill" id="sseStatusPill">🟢 LIVE</div>
 </div>
 
-<div class="container">
-  <div id="tab-wa" class="section active">
-    <div class="wa-wrapper" id="waWrapper">
-      <div class="wa-sidebar">
-        <div class="wa-side-top">
-          <div class="wa-bot-select-row">
-            <select id="waBotSelector" onchange="onSelectSubbot()" style="flex:1; font-weight:700;"></select>
-            <button class="btn btn-wa" onclick="syncSubbotGroups()" title="Sincronizar Grupos">🔄</button>
-          </div>
-          <div class="wa-search-row">
-            <input type="text" id="waSearchInput" placeholder="Buscar chat, número o mensaje..." oninput="renderWaChatList(true)">
-            <button class="btn" onclick="startNewChatPrompt()" title="Nuevo chat">➕</button>
-          </div>
-          <div class="wa-filter-row">
-            <button class="wa-chip active" onclick="setChatFilter('all', this)">Todos</button>
-            <button class="wa-chip" onclick="setChatFilter('unread', this)">No leídos</button>
-            <button class="wa-chip" onclick="setChatFilter('groups', this)">Grupos</button>
-            <button class="wa-chip" onclick="setChatFilter('direct', this)">Privados</button>
-          </div>
-        </div>
-        <div class="wa-chat-list" id="waChatList"></div>
+<div class="wa-layout" id="waLayout">
+  <div class="wa-sidebar">
+    <div class="side-controls">
+      <div class="search-row">
+        <input type="text" id="waSearchInput" placeholder="Buscar nombre, +número, @lid o texto..." oninput="renderSidebarList(true)">
       </div>
-
-      <div class="wa-main">
-        <div class="wa-header">
-          <div class="wa-header-left" onclick="toggleChatDrawer()">
-            <button class="wa-back-btn" onclick="event.stopPropagation(); closeMobileChat()">⬅</button>
-            <div class="wa-avatar" id="waActiveAvatar">?</div>
-            <div style="min-width:0; flex:1; overflow:hidden;">
-              <div class="wa-chat-name" id="waActiveName">Selecciona una conversación</div>
-              <div class="wa-chat-prev" id="waActiveJid">Elige un Subbot arriba a la izquierda</div>
-            </div>
-          </div>
-          <div class="wa-header-actions" id="waHeaderActions" style="display:none;">
-            <button class="wa-icon-btn" onclick="triggerCallFromChat(false)" title="Llamada de Voz">📞</button>
-            <button class="wa-icon-btn" onclick="triggerCallFromChat(true)" title="Videollamada">📹</button>
-            <button class="wa-icon-btn" onclick="toggleChatDrawer()" title="Más opciones e Info">ℹ️</button>
-          </div>
-        </div>
-
-        <div class="wa-messages" id="waMessagesBox">
-          <div style="margin:auto; text-align:center; color:#8696a0; padding:24px; max-width:420px;">
-            <h3 style="color:#e9edef; margin-bottom:8px; font-size:18px;">📱 Aura WhatsApp Web Multi-Subbot</h3>
-            <p style="font-size:13px; line-height:1.5;">Visualiza imágenes, stickers animados, audios y videos con streaming directo. Selecciona cualquier instancia arriba a la izquierda para conversar en vivo.</p>
-          </div>
-        </div>
-
-        <div class="wa-reply-bar" id="waReplyBar">
-          <div style="min-width:0; flex:1;">
-            <div style="font-weight:800; color:var(--wa-green);" id="waReplySender">Respondiendo</div>
-            <div style="color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="waReplyText"></div>
-          </div>
-          <button class="wa-icon-btn" style="width:28px; height:28px;" onclick="cancelReply()">✖</button>
-        </div>
-
-        <div class="wa-emoji-bar" id="waEmojiBar"></div>
-
-        <form class="wa-composer" onsubmit="sendWaMessage(event)">
-          <button type="button" class="wa-icon-btn" onclick="toggleEmojiBar()" title="Emojis">😀</button>
-          <button type="button" class="wa-icon-btn" onclick="document.getElementById('waMediaFileInput').click()" title="Adjuntar">📎</button>
-          <input type="file" id="waMediaFileInput" style="display:none" accept="image/*,video/*,audio/*,.webp,.pdf,.zip" onchange="handleMediaUpload(event)">
-          <input type="text" id="waMessageInput" placeholder="Escribe un mensaje..." autocomplete="off" oninput="onComposerTyping()">
-          <button type="button" class="wa-icon-btn" id="waVoiceBtn" onclick="toggleVoiceRecording()" title="Grabar Nota de Voz">🎤</button>
-          <button type="submit" class="btn btn-wa" style="padding:9px 14px; border-radius:10px;">➤</button>
-        </form>
-
-        <div class="wa-drawer" id="waInfoDrawer">
-          <div class="flex-row" style="justify-content:space-between; border-bottom:1px solid #222e35; padding-bottom:10px;">
-            <h4>ℹ️ Opciones del Chat</h4>
-            <button class="wa-icon-btn" style="width:30px; height:30px;" onclick="toggleChatDrawer()">✖</button>
-          </div>
-          <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:16px 0; gap:10px;">
-            <div class="wa-avatar" id="drawerAvatar" style="width:80px; height:80px; font-size:26px;">?</div>
-            <div style="font-size:16px; font-weight:800;" id="drawerName">-</div>
-            <div style="font-size:12px; color:var(--muted);" id="drawerJid">-</div>
-            <div style="font-size:12px; color:#00e5ff; background:#182229; padding:8px 12px; border-radius:8px; width:100%;" id="drawerBio">Sin descripción</div>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
-            <button class="btn btn-wa" onclick="triggerCallFromChat(false)">📞 Iniciar Llamada de Voz</button>
-            <button class="btn" onclick="triggerCallFromChat(true)">📹 Iniciar Videollamada</button>
-            <button class="btn btn-ghost" onclick="sendPresenceState('composing')">✍️ Simular Escribiendo...</button>
-            <button class="btn btn-warn" onclick="sendStickerQuickPrompt()">🏷️ Enviar URL como Sticker</button>
-            <button class="btn btn-ghost" onclick="clearActiveChatHistory()">🗑️ Vaciar Historial Local</button>
-            <button class="btn btn-danger" onclick="blockOrUnblockCurrentChat('block')">🚫 Bloquear Contacto</button>
-            <button class="btn btn-success" onclick="blockOrUnblockCurrentChat('unblock')">✅ Desbloquear Contacto</button>
-          </div>
-        </div>
+      <div class="filter-tabs">
+        <button class="chip active" onclick="setFilterMode('all', this)">💬 Todos</button>
+        <button class="chip" onclick="setFilterMode('unread', this)">🟢 No leídos</button>
+        <button class="chip" onclick="setFilterMode('direct', this)">👤 Privados</button>
+        <button class="chip" onclick="setFilterMode('groups', this)">👥 Grupos</button>
+        <button class="chip" onclick="setFilterMode('contacts', this)">📒 Contactos</button>
       </div>
     </div>
+    <div class="chat-list" id="waSidebarList"></div>
   </div>
 
-  <div id="tab-calls" class="section">
-    <div class="card" style="margin-bottom:14px;">
-      <div class="flex-row" style="justify-content:space-between;">
-        <div>
-          <h3>📞 Central de Llamadas & Defensa Anti-Call</h3>
-          <p style="font-size:12px; color:var(--muted); margin-top:4px;">Monitorea llamadas entrantes/salientes en todos los subbots, rechaza llamadas automáticamente o lanza timbrados directos.</p>
-        </div>
-        <div class="flex-row" style="margin:0;">
-          <button class="btn" id="btnAutoRejectCalls" onclick="toggleAutoRejectCalls()">🛡️ Auto-Rechazar: OFF</button>
+  <div class="wa-main">
+    <div class="chat-header">
+      <div class="header-left" onclick="openDrawer('info')">
+        <button class="back-btn" onclick="event.stopPropagation(); closeMobileChat()">⬅</button>
+        <div class="avatar" id="waActiveAvatar">?</div>
+        <div class="header-info">
+          <div class="header-name" id="waActiveName">Selecciona un chat o contacto</div>
+          <div class="header-sub" id="waActiveSub">Elige un Subbot en la barra superior</div>
         </div>
       </div>
-      <div class="flex-row" style="margin-top:12px;">
-        <input type="text" id="autoRejectMsgInput" placeholder="Mensaje automático al rechazar llamada..." style="flex:1; min-width:240px;">
-        <button class="btn btn-success" onclick="saveAutoRejectSettings()">💾 Guardar Respuesta</button>
+      <div class="header-actions" id="waHeaderActions" style="display:none;">
+        <button class="btn btn-troll" onclick="openDrawer('troll')" title="Herramientas Troll & Spoof">🎭 Trolls</button>
+        <button class="icon-btn" onclick="quickCall(false)" title="Llamada de Voz">📞</button>
+        <button class="icon-btn" onclick="quickCall(true)" title="Videollamada">📹</button>
+        <button class="icon-btn" onclick="openDrawer('info')" title="Datos del Contacto / Grupo">ℹ️</button>
       </div>
-      <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
-      <h4>📲 Lanzar Llamada / Timbrado desde un Subbot</h4>
-      <div class="flex-row" style="margin-top:10px;">
-        <select id="callBotSelector" style="max-width:240px;"></select>
-        <input type="text" id="callTargetInput" placeholder="Número o JID (ej: 573001234567)" style="max-width:260px;">
-        <select id="callTypeSelect" style="max-width:160px;">
-          <option value="voice">📞 Llamada de Voz</option>
-          <option value="video">📹 Videollamada</option>
+    </div>
+
+    <div class="messages-box" id="waMessagesBox">
+      <div style="margin:auto; text-align:center; color:#8696a0; padding:24px; max-width:440px;">
+        <h3 style="color:#e9edef; margin-bottom:8px; font-size:18px;">💬 WhatsApp Web Multi-Subbot</h3>
+        <p style="font-size:13px; line-height:1.5;">Velocidad en tiempo real con resolución automática de <b>Número (+Phone)</b> y <b>LID (@lid)</b>, revelador de <b>Ver Una Vez</b> y suite de <b>Trolls</b> integrada.</p>
+      </div>
+    </div>
+
+    <div class="reply-bar" id="waReplyBar">
+      <div style="min-width:0; flex:1;">
+        <div style="font-weight:800; color:var(--wa-green);" id="waReplySender">Respondiendo</div>
+        <div style="color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="waReplyText"></div>
+      </div>
+      <button class="icon-btn" style="width:28px; height:28px;" onclick="cancelReply()">✖</button>
+    </div>
+
+    <div class="emoji-bar" id="waEmojiBar"></div>
+
+    <form class="composer" onsubmit="sendWaMessage(event)">
+      <button type="button" class="icon-btn" onclick="toggleEmojiBar()" title="Emojis">😀</button>
+      <button type="button" class="icon-btn" onclick="document.getElementById('waMediaFileInput').click()" title="Adjuntar imagen, video, sticker o documento">📎</button>
+      <button type="button" class="icon-btn vo-toggle" id="voToggleBtn" onclick="toggleViewOnceMode()" title="Activar Modo Ver Una Vez (1x)">👁️</button>
+      <input type="file" id="waMediaFileInput" style="display:none" accept="image/*,video/*,audio/*,.webp,.pdf,.zip" onchange="handleMediaUpload(event)">
+      <input type="text" id="waMessageInput" placeholder="Escribe un mensaje..." autocomplete="off" oninput="onComposerTyping()">
+      <button type="button" class="icon-btn" id="waVoiceBtn" onclick="toggleVoiceRecording()" title="Grabar Nota de Voz">🎤</button>
+      <button type="submit" class="btn" style="padding:9px 14px; border-radius:10px;">➤</button>
+    </form>
+
+    <div class="drawer" id="waTrollDrawer">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:8px;">
+        <h4 style="color:var(--troll);">🎭 Suite Troll & Spoof</h4>
+        <button class="icon-btn" style="width:28px; height:28px;" onclick="closeDrawers()">✖</button>
+      </div>
+
+      <div class="troll-box">
+        <h5>💬 1. Cita Falsa (Spoof Quote)</h5>
+        <div class="troll-lbl">Víctima (elige miembro o escribe número/LID):</div>
+        <select id="trollMemberSelect" onchange="document.getElementById('trollFakeSender').value=this.value" style="margin-bottom:4px;">
+          <option value="">-- Seleccionar del chat --</option>
         </select>
-        <button class="btn btn-wa" onclick="initiateManualCall()">🚀 Llamar Ahora</button>
+        <input type="text" id="trollFakeSender" placeholder="Ej: 573001234567 o 27527...@lid">
+        <div class="troll-lbl">Texto falso que "dijo" la víctima:</div>
+        <input type="text" id="trollFakeQuotedText" placeholder="Ej: Me gusta comer jabón">
+        <div class="troll-lbl">Tu respuesta en el chat:</div>
+        <input type="text" id="trollRealReplyText" placeholder="Ej: ¿Cómo así bro? 📸🤨">
+        <button class="btn btn-troll" onclick="execTroll('fake-quote')">🚀 Enviar Cita Falsa</button>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="flex-row" style="justify-content:space-between;">
-        <h3>📋 Historial de Llamadas en Tiempo Real</h3>
-        <button class="btn btn-ghost" onclick="clearCallLogs()">🗑️ Limpiar Registro</button>
+      <div class="troll-box">
+        <h5>👻 2. Mención Fantasma (Hidden Tag)</h5>
+        <div class="troll-lbl">Menciona a todo el grupo sin mostrar @ en el texto:</div>
+        <input type="text" id="trollGhostText" placeholder="Texto visible (ej: Buenas noches)">
+        <button class="btn btn-troll" onclick="execTroll('ghost-tag')">👻 Enviar Hidden Tag Masivo</button>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Hora</th><th>Subbot</th><th>Contacto / JID</th><th>Tipo</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr></thead>
-          <tbody id="callsTable"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
-  <div id="tab-dash" class="section">
-    <div class="grid">
-      <div class="card"><div class="card-title">Instancias Activas</div><div class="card-val" id="mSubbots">0</div><div class="card-sub" id="mSubState">Operando</div></div>
-      <div class="card"><div class="card-title">Tráfico Mensajes</div><div class="card-val" id="mMsgs">0 / 0</div><div class="card-sub">RX Recibidos / TX Enviados</div></div>
-      <div class="card"><div class="card-title">Grupos en Red</div><div class="card-val" id="mGroups">0</div><div class="card-sub">Sincronizados</div></div>
-      <div class="card"><div class="card-title">Memoria (RSS / Heap)</div><div class="card-val" id="mRam">0 MB</div><div class="card-sub" id="mCpu">CPU: 0.00</div></div>
-    </div>
-
-    <div class="card">
-      <div class="flex-row" style="justify-content: space-between;">
-        <h3>🤖 Control de Nodos (Main + Subbots)</h3>
-        <div class="flex-row" style="margin:0;">
-          <button class="btn btn-warn" onclick="togglePauseSubbots()" id="btnPauseSubs">⏸️ Pausar Todos</button>
-          <button class="btn btn-success" onclick="cleanRam()">🧹 Limpiar RAM</button>
+      <div class="troll-box">
+        <h5>📞 3. Bombardero de Timbrado (Call Ring)</h5>
+        <div style="display:flex; gap:6px;">
+          <input type="number" id="trollCallCount" value="3" min="1" max="15" style="width:80px;">
+          <select id="trollCallVideo">
+            <option value="0">📞 Voz</option>
+            <option value="1">📹 Video</option>
+          </select>
+          <button class="btn btn-danger" style="flex:1;" onclick="execTroll('call-bomb')">📲 Timbrar</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>JID / Número</th><th>Nombre</th><th>Estado</th><th>Rol</th><th>Acciones</th></tr></thead>
-          <tbody id="subbotsTable"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
-  <div id="tab-procs" class="section">
-    <div class="card">
-      <div class="flex-row" style="justify-content: space-between;">
-        <h3>💀 Procesos del Servidor y Memoria</h3>
-        <div class="flex-row" style="margin:0;">
-          <input type="text" id="multiPidInput" placeholder="PIDs (ej: 1204, 1502)" style="width:200px;">
-          <button class="btn btn-danger" onclick="killMultiplePids()">Matar PIDs</button>
-          <button class="btn btn-success" onclick="cleanRam()">Forzar GC / RAM</button>
+      <div class="troll-box">
+        <h5>📍 4. Ubicación Falsa (Spoof GPS)</h5>
+        <select id="trollLocPreset" onchange="applyLocPreset(this.value)">
+          <option value="37.2431,-115.7930,Área 51 - Base Clasificada">🛸 Área 51 (Nevada)</option>
+          <option value="39.0392,125.7625,Pyongyang - Corea del Norte">🚀 Pyongyang (Corea del Norte)</option>
+          <option value="51.3890,30.0990,Reactor 4 - Chernobyl">☢️ Reactor 4 (Chernobyl)</option>
+          <option value="4.7110,-74.0721,Motel Las Palmas Habitación 69">🏩 Motel Las Palmas (Hab. 69)</option>
+        </select>
+        <input type="text" id="trollLocName" value="Área 51 - Base Clasificada" placeholder="Nombre del lugar">
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="trollLocLat" value="37.2431" placeholder="Latitud">
+          <input type="text" id="trollLocLng" value="-115.7930" placeholder="Longitud">
+        </div>
+        <button class="btn btn-troll" onclick="execTroll('fake-loc')">📍 Enviar Ubicación Falsa</button>
+      </div>
+
+      <div class="troll-box">
+        <h5>🪪 5. Contacto Falso (Spoof vCard)</h5>
+        <input type="text" id="trollVcardName" value="Soporte Oficial WhatsApp" placeholder="Nombre del contacto">
+        <input type="text" id="trollVcardPhone" value="16505434800" placeholder="Número (ej: 16505434800)">
+        <button class="btn btn-troll" onclick="execTroll('fake-vcard')">🪪 Enviar vCard Falsa</button>
+      </div>
+
+      <div class="troll-box">
+        <h5>⚡ 6. Ráfaga de Reacciones & Estado Infinito</h5>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-ghost" style="flex:1;" onclick="execTroll('react-rain')">🎉 Lluvia Reacciones</button>
+          <button class="btn btn-ghost" style="flex:1;" onclick="execTroll('presence-loop-composing')">✍️ Escribiendo 60s</button>
+          <button class="btn btn-ghost" style="flex:1;" onclick="execTroll('presence-loop-recording')">🎤 Grabando 60s</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>PID</th><th>Proceso</th><th>% CPU</th><th>% MEM</th><th>Acción</th></tr></thead>
-          <tbody id="procsTable"></tbody>
-        </table>
-      </div>
     </div>
-  </div>
 
-  <div id="tab-cmds" class="section">
-    <div class="card">
-      <h3>🛠️ Bloqueo de Comandos por Mantenimiento</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="customCmdInput" placeholder="Comando (ej: play, sticker, lid)" style="max-width:280px;">
-        <button class="btn btn-danger" onclick="toggleCmdManual()">Alternar Estado</button>
+    <div class="drawer" id="waInfoDrawer">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:8px;">
+        <h4>ℹ️ Ficha de Identidad</h4>
+        <button class="icon-btn" style="width:28px; height:28px;" onclick="closeDrawers()">✖</button>
       </div>
-      <div class="cmd-grid" id="cmdGrid"></div>
-    </div>
-  </div>
-
-  <div id="tab-spam" class="section">
-    <div class="card">
-      <h3>🚨 Ejecutor y Auditoría de Reportes por Subbots</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="spamTarget" placeholder="Número (ej: 573001234567)" style="max-width:240px;">
-        <input type="number" id="spamCycles" value="5" min="1" max="20" style="max-width:100px;">
-        <button class="btn btn-danger" onclick="runSpamReport()">🚀 Ejecutar con Subbots</button>
+      <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:12px 0; gap:8px;">
+        <div class="avatar" id="drawerAvatar" style="width:76px; height:76px; font-size:24px;">?</div>
+        <div style="font-size:16px; font-weight:800;" id="drawerName">-</div>
+        <div style="width:100%; background:#182229; border:1px solid #263540; border-radius:10px; padding:10px; text-align:left; font-size:12px; line-height:1.7; font-family:monospace;">
+          <div>📱 <b>Número:</b> <span id="drawerPhone" style="color:#00e5ff;">-</span></div>
+          <div>🔗 <b>LID:</b> <span id="drawerLid" style="color:#d1c4e9;">-</span></div>
+          <div>🌐 <b>JID Chat:</b> <span id="drawerJid" style="color:#8696a0;">-</span></div>
+          <div>🤖 <b>Subbot Activo:</b> <span id="drawerBot" style="color:#00a884;">-</span></div>
+        </div>
+        <div style="font-size:12px; color:#cbd5e1; background:#182229; padding:8px 12px; border-radius:8px; width:100%;" id="drawerBio">Sin descripción</div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Objetivo</th><th>Total Reportes</th><th>Subbots Usados</th><th>Último Evento</th></tr></thead>
-          <tbody id="spamTable"></tbody>
-        </table>
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <button class="btn" onclick="copyIdentityInfo()">📋 Copiar Número + LID</button>
+        <button class="btn btn-troll" onclick="openDrawer('troll')">🎭 Abrir Panel Troll</button>
+        <button class="btn btn-ghost" onclick="clearActiveChatHistory()">🗑️ Limpiar Mensajes Locales</button>
+        <button class="btn btn-danger" onclick="blockOrUnblockCurrentChat('block')">🚫 Bloquear Contacto</button>
+        <button class="btn btn-ghost" onclick="blockOrUnblockCurrentChat('unblock')">✅ Desbloquear Contacto</button>
       </div>
-    </div>
-  </div>
-
-  <div id="tab-files" class="section">
-    <div class="card">
-      <h3>📁 Explorador y Editor en Vivo</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <input type="text" id="currentDirInput" value="." style="max-width:300px;">
-        <button class="btn" onclick="loadDir()">📂 Abrir Carpeta</button>
-      </div>
-      <div id="fileList" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;"></div>
-      <div class="flex-row" style="justify-content: space-between;">
-        <input type="text" id="editingFilePath" placeholder="Archivo seleccionado..." readonly style="max-width:400px;">
-        <button class="btn btn-success" onclick="saveFileContent()">💾 Guardar Cambios</button>
-      </div>
-      <textarea id="fileEditor" placeholder="Selecciona un archivo para editar..."></textarea>
-    </div>
-  </div>
-
-  <div id="tab-bench" class="section">
-    <div class="card">
-      <h3>⚡ Benchmark V8 & Terminal Shell</h3>
-      <div class="flex-row" style="margin-top:10px;">
-        <button class="btn" onclick="runBenchmark()">🔥 Ejecutar Benchmark</button>
-      </div>
-      <pre id="benchOutput">Pulsa el botón para medir rendimiento...</pre>
-      <h3 style="margin-top:16px;">💻 Consola Shell</h3>
-      <div class="flex-row" style="margin-top:8px;">
-        <input type="text" id="shellCmdInput" placeholder="Comando (ej: df -h, free -m, ps aux)" style="max-width:400px;">
-        <button class="btn btn-warn" onclick="runShellTest()">Ejecutar</button>
-      </div>
-      <pre id="shellOutput">Listo...</pre>
     </div>
   </div>
 </div>
@@ -1597,60 +1868,29 @@ function buildDashboardHtml(token: string): string {
   <img id="lightboxImg" class="lightbox-img" src="" alt="Vista previa">
 </div>
 
-<div class="call-banner" id="incomingCallBanner">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <span style="font-weight:900; color:var(--wa-green); font-size:13px;" id="bannerCallType">📞 LLAMADA ENTRANTE</span>
-    <span style="font-size:11px; color:var(--muted);" id="bannerCallBot"></span>
-  </div>
-  <div style="font-size:16px; font-weight:800; color:#fff;" id="bannerCallerName">Desconocido</div>
-  <div style="font-size:12px; color:var(--muted);" id="bannerCallerJid"></div>
-  <div class="flex-row" style="margin:4px 0 0; justify-content:space-between;">
-    <button class="btn btn-danger" style="flex:1;" onclick="rejectBannerCall()">📵 Rechazar</button>
-    <button class="btn btn-wa" style="flex:1;" onclick="openBannerCallerChat()">💬 Abrir Chat</button>
-  </div>
-</div>
-
 <script>
 const TOKEN = "${token}";
 let selectedBotKey = "";
 let selectedChatJid = "";
-let chatFilterMode = "all";
+let filterMode = "all";
 let cachedChats = [];
+let cachedContacts = [];
+let currentChatObj = null;
 let currentMessages = [];
 let knownBots = [];
 let replyTargetMsg = null;
-let activeBannerCall = null;
+let viewOnceEnabled = false;
 let mediaRecorder = null;
 let recordedChunks = [];
 let lastTypingSent = 0;
-let serverUptimeSec = 0;
-let isFetchingStatus = false;
 let isFetchingChats = false;
 let isFetchingMsgs = false;
-let lastChatListSignature = "";
-let lastMsgListSignature = "";
 
 const EMOJI_LIST = ["😂","❤️","🔥","👍","😭","🙏","😍","🥰","🤣","😊","😎","🙌","💀","👀","✨","🎉","💯","😡","😱","🤔","👏","🫡","🤝","⚡","🚀","👑","💎","🤖","✅","❌"];
 
-function formatSeconds(sec) {
-  const sTotal = Math.max(0, Math.floor(sec));
-  const h = Math.floor(sTotal / 3600);
-  const m = Math.floor((sTotal % 3600) / 60);
-  const s = sTotal % 60;
-  return h + 'h ' + m + 'm ' + s + 's';
-}
-
-setInterval(() => {
-  if (serverUptimeSec > 0) {
-    serverUptimeSec++;
-    const badge = document.getElementById('uptimeBadge');
-    if (badge) badge.textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
-  }
-}, 1000);
-
 function initEmojiBar() {
   const bar = document.getElementById('waEmojiBar');
-  bar.innerHTML = EMOJI_LIST.map(e => '<span class="wa-emoji-item" onclick="insertEmoji(\\'' + e + '\\')">' + e + '</span>').join('');
+  bar.innerHTML = EMOJI_LIST.map(e => '<span class="emoji-item" onclick="insertEmoji(\\'' + e + '\\')">' + e + '</span>').join('');
 }
 
 function toggleEmojiBar() {
@@ -1663,16 +1903,28 @@ function insertEmoji(e) {
   inp.focus();
 }
 
-function switchTab(id, btn) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  if (btn) btn.classList.add('active');
-  if (id === 'files') loadDir();
-  if (id === 'cmds') loadCommands();
-  if (id === 'wa') refreshWaChats(true);
-  if (id === 'calls') refreshCallCenter();
-  if (id === 'procs') loadProcesses();
+function toggleViewOnceMode() {
+  viewOnceEnabled = !viewOnceEnabled;
+  const btn = document.getElementById('voToggleBtn');
+  btn.classList.toggle('active', viewOnceEnabled);
+}
+
+function openDrawer(which) {
+  if (!selectedChatJid) return;
+  document.getElementById('waTrollDrawer').classList.toggle('open', which === 'troll');
+  document.getElementById('waInfoDrawer').classList.toggle('open', which === 'info');
+}
+
+function closeDrawers() {
+  document.getElementById('waTrollDrawer').classList.remove('open');
+  document.getElementById('waInfoDrawer').classList.remove('open');
+}
+
+function applyLocPreset(val) {
+  const parts = val.split(',');
+  document.getElementById('trollLocLat').value = parts[0] || '0';
+  document.getElementById('trollLocLng').value = parts[1] || '0';
+  document.getElementById('trollLocName').value = parts.slice(2).join(',') || '';
 }
 
 async function api(path, method = 'GET', body = null, timeoutMs = 8000) {
@@ -1698,412 +1950,307 @@ function escapeHtml(str) {
 }
 
 function openLightbox(url) {
-  const modal = document.getElementById('lightboxModal');
   document.getElementById('lightboxImg').src = url;
-  modal.classList.add('open');
+  document.getElementById('lightboxModal').classList.add('open');
 }
 
 function closeLightbox() {
   document.getElementById('lightboxModal').classList.remove('open');
 }
 
-async function refreshTelemetry() {
-  if (isFetchingStatus) return;
-  isFetchingStatus = true;
+function connectSseStream() {
   try {
-    const d = await api('status', 'GET', null, 5000);
-    if (typeof d.uptimeSec === 'number') {
-      serverUptimeSec = d.uptimeSec;
-      document.getElementById('uptimeBadge').textContent = '⏱️ ' + formatSeconds(serverUptimeSec);
-    }
-    document.getElementById('mSubbots').textContent = d.subbots.length;
-    document.getElementById('mSubState').textContent = d.subbotsPaused ? '⏸️ PAUSADOS' : '🟢 OPERANDO';
-    document.getElementById('btnPauseSubs').textContent = d.subbotsPaused ? '▶️ Reanudar Todos' : '⏸️ Pausar Todos';
-    document.getElementById('mMsgs').textContent = d.msgRx + ' / ' + d.msgTx;
-    document.getElementById('mGroups').textContent = d.groupsCount;
-    document.getElementById('mRam').textContent = d.ramRss + ' / ' + d.ramHeap + ' MB';
-    document.getElementById('mCpu').textContent = 'CPU Load: ' + d.loadAvg;
+    const es = new EventSource('/api/stream?token=' + encodeURIComponent(TOKEN));
+    const pill = document.getElementById('sseStatusPill');
 
-    knownBots = d.subbots || [];
+    es.onopen = () => {
+      pill.textContent = '🟢 LIVE SSE';
+    };
+
+    es.addEventListener('chat_update', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        if (d.botKey === selectedBotKey) {
+          refreshWaChats(true);
+          if (selectedChatJid && d.jid === selectedChatJid) {
+            loadWaMessages(selectedChatJid, true, true);
+          }
+        }
+      } catch {}
+    });
+
+    es.addEventListener('reaction', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        if (d.botKey === selectedBotKey && d.jid === selectedChatJid) {
+          loadWaMessages(selectedChatJid, false, true);
+        }
+      } catch {}
+    });
+
+    es.addEventListener('sync_done', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        if (d.botKey === selectedBotKey) {
+          refreshWaChats(true);
+        }
+      } catch {}
+    });
+
+    es.onerror = () => {
+      pill.textContent = '🟡 SYNC';
+    };
+  } catch {}
+}
+
+async function loadSubbotsList() {
+  try {
+    const d = await api('bots', 'GET', null, 5000);
+    knownBots = d.bots || [];
     const selector = document.getElementById('waBotSelector');
-    const callSelector = document.getElementById('callBotSelector');
     const prevVal = selector.value || selectedBotKey;
-    const optsHtml = knownBots.map((s, idx) => {
-      const label = (idx === 0 ? '👑 Main: ' : '🤖 Sub #' + idx + ': ') + s.name + ' (+' + s.id + ')';
-      return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(label) + '</option>';
+    const html = knownBots.map((b, idx) => {
+      const role = idx === 0 ? '👑 Main: ' : '🤖 Sub #' + idx + ': ';
+      const unreadTxt = b.unreadTotal > 0 ? ' (' + b.unreadTotal + ' nuevos)' : '';
+      return '<option value="' + escapeHtml(b.key) + '">' + escapeHtml(role + b.name + ' (+' + b.key + ')' + unreadTxt) + '</option>';
     }).join('');
 
-    if (selector.dataset.sig !== optsHtml) {
-      selector.dataset.sig = optsHtml;
-      selector.innerHTML = optsHtml;
-      if (callSelector) callSelector.innerHTML = optsHtml;
-      if (prevVal && knownBots.some(b => b.id === prevVal)) {
+    if (selector.dataset.sig !== html) {
+      selector.dataset.sig = html;
+      selector.innerHTML = html;
+      if (prevVal && knownBots.some(x => x.key === prevVal)) {
         selector.value = prevVal;
         selectedBotKey = prevVal;
       } else if (knownBots[0]) {
-        selectedBotKey = knownBots[0].id;
+        selectedBotKey = knownBots[0].key;
         selector.value = selectedBotKey;
       }
     }
-
-    const sbHtml = knownBots.map((s, i) => '<tr>' +
-      '<td>#' + (i + 1) + '</td>' +
-      '<td><code>+' + escapeHtml(s.id) + '</code></td>' +
-      '<td>' + escapeHtml(s.name) + '</td>' +
-      '<td><span class="pill ' + (s.paused ? 'pill-off' : 'pill-on') + '">' + (s.paused ? 'PAUSADO' : 'ONLINE') + '</span></td>' +
-      '<td>' + escapeHtml(s.role) + '</td>' +
-      '<td>' +
-        '<button class="btn btn-wa" style="padding:5px 8px; margin-right:4px;" onclick="jumpToBotWa(\\'' + escapeHtml(s.id) + '\\')">💬 Chats</button>' +
-        '<button class="btn ' + (s.paused ? 'btn-success' : 'btn-warn') + '" style="padding:5px 8px;" onclick="toggleSingleBot(\\'' + escapeHtml(s.id) + '\\')">' + (s.paused ? '▶️' : '⏸️') + '</button>' +
-      '</td>' +
-    '</tr>').join('');
-    document.getElementById('subbotsTable').innerHTML = sbHtml;
-
-    const spHtml = (d.reports && d.reports.length) ? d.reports.map(r => '<tr>' +
-      '<td><code>+' + escapeHtml(r.phone) + '</code></td>' +
-      '<td><b>' + r.totalReports + '</b></td>' +
-      '<td>' + r.subbotsCount + ' bots</td>' +
-      '<td>' + escapeHtml(r.lastTimestamp) + '</td>' +
-    '</tr>').join('') : '<tr><td colspan="4" style="color:var(--muted)">Sin reportes registrados.</td></tr>';
-    document.getElementById('spamTable').innerHTML = spHtml;
-
-    handleIncomingCallsAlert(d.calls || [], d.autoRejectCalls, d.autoRejectMessage);
-  } catch (e) {
-  } finally {
-    isFetchingStatus = false;
-  }
+  } catch {}
 }
 
-async function loadProcesses() {
-  try {
-    const d = await api('procs', 'GET', null, 5000);
-    const prHtml = (d.processes || []).map(p => '<tr>' +
-      '<td><code>' + escapeHtml(p.pid) + '</code></td>' +
-      '<td>' + escapeHtml(p.comm) + '</td>' +
-      '<td>' + escapeHtml(p.cpu) + '%</td>' +
-      '<td>' + escapeHtml(p.mem) + '%</td>' +
-      '<td><button class="btn btn-danger" style="padding:4px 8px;" onclick="killPid(\\'' + escapeHtml(p.pid) + '\\')">Matar</button></td>' +
-    '</tr>').join('');
-    document.getElementById('procsTable').innerHTML = prHtml;
-  } catch (e) {}
-}
-
-function handleIncomingCallsAlert(calls, autoRej, autoMsg) {
-  const pill = document.getElementById('callCountPill');
-  if (calls.length > 0) {
-    pill.style.display = 'inline-block';
-    pill.textContent = calls.length;
-  } else {
-    pill.style.display = 'none';
-  }
-
-  const btnAuto = document.getElementById('btnAutoRejectCalls');
-  if (btnAuto) {
-    btnAuto.textContent = autoRej ? '🛡️ Auto-Rechazar: ON' : '🛡️ Auto-Rechazar: OFF';
-    btnAuto.className = 'btn ' + (autoRej ? 'btn-success' : 'btn-warn');
-  }
-  const msgInp = document.getElementById('autoRejectMsgInput');
-  if (msgInp && document.activeElement !== msgInp && autoMsg) {
-    msgInp.value = autoMsg;
-  }
-
-  const recentOffer = calls.find(c => (c.status === 'offer' || c.status === 'ringing') && (Date.now() - c.timestamp < 30000));
-  const banner = document.getElementById('incomingCallBanner');
-  const badge = document.getElementById('callStatusBadge');
-
-  if (recentOffer) {
-    activeBannerCall = recentOffer;
-    document.getElementById('bannerCallType').textContent = recentOffer.isVideo ? '📹 VIDEOLLAMADA ENTRANTE' : '📞 LLAMADA DE VOZ ENTRANTE';
-    document.getElementById('bannerCallBot').textContent = 'Bot +' + recentOffer.botKey;
-    document.getElementById('bannerCallerName').textContent = recentOffer.peerName;
-    document.getElementById('bannerCallerJid').textContent = recentOffer.peerJid;
-    banner.classList.add('active');
-    badge.style.display = 'inline-block';
-  } else {
-    activeBannerCall = null;
-    banner.classList.remove('active');
-    badge.style.display = 'none';
-  }
-}
-
-async function rejectBannerCall() {
-  if (!activeBannerCall) return;
-  await api('wa-call', 'POST', {
-    action: 'reject',
-    botKey: activeBannerCall.botKey,
-    callId: activeBannerCall.id,
-    peerJid: activeBannerCall.peerJid
-  });
-  document.getElementById('incomingCallBanner').classList.remove('active');
-  refreshTelemetry();
-  refreshCallCenter();
-}
-
-function openBannerCallerChat() {
-  if (!activeBannerCall) return;
-  selectedBotKey = activeBannerCall.botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = selectedBotKey;
-  const firstBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstBtn);
-  openWaChat(activeBannerCall.peerJid);
-}
-
-async function refreshCallCenter() {
-  try {
-    const d = await api('status');
-    const calls = d.calls || [];
-    const tbody = document.getElementById('callsTable');
-    if (!calls.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">No hay llamadas registradas en esta sesión.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = calls.map(c => '<tr>' +
-      '<td>' + escapeHtml(c.timeStr) + '</td>' +
-      '<td><code>+' + escapeHtml(c.botKey) + '</code></td>' +
-      '<td><b>' + escapeHtml(c.peerName) + '</b><br><span style="color:var(--muted);font-size:11px;">' + escapeHtml(c.peerJid) + '</span></td>' +
-      '<td>' + (c.isVideo ? '📹 Video' : '📞 Voz') + '</td>' +
-      '<td>' + (c.direction === 'outgoing' ? '↗️ Saliente' : '↙️ Entrante') + '</td>' +
-      '<td><span class="pill ' + (c.status === 'reject' ? 'pill-off' : 'pill-on') + '">' + escapeHtml(c.status.toUpperCase()) + '</span></td>' +
-      '<td>' +
-        '<button class="btn btn-danger" style="padding:4px 8px; margin-right:4px;" onclick="rejectCallById(\\'' + escapeHtml(c.botKey) + '\\', \\'' + escapeHtml(c.id) + '\\', \\'' + escapeHtml(c.peerJid) + '\\')">📵 Cortar</button>' +
-        '<button class="btn btn-wa" style="padding:4px 8px;" onclick="jumpToCallChat(\\'' + escapeHtml(c.botKey) + '\\', \\'' + escapeHtml(c.peerJid) + '\\')">💬 Chat</button>' +
-      '</td>' +
-    '</tr>').join('');
-  } catch (e) {}
-}
-
-async function rejectCallById(botKey, callId, peerJid) {
-  await api('wa-call', 'POST', { action: 'reject', botKey, callId, peerJid });
-  refreshCallCenter();
-}
-
-function jumpToCallChat(botKey, peerJid) {
-  selectedBotKey = botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = botKey;
-  const firstBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstBtn);
-  openWaChat(peerJid);
-}
-
-async function toggleAutoRejectCalls() {
-  await api('wa-call', 'POST', { action: 'toggle-autoreject' });
-  refreshTelemetry();
-}
-
-async function saveAutoRejectSettings() {
-  const msg = document.getElementById('autoRejectMsgInput').value.trim();
-  await api('wa-call', 'POST', { action: 'set-message', message: msg });
-  alert('Mensaje de auto-rechazo actualizado.');
-}
-
-async function clearCallLogs() {
-  await api('wa-call', 'POST', { action: 'clear-logs' });
-  refreshCallCenter();
-}
-
-async function initiateManualCall() {
-  const botKey = document.getElementById('callBotSelector').value || selectedBotKey;
-  const rawTarget = document.getElementById('callTargetInput').value.trim();
-  const isVideo = document.getElementById('callTypeSelect').value === 'video';
-  if (!rawTarget) return alert('Ingresa un número o JID destino');
-  const peerJid = rawTarget.includes('@') ? rawTarget : rawTarget.replace(/\\D/g, '') + '@s.whatsapp.net';
-  const r = await api('wa-call', 'POST', {
-    action: 'offer',
-    botKey,
-    peerJid,
-    isVideo
-  });
-  if (r.ok) {
-    alert('Señal de llamada enviada hacia ' + peerJid);
-    refreshCallCenter();
-  } else {
-    alert(r.error || 'Error al iniciar llamada');
-  }
-}
-
-async function triggerCallFromChat(isVideo) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  const r = await api('wa-call', 'POST', {
-    action: 'offer',
-    botKey: selectedBotKey,
-    peerJid: selectedChatJid,
-    isVideo
-  });
-  if (r.ok) {
-    loadWaMessages(selectedChatJid, true, true);
-  }
-}
-
-function setChatFilter(mode, btn) {
-  chatFilterMode = mode;
-  document.querySelectorAll('.wa-chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-  renderWaChatList(true);
-}
-
-function jumpToBotWa(botKey) {
-  selectedBotKey = botKey;
-  const sel = document.getElementById('waBotSelector');
-  if (sel) sel.value = botKey;
-  selectedChatJid = "";
-  lastChatListSignature = "";
-  lastMsgListSignature = "";
-  const firstTabBtn = document.querySelector('.tab-btn');
-  switchTab('wa', firstTabBtn);
+function setFilterMode(mode, btn) {
+  filterMode = mode;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderSidebarList(true);
 }
 
 function onSelectSubbot() {
   const sel = document.getElementById('waBotSelector');
   selectedBotKey = sel.value;
   selectedChatJid = "";
-  lastChatListSignature = "";
-  lastMsgListSignature = "";
+  currentChatObj = null;
   closeMobileChat();
-  document.getElementById('waChatList').innerHTML = '<div style="padding:24px; text-align:center; color:#00e5ff; font-size:13px;">⚡ Cargando sesión de +' + escapeHtml(selectedBotKey) + '...</div>';
+  document.getElementById('waSidebarList').innerHTML = '<div style="padding:24px; text-align:center; color:#00e5ff; font-size:13px;">⚡ Cargando chats de +' + escapeHtml(selectedBotKey) + '...</div>';
   refreshWaChats(true);
 }
 
 async function syncSubbotGroups() {
   if (!selectedBotKey) return;
   await api('wa-sync', 'POST', { botKey: selectedBotKey });
-  setTimeout(() => refreshWaChats(true), 700);
+  setTimeout(() => refreshWaChats(true), 600);
 }
 
-async function refreshWaChats(forceRender = false) {
-  if (isFetchingChats && !forceRender) return;
-  if (!selectedBotKey && knownBots[0]) selectedBotKey = knownBots[0].id;
+async function refreshWaChats(force = false) {
+  if (isFetchingChats && !force) return;
+  if (!selectedBotKey && knownBots[0]) selectedBotKey = knownBots[0].key;
   if (!selectedBotKey) return;
   isFetchingChats = true;
   try {
     const d = await api('wa-chats?botKey=' + encodeURIComponent(selectedBotKey), 'GET', null, 5000);
     cachedChats = d.chats || [];
-    renderWaChatList(forceRender);
-    if (selectedChatJid) {
-      await loadWaMessages(selectedChatJid, false, forceRender);
-    }
-  } catch (e) {
-  } finally {
+    cachedContacts = d.contacts || [];
+    renderSidebarList(force);
+  } catch {} finally {
     isFetchingChats = false;
   }
 }
 
-function renderAvatarNode(name, jid, isGroup, cachedAvatarUrl) {
+function renderAvatarHtml(name, avatarUrl, isGroup) {
   const initials = (name || '?').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || (isGroup ? '👥' : '👤');
-  if (cachedAvatarUrl) {
-    return '<img src="' + escapeHtml(cachedAvatarUrl) + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
+  if (avatarUrl) {
+    return '<img src="' + escapeHtml(avatarUrl) + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
   }
-  const avatarUrl = '/api/wa-avatar?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid) + '&token=' + TOKEN;
-  return '<img src="' + avatarUrl + '" loading="lazy" onerror="this.style.display=\\'none\\'; this.parentNode.textContent=\\'' + escapeHtml(initials) + '\\';" alt="">';
+  return escapeHtml(initials);
 }
 
-function renderWaChatList(forceRender = false) {
+function renderSidebarList() {
   const q = (document.getElementById('waSearchInput').value || '').toLowerCase().trim();
-  const listEl = document.getElementById('waChatList');
+  const listEl = document.getElementById('waSidebarList');
+
+  if (filterMode === 'contacts') {
+    const filteredContacts = cachedContacts.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.phone || '').includes(q) ||
+      (c.lid || '').toLowerCase().includes(q) ||
+      c.jid.toLowerCase().includes(q)
+    );
+
+    if (!filteredContacts.length) {
+      listEl.innerHTML = '<div style="padding:24px; text-align:center; color:#8696a0; font-size:12px;">Sin contactos registrados en este filtro. Pulsa 🔄 para sincronizar.</div>';
+      return;
+    }
+
+    listEl.innerHTML = filteredContacts.slice(0, 200).map(c => {
+      const phoneTag = c.phone ? '<span class="id-tag">📱 +' + escapeHtml(c.phone) + '</span>' : '';
+      const lidTag = c.lid ? '<span class="id-tag lid">🔗 ' + escapeHtml(c.lid) + '</span>' : '';
+      return '<div class="chat-item" onclick="openContactChat(\\'' + escapeHtml(c.jid) + '\\', \\'' + escapeHtml(c.name) + '\\', \\'' + escapeHtml(c.phone) + '\\', \\'' + escapeHtml(c.lid) + '\\')">' +
+        '<div class="avatar" style="background:#008069">' + renderAvatarHtml(c.name, '', false) + '</div>' +
+        '<div class="chat-meta">' +
+          '<div class="chat-title-row"><div class="chat-name">' + escapeHtml(c.name) + '</div></div>' +
+          '<div class="chat-id-tags">' + phoneTag + lidTag + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return;
+  }
+
   const filtered = cachedChats.filter(c => {
-    if (chatFilterMode === 'unread' && (!c.unread || c.unread <= 0)) return false;
-    if (chatFilterMode === 'groups' && !c.isGroup) return false;
-    if (chatFilterMode === 'direct' && c.isGroup) return false;
+    if (filterMode === 'unread' && (!c.unread || c.unread <= 0)) return false;
+    if (filterMode === 'groups' && !c.isGroup) return false;
+    if (filterMode === 'direct' && c.isGroup) return false;
     return (
       c.name.toLowerCase().includes(q) ||
       c.jid.toLowerCase().includes(q) ||
+      (c.peerPhone || '').includes(q) ||
+      (c.peerLid || '').toLowerCase().includes(q) ||
       (c.lastPreview || '').toLowerCase().includes(q)
     );
   });
 
-  const sig = selectedBotKey + '|' + selectedChatJid + '|' + chatFilterMode + '|' + q + '|' + filtered.map(c => c.jid + ':' + c.lastTime + ':' + c.unread + ':' + c.lastPreview).join(',');
-  if (!forceRender && sig === lastChatListSignature) return;
-  lastChatListSignature = sig;
-
   if (!filtered.length) {
-    listEl.innerHTML = '<div style="padding:24px; text-align:center; color:#8696a0; font-size:12px;">Sin conversaciones en este filtro. Pulsa 🔄 para sincronizar grupos o ➕ para abrir un chat nuevo.</div>';
+    listEl.innerHTML = '<div style="padding:24px; text-align:center; color:#8696a0; font-size:12px;">Sin conversaciones en este filtro. Usa 📒 Contactos o pulsa ➕ para abrir un chat.</div>';
     return;
   }
 
-  listEl.innerHTML = filtered.slice(0, 120).map(c => {
+  listEl.innerHTML = filtered.slice(0, 150).map(c => {
     const activeCls = c.jid === selectedChatJid ? 'active' : '';
     const timeStr = c.lastTime ? new Date(c.lastTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const unreadHtml = c.unread > 0 ? '<span class="wa-unread">' + c.unread + '</span>' : '';
-    return '<div class="wa-chat-item ' + activeCls + '" onclick="openWaChat(\\'' + escapeHtml(c.jid) + '\\')">' +
-      '<div class="wa-avatar" style="background:' + (c.isGroup ? '#5e35b1' : '#008069') + '">' + renderAvatarNode(c.name, c.jid, c.isGroup, c.avatarUrl) + '</div>' +
-      '<div class="wa-chat-meta">' +
-        '<div class="wa-chat-name">' + escapeHtml(c.name) + '</div>' +
-        '<div class="wa-chat-prev">' + escapeHtml(c.lastPreview || c.jid) + '</div>' +
-      '</div>' +
-      '<div class="wa-chat-right">' +
-        '<div class="wa-chat-time">' + escapeHtml(timeStr) + '</div>' +
-        unreadHtml +
+    const unreadHtml = c.unread > 0 ? '<span class="unread-badge">' + c.unread + '</span>' : '';
+
+    let idTagsHtml = '';
+    if (!c.isGroup) {
+      const pTag = c.peerPhone ? '<span class="id-tag">📱 +' + escapeHtml(c.peerPhone) + '</span>' : '';
+      const lTag = c.peerLid ? '<span class="id-tag lid">🔗 ' + escapeHtml(c.peerLid) + '</span>' : '';
+      idTagsHtml = '<div class="chat-id-tags">' + pTag + lTag + '</div>';
+    }
+
+    return '<div class="chat-item ' + activeCls + '" onclick="openWaChat(\\'' + escapeHtml(c.jid) + '\\')">' +
+      '<div class="avatar" style="background:' + (c.isGroup ? '#5e35b1' : '#008069') + '">' + renderAvatarHtml(c.name, c.avatarUrl, c.isGroup) + '</div>' +
+      '<div class="chat-meta">' +
+        '<div class="chat-title-row">' +
+          '<div class="chat-name">' + escapeHtml(c.name) + '</div>' +
+          '<div class="chat-time">' + escapeHtml(timeStr) + '</div>' +
+        '</div>' +
+        idTagsHtml +
+        '<div class="chat-prev-row">' +
+          '<div class="chat-prev">' + escapeHtml(c.lastPreview || c.jid) + '</div>' +
+          unreadHtml +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 }
 
+async function openContactChat(jid, name, phone, lid) {
+  await api('wa-init-chat', 'POST', { botKey: selectedBotKey, jid, name, phone, lid });
+  setFilterMode('all', document.querySelector('.chip'));
+  await refreshWaChats(true);
+  openWaChat(jid);
+}
+
 async function openWaChat(jid) {
   selectedChatJid = jid;
-  lastMsgListSignature = "";
   cancelReply();
-  document.getElementById('waWrapper').classList.add('chat-open');
+  closeDrawers();
+  document.getElementById('waLayout').classList.add('chat-open');
   document.getElementById('waHeaderActions').style.display = 'flex';
-  renderWaChatList(true);
+  renderSidebarList();
   await loadWaMessages(jid, true, true);
 }
 
 function closeMobileChat() {
-  document.getElementById('waWrapper').classList.remove('chat-open');
-  document.getElementById('waInfoDrawer').classList.remove('open');
+  document.getElementById('waLayout').classList.remove('chat-open');
+  closeDrawers();
 }
 
-function toggleChatDrawer() {
-  if (!selectedChatJid) return;
-  const drawer = document.getElementById('waInfoDrawer');
-  drawer.classList.toggle('open');
-}
-
-async function loadWaMessages(jid, scrollBottom = false, forceRender = false) {
-  if (isFetchingMsgs && !forceRender) return;
+async function loadWaMessages(jid, scrollBottom = false, force = false) {
+  if (isFetchingMsgs && !force) return;
   if (!selectedBotKey || !jid) return;
   isFetchingMsgs = true;
   try {
     const d = await api('wa-messages?botKey=' + encodeURIComponent(selectedBotKey) + '&jid=' + encodeURIComponent(jid), 'GET', null, 5000);
     if (!d.chat) return;
 
+    currentChatObj = d.chat;
     currentMessages = d.chat.messages || [];
-    const msgSig = selectedBotKey + '|' + jid + '|' + currentMessages.map(m => m.id + ':' + m.text + ':' + (m.mediaReady ? '1' : '0') + ':' + Object.values(m.reactions || {}).join('')).join(',');
-
-    if (!forceRender && msgSig === lastMsgListSignature) {
-      return;
-    }
-    lastMsgListSignature = msgSig;
 
     document.getElementById('waActiveName').textContent = d.chat.name || jid;
-    document.getElementById('waActiveJid').textContent = '+' + selectedBotKey + ' • ' + d.chat.jid;
-    document.getElementById('waActiveAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
+
+    let subParts = [];
+    if (d.chat.isGroup) {
+      subParts.push('👥 ' + ((d.chat.members && d.chat.members.length) || 0) + ' miembros');
+      subParts.push('ID: ' + d.chat.jid);
+    } else {
+      if (d.chat.peerPhone) subParts.push('📱 +' + d.chat.peerPhone);
+      if (d.chat.peerLid) subParts.push('🔗 ' + d.chat.peerLid);
+      if (!subParts.length) subParts.push(d.chat.jid);
+    }
+    subParts.push('🤖 Subbot: +' + selectedBotKey);
+    document.getElementById('waActiveSub').textContent = subParts.join(' • ');
+
+    document.getElementById('waActiveAvatar').innerHTML = renderAvatarHtml(d.chat.name, d.chat.avatarUrl, d.chat.isGroup);
 
     document.getElementById('drawerName').textContent = d.chat.name || jid;
+    document.getElementById('drawerPhone').textContent = d.chat.peerPhone ? ('+' + d.chat.peerPhone) : (d.chat.isGroup ? 'Grupo' : 'No resuelto');
+    document.getElementById('drawerLid').textContent = d.chat.peerLid || (d.chat.isGroup ? 'N/A' : 'No vinculado');
     document.getElementById('drawerJid').textContent = d.chat.jid;
-    document.getElementById('drawerBio').textContent = d.chat.statusText || (d.chat.isGroup ? 'Grupo de WhatsApp activo' : 'Cuenta de WhatsApp');
-    document.getElementById('drawerAvatar').innerHTML = renderAvatarNode(d.chat.name, d.chat.jid, d.chat.isGroup, d.chat.avatarUrl);
+    document.getElementById('drawerBot').textContent = '+' + selectedBotKey;
+    document.getElementById('drawerBio').textContent = d.chat.statusText || (d.chat.isGroup ? 'Grupo sincronizado' : 'Chat directo');
+    document.getElementById('drawerAvatar').innerHTML = renderAvatarHtml(d.chat.name, d.chat.avatarUrl, d.chat.isGroup);
+
+    const memberSel = document.getElementById('trollMemberSelect');
+    if (d.chat.isGroup && Array.isArray(d.chat.members) && d.chat.members.length) {
+      memberSel.innerHTML = '<option value="">-- Seleccionar miembro del grupo --</option>' +
+        d.chat.members.map(m => {
+          const idLbl = (m.phone ? '+' + m.phone : '') + (m.lid ? ' (' + m.lid + ')' : '');
+          return '<option value="' + escapeHtml(m.jid) + '">' + escapeHtml(m.name + ' ' + idLbl) + '</option>';
+        }).join('');
+    } else {
+      const directTarget = d.chat.peerPhone ? (d.chat.peerPhone + '@s.whatsapp.net') : (d.chat.peerLid || d.chat.jid);
+      memberSel.innerHTML = '<option value="' + escapeHtml(directTarget) + '">' + escapeHtml(d.chat.name) + '</option>';
+      document.getElementById('trollFakeSender').value = directTarget;
+    }
 
     const box = document.getElementById('waMessagesBox');
-    const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 150;
+    const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
 
     if (!currentMessages.length) {
-      box.innerHTML = '<div style="margin:auto; color:#8696a0; font-size:12px; text-align:center; background:#111b21; padding:14px 20px; border-radius:10px;">🔒 Los mensajes y archivos multimedia que envíes o recibas en esta conversación aparecerán aquí en tiempo real.</div>';
+      box.innerHTML = '<div style="margin:auto; color:#8696a0; font-size:12px; text-align:center; background:#111b21; padding:14px 20px; border-radius:10px;">🔒 Conversación lista. Envía un mensaje o usa el botón 🎭 Trolls arriba a la derecha.</div>';
       return;
     }
 
     box.innerHTML = currentMessages.map(m => {
       const side = m.fromMe ? 'out' : 'in';
       const isSticker = m.mediaType === 'sticker';
-      const senderHeader = (!m.fromMe && d.chat.isGroup && !isSticker)
-        ? '<div class="wa-bubble-sender" onclick="mentionUserInComposer(\\'' + escapeHtml(m.sender) + '\\')">' + escapeHtml(m.pushName || '+' + m.sender) + '</div>'
-        : '';
+
+      let senderHeader = '';
+      if (!m.fromMe && !isSticker) {
+        const pBadge = m.senderPhone ? '<span class="sender-badge">+' + escapeHtml(m.senderPhone) + '</span>' : '';
+        const lBadge = m.senderLid ? '<span class="sender-badge">' + escapeHtml(m.senderLid) + '</span>' : '';
+        const targetId = m.senderPhone || m.senderLid || m.senderJid;
+        senderHeader = '<div class="sender-line" onclick="selectUserForMentionOrTroll(\\'' + escapeHtml(targetId) + '\\', \\'' + escapeHtml(m.pushName) + '\\')">' +
+          '<span>' + escapeHtml(m.pushName || 'Usuario') + '</span>' + pBadge + lBadge +
+        '</div>';
+      }
+
+      const voBadge = m.isViewOnce ? '<div class="vo-badge">👁️ VER UNA VEZ (REVELADO)</div>' : '';
 
       let quotedHtml = '';
       if (m.quotedText) {
-        quotedHtml = '<div class="wa-quoted-box">' +
-          '<div class="wa-quoted-sender">' + escapeHtml(m.quotedSender ? '+' + m.quotedSender : 'Cita') + '</div>' +
+        quotedHtml = '<div class="quoted-box">' +
+          '<div class="quoted-sender">' + escapeHtml(m.quotedSender || 'Cita') + '</div>' +
           '<div>' + escapeHtml(m.quotedText) + '</div>' +
         '</div>';
       }
@@ -2113,39 +2260,41 @@ async function loadWaMessages(jid, scrollBottom = false, forceRender = false) {
       const thumbUrl = '/api/thumb?id=' + encodeURIComponent(m.id) + '&token=' + TOKEN;
 
       if (m.mediaType === 'image') {
-        mediaHtml = '<img class="wa-media-img" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Imagen">';
+        mediaHtml = '<img class="media-img" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Imagen">';
       } else if (m.mediaType === 'sticker') {
-        mediaHtml = '<img class="wa-media-sticker" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Sticker">';
+        mediaHtml = '<img class="media-sticker" src="' + mediaUrl + '" loading="lazy" onclick="openLightbox(\\'' + mediaUrl + '\\')" alt="Sticker">';
       } else if (m.mediaType === 'video') {
-        mediaHtml = '<video class="wa-media-video" controls playsinline preload="metadata" poster="' + thumbUrl + '" src="' + mediaUrl + '"></video>';
+        mediaHtml = '<video class="media-video" controls playsinline preload="metadata" poster="' + thumbUrl + '" src="' + mediaUrl + '"></video>';
       } else if (m.mediaType === 'audio') {
-        mediaHtml = '<audio class="wa-media-audio" controls preload="metadata" src="' + mediaUrl + '"></audio>';
+        mediaHtml = '<audio class="media-audio" controls preload="metadata" src="' + mediaUrl + '"></audio>';
       }
 
       const textHtml = m.text ? '<div>' + escapeHtml(m.text) + '</div>' : '';
 
       const reactionsEntries = Object.values(m.reactions || {});
       const reactionsHtml = reactionsEntries.length
-        ? '<div class="wa-reactions-pill">' + reactionsEntries.map(r => escapeHtml(r)).join(' ') + '</div>'
+        ? '<div class="reactions-pill">' + reactionsEntries.map(r => escapeHtml(r)).join(' ') + '</div>'
         : '';
 
-      const toolsHtml = '<div class="wa-msg-tools">' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'❤️\\')" title="Me encanta">❤️</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'😂\\')" title="Risa">😂</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'🔥\\')" title="Fuego">🔥</button>' +
-        '<button class="wa-tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'👍\\')" title="Like">👍</button>' +
-        '<button class="wa-tool-btn" onclick="setReplyMsg(\\'' + escapeHtml(m.id) + '\\')" title="Responder">↩️</button>' +
-        '<button class="wa-tool-btn" onclick="deleteMsgForAll(\\'' + escapeHtml(m.id) + '\\')" title="Eliminar para todos">🗑️</button>' +
+      const toolsHtml = '<div class="msg-tools">' +
+        '<button class="tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'❤️\\')">❤️</button>' +
+        '<button class="tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'😂\\')">😂</button>' +
+        '<button class="tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'🔥\\')">🔥</button>' +
+        '<button class="tool-btn" onclick="reactToMsg(\\'' + escapeHtml(m.id) + '\\', \\'💀\\')">💀</button>' +
+        '<button class="tool-btn" onclick="setReplyMsg(\\'' + escapeHtml(m.id) + '\\')" title="Responder">↩️</button>' +
+        '<button class="tool-btn" onclick="prefillFakeQuote(\\'' + escapeHtml(m.senderPhone || m.senderLid || m.senderJid) + '\\')" title="Citar Falso a este usuario">🎭</button>' +
+        '<button class="tool-btn" onclick="deleteMsgForAll(\\'' + escapeHtml(m.id) + '\\')" title="Eliminar para todos">🗑️</button>' +
       '</div>';
 
-      return '<div class="wa-msg-row ' + side + '">' +
+      return '<div class="msg-row ' + side + '">' +
         toolsHtml +
-        '<div class="wa-bubble ' + (isSticker ? 'sticker-bubble' : '') + '">' +
+        '<div class="bubble ' + (isSticker ? 'sticker-bubble' : '') + '">' +
           senderHeader +
+          voBadge +
           quotedHtml +
           mediaHtml +
           textHtml +
-          '<div class="wa-bubble-meta"><span>' + escapeHtml(m.time) + '</span>' + (m.fromMe ? '<span>✓✓</span>' : '') + '</div>' +
+          '<div class="bubble-meta"><span>' + escapeHtml(m.time) + '</span>' + (m.fromMe ? '<span>✓✓</span>' : '') + '</div>' +
         '</div>' +
         reactionsHtml +
       '</div>';
@@ -2154,72 +2303,64 @@ async function loadWaMessages(jid, scrollBottom = false, forceRender = false) {
     if (scrollBottom || wasNearBottom) {
       box.scrollTop = box.scrollHeight;
     }
-  } catch (e) {
-  } finally {
+  } catch {} finally {
     isFetchingMsgs = false;
   }
 }
 
-function mentionUserInComposer(num) {
+function selectUserForMentionOrTroll(id, name) {
+  const num = String(id).split('@')[0];
   const inp = document.getElementById('waMessageInput');
   inp.value += '@' + num + ' ';
   inp.focus();
+  document.getElementById('trollFakeSender').value = id;
+}
+
+function prefillFakeQuote(senderId) {
+  document.getElementById('trollFakeSender').value = senderId;
+  openDrawer('troll');
+  document.getElementById('trollFakeQuotedText').focus();
+}
+
+function copyIdentityInfo() {
+  if (!currentChatObj) return;
+  const txt = 'Nombre: ' + currentChatObj.name + '\\nNúmero: +' + (currentChatObj.peerPhone || 'N/A') + '\\nLID: ' + (currentChatObj.peerLid || 'N/A') + '\\nJID: ' + currentChatObj.jid;
+  navigator.clipboard?.writeText(txt);
+  alert('Datos copiados:\\n' + txt);
 }
 
 function setReplyMsg(msgId) {
   const found = currentMessages.find(x => x.id === msgId);
   if (!found) return;
   replyTargetMsg = found;
-  document.getElementById('waReplySender').textContent = found.pushName || ('+' + found.sender);
-  document.getElementById('waReplyText').textContent = found.text || (found.mediaType ? '[' + found.mediaType.toUpperCase() + ']' : 'Mensaje');
+  document.getElementById('waReplySender').textContent = found.pushName || ('+' + found.senderPhone);
+  document.getElementById('waReplyText').textContent = found.text || 'Multimedia';
   document.getElementById('waReplyBar').classList.add('active');
   document.getElementById('waMessageInput').focus();
 }
 
 function cancelReply() {
   replyTargetMsg = null;
-  const bar = document.getElementById('waReplyBar');
-  if (bar) bar.classList.remove('active');
+  document.getElementById('waReplyBar').classList.remove('active');
 }
 
 async function reactToMsg(msgId, emoji) {
   if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'react',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    msgId,
-    emoji
-  });
+  await api('wa-action', 'POST', { action: 'react', botKey: selectedBotKey, jid: selectedChatJid, msgId, emoji });
   loadWaMessages(selectedChatJid, false, true);
 }
 
 async function deleteMsgForAll(msgId) {
   if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'delete',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    msgId
-  });
+  await api('wa-action', 'POST', { action: 'delete', botKey: selectedBotKey, jid: selectedChatJid, msgId });
   loadWaMessages(selectedChatJid, false, true);
-}
-
-async function sendPresenceState(stateType) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  await api('wa-action', 'POST', {
-    action: 'presence',
-    botKey: selectedBotKey,
-    jid: selectedChatJid,
-    presence: stateType
-  });
 }
 
 function onComposerTyping() {
   const now = Date.now();
   if (now - lastTypingSent > 4000 && selectedBotKey && selectedChatJid) {
     lastTypingSent = now;
-    sendPresenceState('composing');
+    api('wa-action', 'POST', { action: 'presence', botKey: selectedBotKey, jid: selectedChatJid, presence: 'composing' });
   }
 }
 
@@ -2227,11 +2368,7 @@ async function sendWaMessage(e) {
   e.preventDefault();
   const inp = document.getElementById('waMessageInput');
   const text = inp.value.trim();
-  if (!text || !selectedBotKey) return;
-  if (!selectedChatJid) {
-    alert('Selecciona primero un chat o pulsa ➕ para ingresar un número.');
-    return;
-  }
+  if (!text || !selectedBotKey || !selectedChatJid) return;
   const quotedId = replyTargetMsg ? replyTargetMsg.id : '';
   inp.value = '';
   cancelReply();
@@ -2247,7 +2384,7 @@ async function sendWaMessage(e) {
     await loadWaMessages(selectedChatJid, true, true);
     refreshWaChats(true);
   } else {
-    alert(r.error || 'No se pudo enviar el mensaje');
+    alert(r.error || 'Error enviando mensaje');
   }
 }
 
@@ -2257,7 +2394,7 @@ async function handleMediaUpload(e) {
   if (!file || !selectedBotKey || !selectedChatJid) return;
 
   const isSticker = file.name.toLowerCase().endsWith('.webp');
-  const caption = isSticker ? '' : (prompt('Texto o comentario adjunto (opcional):', '') || '');
+  const caption = isSticker ? '' : (prompt('Comentario adjunto (opcional):', '') || '');
 
   const reader = new FileReader();
   reader.onload = async () => {
@@ -2268,7 +2405,8 @@ async function handleMediaUpload(e) {
       jid: selectedChatJid,
       fileName: file.name,
       mimeType: file.type || 'application/octet-stream',
-      asSticker,
+      asSticker: isSticker,
+      viewOnce: viewOnceEnabled,
       caption,
       base64: base64Data,
       quotedId: replyTargetMsg ? replyTargetMsg.id : ''
@@ -2278,7 +2416,7 @@ async function handleMediaUpload(e) {
       await loadWaMessages(selectedChatJid, true, true);
       refreshWaChats(true);
     } else {
-      alert(r.error || 'Error enviando archivo multimedia');
+      alert(r.error || 'Error enviando archivo');
     }
   };
   reader.readAsDataURL(file);
@@ -2286,9 +2424,7 @@ async function handleMediaUpload(e) {
 
 async function toggleVoiceRecording() {
   const btn = document.getElementById('waVoiceBtn');
-  if (!selectedBotKey || !selectedChatJid) {
-    return alert('Selecciona un chat primero.');
-  }
+  if (!selectedBotKey || !selectedChatJid) return alert('Selecciona un chat primero.');
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
     btn.style.background = '#2a3942';
@@ -2315,6 +2451,7 @@ async function toggleVoiceRecording() {
           fileName: 'voice.ogg',
           mimeType: 'audio/ogg; codecs=opus',
           isPtt: true,
+          viewOnce: viewOnceEnabled,
           base64
         }, 20000);
         await loadWaMessages(selectedChatJid, true, true);
@@ -2325,47 +2462,63 @@ async function toggleVoiceRecording() {
     mediaRecorder.start();
     btn.style.background = '#ff2a54';
     btn.textContent = '⏹️';
-    sendPresenceState('recording');
-  } catch (err) {
-    alert('Permiso de micrófono denegado o navegador no compatible.');
+  } catch {
+    alert('Micrófono no disponible.');
   }
 }
 
-async function sendStickerQuickPrompt() {
+async function quickCall(isVideo) {
   if (!selectedBotKey || !selectedChatJid) return;
-  const url = prompt('Ingresa la URL directa de una imagen (.webp / .png / .jpg):');
-  if (!url) return;
-  const r = await api('wa-send-media', 'POST', {
+  await api('wa-troll', 'POST', {
     botKey: selectedBotKey,
     jid: selectedChatJid,
-    mediaUrl: url.trim(),
-    asSticker: true
-  }, 15000);
+    type: 'call-bomb',
+    count: 1,
+    isVideo
+  });
+  loadWaMessages(selectedChatJid, true, true);
+}
+
+async function execTroll(type) {
+  if (!selectedBotKey || !selectedChatJid) return alert('Abre un chat primero');
+  const payload = { botKey: selectedBotKey, jid: selectedChatJid, type };
+
+  if (type === 'fake-quote') {
+    payload.fakeSender = document.getElementById('trollFakeSender').value.trim();
+    payload.fakeQuotedText = document.getElementById('trollFakeQuotedText').value.trim();
+    payload.replyText = document.getElementById('trollRealReplyText').value.trim();
+    if (!payload.fakeQuotedText || !payload.replyText) return alert('Completa el texto falso y tu respuesta');
+  } else if (type === 'ghost-tag') {
+    payload.text = document.getElementById('trollGhostText').value.trim() || '⚡';
+  } else if (type === 'call-bomb') {
+    payload.count = parseInt(document.getElementById('trollCallCount').value, 10) || 3;
+    payload.isVideo = document.getElementById('trollCallVideo').value === '1';
+  } else if (type === 'fake-loc') {
+    payload.lat = parseFloat(document.getElementById('trollLocLat').value) || 37.2431;
+    payload.lng = parseFloat(document.getElementById('trollLocLng').value) || -115.7930;
+    payload.name = document.getElementById('trollLocName').value.trim();
+  } else if (type === 'fake-vcard') {
+    payload.vcardName = document.getElementById('trollVcardName').value.trim();
+    payload.vcardPhone = document.getElementById('trollVcardPhone').value.trim();
+  } else if (type === 'react-rain') {
+    const lastMsg = currentMessages[currentMessages.length - 1];
+    if (!lastMsg) return alert('No hay mensajes en el chat para reaccionar');
+    payload.msgId = lastMsg.id;
+  }
+
+  const r = await api('wa-troll', 'POST', payload, 15000);
   if (r.ok) {
     loadWaMessages(selectedChatJid, true, true);
   } else {
-    alert(r.error || 'Error enviando sticker');
-  }
-}
-
-async function blockOrUnblockCurrentChat(mode) {
-  if (!selectedBotKey || !selectedChatJid) return;
-  const r = await api('wa-action', 'POST', {
-    action: mode,
-    botKey: selectedBotKey,
-    jid: selectedChatJid
-  });
-  if (r.ok) {
-    alert(mode === 'block' ? 'Contacto bloqueado.' : 'Contacto desbloqueado.');
+    alert(r.error || 'Error ejecutando troll');
   }
 }
 
 async function startNewChatPrompt() {
-  const raw = prompt('Ingresa el número con código de país (ej: 573001234567) o el JID completo:');
+  const raw = prompt('Ingresa el número con código de país (ej: 573001234567) o el @lid:');
   if (!raw) return;
   const clean = raw.trim();
   const jid = clean.includes('@') ? clean : clean.replace(/\\D/g, '') + '@s.whatsapp.net';
-  if (jid.length < 10) return alert('Número o JID inválido');
   await api('wa-init-chat', 'POST', { botKey: selectedBotKey, jid });
   await refreshWaChats(true);
   openWaChat(jid);
@@ -2378,130 +2531,19 @@ async function clearActiveChatHistory() {
   refreshWaChats(true);
 }
 
-async function togglePauseSubbots() {
-  await api('toggle-subbots', 'POST', {});
-  refreshTelemetry();
-}
-
-async function toggleSingleBot(botKey) {
-  await api('toggle-single-bot', 'POST', { botKey });
-  refreshTelemetry();
-}
-
-async function cleanRam() {
-  const r = await api('clean-ram', 'POST', {});
-  alert('RAM optimizada. Uso actual: ' + r.afterMb + ' MB');
-  refreshTelemetry();
-}
-
-async function killPid(pid) {
-  await api('kill-proc', 'POST', { pids: [pid] });
-  loadProcesses();
-}
-
-async function killMultiplePids() {
-  const raw = document.getElementById('multiPidInput').value;
-  const pids = raw.split(',').map(s => s.trim()).filter(Boolean);
-  if (!pids.length) return;
-  await api('kill-proc', 'POST', { pids });
-  document.getElementById('multiPidInput').value = '';
-  loadProcesses();
-}
-
-async function loadCommands() {
-  const d = await api('commands');
-  const html = (d.allCommands || []).map(c => {
-    const blocked = (d.blocked || []).includes(c);
-    return '<div class="cmd-item">' +
-      '<span>.' + escapeHtml(c) + '</span>' +
-      '<button class="btn ' + (blocked ? 'btn-danger' : 'btn-success') + '" onclick="toggleCmd(\\'' + escapeHtml(c) + '\\')">' + (blocked ? 'Bloqueado' : 'Activo') + '</button>' +
-    '</div>';
-  }).join('');
-  document.getElementById('cmdGrid').innerHTML = html;
-}
-
-async function toggleCmd(cmd) {
-  await api('toggle-cmd', 'POST', { cmd });
-  loadCommands();
-}
-
-async function toggleCmdManual() {
-  const val = document.getElementById('customCmdInput').value.trim().replace(/^[.#/]/, '');
-  if (!val) return;
-  await toggleCmd(val);
-  document.getElementById('customCmdInput').value = '';
-}
-
-async function runSpamReport() {
-  const phone = document.getElementById('spamTarget').value.trim();
-  const cycles = parseInt(document.getElementById('spamCycles').value, 10) || 5;
-  if (!phone) return alert('Ingresa un número válido');
-  await api('spam-report', 'POST', { phone, cycles });
-  document.getElementById('spamTarget').value = '';
-  refreshTelemetry();
-}
-
-async function loadDir(customDir) {
-  const dirInput = document.getElementById('currentDirInput');
-  if (customDir) dirInput.value = customDir;
-  const d = await api('files?dir=' + encodeURIComponent(dirInput.value));
-  if (!d.entries) return;
-  const html = d.entries.map(e => {
-    if (e.isDir) {
-      return '<button class="tab-btn" onclick="loadDir(\\'' + escapeHtml(e.relPath) + '\\')">📁 ' + escapeHtml(e.name) + '</button>';
-    }
-    return '<button class="tab-btn" onclick="openFile(\\'' + escapeHtml(e.relPath) + '\\')">📄 ' + escapeHtml(e.name) + '</button>';
-  }).join('');
-  document.getElementById('fileList').innerHTML = html;
-}
-
-async function openFile(relPath) {
-  const d = await api('file-read?file=' + encodeURIComponent(relPath));
-  document.getElementById('editingFilePath').value = d.file || relPath;
-  document.getElementById('fileEditor').value = d.content || '';
-}
-
-async function saveFileContent() {
-  const file = document.getElementById('editingFilePath').value;
-  const content = document.getElementById('fileEditor').value;
-  if (!file) return alert('Ningún archivo seleccionado');
-  const r = await api('file-save', 'POST', { file, content });
-  alert(r.ok ? 'Archivo guardado correctamente' : 'Error al guardar');
-}
-
-async function runBenchmark() {
-  document.getElementById('benchOutput').textContent = 'Ejecutando pruebas de estrés en CPU, Memoria y Disco...';
-  const r = await api('benchmark', 'POST', {}, 15000);
-  document.getElementById('benchOutput').textContent = r.result;
-}
-
-async function runShellTest() {
-  const cmd = document.getElementById('shellCmdInput').value.trim();
-  if (!cmd) return;
-  document.getElementById('shellOutput').textContent = 'Ejecutando...';
-  const r = await api('shell-test', 'POST', { cmd }, 12000);
-  document.getElementById('shellOutput').textContent = r.output;
+async function blockOrUnblockCurrentChat(mode) {
+  if (!selectedBotKey || !selectedChatJid) return;
+  await api('wa-action', 'POST', { action: mode, botKey: selectedBotKey, jid: selectedChatJid });
+  alert(mode === 'block' ? 'Contacto bloqueado.' : 'Contacto desbloqueado.');
 }
 
 (async () => {
   initEmojiBar();
-  await refreshTelemetry();
+  await loadSubbotsList();
   await refreshWaChats(true);
-  setInterval(refreshTelemetry, 3500);
-  setInterval(() => {
-    const waSection = document.getElementById('tab-wa');
-    if (waSection && waSection.classList.contains('active')) {
-      refreshWaChats(false);
-    }
-    const callSection = document.getElementById('tab-calls');
-    if (callSection && callSection.classList.contains('active')) {
-      refreshCallCenter();
-    }
-    const procSection = document.getElementById('tab-procs');
-    if (procSection && procSection.classList.contains('active')) {
-      loadProcesses();
-    }
-  }, 2600);
+  connectSseStream();
+  setInterval(loadSubbotsList, 6000);
+  setInterval(() => refreshWaChats(false), 5000);
 })();
 </script>
 </body>
@@ -2518,38 +2560,20 @@ async function ensureWebServerRunning(): Promise<number> {
       const parsedUrl = new URL(req.url || "/", "http://127.0.0.1");
       const pathname = parsedUrl.pathname;
 
+      if (pathname === "/api/ping") {
+        sendJson(res, 200, { ok: true, ts: Date.now() });
+        return;
+      }
+
       if (pathname === "/api/login" && req.method === "POST") {
         const body = await readJsonBody(req);
         const u = String(body.user || "").trim();
         const p = String(body.pass || "").trim();
-        if (
-          (u === state.tempUser && p === state.tempPass) ||
-          (u === state.ownerEmail && p === state.tempPass) ||
-          p === state.token
-        ) {
+        if ((u === state.tempUser && p === state.tempPass) || p === state.token || p === state.tempPass) {
           sendJson(res, 200, { ok: true, token: state.token });
         } else {
-          sendJson(res, 401, { ok: false, error: "Usuario o código OTP inválido." });
+          sendJson(res, 401, { ok: false, error: "Credenciales inválidas." });
         }
-        return;
-      }
-
-      if (pathname === "/api/request-otp" && req.method === "POST") {
-        rotateCredentials();
-        const baseUrl = state.tunnelUrl || `http://${state.publicIp || "127.0.0.1"}:${state.port}`;
-        sendCredentialsEmail(state.ownerEmail, baseUrl, state.tempUser, state.tempPass, state.token).catch(() => {});
-        if (state.lastSock) {
-          const msgText = [
-            `🔐 *${fytBold("NUEVAS CREDENCIALES TEMPORALES")}*`,
-            ``,
-            `👤 *Usuario:* \`${state.tempUser}\``,
-            `🔑 *Clave / OTP:* \`${state.tempPass}\``,
-            `📧 *Correo:* \`${state.ownerEmail}\``,
-            `🌐 *Acceso directo:* ${baseUrl}/?token=${state.token}`,
-          ].join("\n");
-          state.lastSock.sendMessage("573118353868@s.whatsapp.net", { text: msgText }).catch(() => {});
-        }
-        sendJson(res, 200, { ok: true, email: state.ownerEmail });
         return;
       }
 
@@ -2557,19 +2581,658 @@ async function ensureWebServerRunning(): Promise<number> {
 
       if (pathname === "/" && req.method === "GET") {
         if (queryToken !== state.token) {
-          const loginHtml = buildLoginHtml(state.ownerEmail);
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(loginHtml);
+          res.end(buildLoginHtml());
           return;
         }
-        const html = buildDashboardHtml(state.token);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
+        res.end(buildWaWebHtml(state.token));
         return;
       }
 
       if (queryToken !== state.token) {
         sendJson(res, 401, { error: "No autorizado" });
+        return;
+      }
+
+      if (pathname === "/api/stream" && req.method === "GET") {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+          "X-Accel-Buffering": "no",
+        });
+        res.write(`event: connected\ndata: {"ok":true}\n\n`);
+        state.sseClients.add(res);
+        req.on("close", () => {
+          state.sseClients.delete(res);
+        });
+        return;
+      }
+
+      if (pathname === "/api/bots" && req.method === "GET") {
+        hookSockets();
+        const allBots = getAllBotSockets();
+        const bots = allBots.map((b, idx) => {
+          const info = getBotInfo(b, idx);
+          const store = ensureBotChatMap(info.key);
+          let unreadTotal = 0;
+          for (const c of store.values()) unreadTotal += c.unread || 0;
+          return {
+            key: info.key,
+            name: info.name,
+            lid: info.lid,
+            unreadTotal,
+          };
+        });
+        sendJson(res, 200, { bots });
+        return;
+      }
+
+      if (pathname === "/api/wa-chats" && req.method === "GET") {
+        hookSockets();
+        const botKey = parsedUrl.searchParams.get("botKey") || "";
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
+        const effectiveKey = targetBot ? getBotInfo(targetBot, Math.max(0, targetIdx)).key : botKey;
+
+        if (targetBot) {
+          hydrateFastMemoryForBot(targetBot, Math.max(0, targetIdx));
+          triggerBackgroundGroupSync(targetBot, Math.max(0, targetIdx), false);
+        }
+
+        const store = ensureBotChatMap(effectiveKey);
+        const chats = Array.from(store.values())
+          .sort((a, b) => b.lastTime - a.lastTime)
+          .map((c) => {
+            if (!c.isGroup && (!c.peerPhone || !c.peerLid)) {
+              const pDigits = c.peerPhone || normalizePhoneDigits(c.jid);
+              const lNorm = c.peerLid || normalizeLid(c.jid);
+              const prof =
+                (pDigits ? state.identityByPhone.get(pDigits) : undefined) ||
+                (lNorm ? state.identityByLid.get(lNorm) : undefined);
+              if (prof) {
+                if (!c.peerPhone && prof.phone) c.peerPhone = prof.phone;
+                if (!c.peerLid && prof.lid) c.peerLid = prof.lid;
+                if (prof.name && (c.name.startsWith("+") || c.name.startsWith("LID ") || isSameAsBot(targetBot, "", "", c.name))) {
+                  c.name = prof.name;
+                }
+              }
+            }
+            const cachedAva = c.avatarUrl || state.avatarCache.get(`${effectiveKey}:${c.jid}`) || "";
+            if (!state.avatarCache.has(`${effectiveKey}:${c.jid}`)) {
+              enqueueAvatarLookup(effectiveKey, c.jid);
+            }
+            return {
+              jid: c.jid,
+              name: c.name,
+              isGroup: c.isGroup,
+              peerPhone: c.peerPhone || "",
+              peerLid: c.peerLid || "",
+              unread: c.unread,
+              lastTime: c.lastTime,
+              lastPreview: c.lastPreview,
+              avatarUrl: cachedAva,
+            };
+          });
+
+        const contactsMap = ensureBotContactsMap(effectiveKey);
+        const contacts = Array.from(contactsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+        sendJson(res, 200, { botKey: effectiveKey, chats, contacts });
+        return;
+      }
+
+      if (pathname === "/api/wa-sync" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        state.botGroupSynced.delete(botKey);
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        if (targetIdx >= 0) {
+          triggerBackgroundGroupSync(allBots[targetIdx], targetIdx, true);
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/wa-messages" && req.method === "GET") {
+        const botKey = parsedUrl.searchParams.get("botKey") || "";
+        const jid = parsedUrl.searchParams.get("jid") || "";
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
+
+        const store = ensureBotChatMap(botKey);
+        const chat = store.get(jid);
+        if (chat) {
+          chat.unread = 0;
+
+          if (!chat.isGroup && targetBot && (!chat.peerPhone || !chat.peerLid)) {
+            const resolved = await resolvePeerIdentity(targetBot, chat.jid, chat.peerLid || chat.peerPhone, undefined, true);
+            if (resolved.phone && !chat.peerPhone) chat.peerPhone = resolved.phone;
+            if (resolved.lid && !chat.peerLid) chat.peerLid = resolved.lid;
+            if (resolved.name && (chat.name.startsWith("+") || chat.name.startsWith("LID ") || isSameAsBot(targetBot, "", "", chat.name))) {
+              chat.name = resolved.name;
+            }
+          }
+
+          if (chat.isGroup && targetBot && (!chat.members || !chat.members.length)) {
+            try {
+              const cachedMeta = GROUP_METADATA_CACHE?.get?.(chat.jid);
+              if (cachedMeta) {
+                ingestGroupMetadata(targetBot, botKey, chat.jid, cachedMeta);
+              } else if (typeof targetBot.groupMetadata === "function") {
+                const freshMeta = await Promise.race([
+                  targetBot.groupMetadata(chat.jid),
+                  new Promise<null>((r) => setTimeout(() => r(null), 2000)),
+                ]);
+                if (freshMeta) ingestGroupMetadata(targetBot, botKey, chat.jid, freshMeta);
+              }
+            } catch {}
+          }
+
+          const sanitizedMessages = chat.messages.map((m) => ({
+            id: m.id,
+            senderJid: m.senderJid,
+            senderPhone: m.senderPhone,
+            senderLid: m.senderLid,
+            pushName: m.pushName,
+            text: m.text,
+            time: m.time,
+            timestamp: m.timestamp,
+            fromMe: m.fromMe,
+            isViewOnce: m.isViewOnce,
+            mediaType: m.mediaType,
+            mediaMime: m.mediaMime,
+            hasMedia: m.hasMedia,
+            mediaReady: state.mediaStore.has(m.id),
+            quotedId: m.quotedId,
+            quotedSender: m.quotedSender,
+            quotedText: m.quotedText,
+            reactions: m.reactions || {},
+          }));
+
+          sendJson(res, 200, {
+            chat: {
+              jid: chat.jid,
+              name: chat.name,
+              isGroup: chat.isGroup,
+              peerPhone: chat.peerPhone || "",
+              peerLid: chat.peerLid || "",
+              avatarUrl: chat.avatarUrl || state.avatarCache.get(`${botKey}:${chat.jid}`) || "",
+              statusText: chat.statusText || "",
+              members: chat.members || [],
+              messages: sanitizedMessages,
+            },
+          });
+          return;
+        }
+        sendJson(res, 200, { chat: null });
+        return;
+      }
+
+      if (pathname === "/api/wa-init-chat" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        if (botKey && jid) {
+          const allBots = getAllBotSockets();
+          const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+          const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
+          const store = ensureBotChatMap(botKey);
+          const isGroup = jid.endsWith("@g.us");
+          const resolved = !isGroup && targetBot
+            ? await resolvePeerIdentity(targetBot, jid, body.lid || body.phone, body.name, false)
+            : { phone: normalizePhoneDigits(body.phone || jid), lid: normalizeLid(body.lid || jid), name: String(body.name || "") };
+
+          const { canonicalJid, session } = findConsolidatedSession(store, jid, resolved.phone, resolved.lid);
+          if (!session) {
+            store.set(canonicalJid, {
+              jid: canonicalJid,
+              name: resolved.name || (isGroup ? `Grupo ${cleanDigits(jid)}` : resolved.phone ? `+${resolved.phone}` : resolved.lid || `+${cleanDigits(jid)}`),
+              isGroup,
+              peerPhone: resolved.phone,
+              peerLid: resolved.lid,
+              unread: 0,
+              lastTime: Date.now(),
+              lastPreview: "Chat abierto desde el panel",
+              messages: [],
+            });
+          }
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/wa-clear-chat" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        const chat = ensureBotChatMap(botKey).get(jid);
+        if (chat) {
+          chat.messages = [];
+          chat.lastPreview = "Historial vaciado";
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/wa-send" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        const text = String(body.text || "").trim();
+        const quotedId = String(body.quotedId || "");
+
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
+        if (!targetBot || !jid || !text) {
+          sendJson(res, 400, { ok: false, error: "Subbot o datos inválidos" });
+          return;
+        }
+
+        const chat = ensureBotChatMap(botKey).get(jid);
+        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
+        const mentionMatches = text.match(/@(\d{7,15})/g) || [];
+        const mentions = mentionMatches.map((m) => `${m.slice(1)}@s.whatsapp.net`);
+
+        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
+        const sent = await origSend(
+          jid,
+          { text, ...(mentions.length ? { mentions } : {}) },
+          quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined
+        );
+
+        const botInfo = getBotInfo(targetBot, targetIdx);
+        recordChatMessage(targetBot, botKey, jid, {
+          id: sent?.key?.id || randomBytes(6).toString("hex"),
+          senderJid: botInfo.jid,
+          senderPhone: botInfo.key,
+          senderLid: botInfo.lid,
+          pushName: botInfo.name,
+          text,
+          fromMe: true,
+          peerPhone: chat?.peerPhone,
+          peerLid: chat?.peerLid,
+          timestamp: Date.now(),
+          quotedId: quotedObj?.id || "",
+          quotedSender: quotedObj?.senderPhone ? `+${quotedObj.senderPhone}` : quotedObj?.pushName || "",
+          quotedText: quotedObj?.text || "",
+          rawKey: sent?.key,
+          rawMessage: sent,
+        });
+
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/wa-send-media" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        const caption = String(body.caption || "");
+        const mimeType = String(body.mimeType || "image/jpeg");
+        const fileName = String(body.fileName || "archivo");
+        const asSticker = Boolean(body.asSticker);
+        const isPtt = Boolean(body.isPtt);
+        const viewOnce = Boolean(body.viewOnce);
+        const quotedId = String(body.quotedId || "");
+
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
+        if (!targetBot || !jid) {
+          sendJson(res, 404, { ok: false, error: "Subbot inválido" });
+          return;
+        }
+
+        const buf = body.base64 ? Buffer.from(String(body.base64), "base64") : null;
+        if (!buf || !buf.length) {
+          sendJson(res, 400, { ok: false, error: "Archivo vacío" });
+          return;
+        }
+
+        const chat = ensureBotChatMap(botKey).get(jid);
+        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
+        const sendOpts = quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined;
+        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
+
+        let payload: any = {};
+        let mediaKind: "image" | "sticker" | "video" | "audio" | "document" = "document";
+
+        if (asSticker || mimeType.includes("webp")) {
+          payload = { sticker: buf, mimetype: "image/webp" };
+          mediaKind = "sticker";
+        } else if (isPtt || mimeType.startsWith("audio/")) {
+          payload = { audio: buf, mimetype: mimeType, ptt: isPtt, viewOnce };
+          mediaKind = "audio";
+        } else if (mimeType.startsWith("image/")) {
+          payload = { image: buf, caption, mimetype: mimeType, viewOnce };
+          mediaKind = "image";
+        } else if (mimeType.startsWith("video/")) {
+          payload = { video: buf, caption, mimetype: mimeType, viewOnce };
+          mediaKind = "video";
+        } else {
+          payload = { document: buf, fileName, mimetype: mimeType, caption };
+          mediaKind = "document";
+        }
+
+        const sent = await origSend(jid, payload, sendOpts);
+        const msgId = sent?.key?.id || randomBytes(6).toString("hex");
+        saveMediaToStore(msgId, mediaKind === "sticker" ? "image/webp" : mimeType, buf);
+
+        const botInfo = getBotInfo(targetBot, targetIdx);
+        recordChatMessage(targetBot, botKey, jid, {
+          id: msgId,
+          senderJid: botInfo.jid,
+          senderPhone: botInfo.key,
+          senderLid: botInfo.lid,
+          pushName: botInfo.name,
+          text: caption || (mediaKind === "audio" ? "🎤 Nota de voz" : ""),
+          fromMe: true,
+          isViewOnce: viewOnce,
+          peerPhone: chat?.peerPhone,
+          peerLid: chat?.peerLid,
+          timestamp: Date.now(),
+          mediaType: mediaKind,
+          mediaMime: mimeType,
+          hasMedia: true,
+          rawKey: sent?.key,
+          rawMessage: sent,
+        });
+
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/wa-troll" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        const type = String(body.type || "");
+
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
+        if (!targetBot || !jid) {
+          sendJson(res, 404, { ok: false, error: "Subbot no disponible" });
+          return;
+        }
+
+        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
+        const botInfo = getBotInfo(targetBot, targetIdx);
+        const chat = ensureBotChatMap(botKey).get(jid);
+
+        if (type === "fake-quote") {
+          const rawSender = String(body.fakeSender || "").trim();
+          const fakeJid = rawSender.includes("@")
+            ? rawSender
+            : `${cleanDigits(rawSender) || "573000000000"}@s.whatsapp.net`;
+          const fakeQuotedText = String(body.fakeQuotedText || "Hola");
+          const replyText = String(body.replyText || "👀");
+
+          const fakeMsgObj = {
+            key: {
+              remoteJid: jid,
+              fromMe: false,
+              id: `FAKE_${randomBytes(5).toString("hex").toUpperCase()}`,
+              ...(jid.endsWith("@g.us") ? { participant: fakeJid } : {}),
+            },
+            message: {
+              conversation: fakeQuotedText,
+            },
+          };
+
+          const sent = await origSend(
+            jid,
+            { text: replyText, mentions: [fakeJid] },
+            { quoted: fakeMsgObj }
+          );
+
+          recordChatMessage(targetBot, botKey, jid, {
+            id: sent?.key?.id || randomBytes(6).toString("hex"),
+            senderJid: botInfo.jid,
+            senderPhone: botInfo.key,
+            senderLid: botInfo.lid,
+            pushName: botInfo.name,
+            text: replyText,
+            fromMe: true,
+            quotedSender: `+${cleanDigits(fakeJid)}`,
+            quotedText: fakeQuotedText,
+            timestamp: Date.now(),
+          });
+
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "ghost-tag") {
+          const text = String(body.text || "⚡");
+          let mentions: string[] = [];
+          if (jid.endsWith("@g.us")) {
+            if (chat?.members?.length) {
+              mentions = chat.members.map((m) => m.jid);
+            } else {
+              try {
+                const meta = await targetBot.groupMetadata(jid);
+                mentions = (meta?.participants || []).map((p: any) => p.id || p.lid).filter(Boolean);
+              } catch {}
+            }
+          } else {
+            mentions = [jid];
+          }
+
+          const sent = await origSend(jid, { text, mentions });
+          recordChatMessage(targetBot, botKey, jid, {
+            id: sent?.key?.id || randomBytes(6).toString("hex"),
+            senderJid: botInfo.jid,
+            senderPhone: botInfo.key,
+            senderLid: botInfo.lid,
+            pushName: botInfo.name,
+            text: `${text} [👻 HiddenTag: ${mentions.length}]`,
+            fromMe: true,
+            timestamp: Date.now(),
+          });
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "call-bomb") {
+          const count = Math.min(15, Math.max(1, Number(body.count || 3)));
+          const isVideo = Boolean(body.isVideo);
+
+          for (let i = 0; i < count; i++) {
+            const callId = randomBytes(8).toString("hex").toUpperCase();
+            try {
+              if (typeof targetBot.query === "function") {
+                await targetBot
+                  .query({
+                    tag: "call",
+                    attrs: { to: jid, id: callId },
+                    content: [
+                      {
+                        tag: "offer",
+                        attrs: {
+                          "call-id": callId,
+                          "call-creator": botInfo.jid || `${botKey}@s.whatsapp.net`,
+                        },
+                        content: isVideo
+                          ? [{ tag: "video", attrs: {} }]
+                          : [{ tag: "audio", attrs: { enc: "opus", rate: "16000" } }],
+                      },
+                    ],
+                  })
+                  .catch(() => {});
+              }
+            } catch {}
+            await new Promise((r) => setTimeout(r, 350));
+          }
+
+          recordChatMessage(targetBot, botKey, jid, {
+            id: `troll_call_${Date.now()}`,
+            senderJid: botInfo.jid,
+            senderPhone: botInfo.key,
+            senderLid: botInfo.lid,
+            pushName: botInfo.name,
+            text: `📲 [Troll] ${count}x Timbrado de ${isVideo ? "Videollamada" : "Voz"} enviado`,
+            fromMe: true,
+            timestamp: Date.now(),
+          });
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "fake-loc") {
+          const degreesLatitude = Number(body.lat || 37.2431);
+          const degreesLongitude = Number(body.lng || -115.793);
+          const name = String(body.name || "Ubicación Clasificada");
+          const sent = await origSend(jid, {
+            location: { degreesLatitude, degreesLongitude, name, address: name },
+          });
+          recordChatMessage(targetBot, botKey, jid, {
+            id: sent?.key?.id || randomBytes(6).toString("hex"),
+            senderJid: botInfo.jid,
+            senderPhone: botInfo.key,
+            senderLid: botInfo.lid,
+            pushName: botInfo.name,
+            text: `📍 Ubicación Falsa: ${name} (${degreesLatitude}, ${degreesLongitude})`,
+            fromMe: true,
+            timestamp: Date.now(),
+          });
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "fake-vcard") {
+          const displayName = String(body.vcardName || "Soporte Oficial WhatsApp");
+          const phone = cleanDigits(body.vcardPhone || "16505434800");
+          const vcard = [
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            `FN:${displayName}`,
+            `ORG:Meta Platforms Inc.;`,
+            `TEL;type=CELL;type=VOICE;waid=${phone}:+${phone}`,
+            "END:VCARD",
+          ].join("\n");
+
+          const sent = await origSend(jid, {
+            contacts: { displayName, contacts: [{ vcard }] },
+          });
+          recordChatMessage(targetBot, botKey, jid, {
+            id: sent?.key?.id || randomBytes(6).toString("hex"),
+            senderJid: botInfo.jid,
+            senderPhone: botInfo.key,
+            senderLid: botInfo.lid,
+            pushName: botInfo.name,
+            text: `🪪 vCard Falsa: ${displayName} (+${phone})`,
+            fromMe: true,
+            timestamp: Date.now(),
+          });
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "react-rain") {
+          const targetMsg = chat?.messages.find((x) => x.id === body.msgId) || chat?.messages[chat.messages.length - 1];
+          if (targetMsg?.rawKey) {
+            const rainEmojis = ["🔥", "💀", "😂", "⚡", "🤡", "💣", "👑"];
+            (async () => {
+              for (const em of rainEmojis) {
+                try {
+                  await origSend(jid, { react: { text: em, key: targetMsg.rawKey } });
+                  if (!targetMsg.reactions) targetMsg.reactions = {};
+                  targetMsg.reactions[botKey] = em;
+                  broadcastSse("reaction", { botKey, jid, msgId: targetMsg.id, reactions: targetMsg.reactions });
+                } catch {}
+                await new Promise((r) => setTimeout(r, 450));
+              }
+            })();
+          }
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (type === "presence-loop-composing" || type === "presence-loop-recording") {
+          const pMode = type.endsWith("recording") ? "recording" : "composing";
+          const loopKey = `${botKey}:${jid}`;
+          if (state.presenceLoops.has(loopKey)) {
+            clearInterval(state.presenceLoops.get(loopKey)!);
+            state.presenceLoops.delete(loopKey);
+          }
+          let ticks = 0;
+          const timer = setInterval(() => {
+            ticks++;
+            if (ticks > 15 || typeof targetBot.sendPresenceUpdate !== "function") {
+              clearInterval(timer);
+              state.presenceLoops.delete(loopKey);
+              return;
+            }
+            targetBot.sendPresenceUpdate(pMode, jid).catch(() => {});
+          }, 4000);
+          targetBot.sendPresenceUpdate?.(pMode, jid).catch(() => {});
+          state.presenceLoops.set(loopKey, timer);
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        sendJson(res, 400, { ok: false, error: "Troll desconocido" });
+        return;
+      }
+
+      if (pathname === "/api/wa-action" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const action = String(body.action || "");
+        const botKey = String(body.botKey || "");
+        const jid = String(body.jid || "");
+        const msgId = String(body.msgId || "");
+
+        const allBots = getAllBotSockets();
+        const targetIdx = allBots.findIndex((b, idx) => getBotInfo(b, idx).key === botKey);
+        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
+        if (!targetBot) {
+          sendJson(res, 404, { ok: false, error: "Subbot no disponible" });
+          return;
+        }
+
+        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
+        const chat = ensureBotChatMap(botKey).get(jid);
+        const targetMsg = chat?.messages.find((x) => x.id === msgId);
+
+        if (action === "react" && targetMsg?.rawKey) {
+          const emoji = String(body.emoji || "❤️");
+          await origSend(jid, { react: { text: emoji, key: targetMsg.rawKey } });
+          if (!targetMsg.reactions) targetMsg.reactions = {};
+          targetMsg.reactions[botKey] = emoji;
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (action === "delete" && targetMsg?.rawKey) {
+          await origSend(jid, { delete: targetMsg.rawKey });
+          targetMsg.text = "🚫 Eliminaste este mensaje";
+          targetMsg.mediaType = null;
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if (action === "presence" && typeof targetBot.sendPresenceUpdate === "function") {
+          await targetBot.sendPresenceUpdate(body.presence || "composing", jid).catch(() => {});
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        if ((action === "block" || action === "unblock") && typeof targetBot.updateBlockStatus === "function") {
+          const blockTarget = chat?.peerPhone ? `${chat.peerPhone}@s.whatsapp.net` : jid;
+          await targetBot.updateBlockStatus(blockTarget, action);
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        sendJson(res, 200, { ok: true });
         return;
       }
 
@@ -2600,7 +3263,7 @@ async function ensureWebServerRunning(): Promise<number> {
           if (lookup && lookup.msg.mediaType) {
             const allBots = getAllBotSockets();
             const targetBot =
-              allBots.find((b, i) => getBotKey(b, i) === (botKey || lookup.botKey)) || allBots[0];
+              allBots.find((b, i) => getBotInfo(b, i).key === (botKey || lookup.botKey)) || allBots[0];
             item = await downloadMediaBuffer(
               targetBot,
               lookup.msg.rawMessage,
@@ -2664,753 +3327,6 @@ async function ensureWebServerRunning(): Promise<number> {
         return;
       }
 
-      if (pathname === "/api/wa-avatar" && req.method === "GET") {
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const jid = parsedUrl.searchParams.get("jid") || "";
-        const cacheKey = `${botKey}:${jid}`;
-        const cached = state.avatarCache.get(cacheKey);
-
-        if (cached) {
-          res.writeHead(302, { Location: cached, "Cache-Control": "public, max-age=1800" });
-          res.end();
-          return;
-        }
-
-        if (cached === undefined && !state.avatarPending.has(cacheKey) && state.avatarPending.size < 4) {
-          state.avatarPending.add(cacheKey);
-          const allBots = getAllBotSockets();
-          const targetBot = allBots.find((b, i) => getBotKey(b, i) === botKey) || allBots[0];
-          if (targetBot && typeof targetBot.profilePictureUrl === "function") {
-            Promise.race([
-              targetBot.profilePictureUrl(jid, "image"),
-              new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timeout")), 1800)),
-            ])
-              .then((u: any) => {
-                const urlStr = typeof u === "string" ? u : "";
-                state.avatarCache.set(cacheKey, urlStr);
-                const chat = ensureBotChatMap(botKey).get(jid);
-                if (chat && urlStr) chat.avatarUrl = urlStr;
-              })
-              .catch(() => {
-                state.avatarCache.set(cacheKey, "");
-              })
-              .finally(() => {
-                state.avatarPending.delete(cacheKey);
-              });
-          } else {
-            state.avatarCache.set(cacheKey, "");
-            state.avatarPending.delete(cacheKey);
-          }
-        }
-
-        res.writeHead(404, { "Cache-Control": "no-store" });
-        res.end();
-        return;
-      }
-
-      if (pathname === "/api/status" && req.method === "GET") {
-        hookSockets();
-        const allBots = getAllBotSockets();
-        const subbots = allBots.map((b, idx) => {
-          const id = getBotKey(b, idx);
-          const isIndividualPaused = state.pausedBotIds.has(id);
-          const isSubPaused = idx > 0 && state.subbotsPaused;
-          return {
-            id,
-            name: b?.user?.name || (idx === 0 ? "MainBot" : `SubBot-${idx}`),
-            role: idx === 0 && !b?.isSubBot ? "Principal" : `SubBot #${idx}`,
-            paused: isIndividualPaused || isSubPaused,
-          };
-        });
-
-        let groupsCount = 0;
-        for (const store of state.botChatStores.values()) {
-          for (const chat of store.values()) {
-            if (chat.isGroup) groupsCount++;
-          }
-        }
-
-        const mem = process.memoryUsage();
-        const uptimeSec = Math.floor(process.uptime());
-        const h = Math.floor(uptimeSec / 3600);
-        const m = Math.floor((uptimeSec % 3600) / 60);
-        const s = uptimeSec % 60;
-
-        const reports = Array.from(state.reportRegistry.values()).map((r) => ({
-          phone: r.phone,
-          totalReports: r.totalReports,
-          subbotsCount: r.subbotsUsed.size,
-          lastTimestamp: r.lastTimestamp,
-        }));
-
-        sendJson(res, 200, {
-          uptime: `${h}h ${m}m ${s}s`,
-          uptimeSec,
-          subbots,
-          subbotsPaused: state.subbotsPaused,
-          msgRx: state.msgRx,
-          msgTx: state.msgTx,
-          groupsCount,
-          ramRss: (mem.rss / 1024 / 1024).toFixed(1),
-          ramHeap: (mem.heapUsed / 1024 / 1024).toFixed(1),
-          loadAvg: os.loadavg().map((n) => n.toFixed(2)).join(", "),
-          reports,
-          calls: state.callLogs,
-          autoRejectCalls: state.autoRejectCalls,
-          autoRejectMessage: state.autoRejectMessage,
-        });
-        return;
-      }
-
-      if (pathname === "/api/procs" && req.method === "GET") {
-        const processes: Array<{ pid: string; comm: string; cpu: string; mem: string }> = [];
-        try {
-          const { stdout } = await execAsync("ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 16", { timeout: 3000 });
-          const lines = stdout.trim().split("\n").slice(1);
-          for (const line of lines) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 4) {
-              processes.push({
-                pid: parts[0],
-                comm: parts.slice(1, parts.length - 2).join(" "),
-                cpu: parts[parts.length - 2],
-                mem: parts[parts.length - 1],
-              });
-            }
-          }
-        } catch {}
-        sendJson(res, 200, { processes });
-        return;
-      }
-
-      if (pathname === "/api/wa-chats" && req.method === "GET") {
-        hookSockets();
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
-        const effectiveKey = targetBot ? getBotKey(targetBot, Math.max(0, targetIdx)) : botKey;
-
-        if (targetBot) {
-          triggerBackgroundGroupSync(targetBot, Math.max(0, targetIdx), false);
-        }
-
-        const store = ensureBotChatMap(effectiveKey);
-        const chats = Array.from(store.values())
-          .sort((a, b) => b.lastTime - a.lastTime)
-          .map((c) => ({
-            jid: c.jid,
-            name: c.name,
-            isGroup: c.isGroup,
-            unread: c.unread,
-            lastTime: c.lastTime,
-            lastPreview: c.lastPreview,
-            avatarUrl: c.avatarUrl || state.avatarCache.get(`${effectiveKey}:${c.jid}`) || "",
-          }));
-
-        sendJson(res, 200, { botKey: effectiveKey, chats });
-        return;
-      }
-
-      if (pathname === "/api/wa-sync" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        state.botGroupSynced.delete(botKey);
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        if (targetIdx >= 0) {
-          triggerBackgroundGroupSync(allBots[targetIdx], targetIdx, true);
-        }
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-messages" && req.method === "GET") {
-        const botKey = parsedUrl.searchParams.get("botKey") || "";
-        const jid = parsedUrl.searchParams.get("jid") || "";
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        if (chat) {
-          chat.unread = 0;
-          const sanitizedMessages = chat.messages.map((m) => ({
-            id: m.id,
-            sender: m.sender,
-            pushName: m.pushName,
-            text: m.text,
-            time: m.time,
-            timestamp: m.timestamp,
-            fromMe: m.fromMe,
-            mediaType: m.mediaType,
-            mediaMime: m.mediaMime,
-            hasMedia: m.hasMedia,
-            mediaReady: state.mediaStore.has(m.id),
-            quotedId: m.quotedId,
-            quotedSender: m.quotedSender,
-            quotedText: m.quotedText,
-            reactions: m.reactions || {},
-          }));
-          sendJson(res, 200, {
-            chat: {
-              jid: chat.jid,
-              name: chat.name,
-              isGroup: chat.isGroup,
-              avatarUrl: chat.avatarUrl || state.avatarCache.get(`${botKey}:${chat.jid}`) || "",
-              statusText: chat.statusText || "",
-              messages: sanitizedMessages,
-            },
-          });
-          return;
-        }
-        sendJson(res, 200, { chat: null });
-        return;
-      }
-
-      if (pathname === "/api/wa-init-chat" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        if (botKey && jid) {
-          const store = ensureBotChatMap(botKey);
-          if (!store.has(jid)) {
-            const isGroup = jid.endsWith("@g.us");
-            const clean = jid.split("@")[0];
-            store.set(jid, {
-              jid,
-              name: isGroup ? `Grupo ${clean}` : `+${clean}`,
-              isGroup,
-              unread: 0,
-              lastTime: Date.now(),
-              lastPreview: "Conversación abierta desde el panel",
-              messages: [],
-            });
-          }
-        }
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-clear-chat" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        if (chat) {
-          chat.messages = [];
-          chat.lastPreview = "Historial limpiado";
-        }
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-send" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const text = String(body.text || "").trim();
-        const quotedId = String(body.quotedId || "");
-
-        if (!botKey || !jid || !text) {
-          sendJson(res, 400, { ok: false, error: "Datos incompletos" });
-          return;
-        }
-
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
-
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no encontrado o desconectado" });
-          return;
-        }
-
-        const store = ensureBotChatMap(botKey);
-        const chat = store.get(jid);
-        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
-
-        const mentionMatches = text.match(/@(\d{7,15})/g) || [];
-        const mentions = mentionMatches.map((m) => `${m.slice(1)}@s.whatsapp.net`);
-
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-        const sent = await origSend(
-          jid,
-          { text, ...(mentions.length ? { mentions } : {}) },
-          quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined
-        );
-        state.msgTx++;
-
-        recordChatMessage(botKey, jid, {
-          id: sent?.key?.id || randomBytes(6).toString("hex"),
-          sender: botKey,
-          pushName: targetBot?.user?.name || "SubBot",
-          text,
-          fromMe: true,
-          timestamp: Date.now(),
-          quotedId: quotedObj?.id || "",
-          quotedSender: quotedObj?.sender || "",
-          quotedText: quotedObj?.text || "",
-          rawKey: sent?.key,
-          rawMessage: sent,
-        });
-
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-send-media" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const caption = String(body.caption || "");
-        const mimeType = String(body.mimeType || "image/jpeg");
-        const fileName = String(body.fileName || "archivo");
-        const asSticker = Boolean(body.asSticker);
-        const isPtt = Boolean(body.isPtt);
-        const quotedId = String(body.quotedId || "");
-
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
-
-        if (!targetBot || !jid) {
-          sendJson(res, 404, { ok: false, error: "Subbot o chat inválido" });
-          return;
-        }
-
-        let buf: Buffer | null = null;
-        if (body.base64) {
-          buf = Buffer.from(String(body.base64), "base64");
-        } else if (body.mediaUrl) {
-          const r = await fetch(String(body.mediaUrl));
-          const ab = await r.arrayBuffer();
-          buf = Buffer.from(ab);
-        }
-
-        if (!buf || !buf.length) {
-          sendJson(res, 400, { ok: false, error: "Archivo vacío" });
-          return;
-        }
-
-        const chat = ensureBotChatMap(botKey).get(jid);
-        const quotedObj = quotedId ? chat?.messages.find((x) => x.id === quotedId) : undefined;
-        const sendOpts = quotedObj?.rawMessage ? { quoted: quotedObj.rawMessage } : undefined;
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-
-        let payload: any = {};
-        let mediaKind: "image" | "sticker" | "video" | "audio" | "document" = "document";
-
-        if (asSticker || mimeType.includes("webp")) {
-          payload = { sticker: buf, mimetype: "image/webp" };
-          mediaKind = "sticker";
-        } else if (isPtt || mimeType.startsWith("audio/")) {
-          payload = { audio: buf, mimetype: mimeType, ptt: isPtt };
-          mediaKind = "audio";
-        } else if (mimeType.startsWith("image/")) {
-          payload = { image: buf, caption, mimetype: mimeType };
-          mediaKind = "image";
-        } else if (mimeType.startsWith("video/")) {
-          payload = { video: buf, caption, mimetype: mimeType };
-          mediaKind = "video";
-        } else {
-          payload = { document: buf, fileName, mimetype: mimeType, caption };
-          mediaKind = "document";
-        }
-
-        const sent = await origSend(jid, payload, sendOpts);
-        const msgId = sent?.key?.id || randomBytes(6).toString("hex");
-        saveMediaToStore(msgId, mediaKind === "sticker" ? "image/webp" : mimeType, buf);
-        state.msgTx++;
-
-        recordChatMessage(botKey, jid, {
-          id: msgId,
-          sender: botKey,
-          pushName: targetBot?.user?.name || "SubBot",
-          text: caption || (mediaKind === "audio" ? "🎤 Nota de voz" : ""),
-          fromMe: true,
-          timestamp: Date.now(),
-          mediaType: mediaKind,
-          mediaMime: mimeType,
-          hasMedia: true,
-          rawKey: sent?.key,
-          rawMessage: sent,
-        });
-
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-action" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const action = String(body.action || "");
-        const botKey = String(body.botKey || "");
-        const jid = String(body.jid || "");
-        const msgId = String(body.msgId || "");
-
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : null;
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no disponible" });
-          return;
-        }
-
-        const origSend = state.originalSenders.get(targetBot) || targetBot.sendMessage.bind(targetBot);
-        const chat = ensureBotChatMap(botKey).get(jid);
-        const targetMsg = chat?.messages.find((x) => x.id === msgId);
-
-        if (action === "react" && targetMsg?.rawKey) {
-          const emoji = String(body.emoji || "❤️");
-          await origSend(jid, { react: { text: emoji, key: targetMsg.rawKey } });
-          if (!targetMsg.reactions) targetMsg.reactions = {};
-          targetMsg.reactions[botKey] = emoji;
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if (action === "delete" && targetMsg?.rawKey) {
-          await origSend(jid, { delete: targetMsg.rawKey });
-          targetMsg.text = "🚫 Eliminaste este mensaje";
-          targetMsg.mediaType = null;
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if (action === "presence" && typeof targetBot.sendPresenceUpdate === "function") {
-          await targetBot.sendPresenceUpdate(body.presence || "composing", jid).catch(() => {});
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if ((action === "block" || action === "unblock") && typeof targetBot.updateBlockStatus === "function") {
-          await targetBot.updateBlockStatus(jid, action);
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/wa-call" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const action = String(body.action || "");
-
-        if (action === "toggle-autoreject") {
-          state.autoRejectCalls = !state.autoRejectCalls;
-          sendJson(res, 200, { ok: true, autoRejectCalls: state.autoRejectCalls });
-          return;
-        }
-
-        if (action === "set-message") {
-          state.autoRejectMessage = String(body.message || "");
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if (action === "clear-logs") {
-          state.callLogs = [];
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        const botKey = String(body.botKey || "");
-        const peerJid = String(body.peerJid || "");
-        const allBots = getAllBotSockets();
-        const targetIdx = allBots.findIndex((b, idx) => getBotKey(b, idx) === botKey);
-        const targetBot = targetIdx >= 0 ? allBots[targetIdx] : allBots[0];
-
-        if (!targetBot) {
-          sendJson(res, 404, { ok: false, error: "Subbot no encontrado" });
-          return;
-        }
-
-        if (action === "reject") {
-          const callId = String(body.callId || "");
-          if (typeof targetBot.rejectCall === "function" && callId && peerJid) {
-            await targetBot.rejectCall(callId, peerJid).catch(() => {});
-          }
-          const logItem = state.callLogs.find((x) => x.id === callId);
-          if (logItem) logItem.status = "reject";
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if (action === "offer" && peerJid) {
-          const isVideo = Boolean(body.isVideo);
-          const callId = randomBytes(8).toString("hex").toUpperCase();
-          const now = Date.now();
-          const timeStr = new Date(now).toLocaleTimeString("es-CO", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          });
-
-          try {
-            if (typeof targetBot.query === "function") {
-              await targetBot
-                .query({
-                  tag: "call",
-                  attrs: {
-                    to: peerJid,
-                    id: callId,
-                  },
-                  content: [
-                    {
-                      tag: "offer",
-                      attrs: {
-                        "call-id": callId,
-                        "call-creator": targetBot?.user?.id || `${botKey}@s.whatsapp.net`,
-                      },
-                      content: isVideo ? [{ tag: "video", attrs: {} }] : [{ tag: "audio", attrs: { enc: "opus", rate: "16000" } }],
-                    },
-                  ],
-                })
-                .catch(() => {});
-            }
-          } catch {}
-
-          const cleanPeer = peerJid.split("@")[0].split(":")[0];
-          const knownName = ensureBotChatMap(botKey).get(peerJid)?.name || `+${cleanPeer}`;
-
-          state.callLogs.unshift({
-            id: callId,
-            botKey,
-            peerJid,
-            peerName: knownName,
-            isVideo,
-            isGroup: peerJid.endsWith("@g.us"),
-            direction: "outgoing",
-            status: "ringing",
-            timestamp: now,
-            timeStr,
-          });
-
-          recordChatMessage(botKey, peerJid, {
-            id: `call_out_${callId}`,
-            sender: botKey,
-            pushName: targetBot?.user?.name || "SubBot",
-            text: `${isVideo ? "📹 Videollamada" : "📞 Llamada de voz"} saliente iniciada desde el panel`,
-            fromMe: true,
-            timestamp: now,
-          });
-
-          sendJson(res, 200, { ok: true, callId });
-          return;
-        }
-
-        sendJson(res, 400, { ok: false, error: "Acción desconocida" });
-        return;
-      }
-
-      if (pathname === "/api/toggle-subbots" && req.method === "POST") {
-        state.subbotsPaused = !state.subbotsPaused;
-        sendJson(res, 200, { paused: state.subbotsPaused });
-        return;
-      }
-
-      if (pathname === "/api/toggle-single-bot" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const botKey = String(body.botKey || "");
-        if (botKey) {
-          if (state.pausedBotIds.has(botKey)) state.pausedBotIds.delete(botKey);
-          else state.pausedBotIds.add(botKey);
-        }
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/clean-ram" && req.method === "POST") {
-        try {
-          if (typeof globalThis.gc === "function") {
-            globalThis.gc();
-          }
-        } catch {}
-        const afterMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-        sendJson(res, 200, { ok: true, afterMb });
-        return;
-      }
-
-      if (pathname === "/api/kill-proc" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const pids: string[] = Array.isArray(body.pids) ? body.pids : [];
-        const killed: string[] = [];
-        for (const p of pids) {
-          const numPid = parseInt(String(p), 10);
-          if (!isNaN(numPid) && numPid > 1 && numPid !== process.pid) {
-            try {
-              process.kill(numPid, "SIGKILL");
-              killed.push(String(numPid));
-            } catch {}
-          }
-        }
-        sendJson(res, 200, { ok: true, killed });
-        return;
-      }
-
-      if (pathname === "/api/commands" && req.method === "GET") {
-        const allCommands = await syncCommandInterceptors();
-        sendJson(res, 200, {
-          allCommands,
-          blocked: Array.from(state.blockedCommands),
-        });
-        return;
-      }
-
-      if (pathname === "/api/toggle-cmd" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cmd = String(body.cmd || "").toLowerCase().trim();
-        if (cmd) {
-          await syncCommandInterceptors();
-          if (state.blockedCommands.has(cmd)) {
-            state.blockedCommands.delete(cmd);
-          } else {
-            state.blockedCommands.add(cmd);
-          }
-        }
-        sendJson(res, 200, { blocked: Array.from(state.blockedCommands) });
-        return;
-      }
-
-      if (pathname === "/api/spam-report" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cleanPhone = String(body.phone || "").replace(/\D/g, "");
-        const cycles = Math.min(20, Math.max(1, parseInt(String(body.cycles || "5"), 10)));
-
-        if (!cleanPhone || cleanPhone.length < 7) {
-          sendJson(res, 400, { ok: false });
-          return;
-        }
-
-        const targetJid = `${cleanPhone}@s.whatsapp.net`;
-        const allBots = getAllBotSockets();
-
-        if (!state.reportRegistry.has(cleanPhone)) {
-          state.reportRegistry.set(cleanPhone, {
-            phone: cleanPhone,
-            totalReports: 0,
-            subbotsUsed: new Set(),
-            lastTimestamp: new Date().toLocaleTimeString("es-CO"),
-          });
-        }
-
-        const entry = state.reportRegistry.get(cleanPhone)!;
-
-        await Promise.allSettled(
-          allBots.map(async (botSock, idx) => {
-            const botId = getBotKey(botSock, idx);
-            entry.subbotsUsed.add(botId);
-
-            for (let i = 0; i < cycles; i++) {
-              try {
-                if (typeof botSock.updateBlockStatus === "function") {
-                  await botSock.updateBlockStatus(targetJid, "block").catch(() => {});
-                }
-                if (typeof botSock.query === "function") {
-                  await botSock
-                    .query({
-                      tag: "iq",
-                      attrs: { to: "@s.whatsapp.net", type: "set", xmlns: "disallowed" },
-                      content: [{ tag: "report", attrs: { jid: targetJid, type: "spam" } }],
-                    })
-                    .catch(() => {});
-                }
-                entry.totalReports++;
-                entry.lastTimestamp = new Date().toLocaleTimeString("es-CO");
-                if (typeof botSock.updateBlockStatus === "function") {
-                  await botSock.updateBlockStatus(targetJid, "unblock").catch(() => {});
-                }
-              } catch {}
-            }
-          })
-        );
-
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/files" && req.method === "GET") {
-        const relDir = parsedUrl.searchParams.get("dir") || ".";
-        const targetDir = safeResolvePath(relDir);
-        const items = fs.readdirSync(targetDir, { withFileTypes: true });
-        const entries = items
-          .filter((i) => i.name !== "node_modules" && i.name !== ".git")
-          .map((i) => ({
-            name: i.name,
-            isDir: i.isDirectory(),
-            relPath: path.relative(process.cwd(), path.join(targetDir, i.name)) || ".",
-          }))
-          .sort((a, b) => Number(b.isDir) - Number(a.isDir));
-
-        sendJson(res, 200, { entries });
-        return;
-      }
-
-      if (pathname === "/api/file-read" && req.method === "GET") {
-        const relFile = parsedUrl.searchParams.get("file") || "";
-        const targetFile = safeResolvePath(relFile);
-        if (fs.existsSync(targetFile) && fs.statSync(targetFile).isFile()) {
-          const content = fs.readFileSync(targetFile, "utf8");
-          sendJson(res, 200, { file: relFile, content });
-          return;
-        }
-        sendJson(res, 404, { error: "Archivo no encontrado" });
-        return;
-      }
-
-      if (pathname === "/api/file-save" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const relFile = String(body.file || "");
-        const content = String(body.content ?? "");
-        const targetFile = safeResolvePath(relFile);
-        fs.writeFileSync(targetFile, content, "utf8");
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === "/api/benchmark" && req.method === "POST") {
-        const t0 = performance.now();
-        let acc = 0;
-        for (let i = 0; i < 5_000_000; i++) {
-          acc += Math.sqrt(i);
-        }
-        const cpuMs = (performance.now() - t0).toFixed(2);
-
-        const t1 = performance.now();
-        const buf = Buffer.alloc(32 * 1024 * 1024, 0xaa);
-        const memMs = (performance.now() - t1).toFixed(2);
-
-        const tmpFile = path.join(os.tmpdir(), `aura_bench_${Date.now()}.tmp`);
-        const t2 = performance.now();
-        fs.writeFileSync(tmpFile, buf);
-        fs.readFileSync(tmpFile);
-        fs.unlinkSync(tmpFile);
-        const diskMs = (performance.now() - t2).toFixed(2);
-
-        const summary = [
-          `=== AURA-BOT V8 BENCHMARK ===`,
-          `CPU Math (5M ops)     : ${cpuMs} ms (Checksum: ${acc.toFixed(0)})`,
-          `RAM Alloc (32 MB)     : ${memMs} ms`,
-          `Disk R/W (32 MB I/O)  : ${diskMs} ms`,
-          `Sistema Operativo     : ${os.type()} ${os.release()} (${os.arch()})`,
-          `Hilos / Núcleos CPU   : ${os.cpus().length} vCPU (${os.cpus()[0]?.model || "Generic"})`,
-        ].join("\n");
-
-        sendJson(res, 200, { result: summary });
-        return;
-      }
-
-      if (pathname === "/api/shell-test" && req.method === "POST") {
-        const body = await readJsonBody(req);
-        const cmd = String(body.cmd || "uptime");
-        try {
-          const { stdout, stderr } = await execAsync(cmd, { timeout: 8000 });
-          sendJson(res, 200, { output: (stdout || stderr || "Ejecutado sin salida.").slice(0, 4000) });
-        } catch (err: any) {
-          sendJson(res, 200, { output: String(err?.message || err).slice(0, 4000) });
-        }
-        return;
-      }
-
       sendJson(res, 404, { error: "Ruta no encontrada" });
     } catch (e: any) {
       sendJson(res, 500, { error: String(e?.message || e) });
@@ -3444,9 +3360,9 @@ async function ensureWebServerRunning(): Promise<number> {
 }
 
 export default {
-  name: ["checkweb", "webpanel", "panelweb", "dashboard"],
+  name: ["checkweb", "webpanel", "panelweb", "dashboard", "waweb"],
   category: "group",
-  description: "Inicia el panel web con WhatsApp Web Multimedia, Stickers y Llamadas para todos los subbots.",
+  description: "Inicia el cliente WhatsApp Web Multi-Subbot en tiempo real con resolución de LID/Números, Contactos y Suite Troll.",
   groupOnly: false,
   async run(ctx: CommandContext) {
     const { reply, react, db, msg, groupMeta, sock, from, sender } = ctx;
@@ -3455,7 +3371,7 @@ export default {
 
     const rawInput = sender || msg.key?.participant || from;
     const server = rawInput.split("@")[1] || "desconocido";
-    const cleanInputId = rawInput.split("@")[0].split(":")[0].replace(/\D/g, "");
+    const cleanInputId = cleanDigits(rawInput);
 
     let resolvedJid: string | null = null;
     let resolvedLid: string | null = null;
@@ -3468,9 +3384,9 @@ export default {
 
     if (groupMeta?.participants) {
       const foundInGroup = groupMeta.participants.find((p: any) => {
-        const pLid = String(p.lid || "").split("@")[0].split(":")[0];
-        const pId = String(p.id || "").split("@")[0].split(":")[0];
-        const pPhone = String(p.phoneNumber || "").replace(/\D/g, "");
+        const pLid = cleanDigits(p.lid);
+        const pId = cleanDigits(p.id);
+        const pPhone = cleanDigits(p.phoneNumber);
         return pLid === cleanInputId || pId === cleanInputId || (pPhone && pPhone === cleanInputId);
       }) as any;
 
@@ -3479,7 +3395,7 @@ export default {
           if (foundInGroup.id?.endsWith("@s.whatsapp.net")) {
             resolvedJid = foundInGroup.id;
           } else if (foundInGroup.phoneNumber) {
-            const num = String(foundInGroup.phoneNumber).replace(/\D/g, "");
+            const num = cleanDigits(foundInGroup.phoneNumber);
             if (num) resolvedJid = `${num}@s.whatsapp.net`;
           }
         }
@@ -3494,7 +3410,7 @@ export default {
       try {
         const pn = await lidRepo.getPNForLID(resolvedLid);
         if (pn) {
-          const cleanPn = String(pn).split("@")[0].split(":")[0].replace(/\D/g, "");
+          const cleanPn = cleanDigits(pn);
           if (cleanPn) resolvedJid = `${cleanPn}@s.whatsapp.net`;
         }
       } catch {}
@@ -3505,14 +3421,14 @@ export default {
       try {
         const userRec = (resolvedLid && dbAny.getUser(resolvedLid)) || dbAny.getUser(rawInput);
         if (userRec?.phone_number) {
-          resolvedJid = `${String(userRec.phone_number).replace(/\D/g, "")}@s.whatsapp.net`;
+          resolvedJid = `${cleanDigits(userRec.phone_number)}@s.whatsapp.net`;
         } else if (userRec?.jid?.endsWith("@s.whatsapp.net")) {
           resolvedJid = userRec.jid;
         }
       } catch {}
     }
 
-    const realNumber = resolvedJid ? resolvedJid.split("@")[0].split(":")[0] : cleanInputId;
+    const realNumber = resolvedJid ? cleanDigits(resolvedJid) : cleanInputId;
 
     const isAuthorizedOwner =
       realNumber === "573118353868" ||
@@ -3524,10 +3440,12 @@ export default {
 
     if (!isAuthorizedOwner) {
       await react("⛔").catch(() => undefined);
-      return reply("⛔ *Acceso denegado:* Este panel es exclusivo para los propietarios del sistema.");
+      return reply("⛔ *Acceso denegado:* Este cliente WhatsApp Web es exclusivo para el propietario.");
     }
 
-    await react("🌐").catch(() => undefined);
+    if (resolvedJid) state.ownerJid = resolvedJid;
+
+    await react("💬").catch(() => undefined);
 
     rotateCredentials();
 
@@ -3537,42 +3455,29 @@ export default {
       fetchPublicIp(),
     ]);
 
-    syncCommandInterceptors().catch(() => undefined);
+    ensureTunnelWatchdog(port);
 
     const baseHost = tunnelBase || `http://${publicIp}:${port}`;
     const magicLink = `${baseHost}/?token=${state.token}`;
 
-    sendCredentialsEmail(
-      state.ownerEmail,
-      baseHost,
-      state.tempUser,
-      state.tempPass,
-      state.token
-    ).catch(() => {});
-
     const panelMessage = [
-      `🌐 *${fytBold("AURA-BOT 2.0 • SUITE & WA-WEB PRO")}* 🌐`,
+      `💬 *${fytBold("AURA WHATSAPP WEB • MULTI-SUBBOT")}* 💬`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
       `👤 *Usuario Temporal:* \`${state.tempUser}\``,
-      `🔑 *Clave / Código OTP:* \`${state.tempPass}\``,
-      `📧 *Correo vinculado:* \`${state.ownerEmail}\``,
-      `🔌 *Puerto Interno:* \`${port}\``,
+      `🔑 *Clave / OTP:* \`${state.tempPass}\``,
+      `🛡️ *Watchdog Túnel:* \`Activo (Auto-Reconnect)\``,
+      `🎭 *Suite Troll & ViewOnce:* \`Habilitada\``,
       ``,
-      `🚀 *Enlace Portada Login:*`,
-      `${baseHost}`,
-      ``,
-      `⚡ *Enlace Directo (Auto-Login 1 Clic):*`,
+      `⚡ *Acceso Directo (1 Clic):*`,
       `${magicLink}`,
     ].join("\n");
 
-    await sock.sendMessage(
-      sender,
-      { text: panelMessage },
-      { quoted: msg as any }
-    );
+    const dmTarget = resolvedJid || sender;
+    const origSend = state.originalSenders.get(sock) || sock.sendMessage.bind(sock);
+    await origSend(dmTarget, { text: panelMessage }, { quoted: msg as any }).catch(() => {});
 
     if (from.endsWith("@g.us")) {
-      await reply("🔒 *Verificación exitosa.* El enlace y tus credenciales temporales fueron enviados a tu privado y correo.");
+      await reply("💬 *WhatsApp Web Pro listo.* El enlace directo fue enviado a tu chat privado.");
     }
 
     await react("✅").catch(() => undefined);
