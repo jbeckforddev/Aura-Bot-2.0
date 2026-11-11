@@ -1,548 +1,182 @@
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { syncBuiltinESMExports } from 'node:module';
+import fs from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { randomUUID } from "node:crypto";
 
-const encoded = process.argv[2] || '';
+const ROOT = process.cwd();
+const TEST_DIR = path.join(ROOT, "test");
 
-const request = JSON.parse(
-  Buffer.from(encoded, 'base64url').toString('utf8')
-);
+const pending = new Map();
 
-const root = process.cwd();
-const commandName = String(
-  request.command || ''
-).toLowerCase();
+function rpc(method, args = []) {
+  return new Promise((resolve, reject) => {
+    const id = randomUUID();
 
-const startedAt = Date.now();
-const messages = [];
+    pending.set(id, { resolve, reject });
 
-let completed = false;
-
-function send(payload) {
-  try {
-    if (process.send) process.send(payload);
-  } catch {}
-}
-
-function log(level, message) {
-  const text = typeof message === 'string'
-    ? message
-    : safeString(message);
-
-  send({
-    type: 'log',
-    level,
-    message: text.slice(0, 4000),
+    process.send({
+      type: "rpc",
+      id,
+      method,
+      args,
+    });
   });
 }
 
-function safeString(value) {
-  if (value instanceof Error) {
-    return `${value.name}: ${value.message}\n${value.stack || ''}`;
+process.on("message", async (message) => {
+  if (message?.type === "rpc-result") {
+    const request = pending.get(message.id);
+    if (!request) return;
+
+    pending.delete(message.id);
+
+    if (message.ok) {
+      request.resolve(message.value);
+    } else {
+      request.reject(new Error(message.error));
+    }
+
+    return;
   }
+
+  if (message?.type !== "start") return;
 
   try {
-    return typeof value === 'string'
-      ? value
-      : JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
+    const pluginFile = await findPlugin(message.command);
 
-function record(kind, content) {
-  const text = typeof content === 'string'
-    ? content
-    : content?.text !== undefined
-      ? String(content.text)
-      : safeString(content);
-
-  messages.push({
-    kind,
-    text: text.slice(0, 4000),
-    at: new Date().toISOString(),
-  });
-
-  log('BOT-MOCK', `${kind}: ${text}`);
-}
-
-// La red se bloquea dentro del proceso de prueba.
-// No se importa el socket real de Baileys.
-
-function blockNetwork() {
-  const denyFetch = async () => {
-    throw new Error(
-      'Sandbox: acceso de red bloqueado.'
-    );
-  };
-
-  globalThis.fetch = denyFetch;
-
-  if (globalThis.WebSocket) {
-    try {
-      globalThis.WebSocket = class {
-        constructor() {
-          throw new Error(
-            'Sandbox: WebSocket bloqueado.'
-          );
-        }
-      };
-    } catch {}
-  }
-}
-
-for (const name of [
-  'http',
-  'https',
-  'net',
-  'tls',
-  'dgram',
-  'child_process',
-]) {
-  try {
-    const mod = await import(`node:${name}`);
-
-    const deny = () => {
+    if (!pluginFile) {
       throw new Error(
-        `Sandbox: API ${name} bloqueada.`
+        `No existe el comando "${message.command}" dentro de test/.`
       );
-    };
-
-    if (name === 'http' || name === 'https') {
-      mod.default.request = deny;
-      mod.default.get = deny;
-    } else if (name === 'net') {
-      mod.default.connect = deny;
-      mod.default.createConnection = deny;
-      mod.default.createServer = deny;
-    } else if (name === 'tls') {
-      mod.default.connect = deny;
-    } else if (name === 'dgram') {
-      mod.default.createSocket = deny;
-    } else if (name === 'child_process') {
-      for (const method of [
-        'spawn',
-        'spawnSync',
-        'exec',
-        'execSync',
-        'execFile',
-        'execFileSync',
-        'fork',
-      ]) {
-        mod.default[method] = deny;
-      }
     }
 
-    syncBuiltinESMExports();
-  } catch (error) {
-    log(
-      'WARN',
-      `No se pudo aplicar un bloqueo de API: ${safeString(error)}`
+    const imported = await import(
+      `${pathToFileURL(pluginFile).href}?test=${Date.now()}`
     );
-  }
-}
 
-function installConsoleCapture() {
-  for (const level of [
-    'log',
-    'info',
-    'warn',
-    'error',
-    'debug',
-  ]) {
-    console[level] = (...args) => {
-      log(
-        level.toUpperCase(),
-        args.map(safeString).join(' ')
+    const plugin = imported.default;
+
+    if (!plugin || typeof plugin.run !== "function") {
+      throw new Error(
+        "El archivo no exporta un comando válido."
       );
-    };
-  }
-}
-
-function installFatalHandlers() {
-  process.on('uncaughtException', (error) => {
-    send({
-      type: 'fatal',
-      message: safeString(error),
-    });
-
-    process.exit(70);
-  });
-
-  process.on('unhandledRejection', (reason) => {
-    send({
-      type: 'fatal',
-      message: `UnhandledRejection: ${safeString(reason)}`,
-    });
-
-    process.exit(71);
-  });
-}
-
-async function walkTs(dir) {
-  const files = [];
-
-  const entries = await (
-    await import('node:fs/promises')
-  ).readdir(dir, {
-    withFileTypes: true,
-  });
-
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...await walkTs(full));
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith('.ts')
-    ) {
-      files.push(full);
     }
+
+    const original = message.context;
+
+    const sock = {
+      sendMessage: (...args) =>
+        rpc("sock.sendMessage", args),
+    };
+
+    const ctx = {
+      ...original,
+      sock,
+
+      reply: (...args) =>
+        rpc("ctx.reply", args),
+
+      react: (...args) =>
+        rpc("ctx.react", args),
+
+      resolveLid: (...args) =>
+        rpc("ctx.resolveLid", args),
+
+      copy: (...args) =>
+        rpc("ctx.copy", args),
+
+      buttons: (...args) =>
+        rpc("ctx.buttons", args),
+
+      options: (...args) =>
+        rpc("ctx.options", args),
+
+      db: undefined,
+
+      activeBotsLive: [],
+
+      clearGroupCache: () => true,
+
+      getPlugins: () => new Map(),
+
+      getPluginCategories: () => [],
+    };
+
+    await plugin.run(ctx);
+
+    process.send({
+      type: "result",
+      ok: true,
+      status: "OK",
+      command: message.command,
+      file: path.relative(ROOT, pluginFile),
+    });
+
+    process.exit(0);
+  } catch (error) {
+    process.send({
+      type: "result",
+      ok: false,
+      status: "ERROR",
+      error: error instanceof Error
+        ? error.stack || error.message
+        : String(error),
+    });
+
+    process.exit(1);
   }
+});
 
-  return files;
-}
-
-async function findPluginFile(alias) {
-  const require = (
-    await import('node:module')
-  ).createRequire(
-    path.join(root, 'package.json')
-  );
-
-  const ts = require('typescript');
-  const commandDir = path.join(root, 'cmd');
-  const files = await walkTs(commandDir);
+async function findPlugin(alias) {
+  const files = await getTypeScriptFiles(TEST_DIR);
 
   for (const file of files) {
-    const sourceText = await (
-      await import('node:fs/promises')
-    ).readFile(file, 'utf8');
-
-    const source = ts.createSourceFile(
-      file,
-      sourceText,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
+    const imported = await import(
+      `${pathToFileURL(file).href}?lookup=${Date.now()}`
     );
 
-    let matched = false;
+    const plugin = imported.default;
+    if (!plugin) continue;
 
-    const visit = (node) => {
-      if (matched) return;
+    const names = Array.isArray(plugin.name)
+      ? plugin.name
+      : [plugin.name];
 
-      if (ts.isObjectLiteralExpression(node)) {
-        let hasRunner = false;
-        let names = [];
-
-        for (const property of node.properties) {
-          const propertyName = property.name;
-
-          const key = propertyName &&
-            (
-              ts.isIdentifier(propertyName) ||
-              ts.isStringLiteral(propertyName)
-            )
-            ? propertyName.text
-            : '';
-
-          if (
-            (
-              ts.isMethodDeclaration(property) ||
-              ts.isPropertyAssignment(property)
-            ) &&
-            (
-              key === 'run' ||
-              key === 'execute'
-            )
-          ) {
-            hasRunner = true;
-          }
-
-          if (
-            ts.isPropertyAssignment(property) &&
-            key === 'name'
-          ) {
-            const initializer = property.initializer;
-
-            if (ts.isStringLiteralLike(initializer)) {
-              names.push(initializer.text);
-            } else if (
-              ts.isArrayLiteralExpression(initializer)
-            ) {
-              names.push(
-                ...initializer.elements
-                  .filter(ts.isStringLiteralLike)
-                  .map((element) => element.text)
-              );
-            }
-          }
-        }
-
-        if (
-          hasRunner &&
-          names.some(
-            (name) => name.toLowerCase() === alias
-          )
-        ) {
-          matched = true;
-        }
-      }
-
-      if (!matched) {
-        ts.forEachChild(node, visit);
-      }
-    };
-
-    visit(source);
-
-    if (matched) return file;
+    if (
+      names.some(
+        (name) =>
+          typeof name === "string" &&
+          name.toLowerCase() === alias
+      )
+    ) {
+      return file;
+    }
   }
 
   return null;
 }
 
-function makeSocketMock(from) {
-  const target = {
-    user: {
-      id: 'sandbox@s.whatsapp.net',
-      name: 'Aura Reed Sandbox',
-    },
-    isSubBot: false,
-    botType: 'Principal',
-  };
+async function getTypeScriptFiles(directory) {
+  const files = [];
 
-  return new Proxy(target, {
-    get(object, property) {
-      if (property in object) {
-        return object[property];
-      }
-
-      if (property === 'sendMessage') {
-        return async (jid, content) => {
-          record('sendMessage', content);
-
-          return {
-            key: {
-              remoteJid: jid || from,
-              id: `SANDBOX-${Date.now()}`,
-            },
-          };
-        };
-      }
-
-      if (property === 'groupMetadata') {
-        return async () => ({
-          id: from,
-          subject: 'Sandbox Group',
-          participants: [],
-        });
-      }
-
-      if (
-        property === 'on' ||
-        property === 'ev' ||
-        property === 'ws'
-      ) {
-        return undefined;
-      }
-
-      return async (...args) => {
-        log(
-          'SOCKET-MOCK',
-          `${String(property)}(${args.map(safeString).join(', ')})`
-        );
-
-        return undefined;
-      };
-    },
+  const entries = await fs.readdir(directory, {
+    withFileTypes: true,
   });
-}
 
-async function main() {
-  installFatalHandlers();
-  installConsoleCapture();
-  blockNetwork();
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
 
-  log(
-    'INFO',
-    `Iniciando prueba aislada: ${commandName}`
-  );
-
-  log(
-    'INFO',
-    'Buscando archivo del comando en cmd/**/*.ts'
-  );
-
-  const pluginFile = await findPluginFile(commandName);
-
-  if (!pluginFile) {
-    throw new Error(
-      `No se encontró un comando registrado con el alias: ${commandName}`
-    );
-  }
-
-  log(
-    'INFO',
-    `Comando localizado: ${path.relative(root, pluginFile)}`
-  );
-
-  const databaseModule = await import(
-    pathToFileURL(
-      path.join(root, 'database', 'AuraDB.ts')
-    ).href
-  );
-
-  const pluginModule = await import(
-    pathToFileURL(pluginFile).href
-  );
-
-  const plugin = pluginModule.default;
-
-  if (
-    !plugin ||
-    typeof plugin.run !== 'function'
-  ) {
-    throw new Error(
-      'El módulo no exporta un comando válido mediante default.run(ctx).'
-    );
-  }
-
-  const from = '525000000000@s.whatsapp.net';
-
-  const args = Array.isArray(request.args)
-    ? request.args
-    : [];
-
-  const text = args.join(' ');
-
-  const body =
-    `.${commandName}${text ? ` ${text}` : ''}`;
-
-  const fakeMsg = {
-    key: {
-      remoteJid: from,
-      participant: from,
-      id: 'AURA-SANDBOX-MESSAGE',
-      fromMe: false,
-    },
-
-    message: {
-      conversation: body,
-    },
-
-    pushName: 'Sandbox Test',
-    messageTimestamp: Math.floor(Date.now() / 1000),
-  };
-
-  const sock = makeSocketMock(from);
-  const db = databaseModule.db;
-
-  const ctx = {
-    sock,
-    db,
-    msg: fakeMsg,
-    receivedAt: Date.now(),
-    from,
-    sender: from,
-    senderNum: from.split('@')[0],
-    botJid: from,
-    botLabel: 'AURA REED SANDBOX',
-    mainBotNum: from.split('@')[0],
-    activeBotsLive: [],
-    isGroup: false,
-    groupName: '',
-    groupMeta: null,
-    body,
-    isCmd: true,
-    cmdName: commandName,
-    args,
-    text,
-    rawText: text,
-    usedPrefix: '.',
-    modPrefix: '',
-    isOwner: true,
-    isCoOwner: false,
-    isMod: true,
-    isPremium: true,
-    isAdmin: true,
-    isBotAdmin: true,
-    isBotUser: true,
-    prefix: '.',
-
-    resolveLid: async (jid) => jid,
-
-    clearGroupCache: () => true,
-    clearGROUP_METADATA_CACHE: () => true,
-
-    reply: async (content) => {
-      record('reply', content);
-      return undefined;
-    },
-
-    react: async (emoji) => {
-      record('react', emoji);
-      return undefined;
-    },
-
-    copy: async (...values) => {
-      record('copy', values);
-      return undefined;
-    },
-
-    buttons: async (...values) => {
-      record('buttons', values);
-      return undefined;
-    },
-
-    options: async (...values) => {
-      record('options', values);
-      return undefined;
-    },
-
-    getPlugins: () => new Map([
-      [commandName, plugin],
-    ]),
-
-    getPluginCategories: () =>
-      plugin.category
-        ? [String(plugin.category)]
-        : [],
-  };
-
-  log(
-    'INFO',
-    `Ejecutando ${commandName} con contexto simulado.`
-  );
-
-  await plugin.run(ctx);
-
-  completed = true;
-
-  send({
-    type: 'result',
-    status: 'OK',
-    durationMs: Date.now() - startedAt,
-    messages,
-  });
-}
-
-main()
-  .catch((error) => {
-    send({
-      type: 'result',
-      status: 'ERROR',
-      durationMs: Date.now() - startedAt,
-      messages,
-      error: safeString(error),
-    });
-
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    if (completed) {
-      log('INFO', 'Prueba finalizada.');
+    if (entry.isDirectory()) {
+      files.push(
+        ...await getTypeScriptFiles(fullPath)
+      );
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".ts")
+    ) {
+      files.push(fullPath);
     }
-  });
+  }
+
+  return files;
+}
