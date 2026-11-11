@@ -1,65 +1,68 @@
+import { randomUUID } from "node:crypto";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-function buildMinecraftPayload(playerName: string, seedArg: number) {
+function buildFullscreenMinecraftHtml(playerName: string, seedArg: number): string {
   const configJson = JSON.stringify({
     player: playerName || "Steve",
     seed: seedArg || Math.floor(Math.random() * 99999),
   });
 
-  const html = `<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-html,body{width:100%;height:100%;min-height:540px;background:#000;color:#fff;font-family:'Courier New',monospace;overflow:hidden;touch-action:none}
-#app{position:relative;width:100%;height:540px;background:#000;overflow:hidden}
+  return `<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+html,body{width:100%;height:100%;background:#05070b;color:#fff;font-family:'Courier New',monospace;overflow:hidden;touch-action:none}
+#mc-root{position:fixed;inset:0;width:100vw;height:100vh;background:#000; display:flex;flex-direction:column;overflow:hidden}
 #view{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block;z-index:1}
 #hud{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
-.top-bar{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:flex-start;z-index:10;pointer-events:none}
-.mc-info{background:rgba(0,0,0,.58);border:2px solid #3c3c3c;padding:5px 8px;font-size:10px;line-height:1.35;text-shadow:1px 1px 0 #000}
-.mc-ver{color:#55ff55;font-weight:900;font-size:11px}
-.top-btns{display:flex;gap:5px;pointer-events:auto}
-.mc-btn{background:#727272;border-top:2px solid #b8b8b8;border-left:2px solid #b8b8b8;border-right:2px solid #282828;border-bottom:2px solid #282828;color:#fff;font-family:'Courier New',monospace;font-size:10px;font-weight:900;padding:5px 7px;text-shadow:1px 1px 0 #222;cursor:pointer}
+.top-bar{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-start;z-index:10;pointer-events:none}
+.mc-info{background:rgba(0,0,0,.65);border:2px solid #4a4a4a;padding:6px 10px;font-size:11px;line-height:1.4;text-shadow:1px 1px 0 #000;border-radius:4px}
+.mc-ver{color:#55ff55;font-weight:900;font-size:12px}
+.top-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto;max-width:230px}
+.mc-btn{background:#727272;border-top:2px solid #b8b8b8;border-left:2px solid #b8b8b8;border-right:2px solid #282828;border-bottom:2px solid #282828;color:#fff;font-family:'Courier New',monospace;font-size:10.5px;font-weight:900;padding:6px 8px;text-shadow:1px 1px 0 #222;cursor:pointer;border-radius:2px}
 .mc-btn:active,.mc-btn.on{background:#4a4a4a;border-top-color:#282828;border-left-color:#282828;border-right-color:#b8b8b8;border-bottom-color:#b8b8b8;color:#ffff55}
-#crosshair{position:absolute;top:50%;left:50%;width:14px;height:14px;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
-#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.85);box-shadow:0 0 2px #000}
-#crosshair::before{top:6px;left:0;width:14px;height:2px}
-#crosshair::after{top:0;left:6px;width:2px;height:14px}
-#pad-zone{position:absolute;bottom:64px;left:10px;width:118px;height:118px;z-index:12;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:3px}
-.d-btn{background:rgba(50,50,50,.68);border:2px solid rgba(180,180,180,.55);color:#fff;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:4px;text-shadow:1px 1px 0 #000}
-.d-btn:active{background:rgba(120,255,120,.55);border-color:#55ff55}
-#act-zone{position:absolute;bottom:64px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:12}
-.act-row{display:flex;gap:6px;justify-content:flex-end}
-.a-btn{width:54px;height:44px;background:rgba(60,60,60,.75);border-top:2px solid #bbb;border-left:2px solid #bbb;border-right:2px solid #222;border-bottom:2px solid #222;color:#fff;font-size:10px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-shadow:1px 1px 0 #000;border-radius:4px}
-.a-btn span{font-size:15px;line-height:1}
+#crosshair{position:absolute;top:50%;left:50%;width:16px;height:16px;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.9);box-shadow:0 0 2px #000}
+#crosshair::before{top:7px;left:0;width:16px;height:2px}
+#crosshair::after{top:0;left:7px;width:2px;height:16px}
+#pad-zone{position:absolute;bottom:78px;left:14px;width:132px;height:132px;z-index:12;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px}
+.d-btn{background:rgba(45,45,45,.72);border:2px solid rgba(190,190,190,.55);color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:6px;text-shadow:1px 1px 0 #000}
+.d-btn:active{background:rgba(85,255,85,.55);border-color:#55ff55}
+#act-zone{position:absolute;bottom:78px;right:14px;display:flex;flex-direction:column;gap:8px;z-index:12}
+.act-row{display:flex;gap:8px;justify-content:flex-end}
+.a-btn{width:62px;height:50px;background:rgba(55,55,55,.78);border-top:2px solid #bbb;border-left:2px solid #bbb;border-right:2px solid #222;border-bottom:2px solid #222;color:#fff;font-size:10.5px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-shadow:1px 1px 0 #000;border-radius:6px}
+.a-btn span{font-size:17px;line-height:1;margin-bottom:2px}
 .a-btn:active{background:rgba(255,255,85,.45)}
-.a-btn.tnt{background:rgba(160,30,30,.8)}
-#bottom-hud{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);z-index:12;display:flex;flex-direction:column;align-items:center;gap:3px;width:96%;max-width:360px}
-.status-bars{width:100%;display:flex;justify-content:space-between;padding:0 4px;font-size:11px;letter-spacing:1px;text-shadow:1px 1px 0 #000;pointer-events:none}
-#hotbar{display:flex;background:#333;border:2px solid #1a1a1a;padding:2px;gap:2px}
-.slot{width:34px;height:34px;background:#8b8b8b;border-top:2px solid #373737;border-left:2px solid #373737;border-right:2px solid #fff;border-bottom:2px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;cursor:pointer}
-.slot.sel{outline:2px solid #ffff55;background:#a8a8a8;z-index:2}
-.slot canvas{width:22px;height:22px;image-rendering:pixelated}
-.slot-num{position:absolute;top:1px;left:2px;font-size:8px;color:#fff;text-shadow:1px 1px 0 #000}
-#toast{position:absolute;top:52px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);border:1px solid #55ff55;color:#ffff55;padding:4px 10px;font-size:10.5px;font-weight:900;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.a-btn.tnt{background:rgba(175,30,30,.85)}
+#bottom-hud{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:12;display:flex;flex-direction:column;align-items:center;gap:4px;width:96%;max-width:390px}
+.status-bars{width:100%;display:flex;justify-content:space-between;padding:0 6px;font-size:12px;letter-spacing:1px;text-shadow:1px 1px 0 #000;pointer-events:none}
+#hotbar{display:flex;background:#333;border:2px solid #1a1a1a;padding:3px;gap:3px;border-radius:3px}
+.slot{width:37px;height:37px;background:#8b8b8b;border-top:2px solid #373737;border-left:2px solid #373737;border-right:2px solid #fff;border-bottom:2px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.slot.sel{outline:2.5px solid #ffff55;background:#ababab;z-index:2}
+.slot canvas{width:24px;height:24px;image-rendering:pixelated}
+.slot-num{position:absolute;top:1px;left:2px;font-size:8.5px;color:#fff;text-shadow:1px 1px 0 #000}
+#toast{position:absolute;top:68px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.82);border:1.5px solid #55ff55;color:#ffff55;padding:5px 12px;font-size:11.5px;font-weight:900;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;border-radius:4px}
 #toast.show{opacity:1}
 </style>
 
-<div id="app">
-  <canvas id="view" width="160" height="120"></canvas>
-  <canvas id="hud" width="320" height="240"></canvas>
+<div id="mc-root">
+  <canvas id="view" width="176" height="132"></canvas>
+  <canvas id="hud" width="352" height="264"></canvas>
   <div id="crosshair"></div>
   <div id="toast"></div>
 
   <div class="top-bar">
     <div class="mc-info">
-      <div class="mc-ver">Minecraft 1.0 (Aura Voxel)</div>
+      <div class="mc-ver">Minecraft 1.0 Classic</div>
       <div id="posTxt">XYZ: 16, 12, 16</div>
       <div id="blkTxt">Bloque: Pasto</div>
+      <div id="scoreTxt" style="color:#55ffff">Minados: 0 | Puestos: 0</div>
     </div>
     <div class="top-btns">
       <button class="mc-btn" id="btnFly" onclick="toggleFly()">🕊️ Fly</button>
       <button class="mc-btn" id="btnTime" onclick="cycleTime()">🌗 Día</button>
-      <button class="mc-btn" onclick="spawnCreeper()">👾 Mob</button>
-      <button class="mc-btn" onclick="regenWorld()">🌍 Nuevo</button>
+      <button class="mc-btn" onclick="spawnCreeper()">👾 Creeper</button>
+      <button class="mc-btn" onclick="buildHouse()">🏠 Casa</button>
+      <button class="mc-btn" onclick="regenWorld()">🌍 Mundo</button>
     </div>
   </div>
 
@@ -68,7 +71,7 @@ html,body{width:100%;height:100%;min-height:540px;background:#000;color:#fff;fon
     <div class="d-btn" data-k="w">▲</div>
     <div></div>
     <div class="d-btn" data-k="a">◀</div>
-    <div class="d-btn" data-k=" jump">🦘</div>
+    <div class="d-btn" data-k="jump">🦘</div>
     <div class="d-btn" data-k="d">▶</div>
     <div></div>
     <div class="d-btn" data-k="s">▼</div>
@@ -89,7 +92,7 @@ html,body{width:100%;height:100%;min-height:540px;background:#000;color:#fff;fon
   <div id="bottom-hud">
     <div class="status-bars">
       <div id="hearts">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
-      <div id="fpsTxt" style="color:#55ffff">60 FPS</div>
+      <div id="fpsTxt" style="color:#55ff55">60 FPS</div>
     </div>
     <div id="hotbar"></div>
   </div>
@@ -102,14 +105,14 @@ const viewCtx = viewCv.getContext("2d", { alpha: false });
 const hudCv = document.getElementById("hud");
 const hudCtx = hudCv.getContext("2d");
 
-const RW = 160;
-const RH = 120;
+const RW = 176;
+const RH = 132;
 const imgData = viewCtx.createImageData(RW, RH);
 const buf32 = new Uint32Array(imgData.data.buffer);
 
-const WX = 32;
+const WX = 36;
 const WY = 24;
-const WZ = 32;
+const WZ = 36;
 const world = new Uint8Array(WX * WY * WZ);
 
 const BLOCKS = [
@@ -119,7 +122,7 @@ const BLOCKS = [
   { id: 4, name: "Madera", top: 5, side: 5, bot: 5 },
   { id: 5, name: "Tronco", top: 6, side: 7, bot: 6 },
   { id: 6, name: "Ladrillo", top: 8, side: 8, bot: 8 },
-  { id: 7, name: "Bloque Oro", top: 9, side: 9, bot: 9 },
+  { id: 7, name: "Diamante", top: 9, side: 9, bot: 9 },
   { id: 8, name: "Piedra Luz", top: 10, side: 10, bot: 10 },
   { id: 9, name: "TNT Explosivo", top: 11, side: 12, bot: 11 },
   { id: 10, name: "Hojas", top: 13, side: 13, bot: 13 },
@@ -130,6 +133,9 @@ const TEX_COUNT = 16;
 const texData = new Uint32Array(TEX_COUNT * 256);
 
 let seedVal = CFG.seed || 1337;
+let minedCount = 0;
+let placedCount = 0;
+
 function rnd() {
   seedVal = (seedVal * 1664525 + 1013904223) >>> 0;
   return (seedVal & 0xfffffff) / 0x10000000;
@@ -173,31 +179,31 @@ function buildTextures() {
         } else if (t === 8) {
           const mortar = (y % 4 === 0 || ((x + (y >> 2) * 4) % 8 === 0)) ? 1 : 0;
           if (mortar) { r = 185; g = 180; b = 175; }
-          else { r = 155 + n * 0.6; g = 72 + n * 0.5; b = 58 + n * 0.5; }
+          else { r = 160 + n * 0.6; g = 70 + n * 0.5; b = 55 + n * 0.5; }
         } else if (t === 9) {
-          const shine = ((x + y) % 7 === 0) ? 35 : 0;
-          r = 245 + shine; g = 205 + shine + n * 0.4; b = 45 + shine;
+          const shine = ((x + y) % 6 === 0) ? 45 : 0;
+          r = 65 + shine; g = 225 + shine + n * 0.3; b = 240 + shine;
         } else if (t === 10) {
-          const glow = ((x * y) % 5 === 0) ? 50 : 0;
-          r = 210 + glow; g = 175 + glow; b = 90 + n;
+          const glow = ((x * y) % 5 === 0) ? 55 : 0;
+          r = 215 + glow; g = 180 + glow; b = 90 + n;
         } else if (t === 11) {
           r = 195 + n; g = 45 + n * 0.5; b = 35 + n * 0.5;
         } else if (t === 12) {
           if (y >= 5 && y <= 10) {
             const isTxt = (x % 2 === 0 && y >= 6 && y <= 9);
-            r = isTxt ? 30 : 240; g = isTxt ? 30 : 240; b = isTxt ? 30 : 240;
+            r = isTxt ? 25 : 245; g = isTxt ? 25 : 245; b = isTxt ? 25 : 245;
           } else {
             const st = (x % 4 === 0) ? -25 : 0;
             r = 205 + st + n * 0.4; g = 42 + st; b = 32 + st;
           }
         } else if (t === 13) {
           const leaf = ((x + y * 3) % 4 === 0) ? -26 : 12;
-          r = 46 + leaf; g = 128 + leaf + n * 0.5; b = 36 + leaf;
+          r = 46 + leaf; g = 132 + leaf + n * 0.5; b = 36 + leaf;
         } else if (t === 14) {
           const eye = ((y >= 4 && y <= 6) && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12)));
           const mouth = ((y >= 7 && y <= 11 && x >= 6 && x <= 9) || (y >= 9 && y <= 12 && (x === 5 || x === 10)));
-          if (eye || mouth) { r = 20; g = 25; b = 20; }
-          else { r = 65 + n; g = 175 + n; b = 55 + n; }
+          if (eye || mouth) { r = 18; g = 22; b = 18; }
+          else { r = 60 + n; g = 180 + n; b = 50 + n; }
         }
         r = Math.max(0, Math.min(255, r));
         g = Math.max(0, Math.min(255, g));
@@ -232,17 +238,17 @@ function generateWorld(newSeed) {
     for (let z = 0; z < WZ; z++) {
       const h = Math.floor(
         5 +
-        Math.sin(x * 0.22 + offsetA) * 2.2 +
-        Math.cos(z * 0.22 + offsetB) * 2.2
+        Math.sin(x * 0.2 + offsetA) * 2.3 +
+        Math.cos(z * 0.2 + offsetB) * 2.3
       );
       for (let y = 0; y <= h; y++) {
         if (y === 0) setBlock(x, y, z, 3);
         else if (y === h) setBlock(x, y, z, 1);
         else if (y >= h - 2) setBlock(x, y, z, 2);
-        else setBlock(x, y, z, rnd() < 0.08 ? 7 : 3);
+        else setBlock(x, y, z, rnd() < 0.09 ? 7 : 3);
       }
 
-      if (x > 4 && x < WX - 5 && z > 4 && z < WZ - 5 && rnd() < 0.028) {
+      if (x > 4 && x < WX - 5 && z > 4 && z < WZ - 5 && rnd() < 0.03) {
         for (let ty = 1; ty <= 4; ty++) setBlock(x, h + ty, z, 5);
         for (let lx = -2; lx <= 2; lx++) {
           for (let lz = -2; lz <= 2; lz++) {
@@ -258,8 +264,8 @@ function generateWorld(newSeed) {
   }
 }
 
-let px = 16.5, py = 12.0, pz = 16.5;
-let vx = 0, vy = 0, vz = 0;
+let px = 18.5, py = 13.0, pz = 18.5;
+let vy = 0;
 let yaw = 0.6, pitch = -0.15;
 let flyMode = false;
 let onGround = false;
@@ -270,6 +276,7 @@ let walkBob = 0;
 let shakeTime = 0;
 let aimHit = null;
 const activeTnts = [];
+const creepers = [];
 const keys = {};
 
 let audioCtx = null;
@@ -286,7 +293,7 @@ function playSfx(type) {
     const now = audioCtx.currentTime;
     if (type === "break") {
       osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(170, now);
+      osc.frequency.setValueAtTime(175, now);
       osc.frequency.exponentialRampToValueAtTime(55, now + 0.11);
       gain.gain.setValueAtTime(0.18, now);
       gain.gain.linearRampToValueAtTime(0.01, now + 0.11);
@@ -295,7 +302,7 @@ function playSfx(type) {
     } else if (type === "place") {
       osc.type = "square";
       osc.frequency.setValueAtTime(240, now);
-      osc.frequency.exponentialRampToValueAtTime(360, now + 0.08);
+      osc.frequency.exponentialRampToValueAtTime(370, now + 0.08);
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
       osc.start(now);
@@ -303,13 +310,18 @@ function playSfx(type) {
     } else if (type === "boom") {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(95, now);
-      osc.frequency.exponentialRampToValueAtTime(22, now + 0.45);
+      osc.frequency.exponentialRampToValueAtTime(20, now + 0.45);
       gain.gain.setValueAtTime(0.35, now);
       gain.gain.linearRampToValueAtTime(0.01, now + 0.45);
       osc.start(now);
       osc.stop(now + 0.45);
     }
   } catch (e) {}
+}
+
+function updateStatsUI() {
+  document.getElementById("scoreTxt").textContent =
+    "Minados: " + minedCount + " | Puestos: " + placedCount;
 }
 
 function showToast(msg) {
@@ -381,20 +393,48 @@ function spawnCreeper() {
   const cz = aimHit.z + aimHit.nz;
   setBlock(cx, cy, cz, 11);
   setBlock(cx, cy + 1, cz, 11);
+  creepers.push({ x: cx, y: cy, z: cz, tick: 0 });
   playSfx("place");
-  showToast("👾 ¡Creeper salvaje apareció!");
+  showToast("👾 ¡Creeper invocado!");
+}
+
+function buildHouse() {
+  const bx = Math.floor(px);
+  const by = Math.floor(py - 1);
+  const bz = Math.floor(pz);
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dy = 0; dy <= 3; dy++) {
+        const wx = bx + dx, wy = by + dy, wz = bz + dz;
+        if (dy === 0) setBlock(wx, wy, wz, 4);
+        else if (dy === 3) setBlock(wx, wy, wz, 8);
+        else if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
+          if (dx === 0 && dz === 2 && dy <= 2) setBlock(wx, wy, wz, 0);
+          else setBlock(wx, wy, wz, 6);
+        } else {
+          setBlock(wx, wy, wz, 0);
+        }
+      }
+    }
+  }
+  placedCount += 35;
+  updateStatsUI();
+  playSfx("place");
+  showToast("🏠 ¡Refugio construido a tu alrededor!");
 }
 
 function regenWorld() {
+  creepers.length = 0;
+  activeTnts.length = 0;
   generateWorld(Math.floor(Math.random() * 999999));
-  px = 16.5; py = 14; pz = 16.5;
+  px = 18.5; py = 14; pz = 18.5;
   showToast("🌍 Nuevo mundo 1.0 generado");
 }
 
 function explodeAt(ex, ey, ez) {
   playSfx("boom");
-  shakeTime = 14;
-  const rad = 3.2;
+  shakeTime = 16;
+  const rad = 3.3;
   for (let dx = -3; dx <= 3; dx++) {
     for (let dy = -3; dy <= 3; dy++) {
       for (let dz = -3; dz <= 3; dz++) {
@@ -412,7 +452,7 @@ function detonateAllTnt() {
   for (let x = 0; x < WX; x++) {
     for (let y = 1; y < WY; y++) {
       for (let z = 0; z < WZ; z++) {
-        if (getBlock(x, y, z) === 9) {
+        if (getBlock(x, y, z) === 9 || getBlock(x, y, z) === 11) {
           explodeAt(x, y, z);
           count++;
         }
@@ -423,7 +463,7 @@ function detonateAllTnt() {
     explodeAt(aimHit.x, aimHit.y, aimHit.z);
     showToast("🧨 ¡Explosión directa!");
   } else {
-    showToast("🧨 ¡" + count + " TNT detonados!");
+    showToast("🧨 ¡" + count + " cargas detonadas!");
   }
 }
 
@@ -432,12 +472,14 @@ function doAction(mode) {
   if (!aimHit) return;
   if (mode === "break") {
     const bId = getBlock(aimHit.x, aimHit.y, aimHit.z);
-    if (bId === 9) {
+    if (bId === 9 || bId === 11) {
       explodeAt(aimHit.x, aimHit.y, aimHit.z);
       return;
     }
     if (aimHit.y > 0) {
       setBlock(aimHit.x, aimHit.y, aimHit.z, 0);
+      minedCount++;
+      updateStatsUI();
       playSfx("break");
     }
   } else if (mode === "place") {
@@ -452,6 +494,8 @@ function doAction(mode) {
     if (!distToPlayer) {
       const chosenId = BLOCKS[selectedSlot].id;
       setBlock(nx, ny, nz, chosenId);
+      placedCount++;
+      updateStatsUI();
       playSfx("place");
       if (chosenId === 9) {
         showToast("🧨 ¡TNT activado! Explota en 2s...");
@@ -534,7 +578,7 @@ function renderScene() {
   const skyColors = [
     [118, 182, 255],
     [235, 115, 65],
-    [12, 16, 36]
+    [10, 14, 32]
   ];
   const sky = skyColors[timeMode];
   const skyPacked = packRGB(sky[0], sky[1], sky[2]);
@@ -592,9 +636,9 @@ function renderScene() {
       let hitBlock = 0;
       let side = 0;
       let dist = 0;
-      const maxDist = 20;
+      const maxDist = 22;
 
-      for (let step = 0; step < 26; step++) {
+      for (let step = 0; step < 28; step++) {
         if (sideX < sideY) {
           if (sideX < sideZ) {
             dist = sideX; sideX += ddx; mapX += stepX; side = 0;
@@ -646,7 +690,7 @@ function renderScene() {
 
       let col = texData[texId * 256 + ty * 16 + tx];
 
-      if (x === (RW >> 1) && y === (RH >> 1) && dist <= 6.5) {
+      if (x === (RW >> 1) && y === (RH >> 1) && dist <= 7.0) {
         aimHit = {
           x: mapX, y: mapY, z: mapZ,
           nx: side === 0 ? -stepX : 0,
@@ -669,8 +713,8 @@ function renderScene() {
       let g = ((col >> 8) & 255) * shade;
       let b = ((col >> 16) & 255) * shade;
 
-      if (dist > 12) {
-        const f = Math.min(1, (dist - 12) / 8);
+      if (dist > 13) {
+        const f = Math.min(1, (dist - 13) / 9);
         r = r * (1 - f) + sky[0] * f;
         g = g * (1 - f) + sky[1] * f;
         b = b * (1 - f) + sky[2] * f;
@@ -687,13 +731,13 @@ function renderHandHUD() {
   hudCtx.clearRect(0, 0, hudCv.width, hudCv.height);
   if (swingAnim > 0) swingAnim = Math.max(0, swingAnim - 0.12);
 
-  const bobX = Math.cos(walkBob * 0.5) * 5;
-  const bobY = Math.abs(Math.sin(walkBob)) * 6;
-  const swX = -Math.sin(swingAnim * Math.PI) * 28;
-  const swY = Math.sin(swingAnim * Math.PI) * 18;
+  const bobX = Math.cos(walkBob * 0.5) * 6;
+  const bobY = Math.abs(Math.sin(walkBob)) * 7;
+  const swX = -Math.sin(swingAnim * Math.PI) * 32;
+  const swY = Math.sin(swingAnim * Math.PI) * 20;
 
-  const bx = 250 + bobX + swX;
-  const by = 165 + bobY + swY;
+  const bx = 275 + bobX + swX;
+  const by = 185 + bobY + swY;
 
   hudCtx.save();
   hudCtx.translate(bx, by);
@@ -704,12 +748,12 @@ function renderHandHUD() {
   const r = sampleCol & 255, g = (sampleCol >> 8) & 255, b = (sampleCol >> 16) & 255;
 
   hudCtx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
-  hudCtx.fillRect(0, 0, 46, 46);
+  hudCtx.fillRect(0, 0, 50, 50);
   hudCtx.fillStyle = "rgb(" + Math.floor(r * 0.7) + "," + Math.floor(g * 0.7) + "," + Math.floor(b * 0.7) + ")";
-  hudCtx.fillRect(46, 6, 16, 44);
+  hudCtx.fillRect(50, 6, 18, 48);
   hudCtx.strokeStyle = "#111";
   hudCtx.lineWidth = 2;
-  hudCtx.strokeRect(0, 0, 46, 46);
+  hudCtx.strokeRect(0, 0, 50, 50);
   hudCtx.restore();
 }
 
@@ -812,23 +856,12 @@ setupControls();
 showToast("⛏️ Bienvenido a Minecraft 1.0, " + CFG.player);
 requestAnimationFrame(loop);
 </script>`;
-
-  return {
-    view_model: {
-      __typename: "GenAISingleLayoutViewModel",
-      primitive: {
-        __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
-        trusted_sources: [],
-        payload: html,
-      },
-    },
-  };
 }
 
 export default {
   name: ["mc", "minecraft", "mc1"],
   category: "group",
-  description: "Juega Minecraft 1.0 Classic en 3D con TNT, modo vuelo, ciclo día/noche y generación de mundos.",
+  description: "Juega Minecraft 1.0 Classic en 3D a pantalla completa con TNT, Creepers, Casa instantánea y modo vuelo.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -838,20 +871,100 @@ export default {
 
     const playerName = String(msg?.pushName || "Steve").trim();
     const customSeed = Number(args[0]?.replace(/\D/g, "")) || Math.floor(Math.random() * 89999 + 10000);
+    const HTML = buildFullscreenMinecraftHtml(playerName, customSeed);
+
+    const data = {
+      response_id: "PopiooNixelPopiooNixelPopiooNixel",
+      sections: [
+        {
+          __typename: "GenAIUnifiedResponseSection",
+          view_model: {
+            __typename: "GenAISingleLayoutViewModel",
+            primitive: {
+              __typename: "GenAIBotProgressStatusPrimitive",
+              title: "⛏️ JUGAR MINECRAFT 1.0 (PANTALLA COMPLETA)",
+              is_in_progress: true,
+            },
+          },
+        },
+      ],
+      embedded_screens: [
+        {
+          title: `Minecraft 1.0 • ${playerName}`,
+          content: [
+            {
+              __typename: "FOAIDNixelButtonSheets",
+              tabs: [
+                {
+                  id: "tab_0",
+                  tab_header: "Minecraft 1.0",
+                  sections: [
+                    {
+                      __typename: "GenAIUnifiedResponseSection",
+                      view_model: {
+                        __typename: "GenAISingleLayoutViewModel",
+                        primitive: {
+                          __typename: "GenAIaeacdsnwHtmlPrimitive",
+                          payload: HTML,
+                          url: "https://whatsapp.com",
+                          trusted_sources: ["example.com"],
+                        },
+                      },
+                    },
+                  ],
+                  step_entries: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
 
     try {
-      const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
-      const rich = new AIRich(sock)
-        .setTitle(`⛏️ MINECRAFT 1.0 // ${playerName.toUpperCase()}`)
-        .setFooter(`Semilla: #${customSeed} • 3D Voxel Engine • TNT & Fly`);
+      const msgId =
+        typeof (sock as any).generateMessageTag === "function"
+          ? await (sock as any).generateMessageTag()
+          : randomUUID();
 
-      rich.addSection(buildMinecraftPayload(playerName, customSeed));
-      await rich.send(from, { quoted: msg });
+      await sock.relayMessage(
+        from,
+        {
+          messageContextInfo: {
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2,
+            botMetadata: {
+              messageDisclaimerText: "",
+              richResponseSourcesMetadata: {},
+            },
+          },
+          botForwardedMessage: {
+            message: {
+              richResponseMessage: {
+                messageType: 1,
+                unifiedResponse: {
+                  data: Buffer.from(JSON.stringify(data)).toString("base64"),
+                },
+                contextInfo: {
+                  forwardingScore: 1,
+                  isForwarded: true,
+                  forwardedAiBotMessageInfo: { botJid: "0@bot" },
+                  forwardOrigin: 4,
+                },
+              },
+            },
+          },
+        } as any,
+        {
+          messageId: msgId,
+        },
+      );
+
       await react("✅").catch(() => undefined);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
       await reply(
-        `❌ ${fytBold("Error al iniciar Minecraft 1.0:")} ${e?.message || String(e)}`,
+        `❌ ${fytBold("Error al enviar Minecraft 1.0:")} ${e?.message || String(e)}`,
       ).catch(() => undefined);
     }
   },
