@@ -3,6 +3,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
+import { encode, decode } from "./codec.mjs";
+
 const ROOT = process.cwd();
 const TEST_DIR = path.join(ROOT, "test");
 
@@ -15,8 +17,6 @@ function finish(payload, exitCode = 0) {
     process.send(payload, () => {
       process.disconnect();
     });
-  } else {
-    process.exitCode = exitCode;
   }
 }
 
@@ -26,12 +26,64 @@ function rpc(method, args = []) {
 
     pending.set(id, { resolve, reject });
 
-    process.send({
-      type: "rpc",
-      id,
-      method,
-      args,
-    });
+    try {
+      process.send({
+        type: "rpc",
+        id,
+        method,
+        payload: encode(args),
+      }, (error) => {
+        if (!error) return;
+
+        pending.delete(id);
+        reject(error);
+      });
+    } catch (error) {
+      pending.delete(id);
+      reject(error);
+    }
+  });
+}
+
+function createDatabaseProxy(methods) {
+  const allowed = new Set(methods);
+
+  return new Proxy(Object.create(null), {
+    get(_target, property) {
+      if (property === "then") return undefined;
+
+      if (typeof property !== "string") {
+        return undefined;
+      }
+
+      if (!allowed.has(property)) {
+        return undefined;
+      }
+
+      return (...args) =>
+        rpc(`db.${property}`, args);
+    },
+
+    set() {
+      return false;
+    },
+
+    has(_target, property) {
+      return allowed.has(property);
+    },
+
+    ownKeys() {
+      return [...allowed];
+    },
+
+    getOwnPropertyDescriptor(_target, property) {
+      if (!allowed.has(property)) return undefined;
+
+      return {
+        configurable: true,
+        enumerable: true,
+      };
+    },
   });
 }
 
@@ -44,7 +96,11 @@ process.on("message", async (message) => {
     pending.delete(message.id);
 
     if (message.ok) {
-      request.resolve(message.value);
+      try {
+        request.resolve(decode(message.payload));
+      } catch (error) {
+        request.reject(error);
+      }
     } else {
       request.reject(new Error(message.error));
     }
@@ -55,11 +111,20 @@ process.on("message", async (message) => {
   if (message?.type !== "start") return;
 
   try {
-    const pluginFile = await findPlugin(message.command);
+    const start = decode(message.payload);
+
+    const {
+      command,
+      args,
+      context,
+      dbMethods,
+    } = start;
+
+    const pluginFile = await findPlugin(command);
 
     if (!pluginFile) {
       throw new Error(
-        `No existe el comando "${message.command}" dentro de test/.`
+        `No existe el comando "${command}" dentro de test/.`
       );
     }
 
@@ -75,16 +140,18 @@ process.on("message", async (message) => {
       );
     }
 
-    const original = message.context;
-
     const sock = {
       sendMessage: (...args) =>
         rpc("sock.sendMessage", args),
     };
 
     const ctx = {
-      ...original,
+      ...context,
+
+      args,
       sock,
+
+      db: createDatabaseProxy(dbMethods),
 
       reply: (...args) =>
         rpc("ctx.reply", args),
@@ -104,7 +171,6 @@ process.on("message", async (message) => {
       options: (...args) =>
         rpc("ctx.options", args),
 
-      db: undefined,
       activeBotsLive: [],
 
       clearGroupCache: () => true,
@@ -120,7 +186,7 @@ process.on("message", async (message) => {
       type: "result",
       ok: true,
       status: "OK",
-      command: message.command,
+      command,
       file: path.relative(ROOT, pluginFile),
     });
   } catch (error) {
