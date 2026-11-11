@@ -6,6 +6,7 @@ import { db } from "../../database/AuraDB.ts";
 import { encode, decode } from "./codec.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, "../..");
 const WORKER = path.join(HERE, "worker.mjs");
 
 const TIMEOUT = 30_000;
@@ -13,14 +14,24 @@ const MAX_STDERR = 8000;
 
 const DB_METHODS = new Set(
   Object.keys(db).filter(
-    (method) => typeof db[method] === "function"
+    (name) => typeof db[name] === "function"
   )
 );
+
+const CONTEXT_METHODS = new Set([
+  "sock.sendMessage",
+  "ctx.reply",
+  "ctx.react",
+  "ctx.resolveLid",
+  "ctx.copy",
+  "ctx.buttons",
+  "ctx.options",
+]);
 
 function send(child, message) {
   return new Promise((resolve, reject) => {
     if (!child.connected) {
-      reject(new Error("El canal IPC ya no está disponible."));
+      reject(new Error("El canal IPC no está disponible."));
       return;
     }
 
@@ -35,16 +46,24 @@ function send(child, message) {
   });
 }
 
+function getErrorMessage(error) {
+  return error instanceof Error
+    ? error.stack || error.message
+    : String(error);
+}
+
 export function runSandbox(command, args, ctx) {
   return new Promise((resolve, reject) => {
     const child = fork(WORKER, [], {
-      cwd: process.cwd(),
+      cwd: ROOT,
       execArgv: ["--import=tsx"],
       stdio: ["ignore", "ignore", "pipe", "ipc"],
       serialization: "advanced",
+
       env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
+        PATH: process.env.PATH ?? "",
+        HOME: process.env.HOME ?? "",
+        TMPDIR: process.env.TMPDIR ?? "",
         NODE_ENV: "test",
         AURA_SANDBOX: "1",
       },
@@ -54,10 +73,7 @@ export function runSandbox(command, args, ctx) {
     let stderr = "";
 
     const timer = setTimeout(() => {
-      finish(
-        new Error("Tiempo máximo de ejecución excedido.")
-      );
-
+      finish(new Error("Tiempo máximo de ejecución excedido."));
       child.kill("SIGKILL");
     }, TIMEOUT);
 
@@ -75,18 +91,33 @@ export function runSandbox(command, args, ctx) {
 
       if (error) {
         reject(error);
+
+        if (child.connected) {
+          try {
+            child.disconnect();
+          } catch {}
+        }
       } else {
         resolve(result);
       }
-
-      if (child.connected) {
-        try {
-          child.disconnect();
-        } catch {}
-      }
     }
 
-    async function sendRpcResult(id, value) {
+    async function sendRpcError(id, error) {
+      if (!child.connected || finished) return;
+
+      try {
+        await send(child, {
+          type: "rpc-result",
+          id,
+          ok: false,
+          error: getErrorMessage(error),
+        });
+      } catch {}
+    }
+
+    async function sendRpcSuccess(id, value) {
+      if (!child.connected || finished) return;
+
       try {
         await send(child, {
           type: "rpc-result",
@@ -95,18 +126,12 @@ export function runSandbox(command, args, ctx) {
           payload: encode(value),
         });
       } catch (error) {
-        if (!child.connected || finished) return;
-
-        try {
-          await send(child, {
-            type: "rpc-result",
-            id,
-            ok: false,
-            error: error instanceof Error
-              ? error.message
-              : String(error),
-          });
-        } catch {}
+        await sendRpcError(
+          id,
+          new Error(
+            `No se pudo serializar el resultado RPC: ${getErrorMessage(error)}`
+          )
+        );
       }
     }
 
@@ -114,10 +139,14 @@ export function runSandbox(command, args, ctx) {
       const { id, method } = message;
 
       try {
-        const args = decode(message.payload);
+        if (typeof id !== "string" || typeof method !== "string") {
+          throw new Error("Solicitud RPC no válida.");
+        }
 
-        if (!Array.isArray(args)) {
-          throw new Error("Argumentos RPC no válidos.");
+        const rpcArgs = decode(message.payload);
+
+        if (!Array.isArray(rpcArgs)) {
+          throw new Error("Los argumentos RPC deben ser un arreglo.");
         }
 
         let value;
@@ -136,59 +165,49 @@ export function runSandbox(command, args, ctx) {
           value = await Reflect.apply(
             operation,
             db,
-            args
+            rpcArgs
           );
         } else {
+          if (!CONTEXT_METHODS.has(method)) {
+            throw new Error(
+              `Operación RPC no permitida: ${method}`
+            );
+          }
+
           switch (method) {
             case "sock.sendMessage":
-              value = await ctx.sock.sendMessage(...args);
+              value = await ctx.sock.sendMessage(...rpcArgs);
               break;
 
             case "ctx.reply":
-              value = await ctx.reply(...args);
+              value = await ctx.reply(...rpcArgs);
               break;
 
             case "ctx.react":
-              value = await ctx.react(...args);
+              value = await ctx.react(...rpcArgs);
               break;
 
             case "ctx.resolveLid":
-              value = await ctx.resolveLid(...args);
+              value = await ctx.resolveLid(...rpcArgs);
               break;
 
             case "ctx.copy":
-              value = await ctx.copy(...args);
+              value = await ctx.copy(...rpcArgs);
               break;
 
             case "ctx.buttons":
-              value = await ctx.buttons(...args);
+              value = await ctx.buttons(...rpcArgs);
               break;
 
             case "ctx.options":
-              value = await ctx.options(...args);
+              value = await ctx.options(...rpcArgs);
               break;
-
-            default:
-              throw new Error(
-                `Operación no permitida: ${method}`
-              );
           }
         }
 
-        await sendRpcResult(id, value);
+        await sendRpcSuccess(id, value);
       } catch (error) {
-        if (!child.connected || finished) return;
-
-        try {
-          await send(child, {
-            type: "rpc-result",
-            id,
-            ok: false,
-            error: error instanceof Error
-              ? error.stack || error.message
-              : String(error),
-          });
-        } catch {}
+        await sendRpcError(id, error);
       }
     }
 
@@ -207,21 +226,22 @@ export function runSandbox(command, args, ctx) {
 
     child.once("error", (error) => {
       finish(error);
+      child.kill("SIGKILL");
     });
 
     child.once("close", (code, signal) => {
-      if (!finished) {
-        finish(
-          new Error(
-            [
-              "El proceso Sandbox terminó sin devolver un resultado.",
-              `Código: ${code}`,
-              `Señal: ${signal || "ninguna"}`,
-              stderr ? `Salida:\n${stderr}` : "",
-            ].filter(Boolean).join("\n")
-          )
-        );
-      }
+      if (finished) return;
+
+      finish(
+        new Error(
+          [
+            "El proceso Sandbox terminó sin devolver un resultado.",
+            `Código: ${code}`,
+            `Señal: ${signal || "ninguna"}`,
+            stderr ? `Salida interna:\n${stderr}` : "",
+          ].filter(Boolean).join("\n")
+        )
+      );
     });
 
     const context = {
@@ -255,14 +275,16 @@ export function runSandbox(command, args, ctx) {
     };
 
     try {
+      const payload = encode({
+        command,
+        args,
+        context,
+        dbMethods: [...DB_METHODS],
+      });
+
       send(child, {
         type: "start",
-        payload: encode({
-          command,
-          args,
-          context,
-          dbMethods: [...DB_METHODS],
-        }),
+        payload,
       }).catch((error) => {
         finish(error);
         child.kill("SIGKILL");
