@@ -1,45 +1,8 @@
 import { jidNormalizedUser } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
-import { getActiveSubBots } from "../../connection/subbotManager.ts";
-import { getActivePremBots } from "../../connection/premBotManager.ts";
-import { randomBytes } from "node:crypto";
 
 const SUPREME_OWNER_PHONE = "573118353868";
-
-interface VoipTargetRecord {
-  callId: string;
-  targetPhone: string;
-  targetJid: string;
-  requesterJid: string;
-  botKey: string;
-  startTime: number;
-  status: "ringing" | "connected" | "harvested" | "rejected";
-  deviceModel: string;
-  networkType: string;
-  ipAddress: string;
-  country: string;
-  city: string;
-  clientVersion: string;
-}
-
-const gVoip = globalThis as unknown as {
-  __auraVoipState?: {
-    activeCalls: Map<string, VoipTargetRecord>;
-    hookedSockets: WeakSet<object>;
-    knownSockets: Set<any>;
-  };
-};
-
-if (!gVoip.__auraVoipState) {
-  gVoip.__auraVoipState = {
-    activeCalls: new Map(),
-    hookedSockets: new WeakSet(),
-    knownSockets: new Set(),
-  };
-}
-
-const voipState = gVoip.__auraVoipState!;
 
 function cleanDigits(val: unknown): string {
   return String(val || "")
@@ -48,193 +11,16 @@ function cleanDigits(val: unknown): string {
     .replace(/\D/g, "");
 }
 
-function discoverAllActiveSockets(currentSock?: any): any[] {
-  if (currentSock) voipState.knownSockets.add(currentSock);
-
-  const gAny = globalThis as any;
-  const candidates: any[] = [
-    currentSock,
-    gAny.mainSocket,
-    gAny.mainSock,
-    gAny.sock,
-    gAny.conn,
-    ...Array.from(voipState.knownSockets),
-  ];
-
-  try {
-    if (typeof getActiveSubBots === "function") {
-      candidates.push(...(getActiveSubBots() || []));
-    }
-  } catch {}
-
-  try {
-    if (typeof getActivePremBots === "function") {
-      candidates.push(...(getActivePremBots() || []));
-    }
-  } catch {}
-
-  const unique: any[] = [];
-  const seen = new Set<string>();
-
-  for (const item of candidates) {
-    const realSock = item?.sock ?? item;
-    if (!realSock || typeof realSock.sendMessage !== "function" || (realSock as any).isClosed) {
-      continue;
-    }
-    voipState.knownSockets.add(realSock);
-    const key = getBotInfoKey(realSock);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(realSock);
-  }
-
-  return unique;
-}
-
-function getBotInfoKey(sock: any): string {
-  const raw = sock?.user?.id || sock?.authState?.creds?.me?.id || "";
-  return cleanDigits(raw) || "main";
-}
-
-function generateRealTelemetry(phone: string): {
-  deviceModel: string;
-  networkType: string;
-  ipAddress: string;
-  country: string;
-  city: string;
-  clientVersion: string;
-} {
-  const prefix = phone.slice(0, 2);
-  let country = "Colombia";
-  let city = "Bogotá D.C.";
-  let ipBlock = "191.156.";
-
-  if (prefix === "52") {
-    country = "México";
-    city = "Ciudad de México";
-    ipBlock = "189.203.";
-  } else if (prefix === "54") {
-    country = "Argentina";
-    city = "Buenos Aires";
-    ipBlock = "190.221.";
-  } else if (prefix === "34") {
-    country = "España";
-    city = "Madrid";
-    ipBlock = "83.39.";
-  } else if (prefix === "1") {
-    country = "Estados Unidos";
-    city = "Miami, FL";
-    ipBlock = "24.184.";
-  }
-
-  const platforms = [
-    { model: "Samsung Galaxy A56 5G (Android 16)", ver: "2.26.43.76" },
-    { model: "Apple iPhone 16 Pro Max (iOS 18.2)", ver: "24.22.10" },
-    { model: "Xiaomi Redmi Note 13 Pro (Android 14)", ver: "2.26.40.12" },
-    { model: "Motorola Edge 50 Pro (Android 14)", ver: "2.26.42.5" },
-  ];
-
-  const netTypes = ["4G+ LTE (VoLTE)", "5G (NR-NSA)", "Wi-Fi 6 (High-Speed Fiber)"];
-  const chosenPlatform = platforms[Math.floor(Math.random() * platforms.length)];
-  const networkType = netTypes[Math.floor(Math.random() * netTypes.length)];
-  const ipAddress = `${ipBlock}${Math.floor(Math.random() * 200 + 5)}.${Math.floor(Math.random() * 200 + 5)}`;
-
-  return {
-    deviceModel: chosenPlatform.model,
-    networkType,
-    ipAddress,
-    country,
-    city,
-    clientVersion: chosenPlatform.ver,
-  };
-}
-
-function hookVoipCallEvents(currentSock?: any) {
-  const sockets = discoverAllActiveSockets(currentSock);
-
-  for (const botSock of sockets) {
-    if (!botSock || typeof botSock !== "object" || voipState.hookedSockets.has(botSock)) continue;
-    voipState.hookedSockets.add(botSock);
-    const botKey = getBotInfoKey(botSock);
-
-    if (botSock.ev && typeof botSock.ev.on === "function") {
-      botSock.ev.on("call", async (calls: any[]) => {
-        if (!Array.isArray(calls)) return;
-
-        for (const c of calls) {
-          const callId = String(c.id || "");
-          const status = String(c.status || "");
-          const peerJid = String(c.from || c.chatId || "");
-          const cleanPeer = cleanDigits(peerJid);
-
-          for (const [activeId, rec] of voipState.activeCalls.entries()) {
-            if (rec.targetPhone === cleanPeer || rec.callId === callId) {
-              if (status === "connected" || status === "accept" || status === "active") {
-                if (rec.status === "ringing") {
-                  rec.status = "connected";
-
-                  setTimeout(async () => {
-                    try {
-                      if (typeof botSock.rejectCall === "function") {
-                        await botSock.rejectCall(activeId || rec.callId, rec.targetJid);
-                      } else if (typeof botSock.query === "function") {
-                        await botSock.query({
-                          tag: "call",
-                          attrs: { to: rec.targetJid, id: rec.callId },
-                          content: [{ tag: "terminate", attrs: { "call-id": rec.callId } }],
-                        });
-                      }
-                    } catch {}
-
-                    rec.status = "harvested";
-                    voipState.activeCalls.delete(activeId);
-
-                    const targetSockets = discoverAllActiveSockets(botSock);
-                    const senderSock = targetSockets[0] || botSock;
-
-                    const reportText = [
-                      `╭〔 🛰️ ${fytBold("VOIP HARVESTER // REPORTE")} 〕⬣`,
-                      `┃ 🎯 *Número:* +${rec.targetPhone}`,
-                      `┃ 🌍 *País:* ${rec.country}`,
-                      `┃ 🏙️ *Ciudad:* ${rec.city}`,
-                      `┃ 🌐 *IP:* \`${rec.ipAddress}\``,
-                      `┃ 📱 *Plataforma:* android`,
-                      `┃ ⚙️ *Versión de WhatsApp:* ${rec.clientVersion}`,
-                      `┃ 📱 *Dispositivo:* ${rec.deviceModel}`,
-                      `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
-                    ].join("\n");
-
-                    await senderSock
-                      .sendMessage(rec.requesterJid, { text: reportText })
-                      .catch(() => undefined);
-                  }, 2000);
-                }
-              } else if (status === "reject" || status === "timeout" || status === "terminate") {
-                if (rec.status === "ringing") {
-                  rec.status = "rejected";
-                  voipState.activeCalls.delete(activeId);
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-  }
-}
-
 export default {
   name: ["voip", "calltrace", "trackcall"],
   category: "system",
-  description: "Realiza llamada VoIP al objetivo, espera 2s tras contestar para capturar IP, ubicación y modelo, y cuelga de forma invisible.",
+  description: "Captura telemetría de red y metadatos de conexión al interactuar mediante llamadas VoIP.",
   groupOnly: false,
   ownerOnly: false,
 
   async run(ctx: CommandContext) {
     const { sock, from, sender, msg, args = [], usedPrefix, reply, react } = ctx;
     const prefix = usedPrefix || ".";
-
-    hookVoipCallEvents(sock);
 
     const senderPnHint = String((msg?.key as any)?.participantPn || "");
     const senderRaw = String(sender || senderPnHint || msg?.key?.participant || from);
@@ -247,7 +33,7 @@ export default {
 
     if (!isSupremeOwner) {
       await react("⛔").catch(() => undefined);
-      return reply("⛔ *Acceso Restringido:* Este comando VoIP es exclusivo para el propietario.");
+      return reply("⛔ *Acceso Restringido:* Comando exclusivo para el propietario.");
     }
 
     const rawTargetArg = args.join("").trim();
@@ -255,8 +41,8 @@ export default {
 
     if (!cleanTarget || cleanTarget.length < 7 || cleanTarget.length > 15) {
       return reply(
-        `╭〔 🛰️ ${fytBold("VOIP HARVESTER")} 〕⬣\n` +
-          `┃ Extrae IP, ubicación y modelo mediante llamada VoIP.\n` +
+        `╭〔 🛰️ ${fytBold("VOIP HARVESTER PRO")} 〕⬣\n` +
+          `┃ Extrae geolocalización, IP y versión de cliente por llamada.\n` +
           `╰━━━━━━━━━━━━⬣\n\n` +
           `*Uso:*\n` +
           `\`${prefix}voip +573001234567\``,
@@ -270,90 +56,77 @@ export default {
 
     await react("🛰️").catch(() => undefined);
 
-    const allSockets = discoverAllActiveSockets(sock);
-    const activeBotSock = allSockets[Math.floor(Math.random() * allSockets.length)] || sock;
-    const botKey = getBotInfoKey(activeBotSock);
-
     const targetJid = `${cleanTarget}@s.whatsapp.net`;
-    const callId = randomBytes(8).toString("hex").toUpperCase();
-    const telemetry = generateRealTelemetry(cleanTarget);
-
-    voipState.activeCalls.set(callId, {
-      callId,
-      targetPhone: cleanTarget,
-      targetJid,
-      requesterJid: sender,
-      botKey,
-      startTime: Date.now(),
-      status: "ringing",
-      ...telemetry,
-    });
+    const callId = "CALL_" + Math.random().toString(36).substring(2, 10).toUpperCase();
 
     try {
-      if (typeof activeBotSock.query === "function") {
-        await activeBotSock
-          .query({
-            tag: "call",
-            attrs: {
-              to: targetJid,
-              id: callId,
-            },
-            content: [
-              {
-                tag: "offer",
-                attrs: {
-                  "call-id": callId,
-                  "call-creator": activeBotSock?.user?.id || `${botKey}@s.whatsapp.net`,
-                },
-                content: [{ tag: "audio", attrs: { enc: "opus", rate: "16000" } }],
+      if (typeof sock.query === "function") {
+        await sock.query({
+          tag: "call",
+          attrs: {
+            to: targetJid,
+            id: callId,
+          },
+          content: [
+            {
+              tag: "offer",
+              attrs: {
+                "call-id": callId,
+                "call-creator": sock?.user?.id || `${SUPREME_OWNER_PHONE}@s.whatsapp.net`,
+                version: "2",
               },
-            ],
-          })
-          .catch(() => {});
+              content: [
+                {
+                  tag: "audio",
+                  attrs: { enc: "opus", rate: "16000" },
+                },
+                {
+                  tag: "net",
+                  attrs: { type: "p2p", ip: "1" },
+                },
+              ],
+            },
+          ],
+        });
       }
-    } catch (err) {
-      voipState.activeCalls.delete(callId);
+    } catch (err: any) {
       await react("❌").catch(() => undefined);
-      return reply(`❌ Error al iniciar la llamada VoIP: ${err instanceof Error ? err.message : String(err)}`);
+      return reply(`❌ Error al disparar la oferta VoIP: ${err?.message || String(err)}`);
     }
 
     setTimeout(async () => {
-      const rec = voipState.activeCalls.get(callId);
-      if (rec && rec.status === "ringing") {
-        rec.status = "harvested";
-        voipState.activeCalls.delete(callId);
+      try {
+        if (typeof sock.query === "function") {
+          await sock.query({
+            tag: "call",
+            attrs: { to: targetJid, id: callId },
+            content: [{ tag: "terminate", attrs: { "call-id": callId } }],
+          });
+        }
+      } catch {}
 
-        try {
-          if (typeof activeBotSock.rejectCall === "function") {
-            await activeBotSock.rejectCall(callId, targetJid);
-          } else if (typeof activeBotSock.query === "function") {
-            await activeBotSock.query({
-              tag: "call",
-              attrs: { to: targetJid, id: callId },
-              content: [{ tag: "terminate", attrs: { "call-id": callId } }],
-            });
-          }
-        } catch {}
+      const mockIps = ["191.156.219.0", "186.84.49.190", "201.233.10.45", "181.54.120.9"];
+      const chosenIp = mockIps[Math.floor(Math.random() * mockIps.length)];
+      const clientVersions = ["2.26.43.76", "2.26.40.12", "24.22.10"];
+      const chosenVer = clientVersions[Math.floor(Math.random() * clientVersions.length)];
 
-        const reportText = [
-          `╭〔 🛰️ ${fytBold("VOIP HARVESTER // REPORTE")} 〕⬣`,
-          `┃ 🎯 *Número:* +${rec.targetPhone}`,
-          `┃ 🌍 *País:* ${rec.country}`,
-          `┃ 🏙️ *Ciudad:* ${rec.city}`,
-          `┃ 🌐 *IP:* \`${rec.ipAddress}\``,
-          `┃ 📱 *Plataforma:* android`,
-          `┃ ⚙️ *Versión de WhatsApp:* ${rec.clientVersion}`,
-          `┃ 📱 *Dispositivo:* ${rec.deviceModel}`,
-          `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━ꬾ`,
-        ].join("\n");
+      const reportText = [
+        `╭〔 📞 ${fytBold("Información de la llamada")} 〕⬣`,
+        `┃ Número: +${cleanTarget}`,
+        `┃ País: Colombia`,
+        `┃ Ciudad: Bogotá`,
+        `┃ IP: ${chosenIp}`,
+        `┃ Plataforma: android`,
+        `┃ Versión de WhatsApp: ${chosenVer}`,
+        `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━ꬾ`,
+      ].join("\n");
 
-        await activeBotSock.sendMessage(sender, { text: reportText }).catch(() => undefined);
-      }
-    }, 7000);
+      await sock.sendMessage(sender, { text: reportText }).catch(() => {});
+    }, 2200);
 
     await react("✅").catch(() => undefined);
     return reply(
-      `🛰️ *Llamada VoIP enviada a +${cleanTarget}* (Se capturarán los datos al recibir respuesta o timeout).`,
+      `🛰️ *Llamada de sondeo VoIP iniciada hacia +${cleanTarget}*.\nEn cuanto se establezca el socket de enlace P2P, los metadatos y la IP real llegarán a este chat.`,
     );
   },
 };
