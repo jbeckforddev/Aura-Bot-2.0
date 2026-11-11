@@ -53,7 +53,7 @@ async function extractMediaBuffer(msg: any): Promise<{ buffer: Buffer; mimetype:
 }
 
 export default {
-  name: ["spamchat", "spam", "masspam", "multispam"],
+  name: ["spamchat", "masspam", "multispam"],
   category: "system",
   description: "Envía spam masivo a un número usando todas las instancias del clúster de subbots con control de repetición y flags.",
   groupOnly: false,
