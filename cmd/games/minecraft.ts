@@ -10,73 +10,67 @@ function buildFullscreenMinecraftHtml(playerName: string, seedArg: number): stri
 
   return `<style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-html,body{width:100%;min-height:100dvh;background:#05070b;color:#fff;font-family:'Courier New',monospace;overflow:hidden;touch-action:none}
-#mc-shell{position:relative;width:100%;height:86dvh;min-height:680px;max-height:920px;background:#000;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+html,body{width:100%;height:100%;background:#030508;color:#fff;font-family:'Courier New',monospace;overflow:hidden;touch-action:none}
+#mc-shell{position:fixed;inset:0;width:100vw;height:100dvh;background:#030508;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+#viewport-container{position:relative;flex:1;width:100%;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center}
 #view{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block;z-index:1}
 #hud{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
-.top-zone{position:relative;z-index:10;padding:8px 10px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
-.top-row{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
-.mc-info{background:rgba(10,12,18,.76);border:1.5px solid rgba(255,255,255,.22);padding:6px 9px;font-size:10.5px;line-height:1.38;text-shadow:1px 1px 0 #000;border-radius:6px;backdrop-filter:blur(4px)}
-.mc-ver{color:#55ff55;font-weight:900;font-size:11.5px;display:flex;align-items:center;gap:6px}
-.mode-pill{font-size:9px;padding:1px 5px;border-radius:4px;background:#ffaa00;color:#000;font-weight:900;text-shadow:none}
+.top-zone{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:flex-start;z-index:15;pointer-events:none}
+.mc-info{background:rgba(8,10,16,.82);border:1.5px solid rgba(255,255,255,.25);padding:5px 8px;font-size:10px;line-height:1.35;text-shadow:1px 1px 0 #000;border-radius:6px;backdrop-filter:blur(4px)}
+.mc-ver{color:#55ff55;font-weight:900;font-size:11px;display:flex;align-items:center;gap:5px}
+.mode-pill{font-size:8.5px;padding:1px 4px;border-radius:3px;background:#ffaa00;color:#000;font-weight:900;text-shadow:none}
 .mode-pill.cre{background:#00e5ff}
-.top-btns{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto;max-width:240px}
-.mc-btn{background:rgba(75,78,88,.88);border-top:2px solid #c2c2c2;border-left:2px solid #c2c2c2;border-right:2px solid #222;border-bottom:2px solid #222;color:#fff;font-family:'Courier New',monospace;font-size:10px;font-weight:900;padding:5px 7px;text-shadow:1px 1px 0 #111;cursor:pointer;border-radius:4px}
-.mc-btn:active,.mc-btn.on{background:#3b4252;border-top-color:#222;border-left-color:#222;border-right-color:#c2c2c2;border-bottom-color:#c2c2c2;color:#ffff55}
-#crosshair{position:absolute;top:44%;left:50%;width:16px;height:16px;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
+.top-btns{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto;max-width:210px}
+.mc-btn{background:rgba(65,68,78,.88);border-top:2px solid #b8b8b8;border-left:2px solid #b8b8b8;border-right:2px solid #222;border-bottom:2px solid #222;color:#fff;font-family:'Courier New',monospace;font-size:9.5px;font-weight:900;padding:4px 6px;text-shadow:1px 1px 0 #111;cursor:pointer;border-radius:4px}
+.mc-btn:active,.mc-btn.on{background:#3b4252;border-top-color:#222;border-left-color:#222;border-right-color:#b8b8b8;border-bottom-color:#b8b8b8;color:#ffff55}
+#crosshair{position:absolute;top:50%;left:50%;width:16px;height:16px;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
 #crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.92);box-shadow:0 0 2px #000}
 #crosshair::before{top:7px;left:0;width:16px;height:2px}
 #crosshair::after{top:0;left:7px;width:2px;height:16px}
-#toast{position:absolute;top:88px;left:50%;transform:translateX(-50%);background:rgba(8,10,16,.88);border:1.5px solid #55ff55;color:#ffff55;padding:5px 12px;font-size:11px;font-weight:900;z-index:25;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.6)}
+#toast{position:absolute;top:52px;left:50%;transform:translateX(-50%);background:rgba(8,10,16,.9);border:1.5px solid #55ff55;color:#ffff55;padding:4px 10px;font-size:11px;font-weight:900;z-index:25;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.6)}
 #toast.show{opacity:1}
 #dmg-flash{position:absolute;inset:0;background:rgba(255,0,40,.38);z-index:8;pointer-events:none;opacity:0;transition:opacity .12s}
-.bottom-zone{position:relative;z-index:12;width:100%;padding:0 10px 10px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.bottom-zone{position:relative;z-index:15;width:100%;background:linear-gradient(180deg,transparent,rgba(3,5,8,.92) 25%);padding:6px 8px 8px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
 .controls-row{display:flex;justify-content:space-between;align-items:flex-end;width:100%}
-#pad-zone{width:132px;height:132px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;pointer-events:auto}
-.d-btn{background:rgba(30,34,44,.75);border:2px solid rgba(200,205,215,.5);color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:8px;text-shadow:1px 1px 0 #000;backdrop-filter:blur(2px)}
+#pad-zone{width:120px;height:120px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:3px;pointer-events:auto}
+.d-btn{background:rgba(30,34,44,.78);border:2px solid rgba(200,205,215,.5);color:#fff;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:7px;text-shadow:1px 1px 0 #000;backdrop-filter:blur(2px)}
 .d-btn:active{background:rgba(85,255,85,.55);border-color:#55ff55}
-#act-zone{display:flex;flex-direction:column;gap:6px;pointer-events:auto}
-.act-row{display:flex;gap:6px;justify-content:flex-end}
-.a-btn{width:60px;height:46px;background:rgba(40,44,55,.82);border-top:2px solid #bbb;border-left:2px solid #bbb;border-right:2px solid #1b1b1b;border-bottom:2px solid #1b1b1b;color:#fff;font-size:9.5px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-shadow:1px 1px 0 #000;border-radius:7px}
-.a-btn span{font-size:15px;line-height:1;margin-bottom:2px}
+#act-zone{display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+.act-row{display:flex;gap:5px;justify-content:flex-end}
+.a-btn{width:56px;height:42px;background:rgba(40,44,55,.85);border-top:2px solid #bbb;border-left:2px solid #bbb;border-right:2px solid #1b1b1b;border-bottom:2px solid #1b1b1b;color:#fff;font-size:9px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-shadow:1px 1px 0 #000;border-radius:6px}
+.a-btn span{font-size:14px;line-height:1;margin-bottom:1px}
 .a-btn:active{background:rgba(255,255,85,.48)}
-.a-btn.tnt{background:rgba(175,32,32,.86)}
-.a-btn.atk{background:rgba(130,50,185,.86)}
-#bottom-hud{width:100%;max-width:400px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:auto}
-.status-bars{width:100%;display:flex;justify-content:space-between;align-items:center;padding:0 4px;font-size:11px;text-shadow:1px 1px 0 #000;pointer-events:none}
-#hotbar{display:flex;background:#262626;border:2px solid #111;padding:3px;gap:3px;border-radius:5px;box-shadow:0 6px 18px rgba(0,0,0,.7)}
-.slot{width:38px;height:38px;background:#7d7d7d;border-top:2px solid #333;border-left:2px solid #333;border-right:2px solid #e0e0e0;border-bottom:2px solid #e0e0e0;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;cursor:pointer;border-radius:2px}
+.a-btn.tnt{background:rgba(175,32,32,.88)}
+.a-btn.atk{background:rgba(130,50,185,.88)}
+#bottom-hud{width:100%;max-width:380px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:auto}
+.status-bars{width:100%;display:flex;justify-content:space-between;align-items:center;padding:0 3px;font-size:10.5px;text-shadow:1px 1px 0 #000;pointer-events:none}
+#hotbar{display:flex;background:#262626;border:2px solid #111;padding:2px;gap:2px;border-radius:4px;box-shadow:0 6px 16px rgba(0,0,0,.7)}
+.slot{width:35px;height:35px;background:#7d7d7d;border-top:2px solid #333;border-left:2px solid #333;border-right:2px solid #e0e0e0;border-bottom:2px solid #e0e0e0;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;cursor:pointer;border-radius:2px}
 .slot.sel{outline:2.5px solid #ffff55;background:#a6a6a6;z-index:2}
-.slot canvas{width:24px;height:24px;image-rendering:pixelated}
-.slot-num{position:absolute;top:1px;left:2px;font-size:8px;color:#fff;text-shadow:1px 1px 0 #000}
-.slot-cnt{position:absolute;bottom:1px;right:2px;font-size:8.5px;font-weight:900;color:#ffff55;text-shadow:1px 1px 0 #000}
-#inv-modal{position:absolute;inset:0;background:rgba(5,8,14,.88);z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;pointer-events:auto}
+.slot canvas{width:22px;height:22px;image-rendering:pixelated}
+.slot-num{position:absolute;top:1px;left:2px;font-size:7.5px;color:#fff;text-shadow:1px 1px 0 #000}
+.slot-cnt{position:absolute;bottom:1px;right:2px;font-size:8px;font-weight:900;color:#ffff55;text-shadow:1px 1px 0 #000}
+#inv-modal{position:absolute;inset:0;background:rgba(5,8,14,.9);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;pointer-events:auto}
 #inv-modal.open{display:flex}
 .inv-card{background:#3b3b3b;border:3px solid #ababab;border-radius:8px;padding:12px;width:100%;max-width:340px}
-.inv-title{font-size:13px;font-weight:900;color:#ffff55;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.inv-title{font-size:12px;font-weight:900;color:#ffff55;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
 .inv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .inv-item{background:#686868;border:2px solid #2b2b2b;padding:6px;border-radius:4px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:9px;text-align:center}
 .inv-item:active{border-color:#ffff55;background:#888}
-.inv-item canvas{width:28px;height:28px;image-rendering:pixelated}
+.inv-item canvas{width:26px;height:26px;image-rendering:pixelated}
 </style>
 
 <div id="mc-shell">
-  <canvas id="view" width="176" height="144"></canvas>
-  <canvas id="hud" width="352" height="288"></canvas>
-  <div id="dmg-flash"></div>
-  <div id="crosshair"></div>
-  <div id="toast"></div>
-
   <div class="top-zone">
     <div class="top-row">
       <div class="mc-info">
         <div class="mc-ver">
-          <span>Minecraft 1.0 HD</span>
+          <span>MC 1.0 HD + AutoJump</span>
           <span class="mode-pill" id="modePill">SURVIVAL</span>
         </div>
         <div id="posTxt">XYZ: 32, 14, 32 • Pradera</div>
         <div id="blkTxt">Mano: Pasto (32x32)</div>
-        <div id="mobTxt" style="color:#55ffff">Mobs vivos: 0 | Kills: 0</div>
+        <div id="mobTxt" style="color:#55ffff">Mobs: 18 | Kills: 0</div>
       </div>
       <div class="top-btns">
         <button class="mc-btn" id="btnMode" onclick="toggleGameMode()">⚔️ Modo</button>
@@ -88,6 +82,14 @@ html,body{width:100%;min-height:100dvh;background:#05070b;color:#fff;font-family
         <button class="mc-btn" onclick="regenWorld()">🌍 Mapa</button>
       </div>
     </div>
+  </div>
+
+  <div id="viewport-container">
+    <canvas id="view" width="180" height="144"></canvas>
+    <canvas id="hud" width="360" height="288"></canvas>
+    <div id="dmg-flash"></div>
+    <div id="crosshair"></div>
+    <div id="toast"></div>
   </div>
 
   <div class="bottom-zone">
@@ -141,20 +143,12 @@ html,body{width:100%;min-height:100dvh;background:#05070b;color:#fff;font-family
 
 <script>
 const CFG = ${configJson};
-const shellEl = document.getElementById("mc-shell");
 const viewCv = document.getElementById("view");
 const viewCtx = viewCv.getContext("2d", { alpha: false });
 const hudCv = document.getElementById("hud");
 const hudCtx = hudCv.getContext("2d");
 
-function syncFullscreenHeight() {
-  const vh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0, 680);
-  shellEl.style.height = vh + "px";
-}
-window.addEventListener("resize", syncFullscreenHeight);
-syncFullscreenHeight();
-
-const RW = 176;
+const RW = 180;
 const RH = 144;
 const imgData = viewCtx.createImageData(RW, RH);
 const buf32 = new Uint32Array(imgData.data.buffer);
@@ -220,7 +214,7 @@ function buildTextures32() {
           if (y < grassDrop) {
             r = 82 + n * 0.7; g = 168 + n; b = 50 + n * 0.6;
           } else {
-            constpeb = ((x * 7 + y * 5) % 13 === 0) ? -18 : 0;
+            const peb = ((x * 7 + y * 5) % 13 === 0) ? -18 : 0;
             r = 132 + n + peb; g = 94 + n * 0.8 + peb; b = 64 + n * 0.7 + peb;
           }
         } else if (t === 3) {
@@ -262,7 +256,7 @@ function buildTextures32() {
               (x >= 13 && x <= 19 && (x === 13 || x === 19 || x - 13 === y - 12)) ||
               (x >= 22 && x <= 27 && (y === 12 || x === 24))
             );
-            r = letter ? 20 : 245; g = letter ? 20 : 245; b = letter ? 20 : 245;
+            r = letter ? 25 : 245; g = letter ? 25 : 245; b = letter ? 25 : 245;
           } else {
             const stripe = (x % 6 === 0) ? -28 : 0;
             r = 212 + stripe + n * 0.4; g = 42 + stripe; b = 32 + stripe;
@@ -344,8 +338,6 @@ function buildPyramidAt(cx, cz) {
   }
   setBlock(cx, baseY + 1, cz, 7);
   setBlock(cx, baseY + 2, cz, 8);
-  setBlock(cx, baseY + 1, cz + 5, 0);
-  setBlock(cx, baseY + 2, cz + 5, 0);
 }
 
 function buildCastleAt(cx, cz) {
@@ -368,8 +360,6 @@ function buildCastleAt(cx, cz) {
     }
   }
   setBlock(cx, baseY + 2, cz, 8);
-  setBlock(cx - 2, baseY + 2, cz - 2, 16);
-  setBlock(cx + 2, baseY + 2, cz - 2, 7);
 }
 
 function buildHouseAt(cx, cz) {
@@ -392,7 +382,6 @@ function buildHouseAt(cx, cz) {
     }
   }
   setBlock(cx, baseY + 3, cz, 8);
-  setBlock(cx - 1, baseY + 2, cz - 1, 16);
 }
 
 const mobs = [];
@@ -584,7 +573,7 @@ function updateSurvivalBars() {
       "🍖".repeat(fullF) + "🦴".repeat(8 - fullF);
   }
   document.getElementById("mobTxt").textContent =
-    "Mobs vivos: " + mobs.length + " | Kills: " + killCount;
+    "Mobs: " + mobs.length + " | Kills: " + killCount;
 }
 
 function damagePlayer(amount, cause) {
@@ -971,10 +960,23 @@ function updatePhysicsAndMobs() {
     if (keys["down"]) py = Math.max(2.5, py - 0.16);
   } else {
     vy -= 0.017;
-    if (keys["jump"] && onGround) {
+    
+    // SISTEMA DE AUTOSALTO (AUTO-JUMP)
+    let autoJumpTriggered = false;
+    if (!flyMode && onGround && (Math.abs(dx) > 0.001 || Math.abs(dz) > 0.001)) {
+      const fwdX = px + Math.sin(yaw) * 0.6;
+      const fwdZ = pz + Math.cos(yaw) * 0.6;
+      const footY = Math.floor(py - 1.2);
+      if (isSolid(fwdX, footY, fwdZ) && !isSolid(fwdX, footY + 1, fwdZ)) {
+        autoJumpTriggered = true;
+      }
+    }
+
+    if ((keys["jump"] || autoJumpTriggered) && onGround) {
       vy = 0.24;
       onGround = false;
     }
+
     const nextY = py + vy;
     if (vy < 0 && isSolid(px, nextY - 1.55, pz)) {
       if (vy < -0.42 && gameMode === "survival") {
@@ -1258,8 +1260,8 @@ function renderHandHUD() {
   const swX = -Math.sin(swingAnim * Math.PI) * 34;
   const swY = Math.sin(swingAnim * Math.PI) * 22;
 
-  const bx = 278 + bobX + swX;
-  const by = 195 + bobY + swY;
+  const bx = 280 + bobX + swX;
+  const by = 205 + bobY + swY;
 
   hudCtx.save();
   hudCtx.translate(bx, by);
@@ -1386,7 +1388,7 @@ requestAnimationFrame(loop);
 export default {
   name: ["mc", "minecraft", "mc1"],
   category: "group",
-  description: "Juega Minecraft 1.0 HD (32x32) a pantalla completa con modos Survival/Creativo, Mobs y Estructuras.",
+  description: "Juega Minecraft 1.0 HD (32x32) a pantalla completa real con Auto-Jump, Supervivencia/Creativo, Mobs y Estructuras.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -1407,7 +1409,7 @@ export default {
             __typename: "GenAISingleLayoutViewModel",
             primitive: {
               __typename: "GenAIBotProgressStatusPrimitive",
-              title: "⛏️ ABRIR MINECRAFT 1.0 HD (SURVIVAL & CREATIVO)",
+              title: "⛏️ ABRIR MINECRAFT 1.0 HD (PANTALLA COMPLETA)",
               is_in_progress: true,
             },
           },
