@@ -233,7 +233,7 @@ init();
 }
 
 export default {
-  name: ["spam" , "atacar"],
+  name: ["spam" , "reportar" , "atacar"],
   category: "system",
   ownerOnly: false,
   description: "Reporta y bloquea un número de forma masiva y escalonada usando los subbots activos.",
