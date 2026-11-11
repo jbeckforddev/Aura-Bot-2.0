@@ -1,25 +1,17 @@
-import type { CommandContext } from '../../types/index.d.ts';
-import { runSandbox } from '../../core/sandbox/manager.mjs';
-
-const MAX_REPLY = 3500;
-
-function clean(value: unknown): string {
-  return String(value ?? '')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
-    .trim();
-}
+import type { CommandContext } from "../../types/index.d.ts";
+import { runSandbox } from "../../core/sandbox/manager.mjs";
 
 export default {
-  name: ['test', 'sandbox'],
-  category: 'system',
-  description: 'Ejecuta comandos en un proceso secundario aislado.',
+  name: ["test", "sandbox"],
+  category: "system",
+  description: "Ejecuta comandos de prueba desde la carpeta test.",
   ownerOnly: true,
   cooldown: 5,
 
   async run(ctx: CommandContext) {
     if (!ctx.isOwner) {
       return ctx.reply(
-        'Este comando está reservado al propietario.'
+        "Este comando está reservado al propietario."
       );
     }
 
@@ -27,89 +19,46 @@ export default {
 
     if (!target) {
       return ctx.reply(
-        'Uso: .test <comando> [argumentos]\n' +
-        'Ejemplo: .test ping\n\n' +
-        'La prueba usa una copia temporal del proyecto y un contexto de WhatsApp simulado.'
+        "Uso: .test <comando>\nEjemplo: .test ping"
       );
     }
 
-    const command = clean(target).toLowerCase();
+    const command = target.trim().toLowerCase();
 
-    if (
-      !/^[a-z0-9_-]{1,64}$/.test(command) ||
-      ['test', 'sandbox'].includes(command)
-    ) {
-      return ctx.reply(
-        'Alias no válido para ejecutar en Sandbox.'
-      );
+    if (!/^[a-z0-9_-]{1,64}$/.test(command)) {
+      return ctx.reply("Nombre de comando no válido.");
     }
 
-    await ctx.react('🧪');
-
-    const notice = await ctx.reply(
-      `🧪 Sandbox iniciado\n` +
-      `Comando: .${command}\n` +
-      `Proceso secundario: activo`
-    );
+    await ctx.react("🧪");
 
     try {
       const result = await runSandbox(
         command,
-        args.map(clean)
+        args,
+        ctx
       );
 
-      const logLines = result.logs
-        .slice(-12)
-        .map((item) =>
-          `[${clean(item.level)}] ${clean(item.message)}`
+      if (!result.ok) {
+        return ctx.reply(
+          `✖ Error en Sandbox\n` +
+          `Comando: ${command}\n` +
+          `${result.error || result.status}`
         );
-
-      const botMessages = (result.messages || [])
-        .slice(-8)
-        .map(
-          (item: { kind?: string; text?: string }) =>
-            `↳ ${clean(item.kind)}: ${clean(item.text)}`
-        );
-
-      const details = [
-        `Estado: ${clean(result.status || 'UNKNOWN')}`,
-        `Duración: ${Number(result.durationMs || 0)} ms`,
-        result.error
-          ? `Error: ${clean(result.error)}`
-          : '',
-        ...botMessages,
-        ...logLines,
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-      const output =
-        `🧪 Sandbox · ${command}\n${details}`
-          .slice(0, MAX_REPLY);
-
-      if (notice?.key) {
-        try {
-          await ctx.sock.sendMessage(
-            ctx.from,
-            {
-              text: output,
-              edit: notice.key,
-            }
-          );
-
-          return;
-        } catch {}
       }
 
-      return ctx.reply(output);
+      return ctx.reply(
+        `🧪 Prueba completada\n` +
+        `Comando: ${command}\n` +
+        `Archivo: ${result.file || "test/"}\n` +
+        `Proceso: secundario`
+      );
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
+      const detail = error instanceof Error
+        ? error.stack || error.message
+        : String(error);
 
       return ctx.reply(
-        `✖ Sandbox no disponible\n${message.slice(0, 1200)}`
+        `✖ Falló la ejecución del Sandbox\n${detail.slice(0, 2500)}`
       );
     }
   },
