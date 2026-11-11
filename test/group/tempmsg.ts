@@ -1,5 +1,4 @@
 
-
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { t } from "../../src/langs/index.ts";
@@ -11,7 +10,6 @@ const UNIT_SECONDS: Record<string, number> = {
   d: 86400,
   w: 604800,
   mo: 2592000,
-  a: 31536000,
 };
 
 const DISABLE_VALUES = new Set([
@@ -27,7 +25,7 @@ function parseDuration(value: string): number | false | null {
     return false;
   }
 
-  const match = input.match(/^(\d+(?:[.,]\d+)?)\s*(mo|s|m|h|d|w|a)$/);
+  const match = input.match(/^(\d+(?:[.,]\d+)?)\s*(mo|s|m|h|d|w)$/);
 
   if (!match) {
     return null;
@@ -51,7 +49,6 @@ function formatDuration(seconds?: number | null): string {
   }
 
   const units = [
-    { label: "año", plural: "años", seconds: UNIT_SECONDS.a },
     { label: "mes", plural: "meses", seconds: UNIT_SECONDS.mo },
     { label: "semana", plural: "semanas", seconds: UNIT_SECONDS.w },
     { label: "día", plural: "días", seconds: UNIT_SECONDS.d },
@@ -99,11 +96,29 @@ export default {
 
     const currentDuration = formatDuration(groupMeta?.ephemeralDuration);
 
-    const text = t("tempMsgHelp", {
-      current: fytBold(currentDuration),
-      prefix,
-      system: fytBold(t("cmd_system_info_1a78a0cb")),
-    });
+    const text = [
+      "╭〔 ⏳ MENSAJES TEMPORALES 〕⬣",
+      "┃ ⚙️ CONFIGURACIÓN",
+      "╰━━━━━━━━━━━━⬣",
+      "",
+      "┣━━〔 📊 ESTADO ACTUAL 〕━⬣",
+      "",
+      `┃ ⏱️ Duración › ${fytBold(currentDuration)}`,
+      "",
+      "┣━━〔 🕒 DURACIONES 〕━⬣",
+      "",
+      "┃ ✦ `1m` › 1 minuto",
+      "┃ ✦ `1h` › 1 hora",
+      "┃ ✦ `1d` › 1 día",
+      "┃ ✦ `1w` › 1 semana",
+      "┃ ✦ `3mo` › 3 meses",
+      "┃ ✦ `off` › Desactivar",
+      "",
+      `┃ > Ejemplo: \`${prefix}tempmsg 7d\``,
+      `┃ > Desactivar: \`${prefix}tempmsg off\``,
+      "",
+      `╰━━〔 ${fytBold(t("cmd_system_info_1a78a0cb"))} 〕━━⬣`,
+    ].join("\n");
 
     if (!args.length) {
       return ctx.reply(text);
