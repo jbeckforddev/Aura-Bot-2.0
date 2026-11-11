@@ -54,6 +54,14 @@ function sanitize(value, seen = new WeakMap()) {
       result.cause = sanitize(value.cause, seen);
     }
 
+    for (const key of Object.keys(value)) {
+      try {
+        result[key] = sanitize(value[key], seen);
+      } catch {
+        result[key] = "[Unserializable property]";
+      }
+    }
+
     return result;
   }
 
@@ -136,5 +144,9 @@ export function encode(value) {
 }
 
 export function decode(value) {
-  return deserialize(Buffer.from(value));
+  return deserialize(
+    Buffer.isBuffer(value)
+      ? value
+      : Buffer.from(value)
+  );
 }
