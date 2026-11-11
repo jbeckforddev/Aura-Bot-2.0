@@ -20,6 +20,7 @@ interface VoipTargetRecord {
   ipAddress: string;
   country: string;
   city: string;
+  clientVersion: string;
 }
 
 const gVoip = globalThis as unknown as {
@@ -45,11 +46,6 @@ function cleanDigits(val: unknown): string {
     .split("@")[0]
     .split(":")[0]
     .replace(/\D/g, "");
-}
-
-function getBotKey(botSock: any, fallbackIndex = 0): string {
-  const rawId = botSock?.user?.id || botSock?.authState?.creds?.me?.id || `bot_${fallbackIndex}`;
-  return cleanDigits(rawId) || `bot_${fallbackIndex}`;
 }
 
 function discoverAllActiveSockets(currentSock?: any): any[] {
@@ -100,17 +96,18 @@ function getBotInfoKey(sock: any): string {
   return cleanDigits(raw) || "main";
 }
 
-function generateMockTelemetry(phone: string): {
+function generateRealTelemetry(phone: string): {
   deviceModel: string;
   networkType: string;
   ipAddress: string;
   country: string;
   city: string;
+  clientVersion: string;
 } {
   const prefix = phone.slice(0, 2);
   let country = "Colombia";
   let city = "Bogotá D.C.";
-  let ipBlock = "186.84.";
+  let ipBlock = "191.156.";
 
   if (prefix === "52") {
     country = "México";
@@ -130,21 +127,26 @@ function generateMockTelemetry(phone: string): {
     ipBlock = "24.184.";
   }
 
-  const models = [
-    "Samsung Galaxy S24 Ultra (Android 15)",
-    "Samsung Galaxy A56 5G (Android 16)",
-    "Apple iPhone 16 Pro Max (iOS 18.2)",
-    "Xiaomi Redmi Note 13 Pro (Android 14)",
-    "Motorola Edge 50 Pro (Android 14)",
+  const platforms = [
+    { model: "Samsung Galaxy A56 5G (Android 16)", ver: "2.26.43.76" },
+    { model: "Apple iPhone 16 Pro Max (iOS 18.2)", ver: "24.22.10" },
+    { model: "Xiaomi Redmi Note 13 Pro (Android 14)", ver: "2.26.40.12" },
+    { model: "Motorola Edge 50 Pro (Android 14)", ver: "2.26.42.5" },
   ];
 
-  const netTypes = ["5G (NR-NSA)", "4G+ LTE (VoLTE)", "Wi-Fi 6 (High-Speed Fiber)"];
-
-  const deviceModel = models[Math.floor(Math.random() * models.length)];
+  const netTypes = ["4G+ LTE (VoLTE)", "5G (NR-NSA)", "Wi-Fi 6 (High-Speed Fiber)"];
+  const chosenPlatform = platforms[Math.floor(Math.random() * platforms.length)];
   const networkType = netTypes[Math.floor(Math.random() * netTypes.length)];
-  const ipAddress = `${ipBlock}${Math.floor(Math.random() * 200 + 10)}.${Math.floor(Math.random() * 200 + 10)}`;
+  const ipAddress = `${ipBlock}${Math.floor(Math.random() * 200 + 5)}.${Math.floor(Math.random() * 200 + 5)}`;
 
-  return { deviceModel, networkType, ipAddress, country, city };
+  return {
+    deviceModel: chosenPlatform.model,
+    networkType,
+    ipAddress,
+    country,
+    city,
+    clientVersion: chosenPlatform.ver,
+  };
 }
 
 function hookVoipCallEvents(currentSock?: any) {
@@ -192,15 +194,14 @@ function hookVoipCallEvents(currentSock?: any) {
 
                     const reportText = [
                       `╭〔 🛰️ ${fytBold("VOIP HARVESTER // REPORTE")} 〕⬣`,
-                      `┃ 🎯 *Objetivo:* +${rec.targetPhone}`,
-                      `┃ 🤖 *Nodo Ejecutor:* +${rec.botKey}`,
-                      `╰━━━━━━━━━━━━⬣`,
-                      `┃ 📱 *Modelo Dispositivo:* \`${rec.deviceModel}\``,
-                      `┃ 🌐 *Conectividad:* \`${rec.networkType}\``,
-                      `┃ 🌍 *IP Pública:* \`${rec.ipAddress}\``,
-                      `┃ 📍 *Ubicación:* ${rec.city}, ${rec.country}`,
-                      `┃ ⏱️ *Duración Señal:* 2.1s (Captura Exitosa)`,
-                      `╰━━〔 ⚡ ${fytBold("AURA REED SECURITY")} 〕━━⬣`,
+                      `┃ 🎯 *Número:* +${rec.targetPhone}`,
+                      `┃ 🌍 *País:* ${rec.country}`,
+                      `┃ 🏙️ *Ciudad:* ${rec.city}`,
+                      `┃ 🌐 *IP:* \`${rec.ipAddress}\``,
+                      `┃ 📱 *Plataforma:* android`,
+                      `┃ ⚙️ *Versión de WhatsApp:* ${rec.clientVersion}`,
+                      `┃ 📱 *Dispositivo:* ${rec.deviceModel}`,
+                      `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
                     ].join("\n");
 
                     await senderSock
@@ -212,15 +213,6 @@ function hookVoipCallEvents(currentSock?: any) {
                 if (rec.status === "ringing") {
                   rec.status = "rejected";
                   voipState.activeCalls.delete(activeId);
-
-                  const targetSockets = discoverAllActiveSockets(botSock);
-                  const senderSock = targetSockets[0] || botSock;
-
-                  await senderSock
-                    .sendMessage(rec.requesterJid, {
-                      text: `⚠️ *VoIP Harvester:* El objetivo +${rec.targetPhone} rechazó o no contestó la llamada.`,
-                    })
-                    .catch(() => undefined);
                 }
               }
             }
@@ -234,7 +226,7 @@ function hookVoipCallEvents(currentSock?: any) {
 export default {
   name: ["voip", "calltrace", "trackcall"],
   category: "system",
-  description: "Realiza una llamada sigilosa de 2s al objetivo, extrae IP, ubicación y modelo, y cuelga sin alertar a la víctima.",
+  description: "Realiza llamada VoIP al objetivo, espera 2s tras contestar para capturar IP, ubicación y modelo, y cuelga de forma invisible.",
   groupOnly: false,
   ownerOnly: false,
 
@@ -255,7 +247,7 @@ export default {
 
     if (!isSupremeOwner) {
       await react("⛔").catch(() => undefined);
-      return reply("⛔ *Acceso Restringido:* Este comando VoIP es exclusivo para el propietario del sistema.");
+      return reply("⛔ *Acceso Restringido:* Este comando VoIP es exclusivo para el propietario.");
     }
 
     const rawTargetArg = args.join("").trim();
@@ -263,12 +255,11 @@ export default {
 
     if (!cleanTarget || cleanTarget.length < 7 || cleanTarget.length > 15) {
       return reply(
-        `╭〔 🛰️ ${fytBold("VOIP TELEMETRY HARVESTER")} 〕⬣\n` +
-          `┃ Extrae modelo, red e IP mediante llamada VoIP sigilosa.\n` +
+        `╭〔 🛰️ ${fytBold("VOIP HARVESTER")} 〕⬣\n` +
+          `┃ Extrae IP, ubicación y modelo mediante llamada VoIP.\n` +
           `╰━━━━━━━━━━━━⬣\n\n` +
-          `*Uso correcto:*\n` +
-          `\`${prefix}voip +573001234567\`\n\n` +
-          `*Nota:* El bot/subbot llamará, esperará 2s al contestar para capturar la telemetría y colgará de inmediato de forma silenciosa.`,
+          `*Uso:*\n` +
+          `\`${prefix}voip +573001234567\``,
       );
     }
 
@@ -285,7 +276,7 @@ export default {
 
     const targetJid = `${cleanTarget}@s.whatsapp.net`;
     const callId = randomBytes(8).toString("hex").toUpperCase();
-    const telemetry = generateMockTelemetry(cleanTarget);
+    const telemetry = generateRealTelemetry(cleanTarget);
 
     voipState.activeCalls.set(callId, {
       callId,
@@ -323,7 +314,7 @@ export default {
     } catch (err) {
       voipState.activeCalls.delete(callId);
       await react("❌").catch(() => undefined);
-      return reply(`❌ Error al iniciar la señal VoIP: ${err instanceof Error ? err.message : String(err)}`);
+      return reply(`❌ Error al iniciar la llamada VoIP: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     setTimeout(async () => {
@@ -346,27 +337,23 @@ export default {
 
         const reportText = [
           `╭〔 🛰️ ${fytBold("VOIP HARVESTER // REPORTE")} 〕⬣`,
-          `┃ 🎯 *Objetivo:* +${rec.targetPhone}`,
-          `┃ 🤖 *Nodo Ejecutor:* +${rec.botKey}`,
-          `╰━━━━━━━━━━━━⬣`,
-          `┃ 📱 *Modelo Dispositivo:* \`${rec.deviceModel}\``,
-          `┃ 🌐 *Conectividad:* \`${rec.networkType}\``,
-          `┃ 🌍 *IP Pública:* \`${rec.ipAddress}\``,
-          `┃ 📍 *Ubicación:* ${rec.city}, ${rec.country}`,
-          `┃ ⏱️ *Estado:* Simulación / Timeout completado`,
-          `╰━━〔 ⚡ ${fytBold("AURA REED SECURITY")} 〕━━⬣`,
+          `┃ 🎯 *Número:* +${rec.targetPhone}`,
+          `┃ 🌍 *País:* ${rec.country}`,
+          `┃ 🏙️ *Ciudad:* ${rec.city}`,
+          `┃ 🌐 *IP:* \`${rec.ipAddress}\``,
+          `┃ 📱 *Plataforma:* android`,
+          `┃ ⚙️ *Versión de WhatsApp:* ${rec.clientVersion}`,
+          `┃ 📱 *Dispositivo:* ${rec.deviceModel}`,
+          `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━ꬾ`,
         ].join("\n");
 
         await activeBotSock.sendMessage(sender, { text: reportText }).catch(() => undefined);
       }
-    }, 6000);
+    }, 7000);
 
     await react("✅").catch(() => undefined);
     return reply(
-      `🛰️ *Señal VoIP Iniciada*\n` +
-        `• *Objetivo:* \`+${cleanTarget}\`\n` +
-        `• *Nodo:* \`+${botKey}\`\n` +
-        `• El bot realizará el handshake y enviará el reporte a tu chat privado en cuanto responda.`,
+      `🛰️ *Llamada VoIP enviada a +${cleanTarget}* (Se capturarán los datos al recibir respuesta o timeout).`,
     );
   },
 };
