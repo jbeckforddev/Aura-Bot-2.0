@@ -1,27 +1,50 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
 import { encode, decode } from "./codec.mjs";
 
-const ROOT = process.cwd();
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, "../..");
 const TEST_DIR = path.join(ROOT, "test");
 
 const pending = new Map();
 
+let finished = false;
+
 function finish(payload, exitCode = 0) {
+  if (finished) return;
+
+  finished = true;
   process.exitCode = exitCode;
 
-  if (process.connected) {
-    process.send(payload, () => {
-      process.disconnect();
-    });
+  for (const request of pending.values()) {
+    request.reject(
+      new Error("El proceso Sandbox terminó.")
+    );
   }
+
+  pending.clear();
+
+  if (!process.connected) return;
+
+  process.send(payload, (error) => {
+    if (error) process.exitCode = 1;
+
+    if (process.connected) {
+      process.disconnect();
+    }
+  });
 }
 
 function rpc(method, args = []) {
   return new Promise((resolve, reject) => {
+    if (!process.connected || finished) {
+      reject(new Error("El canal IPC no está disponible."));
+      return;
+    }
+
     const id = randomUUID();
 
     pending.set(id, { resolve, reject });
@@ -47,10 +70,15 @@ function rpc(method, args = []) {
 
 function createDatabaseProxy(methods) {
   const allowed = new Set(methods);
+  const target = Object.create(null);
 
-  return new Proxy(Object.create(null), {
+  return new Proxy(target, {
     get(_target, property) {
       if (property === "then") return undefined;
+
+      if (property === Symbol.toStringTag) {
+        return "AuraDatabaseProxy";
+      }
 
       if (typeof property !== "string") {
         return undefined;
@@ -82,10 +110,21 @@ function createDatabaseProxy(methods) {
       return {
         configurable: true,
         enumerable: true,
+        writable: false,
       };
     },
   });
 }
+
+process.on("disconnect", () => {
+  for (const request of pending.values()) {
+    request.reject(
+      new Error("Se perdió la conexión con el proceso principal.")
+    );
+  }
+
+  pending.clear();
+});
 
 process.on("message", async (message) => {
   if (message?.type === "rpc-result") {
@@ -102,13 +141,15 @@ process.on("message", async (message) => {
         request.reject(error);
       }
     } else {
-      request.reject(new Error(message.error));
+      request.reject(
+        new Error(message.error || "Error en operación RPC.")
+      );
     }
 
     return;
   }
 
-  if (message?.type !== "start") return;
+  if (message?.type !== "start" || finished) return;
 
   try {
     const start = decode(message.payload);
@@ -141,8 +182,8 @@ process.on("message", async (message) => {
     }
 
     const sock = {
-      sendMessage: (...args) =>
-        rpc("sock.sendMessage", args),
+      sendMessage: (...rpcArgs) =>
+        rpc("sock.sendMessage", rpcArgs),
     };
 
     const ctx = {
@@ -153,23 +194,23 @@ process.on("message", async (message) => {
 
       db: createDatabaseProxy(dbMethods),
 
-      reply: (...args) =>
-        rpc("ctx.reply", args),
+      reply: (...rpcArgs) =>
+        rpc("ctx.reply", rpcArgs),
 
-      react: (...args) =>
-        rpc("ctx.react", args),
+      react: (...rpcArgs) =>
+        rpc("ctx.react", rpcArgs),
 
-      resolveLid: (...args) =>
-        rpc("ctx.resolveLid", args),
+      resolveLid: (...rpcArgs) =>
+        rpc("ctx.resolveLid", rpcArgs),
 
-      copy: (...args) =>
-        rpc("ctx.copy", args),
+      copy: (...rpcArgs) =>
+        rpc("ctx.copy", rpcArgs),
 
-      buttons: (...args) =>
-        rpc("ctx.buttons", args),
+      buttons: (...rpcArgs) =>
+        rpc("ctx.buttons", rpcArgs),
 
-      options: (...args) =>
-        rpc("ctx.options", args),
+      options: (...rpcArgs) =>
+        rpc("ctx.options", rpcArgs),
 
       activeBotsLive: [],
 
@@ -242,6 +283,8 @@ async function getTypeScriptFiles(directory) {
     const fullPath = path.join(directory, entry.name);
 
     if (entry.isDirectory()) {
+      if (entry.name.startsWith(".")) continue;
+
       files.push(
         ...await getTypeScriptFiles(fullPath)
       );
