@@ -1,23 +1,16 @@
-export interface SandboxLog {
-  level?: string;
-  message?: string;
-}
+import type { CommandContext } from "../../types/index.d.ts";
 
 export interface SandboxResult {
-  type?: string;
-  ok?: boolean;
-  status?: string;
-  durationMs?: number;
-  messages?: Array<{
-    kind?: string;
-    text?: string;
-    at?: string;
-  }>;
-  error?: string | null;
-  logs: SandboxLog[];
+  type: "result";
+  ok: boolean;
+  status: string;
+  command?: string;
+  file?: string;
+  error?: string;
 }
 
 export function runSandbox(
   command: string,
-  args?: string[]
+  args: string[],
+  ctx: CommandContext
 ): Promise<SandboxResult>;
