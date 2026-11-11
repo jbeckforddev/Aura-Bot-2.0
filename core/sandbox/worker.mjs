@@ -8,6 +8,18 @@ const TEST_DIR = path.join(ROOT, "test");
 
 const pending = new Map();
 
+function finish(payload, exitCode = 0) {
+  process.exitCode = exitCode;
+
+  if (process.connected) {
+    process.send(payload, () => {
+      process.disconnect();
+    });
+  } else {
+    process.exitCode = exitCode;
+  }
+}
+
 function rpc(method, args = []) {
   return new Promise((resolve, reject) => {
     const id = randomUUID();
@@ -26,6 +38,7 @@ function rpc(method, args = []) {
 process.on("message", async (message) => {
   if (message?.type === "rpc-result") {
     const request = pending.get(message.id);
+
     if (!request) return;
 
     pending.delete(message.id);
@@ -58,7 +71,7 @@ process.on("message", async (message) => {
 
     if (!plugin || typeof plugin.run !== "function") {
       throw new Error(
-        "El archivo no exporta un comando válido."
+        "El archivo no exporta un comando válido mediante default.run(ctx)."
       );
     }
 
@@ -92,7 +105,6 @@ process.on("message", async (message) => {
         rpc("ctx.options", args),
 
       db: undefined,
-
       activeBotsLive: [],
 
       clearGroupCache: () => true,
@@ -104,26 +116,22 @@ process.on("message", async (message) => {
 
     await plugin.run(ctx);
 
-    process.send({
+    finish({
       type: "result",
       ok: true,
       status: "OK",
       command: message.command,
       file: path.relative(ROOT, pluginFile),
     });
-
-    process.exit(0);
   } catch (error) {
-    process.send({
+    finish({
       type: "result",
       ok: false,
       status: "ERROR",
       error: error instanceof Error
         ? error.stack || error.message
         : String(error),
-    });
-
-    process.exit(1);
+    }, 1);
   }
 });
 
@@ -136,6 +144,7 @@ async function findPlugin(alias) {
     );
 
     const plugin = imported.default;
+
     if (!plugin) continue;
 
     const names = Array.isArray(plugin.name)
