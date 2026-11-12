@@ -48,19 +48,44 @@ async function geo(ip: string) {
   } catch { return null; }
 }
 
-function pool(ctx: any): any[] {
+/* ───────────────────────── subbots ───────────────────────── */
+
+const isSock = (v: any) => v && typeof v.sendMessage === "function" && v.ws && typeof v.query === "function";
+
+function fromAny(x: any): any[] {
+  if (!x) return [];
+  if (isSock(x)) return [x];
+  let arr: any[] = [];
+  if (typeof x.values === "function") { try { arr = [...x.values()]; } catch {} }
+  else if (Array.isArray(x)) arr = x;
+  else if (typeof x === "object") arr = Object.values(x);
+  return arr.map((v: any) => v?.sock ?? v?.client ?? v?.conn ?? v).filter(isSock);
+}
+
+function pool(ctx: any): { socks: any[]; where: string } {
   const G = globalThis as any;
-  const c = [G.subbots, G.__subbots, G.subbotManager?.list, G.subbotManager?.all, G.subbotManager?.sockets, ctx.subbots, ctx.subbotManager?.list];
-  for (const x of c) {
-    if (!x) continue;
-    let arr: any[] = [];
-    if (typeof x.values === "function") arr = [...x.values()];
-    else if (Array.isArray(x)) arr = x;
-    else if (typeof x === "object") arr = Object.values(x);
-    const s = arr.map((v: any) => v?.sock ?? v?.client ?? v).filter((v: any) => v && typeof v.sendMessage === "function" && v.ws);
-    if (s.length) return s;
+  const found: any[] = [];
+  let where = "ninguno";
+
+  const named = [G.subbots, G.__subbots, G.subbotsMap, G.subbotManager, G.subbotsList, G.bots, G.connections, ctx.subbots, ctx.subbotManager];
+  for (const c of named) {
+    const got = fromAny(c);
+    if (got.length) { found.push(...got); where = "directo"; break; }
   }
-  return [];
+
+  if (!found.length) {
+    for (const k of Object.keys(G)) {
+      if (!/sub|bot|conn|sock|client|instance/i.test(k)) continue;
+      if (k.startsWith("__voip")) continue;
+      let v: any;
+      try { v = G[k]; } catch { continue; }
+      const got = fromAny(v);
+      if (got.length) { found.push(...got); where = `global.${k}`; }
+    }
+  }
+
+  const uniq = [...new Set(found)];
+  return { socks: uniq, where };
 }
 
 function hook(sock: any) {
@@ -72,7 +97,7 @@ function hook(sock: any) {
       const tag = String(first?.tag || "").toLowerCase();
       const who = digits(String(node?.attrs?.from || first?.attrs?.["call-creator"] || ""));
       const p = P.get(who);
-      log("CB:call", tag, who, JSON.stringify(node?.attrs || {}));
+      log("CB:call", tag, who);
       if (!p || p.done) return;
       if (["offer", "preaccept", "accept", "transport"].includes(tag)) {
         const a = attrsOf(first);
@@ -100,19 +125,6 @@ async function hangup(sock: any, target: string, callId?: string) {
   } catch {}
 }
 
-/* ───────────────────────── diagnóstico ───────────────────────── */
-
-function diag(sock: any) {
-  const caps: string[] = [];
-  for (const f of ["offerCall", "sendCallOffer", "callOffer", "sendNode", "query", "getUSyncDevices", "presenceSubscribe"]) {
-    caps.push(`${typeof sock[f] === "function" ? "✅" : "❌"} ${f}`);
-  }
-  caps.push(`${sock.signalRepository?.encryptMessage ? "✅" : "❌"} signalRepository.encryptMessage`);
-  caps.push(`${sock.signalRepository?.lidMapping?.getLIDForPN ? "✅" : "❌"} lidMapping.getLIDForPN`);
-  caps.push(`${sock.generateMessageTag ? "✅" : "❌"} generateMessageTag`);
-  return caps.join("\n");
-}
-
 /* ───────────────────────── oferta ───────────────────────── */
 
 async function offer(sock: any, target: string, callId: string): Promise<string> {
@@ -132,7 +144,7 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
     const list = await sock.getUSyncDevices([peerLid], true, false);
     devs = (list || []).map((d: any) => d.jid).filter(Boolean);
   } catch (e: any) { throw new Error(`getUSyncDevices: ${e?.message || e}`); }
-  if (!devs.length) throw new Error("sin dispositivos para ese número (¿no tiene WhatsApp?)");
+  if (!devs.length) throw new Error("ese número no tiene dispositivos (¿no existe en WhatsApp?)");
 
   const norm = (j: string) => {
     const d = jidDecode?.(j);
@@ -210,8 +222,8 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
   });
 
   const err = ack?.attrs?.error;
-  if (err && err !== "0") throw new Error(`servidor rechazó la oferta (error ${err})`);
-  return `manual → ${destinations.length} dispositivo(s)`;
+  if (err && err !== "0") throw new Error(`el servidor rechazó la oferta (error ${err})`);
+  return `${destinations.length} dispositivo(s)`;
 }
 
 /* ───────────────────────── cierre ───────────────────────── */
@@ -249,28 +261,31 @@ export default {
     const { sock, from, msg, args, reply, react } = ctx;
 
     const info: any = (msg.message as any)?.extendedTextMessage?.contextInfo || {};
-    const raw = (args[0] || "").replace(/\D/g, "");
-    const quoted: string | undefined = info.participant;
+    const first = (args[0] || "").trim();
 
-    const subs = pool(ctx);
+    const { socks: subs, where } = pool(ctx);
     const list = subs.length ? subs : [sock];
 
-    /* .voip diag */
-    if (/^(diag|test)$/i.test((args[0] || "").trim())) {
-      const out: string[] = [`Subbots detectados: *${subs.length}*`];
-      list.slice(0, 2).forEach((s: any, i: number) => {
-        out.push(`\n— socket ${i + 1} —\n${diag(s)}`);
-      });
-      await reply(out.join("\n")).catch(() => undefined);
+    if (/^(diag|test)$/i.test(first)) {
+      const caps = ["offerCall", "sendNode", "query", "getUSyncDevices", "presenceSubscribe", "generateMessageTag"]
+        .map((f) => `${typeof sock[f] === "function" ? "✅" : "❌"} ${f}`);
+      caps.push(`${sock.signalRepository?.encryptMessage ? "✅" : "❌"} encryptMessage`);
+      await reply(
+        `Subbots: *${subs.length}*${subs.length ? ` (vía ${where})` : ""}\n\n${caps.join("\n")}`,
+      ).catch(() => undefined);
       return;
     }
 
+    /* une todos los args: "+57 320 3995335" -> 573203995335 */
+    const joined = args.join("").replace(/\D/g, "");
+    const quoted: string | undefined = info.participant;
+
     let target: string;
-    if (raw.length >= 8) target = bare(raw);
+    if (joined.length >= 8) target = bare(joined);
     else if (quoted) target = bare(quoted);
     else if (info.mentionedJid?.length) target = bare(info.mentionedJid[0]);
     else {
-      await reply("Uso: `.voip +573118353868` · diagnóstico: `.voip diag`").catch(() => undefined);
+      await reply("Uso: `.voip +573203995335` o responde a alguien.").catch(() => undefined);
       return;
     }
 
@@ -294,11 +309,10 @@ export default {
     let how = "";
     try {
       how = await offer(callSock, target, callId);
-      log("oferta ok", how);
     } catch (e: any) {
       P.delete(key);
       await react("❌").catch(() => undefined);
-      await reply(`❌ ${fytBold("Falló")}: ${e?.message || e}\n\nRevisa con \`.voip diag\`.`).catch(() => undefined);
+      await reply(`❌ ${fytBold("Falló")}: ${e?.message || e}`).catch(() => undefined);
       return;
     }
 
@@ -310,6 +324,6 @@ export default {
       await reply(`⏱️ +${key} no contestó.`).catch(() => undefined);
     }, 45000);
 
-    await reply(`✅ Oferta enviada (${how}). Esperando que conteste…`).catch(() => undefined);
+    await reply(`✅ Oferta enviada a ${how}. Esperando…`).catch(() => undefined);
   },
 };
