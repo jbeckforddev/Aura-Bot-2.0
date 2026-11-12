@@ -18,79 +18,6 @@ const JSNES_URLS = [
   "https://cdn.jsdelivr.net/npm/jsnes@1.2.1/dist/jsnes.min.js",
 ];
 
-interface RomPreset {
-  id: string;
-  title: string;
-  banner: string;
-  theme: "smb3" | "red";
-  localNames: string[];
-  urls: string[];
-}
-
-const ROM_PRESETS: Record<string, RomPreset> = {
-  mario3: {
-    id: "mario3",
-    title: "SUPER MARIO BROS",
-    banner: "★ SUPER MARIO BROS. 3 ★",
-    theme: "smb3",
-    localNames: [
-      "mario3.nes",
-      "smb3.nes",
-      "Super Mario Bros. 3 (USA).nes",
-      "Super Mario Bros. 3.nes",
-      "mario3.zip",
-      "smb3.zip",
-    ],
-    urls: [
-      "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/smb3/smb3.nes",
-      "https://raw.githubusercontent.com/Latifark/nes-roms/main/Super%20Mario%20Bros.%203%20(USA).nes",
-      "https://archive.org/download/nes-romset-ultra-us/Super%20Mario%20Bros.%203%20%28USA%29.zip",
-    ],
-  },
-  mario1: {
-    id: "mario1",
-    title: "Super Mario Bros • NESS",
-    banner: "★  SUPER MARIO BROS.  ★",
-    theme: "red",
-    localNames: ["mario1.nes", "smb1.nes", "mario.nes", "smb.nes", "mario1.zip"],
-    urls: [
-      "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/smb/smb.nes",
-      "https://archive.org/download/nes-romset-ultra-us/Super%20Mario%20Bros.%20%28World%29.zip",
-    ],
-  },
-  contra: {
-    id: "contra",
-    title: "CONTRA • NESS",
-    banner: "★  CONTRA NES  ★",
-    theme: "red",
-    localNames: ["contra.nes", "contra.zip"],
-    urls: [
-      "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/contra/contra.nes",
-      "https://archive.org/download/nes-romset-ultra-us/Contra%20%28USA%29.zip",
-    ],
-  },
-  tetris: {
-    id: "tetris",
-    title: "TETRIS • NESS",
-    banner: "★  TETRIS NES  ★",
-    theme: "red",
-    localNames: ["tetris.nes", "tetris.zip"],
-    urls: [
-      "https://archive.org/download/nes-romset-ultra-us/Tetris%20%28USA%29.zip",
-    ],
-  },
-  pacman: {
-    id: "pacman",
-    title: "PAC-MAN • NESS",
-    banner: "★  PAC-MAN NES  ★",
-    theme: "smb3",
-    localNames: ["pacman.nes", "pacman.zip"],
-    urls: [
-      "https://archive.org/download/nes-romset-ultra-us/Pac-Man%20%28USA%29%20%28Namco%29.zip",
-    ],
-  },
-};
-
 let cachedJsnesCode = "";
 
 function isValidNesRom(buf: Buffer): boolean {
@@ -166,10 +93,8 @@ function extractNesFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
         }
       } catch {}
 
-      if (outBuf && (isValidNesRom(outBuf) || entryName.toLowerCase().endsWith(".nes"))) {
-        if (isValidNesRom(outBuf)) {
-          return { buffer: outBuf, fileName: path.basename(entryName) };
-        }
+      if (outBuf && isValidNesRom(outBuf)) {
+        return { buffer: outBuf, fileName: path.basename(entryName) };
       }
     }
   }
@@ -253,46 +178,38 @@ async function getJsnesEngineCode(): Promise<string> {
   throw new Error("No se pudo descargar el motor JSNES.");
 }
 
-async function resolvePresetRomBuffer(preset: RomPreset): Promise<Buffer> {
-  const searchDirs = [__dirname, path.resolve(process.cwd(), "cmd", "group"), CACHE_DIR];
-  for (const dir of searchDirs) {
-    for (const name of preset.localNames) {
-      const p = path.join(dir, name);
-      if (fs.existsSync(p) && fs.statSync(p).size > 1024) {
-        const extracted = extractNesFromAnyBuffer(fs.readFileSync(p), name);
-        if (extracted) return extracted.buffer;
+function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string } | null {
+  const cleanKey = nameKey.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!fs.existsSync(CACHE_DIR)) return null;
+
+  const files = fs.readdirSync(CACHE_DIR);
+  for (const f of files) {
+    if (!f.toLowerCase().endsWith(".nes")) continue;
+    const baseName = f.slice(0, -4);
+    const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
+      const p = path.join(CACHE_DIR, f);
+      const buf = fs.readFileSync(p);
+      if (isValidNesRom(buf)) {
+        return { buffer: buf, realName: baseName };
       }
     }
   }
+  return null;
+}
 
-  const cacheFile = path.join(CACHE_DIR, `${preset.id}.nes`);
-  if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 4096) {
-    const raw = fs.readFileSync(cacheFile);
-    if (isValidNesRom(raw)) return raw;
+function checkForDuplicateRom(newBuf: Buffer): string | null {
+  if (!fs.existsSync(CACHE_DIR)) return null;
+  const files = fs.readdirSync(CACHE_DIR);
+  for (const f of files) {
+    if (!f.toLowerCase().endsWith(".nes")) continue;
+    const p = path.join(CACHE_DIR, f);
+    const existingBuf = fs.readFileSync(p);
+    if (existingBuf.length === newBuf.length && existingBuf.equals(newBuf)) {
+      return f.slice(0, -4);
+    }
   }
-
-  for (const url of preset.urls) {
-    try {
-      const dlBuf = await fetchBufferWithTimeout(url, 15000);
-      const extracted = extractNesFromAnyBuffer(dlBuf, `${preset.id}.nes`);
-      if (extracted) {
-        fs.writeFileSync(cacheFile, extracted.buffer);
-        return extracted.buffer;
-      }
-    } catch {}
-  }
-
-  const anyCachedNes = fs
-    .readdirSync(CACHE_DIR)
-    .find((f) => f.toLowerCase().endsWith(".nes"));
-  if (anyCachedNes) {
-    const fallbackBuf = fs.readFileSync(path.join(CACHE_DIR, anyCachedNes));
-    if (isValidNesRom(fallbackBuf)) return fallbackBuf;
-  }
-
-  throw new Error(
-    `No se encontró la ROM de ${preset.id} en caché. Envía el archivo .nes o .zip al chat y respóndele con .${preset.id} para guardarlo permanentemente.`,
-  );
+  return null;
 }
 
 async function downloadQuotedDocumentBuffer(
@@ -316,36 +233,10 @@ async function downloadQuotedDocumentBuffer(
     }
     const buffer = Buffer.concat(chunks);
     if (buffer.length > 512) {
-      return { buffer, fileName: String(doc.fileName || "custom.nes") };
+      return { buffer, fileName: String(doc.fileName || "game.nes") };
     }
   }
   return null;
-}
-
-function autoCacheUploadedRom(romBuf: Buffer, fileName: string, invokedCmd: string) {
-  try {
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/\.zip$/i, ".nes");
-    const finalName = safeName.toLowerCase().endsWith(".nes") ? safeName : `${safeName}.nes`;
-    fs.writeFileSync(path.join(CACHE_DIR, finalName), romBuf);
-
-    const low = fileName.toLowerCase();
-    if (invokedCmd === "mario3" || invokedCmd === "smb3" || (low.includes("mario") && low.includes("3")) || low.includes("smb3")) {
-      fs.writeFileSync(path.join(CACHE_DIR, "mario3.nes"), romBuf);
-    } else if (invokedCmd === "mario1" || (low.includes("mario") && !low.includes("2") && !low.includes("3"))) {
-      fs.writeFileSync(path.join(CACHE_DIR, "mario1.nes"), romBuf);
-    } else if (invokedCmd === "contra" || low.includes("contra")) {
-      fs.writeFileSync(path.join(CACHE_DIR, "contra.nes"), romBuf);
-    } else if (invokedCmd === "tetris" || low.includes("tetris")) {
-      fs.writeFileSync(path.join(CACHE_DIR, "tetris.nes"), romBuf);
-    } else if (invokedCmd === "pacman" || low.includes("pac")) {
-      fs.writeFileSync(path.join(CACHE_DIR, "pacman.nes"), romBuf);
-    }
-
-    const defaultMario3 = path.join(CACHE_DIR, "mario3.nes");
-    if (!fs.existsSync(defaultMario3)) {
-      fs.writeFileSync(defaultMario3, romBuf);
-    }
-  } catch {}
 }
 
 function buildConsoleHtml(options: {
@@ -355,71 +246,40 @@ function buildConsoleHtml(options: {
   isGzipped: boolean;
   banner: string;
   bezelTitle: string;
-  theme: "smb3" | "red";
 }): string {
-  const isSmb3 = options.theme === "smb3";
-
-  const caseBg = isSmb3
-    ? "linear-gradient(180deg,#522911 0%,#381b0a 48%,#241005 100%)"
-    : "linear-gradient(180deg,#e83d32 0%,#c91f27 46%,#9f1820 100%)";
-  const caseBorder = isSmb3 ? "#7a4419" : "#731016";
-  const topBannerBg = isSmb3
-    ? "linear-gradient(90deg,#6b3614,#964f22 50%,#6b3614)"
-    : "linear-gradient(90deg,#b61723,#ef4235 50%,#b61723)";
-  const screenWrapBg = isSmb3
-    ? "linear-gradient(180deg,#4d80b8 0%,#3c689c 55%,#2b507d 100%)"
-    : "linear-gradient(180deg,#4aa9e8 0%,#2383c7 55%,#17649e 100%)";
-  const padBg = isSmb3
-    ? "linear-gradient(180deg,#3d200e 0%,#241106 100%)"
-    : "linear-gradient(180deg,#2f8dcc 0%,#155e9c 100%)";
-  const topBtnBg = isSmb3
-    ? "linear-gradient(180deg,#deb045,#996b18)"
-    : "linear-gradient(180deg,#f04435,#b91d27)";
-  const dpadWrapBg = isSmb3
-    ? "linear-gradient(145deg,#b54c22,#75290c)"
-    : "linear-gradient(145deg,#68b8eb,#2d7bb4)";
-  const dpadBtnBg = isSmb3
-    ? "linear-gradient(180deg,#963814 0%,#632007 100%)"
-    : "linear-gradient(180deg,#2d6fb0 0%,#17477b 100%)";
-  const actWrapBg = isSmb3
-    ? "linear-gradient(145deg,#a33f18,#6b2309)"
-    : "linear-gradient(145deg,#6ec0ef,#2d7cb5)";
-
   const template = `<style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
 html,body{width:100%;min-height:100%;background:#08111d}
 body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#fff;background:#08111d}
-#gb-case{width:min(98vw,720px);max-width:720px;margin:0 auto;background:${caseBg};border:3px solid ${caseBorder};border-radius:20px 20px 42px 20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 16px 34px rgba(0,0,0,.68),inset 0 2px 0 rgba(255,255,255,.35);transform:translateZ(0);contain:content}
-#gb-case:before{content:"${options.banner}";display:block;text-align:center;padding:6px 10px 5px;color:#fff5d0;font-size:clamp(10px,2vw,14px);font-weight:900;letter-spacing:1.5px;text-shadow:0 2px 0 #3d1205,0 0 8px rgba(255,230,90,.3);background:${topBannerBg};border-bottom:2px solid #f0c83e}
-#screen-wrap{width:100%;background:${screenWrapBg};border-bottom:3px solid #4a2010;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;padding:clamp(8px,1.5vw,12px) clamp(6px,1.8vw,14px) clamp(10px,2vw,14px);contain:paint layout}
+#gb-case{width:min(98vw,720px);max-width:720px;margin:0 auto;background:linear-gradient(180deg,#e83d32 0%,#c91f27 46%,#9f1820 100%);border:3px solid #731016;border-radius:20px 20px 42px 20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 16px 34px rgba(0,0,0,.68),inset 0 2px 0 rgba(255,255,255,.35);transform:translateZ(0);contain:content}
+#gb-case:before{content:"${options.banner}";display:block;text-align:center;padding:6px 10px 5px;color:#fff5d0;font-size:clamp(10px,2vw,14px);font-weight:900;letter-spacing:1.5px;text-shadow:0 2px 0 #841017,0 0 8px rgba(255,230,90,.3);background:linear-gradient(90deg,#b61723,#ef4235 50%,#b61723);border-bottom:2px solid #f0c83e}
+#screen-wrap{width:100%;background:linear-gradient(180deg,#4aa9e8 0%,#2383c7 55%,#17649e 100%);border-bottom:3px solid #71202a;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;padding:clamp(8px,1.5vw,12px) clamp(6px,1.8vw,14px) clamp(10px,2vw,14px);contain:paint layout}
 #bezel-top{width:94%;display:flex;align-items:center;justify-content:space-between;margin-bottom:clamp(5px,1vw,8px)}
 .stripe-line{flex:1;height:3px;margin:0 6px;background:linear-gradient(90deg,#ffe04b,#fff7bd,#ffe04b);box-shadow:0 1px 0 #18456e}
-.bezel-title{font-size:clamp(7px,1.5vw,10px);font-weight:900;letter-spacing:1.2px;color:#fff2a4;text-transform:uppercase;text-shadow:0 1px 0 #1b2838}
-#screen-container{position:relative;width:96%;height:auto;aspect-ratio:256/240;background:#000;border:clamp(2px,.5vw,4px) solid #1a1412;border-radius:10px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 16px rgba(0,0,0,.88),0 0 0 2px #f1c943;contain:paint layout;will-change:transform;transform:translateZ(0)}
+.bezel-title{font-size:clamp(7px,1.5vw,10px);font-weight:900;letter-spacing:1.2px;color:#fff2a4;text-transform:uppercase;text-shadow:0 1px 0 #7b171d}
+#screen-container{position:relative;width:96%;height:auto;aspect-ratio:256/240;background:#000;border:clamp(2px,.5vw,4px) solid #6e1118;border-radius:10px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 16px rgba(0,0,0,.88),0 0 0 2px #f1c943;contain:paint layout;will-change:transform;transform:translateZ(0)}
 canvas#nes{width:100%;height:100%;object-fit:fill;display:block;image-rendering:pixelated;image-rendering:crisp-edges;will-change:contents;transform:translateZ(0)}
 #status-ind{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;z-index:2;cursor:pointer;padding:4px}
 #status-led{width:7px;height:7px;border-radius:50%;background:#4cff57;box-shadow:0 0 7px #4cff57;transition:background .15s,box-shadow .15s}.status-connecting #status-led{background:#ffd21f;box-shadow:0 0 8px #ffd21f;animation:statusPulse 1s ease-in-out infinite}.status-loading #status-led{background:#a0a0a0;box-shadow:0 0 8px #a0a0a0;animation:statusPulse 1.2s ease-in-out infinite}.status-active #status-led{background:#4cff57;box-shadow:0 0 8px #4cff57}.status-error #status-led{background:#ff3030;box-shadow:0 0 9px #ff3030}@keyframes statusPulse{0%,100%{opacity:.45;transform:scale(.82)}50%{opacity:1;transform:scale(1.25)}}
-#status-text{font-size:5px;font-weight:900;color:#fff;letter-spacing:.5px;text-shadow:0 1px 0 #000}
+#status-text{font-size:5px;font-weight:900;color:#fff;letter-spacing:.5px;text-shadow:0 1px 0 #671018}
 #error{display:none;width:94%;margin:8px auto 0;padding:6px 8px;background:#4a0f14;border:1px solid #c63d45;border-radius:6px;color:#ffdfe1;font-size:10px;line-height:1.3}
-#pad{width:100%;padding:clamp(10px,2vw,18px) clamp(5px,2.5vw,22px) max(18px,env(safe-area-inset-bottom,0px));background:${padBg};display:flex;flex-direction:column;gap:0;position:relative}
-#top-ctrl{width:100%;padding:0;margin:0 0 clamp(24px,6vw,44px);display:flex;justify-content:center;align-items:center;gap:clamp(34px,12vw,88px);position:relative}
-#top-ctrl button{width:clamp(76px,14vw,108px);height:clamp(32px,5.5vw,42px);margin:0;border:2px solid #3d2408;border-radius:9px;background:${topBtnBg};color:#fff6d6;box-shadow:0 3px 0 #2b1804,inset 0 1px 2px rgba(255,255,255,.3);cursor:pointer;font-size:clamp(10px,1.8vw,13px);font-weight:900;letter-spacing:1px;display:flex;align-items:center;justify-content:center;transition:transform .06s,background .06s}
-#top-ctrl button:active,#top-ctrl button.touching{transform:translateY(2px);box-shadow:0 1px 0 #2b1804}
+#pad{width:100%;padding:clamp(10px,2vw,18px) clamp(5px,2.5vw,22px) max(18px,env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#2f8dcc 0%,#155e9c 100%);display:flex;flex-direction:column;gap:0;position:relative}
+#top-ctrl{width:100%;padding:0;margin:0 0 clamp(28px,8vw,56px);display:flex;justify-content:center;align-items:center;gap:clamp(34px,12vw,88px);position:relative}
+#top-ctrl button{width:clamp(72px,14vw,108px);height:clamp(30px,5.5vw,42px);margin:0;border:2px solid #6f1017;border-radius:9px;background:linear-gradient(180deg,#f04435,#b91d27);color:#ffe04b;box-shadow:0 3px 0 #6d1118,inset 0 1px 2px rgba(255,255,255,.3);cursor:pointer;font-size:clamp(10px,1.8vw,14px);font-weight:900;letter-spacing:1px;display:flex;align-items:center;justify-content:center;transition:transform .06s,background .06s}
+#top-ctrl button:active,#top-ctrl button.touching{transform:translateY(2px);background:#941820;box-shadow:0 1px 0 #4d0b10}
 #main-row{width:100%;padding:clamp(4px,1vw,10px) 0 0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:clamp(18px,8vw,64px)}
-#dpad{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,clamp(44px,11vw,74px));grid-template-rows:repeat(3,clamp(44px,11vw,74px));gap:clamp(3px,.7vw,5px);padding:clamp(10px,2vw,15px);background:${dpadWrapBg};border:2px solid #4a1906;border-radius:50%;box-shadow:0 6px 15px rgba(0,0,0,.55),inset 0 2px 4px rgba(255,255,255,.25)}
+#dpad{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,clamp(45px,11.5vw,78px));grid-template-rows:repeat(3,clamp(45px,11.5vw,78px));gap:clamp(3px,.7vw,5px);padding:clamp(10px,2vw,15px);background:linear-gradient(145deg,#68b8eb,#2d7bb4);border:2px solid #15537e;border-radius:50%;box-shadow:0 5px 13px rgba(0,0,0,.48),inset 0 2px 4px rgba(255,255,255,.28)}
 #main-row #dpad{grid-column:1;justify-self:start}
-#dpad button{border:none;border-radius:clamp(7px,1.3vw,10px);background:${dpadBtnBg};color:#fff;font-size:clamp(16px,3.5vw,24px);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 0 #2e0f03,inset 0 1px 1px rgba(255,255,255,.2);cursor:pointer}
-#dpad button:active,#dpad button.touching{background:#e0482e!important;color:#fff;transform:scale(.94) translateY(2px);box-shadow:0 0 0 #000}
+#dpad button{border:none;border-radius:clamp(7px,1.3vw,10px);background:linear-gradient(180deg,#2d6fb0 0%,#17477b 100%);color:#fff;font-size:clamp(17px,3.5vw,25px);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 0 #0a2947,inset 0 1px 1px rgba(255,255,255,.2);cursor:pointer}
+#dpad button:active,#dpad button.touching{background:#e02e34!important;color:#fff;transform:scale(.94) translateY(2px);box-shadow:0 0 0 #000}
 #dpad-center{background:#ffd83d!important;border:2px solid #c49d13;border-radius:50%!important}
-#act{flex:0 0 auto;display:flex;gap:clamp(12px,3vw,26px);padding:clamp(10px,2vw,16px) clamp(14px,3vw,26px);background:${actWrapBg};border:2px solid #4a1906;border-radius:38px;align-items:center;box-shadow:0 6px 15px rgba(0,0,0,.55),inset 0 2px 4px rgba(255,255,255,.25)}
+#act{flex:0 0 auto;display:flex;gap:clamp(12px,3vw,28px);padding:clamp(10px,2vw,16px) clamp(14px,3vw,28px);background:linear-gradient(145deg,#6ec0ef,#2d7cb5);border:2px solid #15537e;border-radius:36px;align-items:center;box-shadow:0 5px 13px rgba(0,0,0,.48),inset 0 2px 4px rgba(255,255,255,.28)}
 #main-row #act{grid-column:3;justify-self:end}
-#act button{width:clamp(52px,10vw,70px);height:clamp(52px,10vw,70px);border-radius:50%;border:3px solid #f5f5f7;color:#fff;font-size:clamp(16px,3vw,22px);font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 8px rgba(0,0,0,.55),inset 0 2px 3px rgba(255,255,255,.34);transition:transform .06s}
-#btn-a{background:radial-gradient(circle at 35% 30%,#f34b3f,#a8141d);text-shadow:0 2px 0 #5e090e}
-#btn-b{background:radial-gradient(circle at 35% 30%,#ffd94b,#b88714);color:#fff;text-shadow:0 1px 2px #5b3d00}
-#act button:active,#act button.touching{transform:scale(.93) translateY(2px)}
-#reset-btn{border:2px solid #3d2408;border-radius:8px;background:${topBtnBg};color:#fff6d6;padding:8px 18px;font-weight:900;font-size:11px;letter-spacing:.8px;cursor:pointer;box-shadow:0 3px 0 #2b1804;margin:18px auto 0;display:block}
-@media(max-width:430px){#main-row{column-gap:clamp(10px,5vw,28px)}#dpad{grid-template-columns:repeat(3,clamp(40px,11vw,56px));grid-template-rows:repeat(3,clamp(40px,11vw,56px))}#act{gap:clamp(8px,2.5vw,16px);padding:clamp(8px,2vw,12px) clamp(10px,3vw,18px)}#act button{width:clamp(46px,12vw,56px);height:clamp(46px,12vw,56px)}}
-@media(max-width:360px){#dpad{grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,38px);padding:8px}#act{gap:7px;padding:8px 9px}#act button{width:45px;height:45px}}
+#act button{width:clamp(52px,10vw,72px);height:clamp(52px,10vw,72px);border-radius:50%;border:3px solid;color:#fff;font-size:clamp(16px,3vw,22px);font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 rgba(55,16,24,.55),inset 0 2px 3px rgba(255,255,255,.34);transition:transform .06s}
+#btn-a{background:linear-gradient(180deg,#f34b3f,#be1d27);border-color:#ffc1bb;text-shadow:0 2px 0 #861017}
+#btn-b{background:linear-gradient(180deg,#ffd94b,#e1ae22);border-color:#fff0a2;color:#5b3d00;text-shadow:none}
+#act button:active,#act button.touching{transform:scale(.94) translateY(2px)}
+#reset-btn{border:1px solid #6f1017;border-radius:8px;background:linear-gradient(180deg,#f04435,#b91d27);color:#ffe04b;padding:8px 14px;font-weight:900;font-size:11px;letter-spacing:.5px;cursor:pointer;box-shadow:0 2px 0 #6d1118;margin:18px auto 0;display:block}
 </style>
 <body>
 <div id="gb-case">
@@ -689,14 +549,14 @@ ${options.jsnesCode}
 }
 
 export default {
-  name: ["mario3", "smb3", "mario1", "nes", "contra", "tetris", "pacman"],
+  name: ["nes", "mario", "mario3", "mario1", "contra", "tetris", "pacman", "save"],
   category: "group",
-  description: "Emulador NES real en WhatsApp: soporta archivos .nes y .zip con ROM adentro.",
+  description: "Emulador LuferOS NES: emula cualquier juego con sistema .nes save <Nombre> y detección de duplicados.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
     const { sock, from, msg, args = [], usedPrefix, reply, react } = ctx;
-    const prefix = usedPrefix || ".";
+    const prefix = usedPrefix || ".nes";
 
     const rawBody =
       msg?.message?.conversation ||
@@ -715,71 +575,57 @@ export default {
 
     try {
       const jsnesCode = await getJsnesEngineCode();
-
       let romBuffer: Buffer | null = null;
-      let bannerText = "★ SUPER MARIO BROS. 3 ★";
-      let bezelTitle = "SUPER MARIO BROS";
-      let cardTitle = "🍄 Super Mario Bros. 3";
-      let theme: "smb3" | "red" = "smb3";
+      let displayTitle = "Super Mario Bros • NESS";
+      let customSaveName = "";
 
       const quotedDoc = await downloadQuotedDocumentBuffer(msg);
-      const firstArg = String(args[0] || "").trim();
+      const subCommand = String(args[0] || "").toLowerCase();
+
+      if (subCommand === "save" && args[1]) {
+        customSaveName = args.slice(1).join(" ").trim();
+      }
 
       if (quotedDoc) {
         const extracted = extractNesFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
         if (!extracted) {
-          throw new Error(
-            `El archivo "${quotedDoc.fileName}" no es una ROM .nes válida ni un .zip que contenga un archivo .nes adentro.`,
+          throw new Error(`El archivo adjunto no es una ROM .nes válida ni un .zip con un archivo .nes dentro.`);
+        }
+        romBuffer = extracted.buffer;
+
+        const originalBaseName = extracted.fileName.replace(/\.(nes|zip)$/i, "").trim();
+        const finalNameKey = customSaveName || originalBaseName;
+
+        const duplicateRealName = checkForDuplicateRom(romBuffer);
+        if (duplicateRealName && duplicateRealName.toLowerCase() !== finalNameKey.toLowerCase()) {
+          await react("⚠️").catch(() => undefined);
+          return reply(
+            `⚠️ *Emulador LuferOS*\nEste juego ya está guardado en la memoria con el nombre: \`${duplicateRealName}\`. No se requiere duplicarlo.`,
           );
         }
-        romBuffer = extracted.buffer;
-        autoCacheUploadedRom(romBuffer, extracted.fileName, invokedCmd);
 
-        const cleanTitle = extracted.fileName.replace(/\.(nes|zip)$/i, "").toUpperCase();
-        const isMario3 = cleanTitle.includes("MARIO") && cleanTitle.includes("3");
-        bannerText = isMario3 ? "★ SUPER MARIO BROS. 3 ★" : `★ ${cleanTitle.slice(0, 26)} ★`;
-        bezelTitle = isMario3 ? "SUPER MARIO BROS" : `${cleanTitle.slice(0, 22)} • NESS`;
-        cardTitle = isMario3 ? "🍄 Super Mario Bros. 3" : `🎮 ${cleanTitle.slice(0, 28)}`;
-        theme = isMario3 ? "smb3" : "red";
-      } else if (/^https?:\/\//i.test(firstArg)) {
-        const dl = await fetchBufferWithTimeout(firstArg, 15000);
-        const urlFileName = path.basename(new URL(firstArg).pathname) || "custom.nes";
-        const extracted = extractNesFromAnyBuffer(dl, urlFileName);
-        if (!extracted) {
-          throw new Error("El enlace no contiene una ROM .nes válida ni un .zip con archivo .nes adentro.");
-        }
-        romBuffer = extracted.buffer;
-        autoCacheUploadedRom(romBuffer, extracted.fileName, invokedCmd);
-
-        const cleanTitle = decodeURIComponent(extracted.fileName).replace(/\.(nes|zip)$/i, "").toUpperCase();
-        bannerText = `★ ${cleanTitle.slice(0, 26)} ★`;
-        bezelTitle = `${cleanTitle.slice(0, 22)} • NESS`;
-        cardTitle = `🎮 ${cleanTitle.slice(0, 28)}`;
-        theme = cleanTitle.includes("3") ? "smb3" : "red";
+        const safeFileName = finalNameKey.replace(/[^a-zA-Z0-9._-]/g, "_") + ".nes";
+        fs.writeFileSync(path.join(CACHE_DIR, safeFileName), romBuffer);
+        displayTitle = `${finalNameKey.toUpperCase()} • NESS`;
+      } else if (subCommand === "save" && !quotedDoc) {
+        return reply("⚠️ Por favor, responde a un documento `.nes` o `.zip` con `.nes save <nombre>` para guardarlo.");
       } else {
-        let presetKey = "mario3";
-        if (invokedCmd === "mario1") presetKey = "mario1";
-        else if (invokedCmd === "contra") presetKey = "contra";
-        else if (invokedCmd === "tetris") presetKey = "tetris";
-        else if (invokedCmd === "pacman") presetKey = "pacman";
-        else if (invokedCmd === "nes" && firstArg) {
-          const low = firstArg.toLowerCase();
-          if (ROM_PRESETS[low]) presetKey = low;
-          else if (low.includes("1")) presetKey = "mario1";
-          else if (low.includes("contra")) presetKey = "contra";
-          else if (low.includes("tetris")) presetKey = "tetris";
-          else if (low.includes("pac")) presetKey = "pacman";
+        const searchName = (customSaveName || args.join(" ")).trim() || invokedCmd;
+        const found = getStoredRomByName(searchName);
+        if (found) {
+          romBuffer = found.buffer;
+          displayTitle = `${found.realName.toUpperCase()} • NESS`;
+        } else {
+          const fallback = getStoredRomByName("mario") || getStoredRomByName("contra") || getStoredRomByName("tetris");
+          if (fallback) {
+            romBuffer = fallback.buffer;
+            displayTitle = `${fallback.realName.toUpperCase()} • NESS`;
+          } else {
+            throw new Error(
+              `No se encontró ningún juego guardado con el nombre "${searchName}". Envía un archivo .nes o .zip al chat y respóndele con .nes save <nombre> para guardarlo en memoria.`,
+            );
+          }
         }
-
-        const preset = ROM_PRESETS[presetKey] || ROM_PRESETS.mario3;
-        romBuffer = await resolvePresetRomBuffer(preset);
-        bannerText = preset.banner;
-        bezelTitle = preset.title;
-        theme = preset.theme;
-        cardTitle =
-          preset.id === "mario3"
-            ? "🍄 Super Mario Bros. 3"
-            : `🎮 ${preset.banner.replace(/★/g, "").trim()}`;
       }
 
       const gzipped = zlib.gzipSync(romBuffer, { level: 9 });
@@ -790,9 +636,8 @@ export default {
         romGzipBase64: useGzip ? gzipped.toString("base64") : "",
         romRawBase64: useGzip ? "" : romBuffer.toString("base64"),
         isGzipped: useGzip,
-        banner: bannerText,
-        bezelTitle,
-        theme,
+        banner: `★  EMULADOR LUFEROS NES  ★`,
+        bezelTitle: displayTitle,
       });
 
       const data = {
@@ -804,7 +649,7 @@ export default {
               __typename: "GenAISingleLayoutViewModel",
               primitive: {
                 __typename: "GenAIBotProgressStatusPrimitive",
-                title: `${cardTitle} (PANTALLA COMPLETA)`,
+                title: `🎮 EMULADOR LUFEROS NES: ${displayTitle}`,
                 is_in_progress: true,
               },
             },
@@ -812,14 +657,14 @@ export default {
         ],
         embedded_screens: [
           {
-            title: cardTitle,
+            title: `LuferOS NES • ${displayTitle}`,
             content: [
               {
                 __typename: "FOAIDNixelButtonSheets",
                 tabs: [
                   {
                     id: "tab_0",
-                    tab_header: cardTitle,
+                    tab_header: "LuferOS NES",
                     sections: [
                       {
                         __typename: "GenAIUnifiedResponseSection",
@@ -843,10 +688,7 @@ export default {
         ],
       };
 
-      const msgId =
-        typeof (sock as any).generateMessageTag === "function"
-          ? await (sock as any).generateMessageTag()
-          : randomUUID();
+      const msgId = randomUUID();
 
       await sock.relayMessage(
         from,
@@ -885,7 +727,7 @@ export default {
     } catch (e: any) {
       await react("❌").catch(() => undefined);
       await reply(
-        `❌ ${fytBold("Error en Emulador NES:")} ${e?.message || String(e)}`,
+        `❌ ${fytBold("Emulador LuferOS:")} ${e?.message || String(e)}`,
       ).catch(() => undefined);
     }
   },
