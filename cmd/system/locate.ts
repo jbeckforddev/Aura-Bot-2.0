@@ -12,7 +12,7 @@ interface CommandLocationInfo {
 }
 
 export default {
-  name: ["locate", "ubicacion", "findcmd", "cmdpath"],
+  name: ["locate", "findcmd", "cmdpath"],
   category: "system",
   description: "Enumera todos los comandos disponibles del bot y muestra su ruta exacta de archivo.",
   groupOnly: false,
