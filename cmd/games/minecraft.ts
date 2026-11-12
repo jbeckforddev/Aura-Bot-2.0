@@ -1387,7 +1387,7 @@ requestAnimationFrame(loop);
 
 export default {
   name: ["mc", "minecraft", "mc1"],
-  category: "group",
+  category: "games",
   description: "Juega Minecraft 1.0 HD (32x32) a pantalla completa real con Auto-Jump, Supervivencia/Creativo, Mobs y Estructuras.",
   groupOnly: false,
 
