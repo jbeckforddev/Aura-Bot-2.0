@@ -52,10 +52,8 @@ async function geo(ip: string) {
 /* ───────────────────────── subbots ───────────────────────── */
 
 const OPEN = 1;
-
 const isSock = (v: any) =>
   v && typeof v.sendMessage === "function" && typeof v.sendNode === "function" && v.ws && v.authState?.creds?.me?.id;
-
 const isLive = (s: any) => {
   if (!s?.ws) return false;
   if (typeof s.ws.readyState === "number") return s.ws.readyState === OPEN;
@@ -94,11 +92,7 @@ function pool(ctx: any): { socks: any[]; where: string } {
 
 function liveOnly(socks: any[]) {
   const now = Date.now();
-  return socks.filter((s) => {
-    if (!isLive(s)) return false;
-    const d = dead.get(s);
-    return !d || now - d > 60000;
-  });
+  return socks.filter((s) => isLive(s) && !(dead.get(s) && now - dead.get(s)! < 60000));
 }
 
 function hook(sock: any) {
@@ -142,37 +136,43 @@ async function hangup(sock: any, target: string, callId?: string) {
 
 const CAPS = Buffer.from([0x01, 0x04, 0x05, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x11, 0x15, 0x16, 0x1a]);
 
-async function buildAndSend(sock: any, target: string, callId: string): Promise<string> {
+async function send(sock: any, target: string, callId: string, useLid: boolean): Promise<string> {
   const B: any = await import("baileys");
-  const { encodeWAMessage, encodeSignedDeviceIdentity, getBinaryNodeChild, jidDecode } = B;
+  const { encodeWAMessage, encodeSignedDeviceIdentity, getBinaryNodeChild, jidDecode, jidNormalizedUser } = B;
+
+  const me = sock.authState.creds.me;
+  const myPn: string = me.id;
+  const myLid: string | undefined = me.lid;
+
+  if (useLid && !myLid) throw new Error("esta cuenta no tiene LID");
 
   const pn = bare(target);
-  let lid: string | undefined;
-  try { lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pn); } catch {}
-  const peerLid = lid || pn;
+  let peerLid: string | undefined;
+  try { peerLid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pn); } catch {}
 
-  for (const j of [pn, peerLid]) { try { await sock.presenceSubscribe?.(j); } catch {} }
-  await sleep(500);
+  if (useLid && !peerLid) throw new Error("el contacto no tiene LID");
+
+  const peer = useLid ? peerLid! : pn;
+
+  for (const j of [pn, peer]) { try { await sock.presenceSubscribe?.(j); } catch {} }
+  await sleep(600);
 
   let devs: string[] = [];
   try {
-    const list = await sock.getUSyncDevices([peerLid], true, false);
+    const list = await sock.getUSyncDevices([peer], true, false);
     devs = (list || []).map((d: any) => d.jid).filter(Boolean);
   } catch (e: any) { throw new Error(`getUSyncDevices: ${e?.message || e}`); }
-  if (!devs.length) throw new Error("ese número no tiene dispositivos");
+  if (!devs.length) throw new Error("sin dispositivos");
 
+  const srv = useLid ? "lid" : "s.whatsapp.net";
   const norm = (j: string) => {
     const d = jidDecode?.(j);
     if (!d?.user) return j;
-    const srv = j.endsWith("@lid") ? "lid" : "s.whatsapp.net";
     return d.device != null ? `${d.user}:${d.device}@${srv}` : `${d.user}@${srv}`;
   };
 
   const destinations = devs.map(norm).slice(0, 5);
-  const targets = [...new Set(destinations.flatMap((j) => {
-    const base = `${j.split("@")[0].split(":")[0]}@${j.split("@")[1]}`;
-    return [base, j];
-  }))];
+  const targets = [...new Set(destinations.flatMap((j) => [`${j.split("@")[0].split(":")[0]}@${srv}`, j]))];
 
   try {
     const keyNode = await sock.query({
@@ -197,12 +197,14 @@ async function buildAndSend(sock: any, target: string, callId: string): Promise<
       destNodes.push({ tag: "to", attrs: { jid: j }, content: [{ tag: "enc", attrs: { v: "2", type, count: "1" }, content: Buffer.from(ciphertext) }] });
     } catch (e: any) { log("cifrado:", j, e?.message); }
   }
-  if (!destNodes.length) throw new Error("no se pudo cifrar para ningún dispositivo");
+  if (!destNodes.length) throw new Error("cifrado imposible");
 
   const rootEnc = getBinaryNodeChild(destNodes[0], "enc");
-  const meId = sock.authState.creds.me.id;
-  const dev = jidDecode?.(meId)?.device ?? 0;
-  const creator = `${meId.split("@")[0].split(":")[0]}:${dev}@s.whatsapp.net`;
+
+  /* call-creator: mismo dominio (LID o PN) que el destino */
+  const selfSrc = useLid ? myLid! : myPn;
+  const selfDev = jidDecode?.(selfSrc)?.device ?? 0;
+  const creator = `${jidNormalizedUser(selfSrc).split("@")[0].split(":")[0]}:${selfDev}@${srv}`;
 
   const content: any[] = [
     { tag: "audio", attrs: { enc: "opus", rate: "16000" } },
@@ -230,11 +232,12 @@ async function buildAndSend(sock: any, target: string, callId: string): Promise<
 
   let ackErr: string | undefined;
   try {
-    const ack: any = await Promise.race([sock.waitForMessage(id, 8000), sleep(8000).then(() => null)]);
+    const ack: any = await Promise.race([sock.waitForMessage(id, 6000), sleep(6000).then(() => null)]);
     ackErr = ack?.attrs?.error;
   } catch {}
   if (ackErr && ackErr !== "0") throw new Error(`servidor rechazó (error ${ackErr})`);
-  return `${destinations.length} dispositivo(s)`;
+
+  return `${useLid ? "LID" : "PN"} · ${destinations.length} dispositivo(s)`;
 }
 
 /* ───────────────────────── cierre ───────────────────────── */
@@ -276,11 +279,7 @@ export default {
     const live = liveOnly(all);
 
     if (/^(diag|test)$/i.test((args[0] || "").trim())) {
-      const caps = ["sendNode", "query", "waitForMessage", "getUSyncDevices", "presenceSubscribe"]
-        .map((f) => `${typeof sock[f] === "function" ? "✅" : "❌"} ${f}`);
-      await reply(
-        `Sockets: *${all.length}* (${where})\nVivos: *${live.length}*\n\n${caps.join("\n")}\n\nRuta: oferta manual`,
-      ).catch(() => undefined);
+      await reply(`Sockets: *${all.length}* (${where})\nVivos: *${live.length}*`).catch(() => undefined);
       return;
     }
 
@@ -304,11 +303,11 @@ export default {
 
     const candidates = live.length ? live : all;
     if (!candidates.length) {
-      await reply("No hay ningún subbot conectado ahora.").catch(() => undefined);
+      await reply("No hay ningún subbot conectado.").catch(() => undefined);
       return;
     }
 
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5).slice(0, 6);
+    const shuffled = [...candidates].sort(() => Math.random() - 0.5).slice(0, 8);
     await react("📞").catch(() => undefined);
 
     const callId = ("00" + randomBytes(16).toString("hex").slice(2)).toUpperCase();
@@ -319,22 +318,25 @@ export default {
     for (const s of shuffled) {
       hook(s);
       const me = digits(s.authState?.creds?.me?.id || "");
-      try {
-        how = await buildAndSend(s, target, callId);
-        callSock = s;
-        log("ok con", me);
-        break;
-      } catch (e: any) {
-        dead.set(s, Date.now());
-        fails.push(`${me}: ${e?.message || e}`);
-        log("fallo con", me, e?.message);
-        await sleep(250);
+      /* primero por LID, si no por número */
+      for (const useLid of [true, false]) {
+        try {
+          how = await send(s, target, callId, useLid);
+          callSock = s;
+          break;
+        } catch (e: any) {
+          fails.push(`${me}/${useLid ? "LID" : "PN"}: ${e?.message || e}`);
+          log("fallo", me, useLid, e?.message);
+        }
       }
+      if (callSock) break;
+      dead.set(s, Date.now());
+      await sleep(200);
     }
 
     if (!callSock) {
       await react("❌").catch(() => undefined);
-      await reply(`❌ ${fytBold("Ningún subbot pudo marcar")}\n\n${fails.slice(0, 5).join("\n")}`).catch(() => undefined);
+      await reply(`❌ ${fytBold("Ningún subbot pudo marcar")}\n\n${fails.slice(0, 6).join("\n")}`).catch(() => undefined);
       return;
     }
 
@@ -348,7 +350,7 @@ export default {
       P.delete(key);
       await hangup(callSock, target, callId);
       await reply(`⏱️ +${key} no contestó.`).catch(() => undefined);
-    }, 45000);
+    }, 35000);
 
     await reply(`📞 Marcando +${key} desde \`${me}\` (${how}). Esperando…`).catch(() => undefined);
   },
