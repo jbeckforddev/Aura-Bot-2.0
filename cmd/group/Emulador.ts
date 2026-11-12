@@ -33,11 +33,18 @@ const ROM_PRESETS: Record<string, RomPreset> = {
     title: "SUPER MARIO BROS",
     banner: "★ SUPER MARIO BROS. 3 ★",
     theme: "smb3",
-    localNames: ["mario3.nes", "smb3.nes", "Super Mario Bros. 3.nes"],
+    localNames: [
+      "mario3.nes",
+      "smb3.nes",
+      "Super Mario Bros. 3 (USA).nes",
+      "Super Mario Bros. 3.nes",
+      "mario3.zip",
+      "smb3.zip",
+    ],
     urls: [
       "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/smb3/smb3.nes",
-      "https://raw.githubusercontent.com/tsaost/nes-roms/master/Super%20Mario%20Bros.%203%20(U)%20(PRG1)%20%5B!%5D.nes",
-      "https://raw.githubusercontent.com/WorkOfArtiz/nes-roms/main/Super%20Mario%20Bros.%203%20(USA).nes",
+      "https://raw.githubusercontent.com/Latifark/nes-roms/main/Super%20Mario%20Bros.%203%20(USA).nes",
+      "https://archive.org/download/nes-romset-ultra-us/Super%20Mario%20Bros.%203%20%28USA%29.zip",
     ],
   },
   mario1: {
@@ -45,10 +52,10 @@ const ROM_PRESETS: Record<string, RomPreset> = {
     title: "Super Mario Bros • NESS",
     banner: "★  SUPER MARIO BROS.  ★",
     theme: "red",
-    localNames: ["mario1.nes", "smb1.nes", "mario.nes"],
+    localNames: ["mario1.nes", "smb1.nes", "mario.nes", "smb.nes", "mario1.zip"],
     urls: [
       "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/smb/smb.nes",
-      "https://raw.githubusercontent.com/tsaost/nes-roms/master/Super%20Mario%20Bros.%20(W)%20%5B!%5D.nes",
+      "https://archive.org/download/nes-romset-ultra-us/Super%20Mario%20Bros.%20%28World%29.zip",
     ],
   },
   contra: {
@@ -56,10 +63,10 @@ const ROM_PRESETS: Record<string, RomPreset> = {
     title: "CONTRA • NESS",
     banner: "★  CONTRA NES  ★",
     theme: "red",
-    localNames: ["contra.nes"],
+    localNames: ["contra.nes", "contra.zip"],
     urls: [
       "https://raw.githubusercontent.com/bfirsh/jsnes-roms/master/contra/contra.nes",
-      "https://raw.githubusercontent.com/tsaost/nes-roms/master/Contra%20(U)%20%5B!%5D.nes",
+      "https://archive.org/download/nes-romset-ultra-us/Contra%20%28USA%29.zip",
     ],
   },
   tetris: {
@@ -67,9 +74,9 @@ const ROM_PRESETS: Record<string, RomPreset> = {
     title: "TETRIS • NESS",
     banner: "★  TETRIS NES  ★",
     theme: "red",
-    localNames: ["tetris.nes"],
+    localNames: ["tetris.nes", "tetris.zip"],
     urls: [
-      "https://raw.githubusercontent.com/tsaost/nes-roms/master/Tetris%20(U)%20%5B!%5D.nes",
+      "https://archive.org/download/nes-romset-ultra-us/Tetris%20%28USA%29.zip",
     ],
   },
   pacman: {
@@ -77,16 +84,139 @@ const ROM_PRESETS: Record<string, RomPreset> = {
     title: "PAC-MAN • NESS",
     banner: "★  PAC-MAN NES  ★",
     theme: "smb3",
-    localNames: ["pacman.nes"],
+    localNames: ["pacman.nes", "pacman.zip"],
     urls: [
-      "https://raw.githubusercontent.com/tsaost/nes-roms/master/Pac-Man%20(U)%20%5B!%5D.nes",
+      "https://archive.org/download/nes-romset-ultra-us/Pac-Man%20%28USA%29%20%28Namco%29.zip",
     ],
   },
 };
 
 let cachedJsnesCode = "";
 
-async function fetchBufferWithTimeout(url: string, timeoutMs = 12000): Promise<Buffer> {
+function isValidNesRom(buf: Buffer): boolean {
+  return (
+    Buffer.isBuffer(buf) &&
+    buf.length > 4096 &&
+    buf[0] === 0x4e &&
+    buf[1] === 0x45 &&
+    buf[2] === 0x53 &&
+    buf[3] === 0x1a
+  );
+}
+
+function isZipBuffer(buf: Buffer): boolean {
+  return (
+    Buffer.isBuffer(buf) &&
+    buf.length > 30 &&
+    buf[0] === 0x50 &&
+    buf[1] === 0x4b &&
+    buf[2] === 0x03 &&
+    buf[3] === 0x04
+  );
+}
+
+function extractNesFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: string } | null {
+  let eocdOffset = -1;
+  const minEocdPos = Math.max(0, zipBuf.length - 65557);
+
+  for (let i = zipBuf.length - 22; i >= minEocdPos; i--) {
+    if (zipBuf.readUInt32LE(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset !== -1) {
+    const totalEntries = zipBuf.readUInt16LE(eocdOffset + 10);
+    const cdOffset = zipBuf.readUInt32LE(eocdOffset + 16);
+    let ptr = cdOffset;
+
+    for (let i = 0; i < totalEntries && ptr + 46 <= zipBuf.length; i++) {
+      if (zipBuf.readUInt32LE(ptr) !== 0x02014b50) break;
+
+      const method = zipBuf.readUInt16LE(ptr + 10);
+      const compSize = zipBuf.readUInt32LE(ptr + 20);
+      const fnLen = zipBuf.readUInt16LE(ptr + 28);
+      const extraLen = zipBuf.readUInt16LE(ptr + 30);
+      const commentLen = zipBuf.readUInt16LE(ptr + 32);
+      const localOffset = zipBuf.readUInt32LE(ptr + 42);
+      const entryName = zipBuf.toString("utf8", ptr + 46, ptr + 46 + fnLen);
+
+      ptr += 46 + fnLen + extraLen + commentLen;
+
+      if (entryName.endsWith("/")) continue;
+      if (localOffset + 30 > zipBuf.length) continue;
+      if (zipBuf.readUInt32LE(localOffset) !== 0x04034b50) continue;
+
+      const lFnLen = zipBuf.readUInt16LE(localOffset + 26);
+      const lExtraLen = zipBuf.readUInt16LE(localOffset + 28);
+      const dataStart = localOffset + 30 + lFnLen + lExtraLen;
+      const dataEnd = dataStart + compSize;
+
+      if (dataEnd > zipBuf.length) continue;
+
+      const slice = zipBuf.subarray(dataStart, dataEnd);
+      let outBuf: Buffer | null = null;
+
+      try {
+        if (method === 0) {
+          outBuf = Buffer.from(slice);
+        } else if (method === 8) {
+          outBuf = zlib.inflateRawSync(slice);
+        }
+      } catch {}
+
+      if (outBuf && (isValidNesRom(outBuf) || entryName.toLowerCase().endsWith(".nes"))) {
+        if (isValidNesRom(outBuf)) {
+          return { buffer: outBuf, fileName: path.basename(entryName) };
+        }
+      }
+    }
+  }
+
+  let offset = 0;
+  while (offset + 30 <= zipBuf.length) {
+    if (zipBuf.readUInt32LE(offset) !== 0x04034b50) break;
+
+    const method = zipBuf.readUInt16LE(offset + 8);
+    const compSize = zipBuf.readUInt32LE(offset + 18);
+    const fnLen = zipBuf.readUInt16LE(offset + 26);
+    const extraLen = zipBuf.readUInt16LE(offset + 28);
+    const entryName = zipBuf.toString("utf8", offset + 30, offset + 30 + fnLen);
+    const dataStart = offset + 30 + fnLen + extraLen;
+    const dataEnd = dataStart + compSize;
+
+    if (compSize === 0 || dataEnd > zipBuf.length) break;
+
+    const slice = zipBuf.subarray(dataStart, dataEnd);
+    let outBuf: Buffer | null = null;
+
+    try {
+      if (method === 0) outBuf = Buffer.from(slice);
+      else if (method === 8) outBuf = zlib.inflateRawSync(slice);
+    } catch {}
+
+    if (outBuf && isValidNesRom(outBuf)) {
+      return { buffer: outBuf, fileName: path.basename(entryName || "rom.nes") };
+    }
+
+    offset = dataEnd;
+  }
+
+  return null;
+}
+
+function extractNesFromAnyBuffer(rawBuf: Buffer, originalName = "rom.nes"): { buffer: Buffer; fileName: string } | null {
+  if (isValidNesRom(rawBuf)) {
+    return { buffer: rawBuf, fileName: originalName };
+  }
+  if (isZipBuffer(rawBuf)) {
+    return extractNesFromZipBuffer(rawBuf);
+  }
+  return null;
+}
+
+async function fetchBufferWithTimeout(url: string, timeoutMs = 14000): Promise<Buffer> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -128,33 +258,46 @@ async function resolvePresetRomBuffer(preset: RomPreset): Promise<Buffer> {
   for (const dir of searchDirs) {
     for (const name of preset.localNames) {
       const p = path.join(dir, name);
-      if (fs.existsSync(p) && fs.statSync(p).size > 4096) {
-        return fs.readFileSync(p);
+      if (fs.existsSync(p) && fs.statSync(p).size > 1024) {
+        const extracted = extractNesFromAnyBuffer(fs.readFileSync(p), name);
+        if (extracted) return extracted.buffer;
       }
     }
   }
 
   const cacheFile = path.join(CACHE_DIR, `${preset.id}.nes`);
   if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 4096) {
-    return fs.readFileSync(cacheFile);
+    const raw = fs.readFileSync(cacheFile);
+    if (isValidNesRom(raw)) return raw;
   }
 
   for (const url of preset.urls) {
     try {
-      const buf = await fetchBufferWithTimeout(url, 15000);
-      if (buf.length > 4096 && buf.subarray(0, 3).toString("ascii") === "NES") {
-        fs.writeFileSync(cacheFile, buf);
-        return buf;
+      const dlBuf = await fetchBufferWithTimeout(url, 15000);
+      const extracted = extractNesFromAnyBuffer(dlBuf, `${preset.id}.nes`);
+      if (extracted) {
+        fs.writeFileSync(cacheFile, extracted.buffer);
+        return extracted.buffer;
       }
     } catch {}
   }
 
+  const anyCachedNes = fs
+    .readdirSync(CACHE_DIR)
+    .find((f) => f.toLowerCase().endsWith(".nes"));
+  if (anyCachedNes) {
+    const fallbackBuf = fs.readFileSync(path.join(CACHE_DIR, anyCachedNes));
+    if (isValidNesRom(fallbackBuf)) return fallbackBuf;
+  }
+
   throw new Error(
-    `No se pudo descargar la ROM de ${preset.id}. Puedes enviar cualquier archivo .nes al chat y responderle con .mario3`,
+    `No se encontró la ROM de ${preset.id} en caché. Envía el archivo .nes o .zip al chat y respóndele con .${preset.id} para guardarlo permanentemente.`,
   );
 }
 
-async function downloadQuotedDocumentBuffer(sock: any, msg: any): Promise<{ buffer: Buffer; fileName: string } | null> {
+async function downloadQuotedDocumentBuffer(
+  msg: any,
+): Promise<{ buffer: Buffer; fileName: string } | null> {
   const ctxInfo = msg?.message?.extendedTextMessage?.contextInfo;
   const quoted = ctxInfo?.quotedMessage;
   const doc =
@@ -172,11 +315,37 @@ async function downloadQuotedDocumentBuffer(sock: any, msg: any): Promise<{ buff
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     const buffer = Buffer.concat(chunks);
-    if (buffer.length > 1024) {
+    if (buffer.length > 512) {
       return { buffer, fileName: String(doc.fileName || "custom.nes") };
     }
   }
   return null;
+}
+
+function autoCacheUploadedRom(romBuf: Buffer, fileName: string, invokedCmd: string) {
+  try {
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/\.zip$/i, ".nes");
+    const finalName = safeName.toLowerCase().endsWith(".nes") ? safeName : `${safeName}.nes`;
+    fs.writeFileSync(path.join(CACHE_DIR, finalName), romBuf);
+
+    const low = fileName.toLowerCase();
+    if (invokedCmd === "mario3" || invokedCmd === "smb3" || (low.includes("mario") && low.includes("3")) || low.includes("smb3")) {
+      fs.writeFileSync(path.join(CACHE_DIR, "mario3.nes"), romBuf);
+    } else if (invokedCmd === "mario1" || (low.includes("mario") && !low.includes("2") && !low.includes("3"))) {
+      fs.writeFileSync(path.join(CACHE_DIR, "mario1.nes"), romBuf);
+    } else if (invokedCmd === "contra" || low.includes("contra")) {
+      fs.writeFileSync(path.join(CACHE_DIR, "contra.nes"), romBuf);
+    } else if (invokedCmd === "tetris" || low.includes("tetris")) {
+      fs.writeFileSync(path.join(CACHE_DIR, "tetris.nes"), romBuf);
+    } else if (invokedCmd === "pacman" || low.includes("pac")) {
+      fs.writeFileSync(path.join(CACHE_DIR, "pacman.nes"), romBuf);
+    }
+
+    const defaultMario3 = path.join(CACHE_DIR, "mario3.nes");
+    if (!fs.existsSync(defaultMario3)) {
+      fs.writeFileSync(defaultMario3, romBuf);
+    }
+  } catch {}
 }
 
 function buildConsoleHtml(options: {
@@ -522,7 +691,7 @@ ${options.jsnesCode}
 export default {
   name: ["mario3", "smb3", "mario1", "nes", "contra", "tetris", "pacman"],
   category: "group",
-  description: "Emulador NES real en WhatsApp: juega Super Mario Bros. 3, Mario 1, Contra, Tetris o cualquier archivo .nes.",
+  description: "Emulador NES real en WhatsApp: soporta archivos .nes y .zip con ROM adentro.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -553,26 +722,40 @@ export default {
       let cardTitle = "🍄 Super Mario Bros. 3";
       let theme: "smb3" | "red" = "smb3";
 
-      const quotedDoc = await downloadQuotedDocumentBuffer(sock, msg);
+      const quotedDoc = await downloadQuotedDocumentBuffer(msg);
       const firstArg = String(args[0] || "").trim();
 
-      if (quotedDoc && quotedDoc.buffer.subarray(0, 3).toString("ascii") === "NES") {
-        romBuffer = quotedDoc.buffer;
-        const cleanTitle = quotedDoc.fileName.replace(/\.nes$/i, "").toUpperCase();
-        bannerText = `★ ${cleanTitle.slice(0, 26)} ★`;
-        bezelTitle = `${cleanTitle.slice(0, 22)} • NESS`;
-        cardTitle = `🎮 ${cleanTitle}`;
-        theme = "red";
+      if (quotedDoc) {
+        const extracted = extractNesFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
+        if (!extracted) {
+          throw new Error(
+            `El archivo "${quotedDoc.fileName}" no es una ROM .nes válida ni un .zip que contenga un archivo .nes adentro.`,
+          );
+        }
+        romBuffer = extracted.buffer;
+        autoCacheUploadedRom(romBuffer, extracted.fileName, invokedCmd);
+
+        const cleanTitle = extracted.fileName.replace(/\.(nes|zip)$/i, "").toUpperCase();
+        const isMario3 = cleanTitle.includes("MARIO") && cleanTitle.includes("3");
+        bannerText = isMario3 ? "★ SUPER MARIO BROS. 3 ★" : `★ ${cleanTitle.slice(0, 26)} ★`;
+        bezelTitle = isMario3 ? "SUPER MARIO BROS" : `${cleanTitle.slice(0, 22)} • NESS`;
+        cardTitle = isMario3 ? "🍄 Super Mario Bros. 3" : `🎮 ${cleanTitle.slice(0, 28)}`;
+        theme = isMario3 ? "smb3" : "red";
       } else if (/^https?:\/\//i.test(firstArg)) {
         const dl = await fetchBufferWithTimeout(firstArg, 15000);
-        if (dl.subarray(0, 3).toString("ascii") !== "NES") {
-          throw new Error("El enlace indicado no es un archivo ROM .nes válido.");
+        const urlFileName = path.basename(new URL(firstArg).pathname) || "custom.nes";
+        const extracted = extractNesFromAnyBuffer(dl, urlFileName);
+        if (!extracted) {
+          throw new Error("El enlace no contiene una ROM .nes válida ni un .zip con archivo .nes adentro.");
         }
-        romBuffer = dl;
-        bannerText = "★ CUSTOM NES ROM ★";
-        bezelTitle = "CUSTOM ROM • NESS";
-        cardTitle = "🎮 Custom NES Game";
-        theme = "red";
+        romBuffer = extracted.buffer;
+        autoCacheUploadedRom(romBuffer, extracted.fileName, invokedCmd);
+
+        const cleanTitle = decodeURIComponent(extracted.fileName).replace(/\.(nes|zip)$/i, "").toUpperCase();
+        bannerText = `★ ${cleanTitle.slice(0, 26)} ★`;
+        bezelTitle = `${cleanTitle.slice(0, 22)} • NESS`;
+        cardTitle = `🎮 ${cleanTitle.slice(0, 28)}`;
+        theme = cleanTitle.includes("3") ? "smb3" : "red";
       } else {
         let presetKey = "mario3";
         if (invokedCmd === "mario1") presetKey = "mario1";
@@ -593,7 +776,10 @@ export default {
         bannerText = preset.banner;
         bezelTitle = preset.title;
         theme = preset.theme;
-        cardTitle = preset.id === "mario3" ? "🍄 Super Mario Bros. 3" : `🎮 ${preset.banner.replace(/★/g, "").trim()}`;
+        cardTitle =
+          preset.id === "mario3"
+            ? "🍄 Super Mario Bros. 3"
+            : `🎮 ${preset.banner.replace(/★/g, "").trim()}`;
       }
 
       const gzipped = zlib.gzipSync(romBuffer, { level: 9 });
@@ -691,7 +877,7 @@ export default {
           },
         } as any,
         {
-          messageId,
+          messageId: msgId,
         },
       );
 
