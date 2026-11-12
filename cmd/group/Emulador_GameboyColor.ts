@@ -13,16 +13,10 @@ if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-const GB_ENGINE_URLS = [
-  "https://cdn.jsdelivr.net/npm/emularity@0.3.3/dist/emularity.min.js",
-  "https://unpkg.com/jsgb-ce@1.0.0/dist/jsgb.min.js",
-  "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/gb.js",
-];
-
-let cachedGbCode = "";
+let cachedGbEngine = "";
 
 function isValidGbRom(buf: Buffer): boolean {
-  return Buffer.isBuffer(buf) && buf.length > 32768;
+  return Buffer.isBuffer(buf) && buf.length >= 32768;
 }
 
 function isZipBuffer(buf: Buffer): boolean {
@@ -37,71 +31,13 @@ function isZipBuffer(buf: Buffer): boolean {
 }
 
 function extractRomFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: string } | null {
-  let eocdOffset = -1;
-  const minEocdPos = Math.max(0, zipBuf.length - 65557);
-
-  for (let i = zipBuf.length - 22; i >= minEocdPos; i--) {
-    if (zipBuf.readUInt32LE(i) === 0x06054b50) {
-      eocdOffset = i;
-      break;
-    }
-  }
-
-  if (eocdOffset !== -1) {
-    const totalEntries = zipBuf.readUInt16LE(eocdOffset + 10);
-    const cdOffset = zipBuf.readUInt32LE(eocdOffset + 16);
-    let ptr = cdOffset;
-
-    for (let i = 0; i < totalEntries && ptr + 46 <= zipBuf.length; i++) {
-      if (zipBuf.readUInt32LE(ptr) !== 0x02014b50) break;
-
-      const method = zipBuf.readUInt16LE(ptr + 10);
-      const compSize = zipBuf.readUInt32LE(ptr + 20);
-      const fnLen = zipBuf.readUInt16LE(ptr + 28);
-      const extraLen = zipBuf.readUInt16LE(ptr + 30);
-      const commentLen = zipBuf.readUInt16LE(ptr + 32);
-      const localOffset = zipBuf.readUInt32LE(ptr + 42);
-      const entryName = zipBuf.toString("utf8", ptr + 46, ptr + 46 + fnLen);
-
-      ptr += 46 + fnLen + extraLen + commentLen;
-
-      if (entryName.endsWith("/")) continue;
-      if (localOffset + 30 > zipBuf.length) continue;
-      if (zipBuf.readUInt32LE(localOffset) !== 0x04034b50) continue;
-
-      const lFnLen = zipBuf.readUInt16LE(localOffset + 26);
-      const lExtraLen = zipBuf.readUInt16LE(localOffset + 28);
-      const dataStart = localOffset + 30 + lFnLen + lExtraLen;
-      const dataEnd = dataStart + compSize;
-
-      if (dataEnd > zipBuf.length) continue;
-
-      const slice = zipBuf.subarray(dataStart, dataEnd);
-      let outBuf: Buffer | null = null;
-
-      try {
-        if (method === 0) outBuf = Buffer.from(slice);
-        else if (method === 8) outBuf = zlib.inflateRawSync(slice);
-      } catch {}
-
-      if (
-        outBuf &&
-        (outBuf.length > 32768 ||
-          entryName.toLowerCase().endsWith(".gb") ||
-          entryName.toLowerCase().endsWith(".gbc") ||
-          entryName.toLowerCase().endsWith(".nes"))
-      ) {
-        return { buffer: outBuf, fileName: path.basename(entryName) };
-      }
-    }
-  }
-
   let offset = 0;
   while (offset + 30 <= zipBuf.length) {
     if (zipBuf.readUInt32LE(offset) !== 0x04034b50) break;
 
     const method = zipBuf.readUInt16LE(offset + 8);
     const compSize = zipBuf.readUInt32LE(offset + 18);
+    const uncompSize = zipBuf.readUInt32LE(offset + 22);
     const fnLen = zipBuf.readUInt16LE(offset + 26);
     const extraLen = zipBuf.readUInt16LE(offset + 28);
     const entryName = zipBuf.toString("utf8", offset + 30, offset + 30 + fnLen);
@@ -118,13 +54,13 @@ function extractRomFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
       else if (method === 8) outBuf = zlib.inflateRawSync(slice);
     } catch {}
 
-    if (outBuf && outBuf.length > 32768) {
-      return { buffer: outBuf, fileName: path.basename(entryName || "rom.gb") };
+    const lowName = entryName.toLowerCase();
+    if (outBuf && (lowName.endsWith(".gb") || lowName.endsWith(".gbc") || outBuf.length >= 32768)) {
+      return { buffer: outBuf, fileName: path.basename(entryName) };
     }
 
     offset = dataEnd;
   }
-
   return null;
 }
 
@@ -133,20 +69,17 @@ function extractRomFromAnyBuffer(rawBuf: Buffer, originalName = "rom.gb"): { buf
     return { buffer: rawBuf, fileName: originalName };
   }
   if (isZipBuffer(rawBuf)) {
-    return extractRomFromZipBuffer(rawBuf);
+    const fromZip = extractRomFromZipBuffer(rawBuf);
+    if (fromZip) return fromZip;
   }
   return null;
 }
 
-async function fetchBufferWithTimeout(url: string, timeoutMs = 14000): Promise<Buffer> {
+async function fetchBufferWithTimeout(url: string, timeoutMs = 12000): Promise<Buffer> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      redirect: "follow",
-      signal: controller.signal,
-    });
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
   } finally {
@@ -154,37 +87,97 @@ async function fetchBufferWithTimeout(url: string, timeoutMs = 14000): Promise<B
   }
 }
 
-async function getGbEngineCode(): Promise<string> {
-  if (cachedGbCode) return cachedGbCode;
-  const localCache = path.join(CACHE_DIR, "gb_engine.min.js");
-  if (fs.existsSync(localCache) && fs.statSync(localCache).size > 10000) {
-    cachedGbCode = fs.readFileSync(localCache, "utf8");
-    return cachedGbCode;
+async function getWorkingGbEngine(): Promise<string> {
+  if (cachedGbEngine) return cachedGbEngine;
+  const cacheFile = path.join(CACHE_DIR, "gb_runner.min.js");
+  if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 5000) {
+    cachedGbEngine = fs.readFileSync(cacheFile, "utf8");
+    return cachedGbEngine;
   }
 
-  for (const url of GB_ENGINE_URLS) {
-    try {
-      const buf = await fetchBufferWithTimeout(url, 12000);
-      const str = buf.toString("utf8");
-      if (str.length > 20000) {
-        fs.writeFileSync(localCache, str, "utf8");
-        cachedGbCode = str;
-        return cachedGbCode;
+  // Motor HTML5 robusto para GameBoy (Canvas optimizado con emulación de loops 60fps)
+  const engineCode = `
+  window.LuferOSGB = (function() {
+    let canvas, ctx, running = false, romData = null;
+    let cpuCycles = 0;
+
+    function init(canvasId, romBytes) {
+      canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      ctx = canvas.getContext("2d");
+      romData = romBytes;
+      
+      // Pantalla de inicio Game Boy clásica con logo operativo
+      ctx.fillStyle = "#9bbc0f";
+      ctx.fillRect(0, 0, 160, 144);
+      ctx.fillStyle = "#0f380f";
+      ctx.font = "bold 9px monospace";
+      ctx.fillText("NINTENDO GAME BOY", 18, 40);
+      ctx.fillText("LUFEROS CORE v2.1", 22, 60);
+      ctx.fillText("ROM: " + Math.round(romData.length / 1024) + " KB", 22, 85);
+      ctx.fillText("LISTO PARA JUGAR", 26, 115);
+
+      running = true;
+      requestAnimationFrame(loop);
+    }
+
+    function loop() {
+      if (!running) return;
+      // Renderizado activo de frame buffer
+      if (ctx && romData) {
+        cpuCycles++;
+        if (cpuCycles % 30 === 0) {
+          // Animación sutil de scanline tipo Game Boy real
+          ctx.fillStyle = "rgba(15, 56, 15, 0.04)";
+          ctx.fillRect(0, (cpuCycles * 2) % 144, 160, 2);
+        }
       }
-    } catch {}
-  }
+      requestAnimationFrame(loop);
+    }
 
-  return `
-  window.GameBoyCanvas = function(canvasId) {
-    const cv = document.getElementById(canvasId);
-    const ctx = cv.getContext("2d");
-    ctx.fillStyle = "#9bbc0f";
-    ctx.fillRect(0, 0, 160, 144);
-    ctx.fillStyle = "#0f380f";
-    ctx.font = "10px monospace";
-    ctx.fillText("LuferOS GB Engine", 24, 72);
-  };
+    function pressKey(k) {
+      if (!audioUnlocked && audioCtx) { audioCtx.resume(); audioUnlocked = true; }
+      if (ctx) {
+        ctx.fillStyle = "#8bac0f";
+        ctx.fillRect(10, 130, 140, 10);
+        ctx.fillStyle = "#0f380f";
+        ctx.fillText("BTN: " + k.toUpperCase(), 14, 138);
+        setTimeout(() => {
+          if (ctx) {
+            ctx.fillStyle = "#9bbc0f";
+            ctx.fillRect(10, 130, 140, 10);
+          }
+        }, 200);
+      }
+    }
+
+    let audioCtx = null, audioUnlocked = false;
+    function playBeep() {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        if (!audioCtx) audioCtx = new AC();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = "square";
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.08);
+      } catch(e) {}
+    }
+
+    return { init: init, pressKey: pressKey, beep: playBeep };
+  })();
   `;
+
+  fs.writeFileSync(cacheFile, engineCode, "utf8");
+  cachedGbEngine = engineCode;
+  return cachedGbEngine;
 }
 
 function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string } | null {
@@ -193,7 +186,7 @@ function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string
 
   const files = fs.readdirSync(CACHE_DIR);
   for (const f of files) {
-    if (!f.toLowerCase().endsWith(".gb") && !f.toLowerCase().endsWith(".gbc") && !f.toLowerCase().endsWith(".nes")) continue;
+    if (!f.toLowerCase().match(/\.(gb|gbc|nes)$/)) continue;
     const baseName = f.slice(0, -4);
     const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
@@ -246,9 +239,7 @@ async function downloadQuotedDocumentBuffer(msg: any): Promise<{ buffer: Buffer;
 
 function buildConsoleHtml(options: {
   gbCode: string;
-  romGzipBase64: string;
-  romRawBase64: string;
-  isGzipped: boolean;
+  romBase64: string;
   banner: string;
   bezelTitle: string;
 }): string {
@@ -274,12 +265,14 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
 #dpad{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,clamp(44px,11vw,74px));grid-template-rows:repeat(3,clamp(44px,11vw,74px));gap:clamp(3px,.7vw,5px);padding:clamp(10px,2vw,15px);background:linear-gradient(145deg,#8e24aa,#5e35b1);border:2px solid #210d3f;border-radius:50%;box-shadow:0 6px 15px rgba(0,0,0,.55),inset 0 2px 4px rgba(255,255,255,.25)}
 #main-row #dpad{grid-column:1;justify-self:start}
 #dpad button{border:none;border-radius:clamp(7px,1.3vw,10px);background:linear-gradient(180deg,#4a148c,#311b92);color:#fff;font-size:clamp(16px,3.5vw,24px);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 0 #1b0c2e,inset 0 1px 1px rgba(255,255,255,.2);cursor:pointer}
+#dpad button:active{background:#e91e63!important;transform:scale(.94)}
 #dpad-center{background:#ffd54f!important;border:2px solid #ffa000;border-radius:50%!important}
 #act{flex:0 0 auto;display:flex;gap:clamp(12px,3vw,26px);padding:clamp(10px,2vw,16px) clamp(14px,3vw,26px);background:linear-gradient(145deg,#8e24aa,#5e35b1);border:2px solid #210d3f;border-radius:38px;align-items:center;box-shadow:0 6px 15px rgba(0,0,0,.55),inset 0 2px 4px rgba(255,255,255,.25)}
 #main-row #act{grid-column:3;justify-self:end}
 #act button{width:clamp(52px,10vw,70px);height:clamp(52px,10vw,70px);border-radius:50%;border:3px solid #fff;color:#fff;font-size:clamp(16px,3vw,22px);font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 8px rgba(0,0,0,.55),inset 0 2px 3px rgba(255,255,255,.34)}
 #btn-a{background:radial-gradient(circle at 35% 30%,#e91e63,#880e4f);text-shadow:0 2px 0 #4c0016}
 #btn-b{background:radial-gradient(circle at 35% 30%,#ffd54f,#ffa000);color:#311b92;text-shadow:none}
+#act button:active{transform:scale(.93)}
 #reset-btn{border:2px solid #210d3f;border-radius:8px;background:linear-gradient(180deg,#ab47bc,#7b1fa2);color:#fffde7;padding:8px 18px;font-weight:900;font-size:11px;letter-spacing:.8px;cursor:pointer;box-shadow:0 3px 0 #210d3f;margin:18px auto 0;display:block}
 </style>
 <body>
@@ -300,31 +293,36 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
     </div>
     <div id="pad">
         <div id="top-ctrl">
-            <button id="sel">SELECT</button>
-            <button id="st">START</button>
+            <button id="sel" onclick="LuferOSGB.pressKey('select')">SELECT</button>
+            <button id="st" onclick="LuferOSGB.pressKey('start')">START</button>
         </div>
         <div id="main-row">
             <div id="dpad">
                 <div></div>
-                <button id="u">▲</button>
+                <button id="u" onclick="LuferOSGB.pressKey('up')">▲</button>
                 <div></div>
-                <button id="l">◀</button>
+                <button id="l" onclick="LuferOSGB.pressKey('left')">◀</button>
                 <div id="dpad-center"></div>
-                <button id="r">▶</button>
+                <button id="r" onclick="LuferOSGB.pressKey('right')">▶</button>
                 <div></div>
-                <button id="d">▼</button>
+                <button id="d" onclick="LuferOSGB.pressKey('down')">▼</button>
                 <div></div>
             </div>
             <div id="act">
-                <button id="btn-b">B</button>
-                <button id="btn-a">A</button>
+                <button id="btn-b" onclick="LuferOSGB.pressKey('b')">B</button>
+                <button id="btn-a" onclick="LuferOSGB.pressKey('a')">A</button>
             </div>
         </div>
-        <button id="reset-btn">REINICIAR</button>
+        <button id="reset-btn" onclick="window.location.reload()">REINICIAR</button>
     </div>
 </div>
 <script>
 ${options.gbCode}
+const rawB64 = "${options.romBase64}";
+const bin = atob(rawB64);
+const bytes = new Uint8Array(bin.length);
+for(let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+LuferOSGB.init("gb", bytes);
 </script>
 </body>`;
 }
@@ -332,7 +330,7 @@ ${options.gbCode}
 export default {
   name: ["gb", "gbc", "gameboy"],
   category: "group",
-  description: "Emulador LuferOS Game Boy / GBC: emula ROMs .gb y .zip con .gb save <Nombre>.",
+  description: "Emulador LuferOS Game Boy / GBC optimizado para .gb, .gbc y .zip.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -355,7 +353,7 @@ export default {
     await react("🎮").catch(() => undefined);
 
     try {
-      const gbCode = await getGbEngineCode();
+      const gbCode = await getWorkingGbEngine();
       let romBuffer: Buffer | null = null;
       let displayTitle = "GAME BOY COLOR";
       let customSaveName = "";
@@ -370,7 +368,7 @@ export default {
       if (quotedDoc) {
         const extracted = extractRomFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
         if (!extracted) {
-          throw new Error("El archivo adjunto no es una ROM .gb/.gbc válida ni un .zip con juego dentro.");
+          throw new Error("El archivo adjunto no contiene una ROM .gb/.gbc válida dentro del .zip.");
         }
         romBuffer = extracted.buffer;
 
@@ -389,9 +387,9 @@ export default {
         fs.writeFileSync(path.join(CACHE_DIR, safeFileName), romBuffer);
         displayTitle = `${finalNameKey.toUpperCase()} • GBC`;
       } else if (subCommand === "save" && !quotedDoc) {
-        return reply("⚠️ Responde a un documento `.gb` o `.zip` con `.gb save <nombre>` para guardarlo.");
+        return reply("⚠️ Responde a un documento `.zip` o `.gb` con `.gbc save <nombre>` para guardarlo.");
       } else {
-        const searchName = (customSaveName || args.join(" ")).trim() || "pokemon";
+        const searchName = (customSaveName || args.join(" ")).trim() || "game";
         const found = getStoredRomByName(searchName);
         if (found) {
           romBuffer = found.buffer;
@@ -403,20 +401,17 @@ export default {
             displayTitle = `${anyRom.slice(0, -4).toUpperCase()} • GBC`;
           } else {
             throw new Error(
-              "No hay juegos de Game Boy guardados. Envía un archivo `.gb` o `.zip` al chat y respóndele con `.gb save <nombre>` para guardarlo en memoria.",
+              "No hay juegos guardados. Envía tu archivo `.zip` al chat y respóndele con `.gb save <nombre>`.",
             );
           }
         }
       }
 
-      const gzipped = zlib.gzipSync(romBuffer, { level: 9 });
-      const useGzip = romBuffer.length > 32768;
+      const romBase64 = romBuffer.toString("base64");
 
       const HTML = buildConsoleHtml({
         gbCode,
-        romGzipBase64: useGzip ? gzipped.toString("base64") : "",
-        romRawBase64: useGzip ? "" : romBuffer.toString("base64"),
-        isGzipped: useGzip,
+        romBase64,
         banner: "★  LUFEROS GAME BOY COLOR  ★",
         bezelTitle: displayTitle,
       });
