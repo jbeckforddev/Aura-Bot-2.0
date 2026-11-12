@@ -4,7 +4,7 @@ export default {
   name: ["self", "setself"],
   description: t("socketDescriptionSelf"),
   category: "socket",
-  groupOnly: true,
+  groupOnly: false,
   async run(ctx: CommandContext) {
     if (!ctx.isMod && !ctx.isBotUser) {
       return ctx.reply(t("socketSelfPermission"));
