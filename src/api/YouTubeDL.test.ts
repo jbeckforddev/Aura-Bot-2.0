@@ -288,10 +288,22 @@ export default async function YoutubeAudioDownload(
             Number.isFinite(parsedSize) && parsedSize > 0
                 ? parsedSize
                 : undefined;
-        const size = apiSize ?? await getAudioSizeFromUrl(audioUrl);
+        
+        let size = apiSize;
+        
         if (size === undefined) {
-            throw new Error("Unable to determine audio file size");
+            try {
+                size = await getAudioSizeFromUrl(audioUrl);
+            } catch (error) {
+                console.warn(
+                    "[YouTubeDL] No se pudo determinar el tamaño:",
+                    error
+                );
+            }
         }
+        // No cancelar la descarga si el tamaño es desconocido
+        size ??= 0;
+
 
         const audioTitle = audio.data?.title;
         const audioTitleFallback =
