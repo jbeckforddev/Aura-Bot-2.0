@@ -8,11 +8,25 @@ import { fytBold } from "../../core/socketText.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(process.cwd(), "data", "sega_cache");
-const ENGINE_CACHE_FILE = path.join(CACHE_DIR, "luferos_genesis_v50.js.gz");
+const ENGINE_CACHE_FILE = path.join(CACHE_DIR, "luferos_genesis_v52.js.gz");
 const DEMO_ROM_FILE = path.join(CACHE_DIR, "SegaDemo.bin");
+const MAX_INLINE_COMBINED_B64 = 780000;
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+for (const oldFile of [
+  "luferos_genesis_v50.js.gz",
+  "luferos_genesis_v51.js.gz",
+  "Genesis.min.js",
+]) {
+  const oldPath = path.join(CACHE_DIR, oldFile);
+  if (fs.existsSync(oldPath)) {
+    try {
+      fs.unlinkSync(oldPath);
+    } catch {}
+  }
 }
 
 const GENESIS_ENGINE_URLS = [
@@ -26,6 +40,83 @@ const GENESIS_DEMO_URLS = [
 ];
 
 let cachedEngineGzipB64 = "";
+
+function patchGenesisEngineCode(rawCode: string): string {
+  let code = rawCode;
+  const marker = "Error. This emulator can not be used from a different origin.";
+  let searchPos = 0;
+
+  while (true) {
+    const idx = code.indexOf(marker, searchPos);
+    if (idx === -1) break;
+
+    const lookBehind = code.slice(Math.max(0, idx - 120), idx);
+    const elseMatch = /}\s*else\s*\{?\s*throw\s+(?:new\s+)?Error\s*\(\s*["']$/i.exec(lookBehind);
+
+    if (elseMatch) {
+      const closeBracePos = idx - elseMatch[0].length;
+      let depth = 0;
+      let openBracePos = -1;
+      for (let i = closeBracePos; i >= 0; i--) {
+        const ch = code[i];
+        if (ch === "}") depth++;
+        else if (ch === "{") {
+          depth--;
+          if (depth === 0) {
+            openBracePos = i;
+            break;
+          }
+        }
+      }
+
+      if (openBracePos !== -1) {
+        let p = openBracePos - 1;
+        while (p >= 0 && /\s/.test(code[p])) p--;
+        if (code[p] === ")") {
+          let pDepth = 0;
+          let openParenPos = -1;
+          for (let j = p; j >= 0; j--) {
+            if (code[j] === ")") pDepth++;
+            else if (code[j] === "(") {
+              pDepth--;
+              if (pDepth === 0) {
+                openParenPos = j;
+                break;
+              }
+            }
+          }
+          if (openParenPos !== -1) {
+            code =
+              code.slice(0, openParenPos) +
+              "(true)" +
+              code.slice(p + 1);
+          }
+        }
+      }
+    }
+
+    searchPos = idx + marker.length;
+  }
+
+  code = code
+    .replace(
+      /if\s*\([^{;]{1,260}\)\s*\{?\s*throw\s+(?:new\s+)?Error\s*\(\s*["']Error\.\s*This emulator can not be used from a different origin\.["']\s*\)\s*;?\s*\}?\s*else/g,
+      "if(true)",
+    )
+    .replace(
+      /throw\s+(?:new\s+)?Error\s*\(\s*["']Error\.\s*This emulator can not be used from a different origin\.["']\s*\)/g,
+      "void 0",
+    )
+    .replace(
+      /throw\s*["']Error\.\s*This emulator can not be used from a different origin\.["']/g,
+      "void 0",
+    )
+    .replace(/window\.top/g, "window.self")
+    .replace(/window\.parent/g, "window.self");
+
+  code += "\n;if(typeof embedGenesis!=='undefined'){window.embedGenesis=embedGenesis;}\n";
+  return code;
+}
 
 function isZipBuffer(buf: Buffer): boolean {
   return (
@@ -207,6 +298,17 @@ async function getGzippedGenesisEngineB64(): Promise<string> {
 
   for (const url of GENESIS_ENGINE_URLS) {
     try {
+      const buf = await fetchBufferWithTimeout
+async function getGzippedGenesisEngineB64(): Promise<string> {
+  if (cachedEngineGzipB64) return cachedEngineGzipB64;
+
+  if (fs.existsSync(ENGINE_CACHE_FILE) && fs.statSync(ENGINE_CACHE_FILE).size > 30000) {
+    cachedEngineGzipB64 = fs.readFileSync(ENGINE_CACHE_FILE).toString("base64");
+    return cachedEngineGzipB64;
+  }
+
+  for (const url of GENESIS_ENGINE_URLS) {
+    try {
       const buf = await fetchBufferWithTimeout(url, 20000);
       const code = buf.toString("utf8");
       if (code.includes("embedGenesis") && code.length > 50000) {
@@ -304,56 +406,56 @@ function buildSegaConsoleHtml(options: {
 }): string {
   const html = `<style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
-html,body{width:100%;min-height:100%;background:#05060a;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;overflow-x:hidden;overflow-y:auto}
+html,body{width:100%;min-height:100%;background:#05060a;color:#f4f4f5;font-family:monospace;overflow-x:hidden;overflow-y:auto}
 body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center}
-#sega-case{width:min(98vw,540px);margin:0 auto;background:linear-gradient(165deg,#18181b 0%,#0f0f12 52%,#09090b 100%);border:3px solid #27272a;border-radius:22px 22px 46px 22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 48px rgba(0,0,0,.92)}
-#sega-top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:linear-gradient(90deg,#7f1d1d,#dc2626 50%,#7f1d1d);border-bottom:2px solid #facc15;font-size:11px;font-weight:900;letter-spacing:1.2px;color:#fff}
+#sega-case{width:min(98vw,540px);margin:0 auto;background:linear-gradient(165deg,#18181b 0%,#09090b 100%);border:3px solid #27272a;border-radius:22px 22px 46px 22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 48px rgba(0,0,0,.92)}
+#sega-top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:linear-gradient(90deg,#7f1d1d,#dc2626 50%,#7f1d1d);border-bottom:2px solid #facc15;font-size:11px;font-weight:900;color:#fff}
 .sega-ver{background:#09090b;color:#facc15;border:1px solid #facc15;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:900}
 #lens-outer{width:100%;padding:8px 12px 6px;display:flex;flex-direction:column;align-items:center}
-#lens-bezel{width:100%;background:linear-gradient(180deg,#1f1f23 0%,#09090b 100%);border:3px solid #3f3f46;border-radius:14px;padding:7px 10px 8px;display:flex;flex-direction:column;align-items:center}
+#lens-bezel{width:100%;background:#121215;border:3px solid #3f3f46;border-radius:14px;padding:7px 10px 8px;display:flex;flex-direction:column;align-items:center}
 #lens-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 .pwr-wrap{display:flex;align-items:center;gap:5px}
 #status-led{width:8px;height:8px;border-radius:50%;background:#facc15;box-shadow:0 0 8px #facc15}
 #status-led.on{background:#ef4444;box-shadow:0 0 10px #ef4444}
 #status-led.err{background:#f97316;box-shadow:0 0 9px #f97316}
-.pwr-txt{font-size:8px;font-weight:900;color:#d4d4d8;letter-spacing:1px}
-.rom-tag{font-size:8.5px;font-weight:900;color:#60a5fa;letter-spacing:.8px;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwr-txt{font-size:8px;font-weight:900;color:#d4d4d8}
+.rom-tag{font-size:8.5px;font-weight:900;color:#60a5fa;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #screen-container{position:relative;width:96%;aspect-ratio:320/224;background:#000;border:2.5px solid #dc2626;border-radius:6px;overflow:hidden;display:flex;justify-content:center;align-items:center}
 #game{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
 #game canvas,canvas#boot-cv{width:100%!important;height:100%!important;object-fit:fill!important;display:block!important;position:absolute!important;inset:0!important;image-rendering:pixelated}
 canvas#boot-cv{z-index:3;pointer-events:none}
 #lens-logo{margin-top:6px;display:flex;align-items:center;justify-content:space-between;width:96%}
-.md-gold{font-family:Impact,sans-serif;font-size:13px;font-style:italic;letter-spacing:1.5px;color:#facc15;font-weight:900}
-.sega-blue{font-family:"Arial Black",sans-serif;font-size:12px;font-weight:900;letter-spacing:2px;color:#3b82f6}
+.md-gold{font-size:12px;font-style:italic;color:#facc15;font-weight:900}
+.sega-blue{font-size:12px;font-weight:900;letter-spacing:2px;color:#3b82f6}
 #debug-wrap{width:94%;margin:2px auto 4px;background:#06080f;border:1.5px solid #3b82f6;border-radius:8px;overflow:hidden}
-#debug-head{background:linear-gradient(90deg,#0f172a,#1e3a8a);padding:4px 8px;display:flex;justify-content:space-between;align-items:center;font-family:monospace;font-size:9px;color:#93c5fd;font-weight:900}
-#telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#030508;padding:3px 6px;font-family:monospace;font-size:8.5px;color:#bfdbfe;text-align:center}
+#debug-head{background:#1e3a8a;padding:4px 8px;display:flex;justify-content:space-between;align-items:center;font-size:9px;color:#93c5fd;font-weight:900}
+#telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#030508;padding:3px 6px;font-size:8.5px;color:#bfdbfe;text-align:center}
 .t-cell{background:rgba(255,255,255,.04);padding:2px 3px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #debug-panel.collapsed{display:none}
-#debug-log{height:74px;overflow-y:auto;padding:5px 7px;font-family:monospace;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text;-webkit-user-select:text}
+#debug-log{height:70px;overflow-y:auto;padding:5px 7px;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text}
 #debug-actions{display:flex;justify-content:flex-end;gap:6px;padding:3px 6px;background:#070a12}
 .dbg-mini-btn{background:#1e293b;color:#60a5fa;border:1px solid #2563eb;border-radius:4px;padding:2px 7px;font-size:8px;font-weight:900;cursor:pointer}
 .log-line{margin-bottom:1px;word-break:break-all}
 .log-warn{color:#facc15}.log-err{color:#f87171;font-weight:900}.log-sys{color:#60a5fa;font-weight:900}.log-ok{color:#4ade80;font-weight:900}
 #pad-area{width:100%;padding:6px 14px 16px;display:flex;flex-direction:column;gap:10px}
 #top-pad-row{width:100%;display:flex;justify-content:center;align-items:center;gap:28px}
-.sega-pill{min-width:82px;height:26px;border-radius:14px;border:1.5px solid #09090b;font-size:10px;font-weight:900;letter-spacing:1.2px;cursor:pointer;box-shadow:0 3px 0 #000}
-#btn-mode{background:linear-gradient(180deg,#52525b,#27272a);color:#e4e4e7}
-#btn-start{background:linear-gradient(180deg,#ef4444,#991b1b);color:#fff}
+.sega-pill{min-width:82px;height:26px;border-radius:14px;border:1.5px solid #09090b;font-size:10px;font-weight:900;cursor:pointer;box-shadow:0 3px 0 #000}
+#btn-mode{background:#3f3f46;color:#e4e4e7}
+#btn-start{background:#dc2626;color:#fff}
 .sega-pill.touching{transform:translateY(2px);filter:brightness(1.25)}
 #main-controls{width:100%;display:flex;justify-content:space-between;align-items:center;padding:2px 4px}
-#dpad{position:relative;width:132px;height:132px;border-radius:50%;background:radial-gradient(circle,#27272a 0%,#121215 78%);border:2px solid #3f3f46;flex-shrink:0}
-.dpad-btn{position:absolute;width:42px;height:42px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);color:#f4f4f5;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;box-shadow:0 3px 0 #000}
+#dpad{position:relative;width:132px;height:132px;border-radius:50%;background:#18181b;border:2px solid #3f3f46;flex-shrink:0}
+.dpad-btn{position:absolute;width:42px;height:42px;border:1.5px solid #09090b;background:#27272a;color:#f4f4f5;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;box-shadow:0 3px 0 #000}
 .dpad-btn.touching{background:#dc2626;color:#fff;transform:translateY(2px)}
 #u{left:43px;top:5px}#d{left:43px;bottom:5px}#l{left:5px;top:43px}#r{right:5px;top:43px}
 #dpad-center{position:absolute;left:50px;top:50px;width:28px;height:28px;border-radius:50%;background:#09090b}
 #sega-buttons{display:flex;flex-direction:column;gap:8px;align-items:center;background:rgba(255,255,255,.03);padding:10px 12px;border-radius:26px;border:1.5px solid rgba(255,255,255,.08);transform:rotate(-14deg)}
 .xyz-row,.abc-row{display:flex;gap:10px;align-items:center}
-.xyz-btn{width:38px;height:38px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 30% 30%,#52525b,#18181b 78%);color:#d4d4d8;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 0 #000;transform:rotate(14deg)}
-.abc-btn{width:46px;height:46px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 30% 30%,#3b82f6,#1d4ed8 78%);color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 #000;transform:rotate(14deg)}
+.xyz-btn{width:38px;height:38px;border-radius:50%;border:2px solid #09090b;background:#3f3f46;color:#d4d4d8;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 0 #000;transform:rotate(14deg)}
+.abc-btn{width:46px;height:46px;border-radius:50%;border:2px solid #09090b;background:#2563eb;color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 #000;transform:rotate(14deg)}
 .xyz-btn.touching,.abc-btn.touching{background:#ef4444;color:#fff;transform:rotate(14deg) translateY(2px) scale(.94)}
 #bottom-tools{width:100%;display:flex;justify-content:center;flex-wrap:wrap;gap:6px}
-.tool-btn{border:1.5px solid #27272a;border-radius:7px;background:linear-gradient(180deg,#27272a,#09090b);color:#facc15;padding:5px 10px;font-weight:900;font-size:9.5px;cursor:pointer}
+.tool-btn{border:1.5px solid #27272a;border-radius:7px;background:#18181b;color:#facc15;padding:5px 10px;font-weight:900;font-size:9.5px;cursor:pointer}
 .tool-btn:active,.tool-btn.active{background:#dc2626;color:#fff;border-color:#facc15}
 </style>
 <body>
@@ -464,13 +566,13 @@ canvas#boot-cv{z-index:3;pointer-events:none}
     const ts = String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0") + "." + String(now.getMilliseconds()).padStart(3, "0").slice(0, 2);
     const fullLine = "[" + ts + "] " + msg;
     logHistory.push(fullLine);
-    if (logHistory.length > 120) logHistory.shift();
+    if (logHistory.length > 100) logHistory.shift();
 
     const div = document.createElement("div");
     div.className = "log-line " + (cls || "");
     div.textContent = fullLine;
     dbgLog.appendChild(div);
-    while (dbgLog.childNodes.length > 80) dbgLog.removeChild(dbgLog.firstChild);
+    while (dbgLog.childNodes.length > 60) dbgLog.removeChild(dbgLog.firstChild);
     dbgLog.scrollTop = dbgLog.scrollHeight;
 
     if (!emuReady && bootCtx) {
@@ -480,7 +582,7 @@ canvas#boot-cv{z-index:3;pointer-events:none}
       bootCtx.fillRect(0, 0, 320, 224);
       bootCtx.fillStyle = "#3b82f6";
       bootCtx.font = "bold 11px monospace";
-      bootCtx.fillText("SEGA MEGA DRIVE // LUFEROS V5.0", 12, 24);
+      bootCtx.fillText("SEGA MEGA DRIVE • LUFEROS V5.0", 12, 24);
       bootCtx.fillStyle = "#facc15";
       bootCtx.font = "bold 9px monospace";
       bootCtx.fillText("MOTOROLA 68000 + Z80 + YM2612 BIOS", 12, 40);
@@ -529,18 +631,18 @@ canvas#boot-cv{z-index:3;pointer-events:none}
   }
 
   const KEY_SPEC = {
-    up:    { code: "ArrowUp",    key: "ArrowUp",    keyCode: 38 },
-    down:  { code: "ArrowDown",  key: "ArrowDown",  keyCode: 40 },
-    left:  { code: "ArrowLeft",  key: "ArrowLeft",  keyCode: 37 },
+    up: { code: "ArrowUp", key: "ArrowUp", keyCode: 38 },
+    down: { code: "ArrowDown", key: "ArrowDown", keyCode: 40 },
+    left: { code: "ArrowLeft", key: "ArrowLeft", keyCode: 37 },
     right: { code: "ArrowRight", key: "ArrowRight", keyCode: 39 },
-    start: { code: "Enter",      key: "Enter",      keyCode: 13 },
-    mode:  { code: "KeyZ",       key: "z",          keyCode: 90 },
-    a:     { code: "KeyA",       key: "a",          keyCode: 65 },
-    b:     { code: "KeyS",       key: "s",          keyCode: 83 },
-    c:     { code: "KeyD",       key: "d",          keyCode: 68 },
-    x:     { code: "KeyQ",       key: "q",          keyCode: 81 },
-    y:     { code: "KeyW",       key: "w",          keyCode: 87 },
-    z:     { code: "KeyE",       key: "e",          keyCode: 69 }
+    start: { code: "Enter", key: "Enter", keyCode: 13 },
+    mode: { code: "KeyZ", key: "z", keyCode: 90 },
+    a: { code: "KeyA", key: "a", keyCode: 65 },
+    b: { code: "KeyS", key: "s", keyCode: 83 },
+    c: { code: "KeyD", key: "d", keyCode: 68 },
+    x: { code: "KeyQ", key: "q", keyCode: 81 },
+    y: { code: "KeyW", key: "w", keyCode: 87 },
+    z: { code: "KeyE", key: "e", keyCode: 69 }
   };
 
   function dispatchSyntheticKey(type, spec) {
