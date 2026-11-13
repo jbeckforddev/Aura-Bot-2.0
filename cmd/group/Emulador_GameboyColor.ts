@@ -478,7 +478,7 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
       bootCtx.font = "bold 8px monospace";
       bootCtx.fillText("LuferOS Game color Sys", 8, 14);
       bootCtx.fillStyle = "#facc15";
-      bootCtx.fillText("BIOS V: 3.0 // BOOTING", 8, 25);
+      bootCtx.fillText("BIOS V: 3.0 • BOOTING", 8, 25);
       bootCtx.fillStyle = "#4ade80";
       bootCtx.font = "7px monospace";
       for (let i = 0; i < bootLines.length; i++) {
@@ -839,7 +839,7 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
 export default {
   name: ["gb", "gbc", "gameboy"],
   category: "group",
-  description: "LuferOS Game color Sys V: 3.0 con consola de diagnóstico en vivo y soporte .gb, .gbc y .zip.",
+  description: "LuferOS Game color Sys V: 3.0 con diagnóstico en vivo, soporte .gb/.gbc/.zip y modo compatible para grupos.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -851,7 +851,13 @@ export default {
     try {
       repairCachedRomsOnDisk();
 
-      const subCommand = String(args[0] || "").toLowerCase();
+      const isInlineFallback = args.some((a) =>
+        ["inline", "lite", "burbuja"].includes(a.toLowerCase()),
+      );
+      const cleanArgs = args.filter(
+        (a) => !["inline", "lite", "burbuja"].includes(a.toLowerCase()),
+      );
+      const subCommand = String(cleanArgs[0] || "").toLowerCase();
 
       if (subCommand === "list" || subCommand === "lista") {
         const savedFiles = fs
@@ -859,7 +865,9 @@ export default {
           .filter((f) => /\.(gb|gbc)$/i.test(f));
 
         if (!savedFiles.length) {
-          return reply("📂 No hay juegos guardados. Responde a un archivo `.zip`, `.gb` o `.gbc` con `.gbc save <Nombre>`.");
+          return reply(
+            `📂 No hay juegos guardados. Responde a un archivo \`.zip\`, \`.gb\` o \`.gbc\` con \`${prefix}gbc save <Nombre>\`.`,
+          );
         }
 
         const listTxt = savedFiles
@@ -873,7 +881,8 @@ export default {
           `╭〔 🎮 ${fytBold("LuferOS Game color Sys V: 3.0")} 〕⬣\n` +
             `${listTxt}\n` +
             `╰━━━━━━━━━━━━⬣\n` +
-            `Usa \`${prefix}gbc <Nombre>\` para iniciar.`,
+            `• Pantalla completa: \`${prefix}gbc <Nombre>\`\n` +
+            `• Modo compatible grupos: \`${prefix}gbc inline <Nombre>\``,
         );
       }
 
@@ -885,10 +894,10 @@ export default {
 
       const quotedDoc = await downloadQuotedDocumentBuffer(msg);
 
-      if (subCommand === "save" && args[1]) {
-        customSaveName = args.slice(1).join(" ").trim();
-      } else if (quotedDoc && args.length > 0 && subCommand !== "save") {
-        customSaveName = args.join(" ").trim();
+      if (subCommand === "save" && cleanArgs[1]) {
+        customSaveName = cleanArgs.slice(1).join(" ").trim();
+      } else if (quotedDoc && cleanArgs.length > 0 && subCommand !== "save") {
+        customSaveName = cleanArgs.join(" ").trim();
       }
 
       if (quotedDoc) {
@@ -912,9 +921,11 @@ export default {
           displayTitle = `${requestedName.toUpperCase()} • GBC`;
         }
       } else if (subCommand === "save" && !quotedDoc) {
-        return reply("⚠️ Responde a un archivo `.zip`, `.gb` o `.gbc` con `.gbc save <Nombre>` para guardarlo.");
+        return reply(
+          `⚠️ Responde a un archivo \`.zip\`, \`.gb\` o \`.gbc\` con \`${prefix}gbc save <Nombre>\` para guardarlo.`,
+        );
       } else {
-        const searchName = (customSaveName || args.join(" ")).trim();
+        const searchName = (customSaveName || cleanArgs.join(" ")).trim();
         const found = searchName ? getStoredRomByName(searchName) : null;
 
         if (found) {
@@ -959,53 +970,82 @@ export default {
         bezelTitle: displayTitle,
       });
 
-      const data = {
-        response_id: "PopiooNixelPopiooNixelPopiooNixel",
-        sections: [
-          {
-            __typename: "GenAIUnifiedResponseSection",
-            view_model: {
-              __typename: "GenAISingleLayoutViewModel",
-              primitive: {
-                __typename: "GenAIBotProgressStatusPrimitive",
-                title: `🎮 LuferOS Game color Sys V: 3.0 (${displayTitle})`,
-                is_in_progress: true,
-              },
-            },
-          },
-        ],
-        embedded_screens: [
-          {
-            title: `LuferOS Game color Sys V: 3.0`,
-            content: [
+      const uniqueResponseId = `LuferOS_GBC_${randomUUID().replace(/-/g, "")}`;
+
+      const data = isInlineFallback
+        ? {
+            response_id: uniqueResponseId,
+            sections: [
               {
-                __typename: "FOAIDNixelButtonSheets",
-                tabs: [
+                __typename: "GenAIUnifiedResponseSection",
+                view_model: {
+                  __typename: "GenAISingleLayoutViewModel",
+                  primitive: {
+                    __typename: "FOAHtmlPrimitiveDemoDONOTUSE",
+                    trusted_sources: [],
+                    payload: HTML,
+                  },
+                },
+              },
+            ],
+          }
+        : {
+            response_id: uniqueResponseId,
+            sections: [
+              {
+                __typename: "GenAIUnifiedResponseSection",
+                view_model: {
+                  __typename: "GenAISingleLayoutViewModel",
+                  primitive: {
+                    __typename: "GenAITextPrimitive",
+                    text: `🎮 *LuferOS Game color Sys V: 3.0* • ${displayTitle}\n_Pulsa el botón inferior para abrir la consola. Si tu WhatsApp no muestra el botón, escribe:_ \`${prefix}gbc inline ${cleanArgs.join(" ") || "Bowling"}\``,
+                  },
+                },
+              },
+              {
+                __typename: "GenAIUnifiedResponseSection",
+                view_model: {
+                  __typename: "GenAISingleLayoutViewModel",
+                  primitive: {
+                    __typename: "GenAIBotProgressStatusPrimitive",
+                    title: `🎮 LuferOS Game color Sys V: 3.0 (${displayTitle})`,
+                    is_in_progress: true,
+                  },
+                },
+              },
+            ],
+            embedded_screens: [
+              {
+                title: `LuferOS Game color Sys V: 3.0`,
+                content: [
                   {
-                    id: "tab_0",
-                    tab_header: "LuferOS Game color Sys V: 3.0",
-                    sections: [
+                    __typename: "FOAIDNixelButtonSheets",
+                    tabs: [
                       {
-                        __typename: "GenAIUnifiedResponseSection",
-                        view_model: {
-                          __typename: "GenAISingleLayoutViewModel",
-                          primitive: {
-                            __typename: "GenAIaeacdsnwHtmlPrimitive",
-                            payload: HTML,
-                            url: "https://whatsapp.com",
-                            trusted_sources: ["example.com"],
+                        id: "tab_0",
+                        tab_header: "LuferOS Game color Sys V: 3.0",
+                        sections: [
+                          {
+                            __typename: "GenAIUnifiedResponseSection",
+                            view_model: {
+                              __typename: "GenAISingleLayoutViewModel",
+                              primitive: {
+                                __typename: "GenAIaeacdsnwHtmlPrimitive",
+                                payload: HTML,
+                                url: "https://whatsapp.com",
+                                trusted_sources: ["whatsapp.com", "example.com"],
+                              },
+                            },
                           },
-                        },
+                        ],
+                        step_entries: [],
                       },
                     ],
-                    step_entries: [],
                   },
                 ],
               },
             ],
-          },
-        ],
-      };
+          };
 
       const msgId =
         typeof (sock as any).generateMessageTag === "function"
@@ -1019,7 +1059,7 @@ export default {
             deviceListMetadata: {},
             deviceListMetadataVersion: 2,
             botMetadata: {
-              messageDisclaimerText: "",
+              messageDisclaimerText: "LuferOS Game color Sys V: 3.0",
               richResponseSourcesMetadata: {},
             },
           },
@@ -1033,7 +1073,9 @@ export default {
                 contextInfo: {
                   forwardingScore: 1,
                   isForwarded: true,
-                  forwardedAiBotMessageInfo: { botJid: "0@bot" },
+                  forwardedAiBotMessageInfo: {
+                    botJid: "13135550002@s.whatsapp.net",
+                  },
                   forwardOrigin: 4,
                 },
               },
