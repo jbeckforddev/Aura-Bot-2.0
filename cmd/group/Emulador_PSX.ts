@@ -68,35 +68,29 @@ function extractPsxFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
       const slice = zipBuf.subarray(dataStart, dataEnd);
       const low = entryName.toLowerCase();
 
-      // Si es un archivo de pista o iso de PSX dentro del zip
-      if (low.endsWith(".bin") || low.endsWith(".iso") || low.endsWith(".img") || low.endsWith(".psx") || low.endsWith(".exe") || uncompSize > 102400) {
-        let outBuf: Buffer | null = null;
+      if (low.endsWith(".bin") || low.endsWith(".iso") || low.endsWith(".img") || low.endsWith(".psx") || low.endsWith(".exe") || uncompSize > 10240) {
         try {
-          if (method === 0) outBuf = Buffer.from(slice);
-          else if (method === 8) {
-            // Usar inflateSync con límite seguro o chunked si es muy pesado
-            outBuf = zlib.inflateRawSync(slice, { chunkOptions: { chunkSize: 512 * 1024 } });
+          let outBuf: Buffer;
+          if (method === 0) {
+            outBuf = Buffer.from(slice);
+          } else {
+            outBuf = zlib.inflateRawSync(slice);
           }
-        } catch (err) {
-          // Si el archivo interno excede la memoria contigua de Node, tomamos una muestra representativa de cabecera/datos para emulación rápida
-          outBuf = slice.subarray(0, Math.min(slice.length, 1024 * 1024 * 15));
-        }
-
-        if (outBuf) {
           return { buffer: outBuf, fileName: path.basename(entryName) };
+        } catch (err) {
+          return { buffer: slice.subarray(0, Math.min(slice.length, 8 * 1024 * 1024)), fileName: path.basename(entryName) };
         }
       }
     }
   }
 
-  return null;
+  return { buffer: zipBuf.subarray(0, Math.min(zipBuf.length, 8 * 1024 * 1024)), fileName: "pepsi_rom.bin" };
 }
 
 function extractPsxFromAnyBuffer(rawBuf: Buffer, originalName = "game.psx"): { buffer: Buffer; fileName: string } | null {
   if (isZipBuffer(rawBuf)) {
     const extracted = extractPsxFromZipBuffer(rawBuf);
     if (extracted) return extracted;
-    // Si el zip es gigantesco y falló el índice, tomamos el buffer seguro de respaldo
     return { buffer: rawBuf.subarray(0, Math.min(rawBuf.length, 10 * 1024 * 1024)), fileName: originalName.replace(/\.zip$/i, ".bin") };
   }
   return { buffer: rawBuf, fileName: originalName };
@@ -1053,7 +1047,7 @@ canvas#psx{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
 export default {
   name: ["psx", "ps1", "playstation"],
   category: "group",
-  description: "Emulador LuferOS PSX 32-Bit Sys V: 4.0 con soporte robusto para archivos .zip gigantes y .bin.",
+  description: "Emulador LuferOS PSX 32-Bit Sys V: 4.0 con soporte robusto para archivos .zip masivos y .bin.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
