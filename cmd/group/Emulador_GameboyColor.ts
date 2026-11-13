@@ -8,18 +8,42 @@ import { fytBold } from "../../core/socketText.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(process.cwd(), "data", "gb_cache");
+const ENGINE_CACHE_FILE = path.join(CACHE_DIR, "luferos_gbc_sys_v30.js.gz");
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-const JSMGBC_CDN_URLS = [
-  "https://cdn.jsdelivr.net/npm/jsmgc@0.1.0/dist/jsmgc.min.js",
-  "https://unpkg.com/jsmgc@0.1.0/dist/jsmgc.min.js",
-  "https://raw.githubusercontent.com/gameboy-online/gameboy-online.github.io/master/js/GameBoyCore.js",
+for (const oldFile of [
+  "gb_engine.min.js",
+  "gb_runner.min.js",
+  "gb_core.min.js",
+  "luferos_gbc_engine_v4.js",
+  "luferos_gbc_engine_v5.js",
+  "luferos_gbc_inline_v6.js",
+]) {
+  const oldPath = path.join(CACHE_DIR, oldFile);
+  if (fs.existsSync(oldPath)) {
+    try {
+      fs.unlinkSync(oldPath);
+    } catch {}
+  }
+}
+
+const GBC_CORE_SOURCES = [
+  {
+    base64: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/other/base64.js",
+    core: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/GameBoyCore.js",
+    io: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/GameBoyIO.js",
+  },
+  {
+    base64: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/other/base64.js",
+    core: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/GameBoyCore.js",
+    io: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/GameBoyIO.js",
+  },
 ];
 
-let cachedEngineCode = "";
+let cachedEngineGzipB64 = "";
 
 function isZipBuffer(buf: Buffer): boolean {
   return (
@@ -151,7 +175,7 @@ function repairCachedRomsOnDisk() {
   }
 }
 
-async function fetchTextWithTimeout(url: string, timeoutMs = 12000): Promise<string> {
+async function fetchTextWithTimeout(url: string, timeoutMs = 15000): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -167,67 +191,36 @@ async function fetchTextWithTimeout(url: string, timeoutMs = 12000): Promise<str
   }
 }
 
-async function getEngineCode(): Promise<string> {
-  if (cachedEngineCode) return cachedEngineCode;
+async function getGzippedGbcEngineB64(): Promise<string> {
+  if (cachedEngineGzipB64) return cachedEngineGzipB64;
 
-  for (const url of JSMGBC_CDN_URLS) {
+  if (fs.existsSync(ENGINE_CACHE_FILE)) {
+    const gzBuf = fs.readFileSync(ENGINE_CACHE_FILE);
+    if (gzBuf.length > 20000) {
+      cachedEngineGzipB64 = gzBuf.toString("base64");
+      return cachedEngineGzipB64;
+    }
+  }
+
+  for (const src of GBC_CORE_SOURCES) {
     try {
-      const txt = await fetchTextWithTimeout(url, 10000);
-      if (txt.length > 10000) {
-        cachedEngineCode = txt;
-        return cachedEngineCode;
+      const [b64Js, coreJs, ioJs] = await Promise.all([
+        fetchTextWithTimeout(src.base64, 12000),
+        fetchTextWithTimeout(src.core, 18000),
+        fetchTextWithTimeout(src.io, 12000),
+      ]);
+
+      if (coreJs.includes("GameBoyCore")) {
+        const bundle = `${b64Js}\n;\n${ioJs}\n;\n${coreJs}\n`;
+        const gzBuf = zlib.gzipSync(Buffer.from(bundle, "utf8"), { level: 9 });
+        fs.writeFileSync(ENGINE_CACHE_FILE, gzBuf);
+        cachedEngineGzipB64 = gzBuf.toString("base64");
+        return cachedEngineGzipB64;
       }
     } catch {}
   }
 
-  // Núcleo Web robusto y autocontenido para emular gráficos y controles de Game Boy Color
-  return `
-  window.LuferOSGBCEngine = (function() {
-    let canvas, ctx, running = false, romBytes = null;
-    let pal = ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"];
-    let screenW = 160, screenH = 144;
-    let imgData, data32;
-    let keysState = { up:false, down:false, left:false, right:false, a:false, b:false, select:false, start:false };
-
-    function init(canvasElem, bytes) {
-      canvas = canvasElem;
-      ctx = canvas.getContext("2d", { alpha: false });
-      romBytes = bytes;
-      imgData = ctx.createImageData(screenW, screenH);
-      data32 = new Uint32Array(imgData.data.buffer);
-
-      running = true;
-      requestAnimationFrame(frameLoop);
-    }
-
-    let frameCount = 0;
-    function frameLoop() {
-      if (!running) return;
-      frameCount++;
-
-      // Renderizador dinámico basado en los bytes de la ROM cargada
-      const seedVal = romBytes ? romBytes[100] || 42 : 42;
-      for (let y = 0; y < screenH; y++) {
-        for (let x = 0; x < screenW; x++) {
-          const idx = y * screenW + x;
-          const colorIdx = (x + y + (frameCount >> 2) + seedVal) % 4;
-          const hex = pal[colorIdx];
-          const r = parseInt(hex.slice(1,3), 16);
-          const g = parseInt(hex.slice(3,5), 16);
-          const b = parseInt(hex.slice(5,7), 16);
-          data32[idx] = (255 << 24) | (b << 16) | (g << 8) | r;
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-      requestAnimationFrame(frameLoop);
-    }
-
-    function keyDown(k) { keysState[k] = true; }
-    function keyUp(k) { keysState[k] = false; }
-
-    return { init: init, keyDown: keyDown, keyUp: keyUp };
-  })();
-  `;
+  throw new Error("No se pudo descargar el núcleo GameBoyCore.");
 }
 
 function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string } | null {
@@ -240,7 +233,17 @@ function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string
   for (const f of files) {
     const baseName = f.replace(/\.(gb|gbc)$/i, "");
     const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
+    if (cleanBase === cleanKey) {
+      const buf = fs.readFileSync(path.join(CACHE_DIR, f));
+      const extracted = extractRomFromAnyBuffer(buf, f);
+      if (extracted) return { buffer: extracted.buffer, realName: baseName };
+    }
+  }
+
+  for (const f of files) {
+    const baseName = f.replace(/\.(gb|gbc)$/i, "");
+    const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
       const buf = fs.readFileSync(path.join(CACHE_DIR, f));
       const extracted = extractRomFromAnyBuffer(buf, f);
       if (extracted) return { buffer: extracted.buffer, realName: baseName };
@@ -293,66 +296,80 @@ async function downloadQuotedDocumentBuffer(msg: any): Promise<{ buffer: Buffer;
 }
 
 function buildGbcConsoleHtml(options: {
-  engineCode: string;
+  engineGzipB64: string;
   romGzipB64: string;
-  banner: string;
   bezelTitle: string;
 }): string {
-  const template = `<style>
+  return `<style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
-html,body{width:100%;min-height:100%;background:#0e0b16}
-body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#fff;background:#0e0b16}
-#gbc-case{width:min(98vw,520px);max-width:520px;margin:0 auto;background:linear-gradient(165deg,#7e22ce 0%,#6b21a8 48%,#4c1d95 100%);border:3px solid #2e1065;border-radius:18px 18px 54px 18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 40px rgba(0,0,0,.78),inset 0 2px 1px rgba(255,255,255,.32);transform:translateZ(0);contain:content}
-#gbc-top-bar{text-align:center;padding:6px 10px 5px;color:#fef08a;font-size:clamp(10px,2.2vw,13px);font-weight:900;letter-spacing:1.4px;text-shadow:0 2px 0 #2e1065;background:linear-gradient(90deg,#4c1d95,#7e22ce 50%,#4c1d95);border-bottom:2px solid #facc15}
-#lens-outer{width:100%;padding:10px 14px 8px;display:flex;flex-direction:column;align-items:center}
-#lens-bezel{width:100%;background:linear-gradient(180deg,#27272a 0%,#18181b 100%);border:3px solid #09090b;border-radius:14px 14px 30px 14px;padding:8px 12px 10px;box-shadow:inset 0 2px 5px rgba(255,255,255,.12),0 6px 14px rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center}
-#lens-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+html,body{width:100%;min-height:100%;background:#09070f}
+body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;overflow-x:hidden;overflow-y:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;color:#fff;background:#09070f}
+#gbc-case{width:min(98vw,520px);max-width:520px;margin:0 auto;background:linear-gradient(165deg,#7e22ce 0%,#6b21a8 48%,#4c1d95 100%);border:3px solid #2e1065;border-radius:18px 18px 46px 18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 40px rgba(0,0,0,.82),inset 0 2px 1px rgba(255,255,255,.32);transform:translateZ(0)}
+#gbc-top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px 5px;color:#fef08a;font-size:clamp(10px,2.2vw,12px);font-weight:900;letter-spacing:1px;text-shadow:0 2px 0 #2e1065;background:linear-gradient(90deg,#3b0764,#6b21a8 50%,#3b0764);border-bottom:2px solid #facc15}
+.ver-pill{background:#facc15;color:#18181b;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:900;text-shadow:none}
+#lens-outer{width:100%;padding:8px 12px 6px;display:flex;flex-direction:column;align-items:center}
+#lens-bezel{width:100%;background:linear-gradient(180deg,#27272a 0%,#18181b 100%);border:3px solid #09090b;border-radius:14px 14px 26px 14px;padding:7px 10px 8px;box-shadow:inset 0 2px 5px rgba(255,255,255,.12),0 6px 14px rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center}
+#lens-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .pwr-wrap{display:flex;align-items:center;gap:5px}
-#status-led{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 9px #22c55e;transition:all .2s}
+#status-led{width:8px;height:8px;border-radius:50%;background:#facc15;box-shadow:0 0 8px #facc15;transition:all .2s}
+#status-led.on{background:#22c55e;box-shadow:0 0 9px #22c55e}
 #status-led.err{background:#ef4444;box-shadow:0 0 9px #ef4444}
 .pwr-txt{font-size:8px;font-weight:900;color:#a1a1aa;letter-spacing:1px}
-.rom-tag{font-size:9px;font-weight:900;color:#e4e4e7;letter-spacing:1px;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#screen-container{position:relative;width:92%;aspect-ratio:160/144;background:#000;border:3px solid #09090b;border-radius:6px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 12px rgba(0,0,0,.65)}
+.rom-tag{font-size:8.5px;font-weight:900;color:#38bdf8;letter-spacing:.8px;text-transform:uppercase;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#screen-container{position:relative;width:92%;aspect-ratio:160/144;background:#05080c;border:3px solid #09090b;border-radius:6px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 12px rgba(0,0,0,.75)}
 canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
-#lens-logo{margin-top:6px;display:flex;align-items:baseline;gap:6px;font-family:"Arial Black",Impact,sans-serif}
-.gb-word{font-size:13px;font-style:italic;font-weight:900;color:#d4d4d8;letter-spacing:.8px}
-.color-word{font-size:13px;font-weight:900;letter-spacing:1px}
+#lens-logo{margin-top:5px;display:flex;align-items:baseline;gap:6px;font-family:"Arial Black",Impact,sans-serif}
+.gb-word{font-size:12px;font-style:italic;font-weight:900;color:#d4d4d8;letter-spacing:.8px}
+.color-word{font-size:12px;font-weight:900;letter-spacing:1px}
 .c1{color:#f43f5e}.c2{color:#a855f7}.c3{color:#22c55e}.c4{color:#eab308}.c5{color:#06b6d4}
-#error{display:none;width:92%;margin:6px auto 0;padding:5px 8px;background:#450a0a;border:1px solid #ef4444;border-radius:6px;color:#fecaca;font-size:10px;text-align:center}
-#nintendo-badge{margin:2px auto 4px;padding:2px 14px;border:1.5px solid rgba(255,255,255,.22);border-radius:999px;font-size:9px;font-weight:900;letter-spacing:2px;color:rgba(255,255,255,.7);text-transform:uppercase}
-#pad-area{width:100%;padding:8px 18px 18px;display:flex;flex-direction:column;gap:14px;position:relative}
-#main-controls{width:100%;display:flex;justify-content:space-between;align-items:center;padding:4px 4px}
-#dpad{position:relative;width:136px;height:136px;flex-shrink:0}
-.dpad-cross-v{position:absolute;left:45px;top:4px;width:46px;height:128px;background:#18181b;border-radius:6px;box-shadow:0 5px 0 #09090b,inset 0 1px 1px rgba(255,255,255,.15)}
-.dpad-cross-h{position:absolute;left:4px;top:45px;width:128px;height:46px;background:#18181b;border-radius:6px;box-shadow:0 5px 0 #09090b,inset 0 1px 1px rgba(255,255,255,.15)}
-.dpad-btn{position:absolute;width:46px;height:46px;border:none;background:transparent;color:#a1a1aa;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;border-radius:6px}
+#debug-wrap{width:94%;margin:2px auto 4px;background:#090d16;border:1.5px solid #00f3ff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.6)}
+#debug-head{background:linear-gradient(90deg,#0f172a,#1e1b4b);padding:4px 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,243,255,.3);font-family:monospace;font-size:9px;color:#00f3ff;font-weight:900}
+#telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#05070c;padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.1);font-family:monospace;font-size:8.5px;color:#a5f3fc;text-align:center}
+.t-cell{background:rgba(255,255,255,.04);padding:2px 3px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#debug-log{height:68px;overflow-y:auto;padding:4px 7px;font-family:"Courier New",monospace;font-size:9px;line-height:1.35;color:#4ade80;background:#05080f;touch-action:pan-y;user-select:text;-webkit-user-select:text}
+#debug-log.collapsed{display:none}
+.log-line{margin-bottom:1px;word-break:break-all}
+.log-warn{color:#facc15}
+.log-err{color:#f87171;font-weight:900}
+.log-sys{color:#38bdf8;font-weight:900}
+.log-ok{color:#4ade80;font-weight:900}
+#pad-area{width:100%;padding:6px 16px 14px;display:flex;flex-direction:column;gap:10px;position:relative}
+#main-controls{width:100%;display:flex;justify-content:space-between;align-items:center;padding:2px 4px}
+#dpad{position:relative;width:130px;height:130px;flex-shrink:0}
+.dpad-cross-v{position:absolute;left:43px;top:4px;width:44px;height:122px;background:#18181b;border-radius:6px;box-shadow:0 5px 0 #09090b,inset 0 1px 1px rgba(255,255,255,.15)}
+.dpad-cross-h{position:absolute;left:4px;top:43px;width:122px;height:44px;background:#18181b;border-radius:6px;box-shadow:0 5px 0 #09090b,inset 0 1px 1px rgba(255,255,255,.15)}
+.dpad-btn{position:absolute;width:44px;height:44px;border:none;background:transparent;color:#a1a1aa;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;border-radius:6px}
 .dpad-btn.touching{background:rgba(250,204,21,.28);color:#fef08a;transform:translateY(2px)}
-#u{left:45px;top:4px}
-#d{left:45px;bottom:4px}
-#l{left:4px;top:45px}
-#r{right:4px;top:45px}
-#dpad-pivot{position:absolute;left:53px;top:53px;width:30px;height:30px;border-radius:50%;background:radial-gradient(circle,#09090b 20%,#27272a 100%);z-index:1;pointer-events:none}
-#ab-cluster{position:relative;width:144px;height:82px;background:rgba(0,0,0,.18);border-radius:42px;transform:rotate(-22deg);display:flex;align-items:center;justify-content:space-around;padding:0 10px;box-shadow:inset 0 2px 5px rgba(0,0,0,.45);border:1.5px solid rgba(255,255,255,.12)}
-.ab-btn{width:54px;height:54px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 32% 28%,#3f3f46,#18181b 75%);color:#e4e4e7;font-size:19px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 0 #09090b,0 6px 12px rgba(0,0,0,.55);cursor:pointer;transform:rotate(22deg)}
+#u{left:43px;top:4px}
+#d{left:43px;bottom:4px}
+#l{left:4px;top:43px}
+#r{right:4px;top:43px}
+#dpad-pivot{position:absolute;left:51px;top:51px;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,#09090b 20%,#27272a 100%);z-index:1;pointer-events:none}
+#ab-cluster{position:relative;width:138px;height:78px;background:rgba(0,0,0,.18);border-radius:40px;transform:rotate(-22deg);display:flex;align-items:center;justify-content:space-around;padding:0 8px;box-shadow:inset 0 2px 5px rgba(0,0,0,.45);border:1.5px solid rgba(255,255,255,.12)}
+.ab-btn{width:52px;height:52px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 32% 28%,#3f3f46,#18181b 75%);color:#e4e4e7;font-size:18px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 0 #09090b,0 6px 12px rgba(0,0,0,.55);cursor:pointer;transform:rotate(22deg)}
 .ab-btn.touching{transform:rotate(22deg) translateY(3px) scale(.95);box-shadow:0 2px 0 #09090b;background:radial-gradient(circle at 32% 28%,#ef4444,#991b1b 75%);color:#fff}
-#select-start-row{width:100%;display:flex;justify-content:center;align-items:center;gap:28px;margin-top:4px}
-.meta-wrap{display:flex;flex-direction:column;align-items:center;gap:5px}
-.pill-rubber{width:58px;height:18px;border-radius:12px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);box-shadow:0 3px 0 #09090b,0 4px 6px rgba(0,0,0,.45);cursor:pointer;transform:rotate(-24deg)}
+#select-start-row{width:100%;display:flex;justify-content:center;align-items:center;gap:28px;margin-top:2px}
+.meta-wrap{display:flex;flex-direction:column;align-items:center;gap:4px}
+.pill-rubber{width:56px;height:17px;border-radius:12px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);box-shadow:0 3px 0 #09090b,0 4px 6px rgba(0,0,0,.45);cursor:pointer;transform:rotate(-24deg)}
 .pill-rubber.touching{transform:rotate(-24deg) translateY(2px);background:#facc15;box-shadow:0 1px 0 #09090b}
-.meta-lbl{font-size:9px;font-weight:900;letter-spacing:1.4px;color:#d4d4d8;margin-top:4px;text-shadow:0 1px 0 #2e1065}
-#bottom-tools{width:100%;display:flex;justify-content:center;gap:10px;margin-top:4px}
-.tool-btn{border:1.5px solid #2e1065;border-radius:8px;background:rgba(24,24,27,.78);color:#fef08a;padding:6px 12px;font-weight:900;font-size:10px;letter-spacing:.6px;cursor:pointer;box-shadow:0 2px 0 #09090b}
+.meta-lbl{font-size:8.5px;font-weight:900;letter-spacing:1.4px;color:#d4d4d8;margin-top:3px;text-shadow:0 1px 0 #2e1065}
+#bottom-tools{width:100%;display:flex;justify-content:center;gap:8px;margin-top:2px}
+.tool-btn{border:1.5px solid #2e1065;border-radius:7px;background:rgba(24,24,27,.82);color:#fef08a;padding:5px 10px;font-weight:900;font-size:9.5px;letter-spacing:.5px;cursor:pointer;box-shadow:0 2px 0 #09090b}
 .tool-btn:active,.tool-btn.active{background:#facc15;color:#18181b;transform:translateY(1px)}
 </style>
 <body>
 <div id="gbc-case">
-  <div id="gbc-top-bar">${options.banner}</div>
+  <div id="gbc-top-bar">
+    <span>★ LuferOS Game color Sys ★</span>
+    <span class="ver-pill">V: 3.0</span>
+  </div>
+
   <div id="lens-outer">
     <div id="lens-bezel">
       <div id="lens-top">
         <div class="pwr-wrap">
-          <div id="status-led" class="on"></div>
-          <span class="pwr-txt" id="status-text">POWER</span>
+          <div id="status-led"></div>
+          <span class="pwr-txt" id="status-text">BIOS</span>
         </div>
         <div class="rom-tag">${options.bezelTitle}</div>
       </div>
@@ -360,14 +377,25 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
         <canvas id="gb" width="160" height="144"></canvas>
       </div>
       <div id="lens-logo">
-        <span class="gb-word">GAME BOY</span>
+        <span class="gb-word">LuferOS</span>
         <span class="color-word"><span class="c1">C</span><span class="c2">O</span><span class="c3">L</span><span class="c4">O</span><span class="c5">R</span></span>
       </div>
     </div>
-    <div id="error"></div>
   </div>
 
-  <div id="nintendo-badge">LuferOS • Nintendo</div>
+  <div id="debug-wrap">
+    <div id="debug-head">
+      <span id="dbg-state">⚡ BIOS BOOTING...</span>
+      <span id="dbg-cart">CART: ---</span>
+    </div>
+    <div id="telemetry-bar">
+      <div class="t-cell" id="t-fps">FPS: 0</div>
+      <div class="t-cell" id="t-pc">PC: 0x0100</div>
+      <div class="t-cell" id="t-mbc">MBC: ---</div>
+      <div class="t-cell" id="t-pad">PAD: IDLE</div>
+    </div>
+    <div id="debug-log"></div>
+  </div>
 
   <div id="pad-area">
     <div id="main-controls">
@@ -400,72 +428,418 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
 
     <div id="bottom-tools">
       <button class="tool-btn" id="turbo-btn">⚡ TURBO 1X</button>
+      <button class="tool-btn" id="dbg-toggle-btn">📟 LOGS</button>
       <button class="tool-btn" id="reset-btn">🔄 REINICIAR</button>
     </div>
   </div>
 </div>
-<script>
-${options.engineCode}
-(function(){
-  const ROM_GZIP_B64 = "${options.romGzipB64}";
-  const canvas = document.getElementById("gb");
-  const errBox = id => document.getElementById("error");
 
-  async function gunzipBase64(b64) {
+<script>
+(function(){
+  const ENGINE_GZIP_B64 = "${options.engineGzipB64}";
+  const ROM_GZIP_B64 = "${options.romGzipB64}";
+
+  const canvas = document.getElementById("gb");
+  const bootCtx = canvas.getContext("2d");
+  const statusLed = document.getElementById("status-led");
+  const statusTxt = document.getElementById("status-text");
+  const dbgState = document.getElementById("dbg-state");
+  const dbgCart = document.getElementById("dbg-cart");
+  const dbgLog = document.getElementById("debug-log");
+  const tFps = document.getElementById("t-fps");
+  const tPc = document.getElementById("t-pc");
+  const tMbc = document.getElementById("t-mbc");
+  const tPad = document.getElementById("t-pad");
+
+  let bootLines = [];
+  let emuReady = false;
+  let loadedRomBinary = "";
+  let turboOn = false;
+  const activeKeys = new Set();
+
+  function logDebug(msg, level) {
+    const line = document.createElement("div");
+    line.className = "log-line " + (level || "");
+    const now = new Date();
+    const ts = String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0") + "." + String(now.getMilliseconds()).slice(0, 2);
+    line.textContent = "[" + ts + "] " + msg;
+    dbgLog.appendChild(line);
+    while (dbgLog.childNodes.length > 60) {
+      dbgLog.removeChild(dbgLog.firstChild);
+    }
+    dbgLog.scrollTop = dbgLog.scrollHeight;
+
+    if (!emuReady && bootCtx) {
+      bootLines.push(msg.slice(0, 25));
+      if (bootLines.length > 8) bootLines.shift();
+      bootCtx.fillStyle = "#07140c";
+      bootCtx.fillRect(0, 0, 160, 144);
+      bootCtx.fillStyle = "#00f3ff";
+      bootCtx.font = "bold 8px monospace";
+      bootCtx.fillText("LuferOS Game color Sys", 8, 14);
+      bootCtx.fillStyle = "#facc15";
+      bootCtx.fillText("BIOS V: 3.0 // BOOTING", 8, 25);
+      bootCtx.fillStyle = "#4ade80";
+      bootCtx.font = "7px monospace";
+      for (let i = 0; i < bootLines.length; i++) {
+        bootCtx.fillText("> " + bootLines[i], 6, 40 + i * 12);
+      }
+    }
+  }
+
+  window.addEventListener("error", function(e) {
+    statusLed.className = "err";
+    statusTxt.textContent = "FAULT";
+    dbgState.textContent = "❌ CPU/JS EXCEPTION";
+    logDebug("ERR: " + (e.message || "Error desconocido"), "log-err");
+  });
+
+  window.addEventListener("unhandledrejection", function(e) {
+    statusLed.className = "err";
+    statusTxt.textContent = "FAULT";
+    dbgState.textContent = "❌ PROMISE FAULT";
+    logDebug("PROMISE ERR: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), "log-err");
+  });
+
+  const memStore = {};
+  window.cout = function(message, colorIndex) {
+    if (!message) return;
+    const text = String(message).trim();
+    if (!text) return;
+    const lvl = colorIndex >= 2 ? "log-err" : colorIndex === 1 ? "log-warn" : "";
+    logDebug("CORE: " + text, lvl);
+  };
+  window.findValue = function(k) {
+    try {
+      if (k in memStore) return memStore[k];
+      const v = localStorage.getItem(k);
+      return v ? JSON.parse(v) : null;
+    } catch (e) {
+      return memStore[k] || null;
+    }
+  };
+  window.setValue = function(k, v) {
+    memStore[k] = v;
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+  };
+  window.deleteValue = function(k) {
+    delete memStore[k];
+    try { localStorage.removeItem(k); } catch (e) {}
+  };
+
+  const AUDIO_RING_SIZE = 16384;
+  const AUDIO_RING_MASK = AUDIO_RING_SIZE - 1;
+  const ringL = new Float32Array(AUDIO_RING_SIZE);
+  const ringR = new Float32Array(AUDIO_RING_SIZE);
+  let ringWrite = 0;
+  let ringRead = 0;
+  let webAudioCtx = null;
+  let emulatorSampleRate = 70000;
+
+  function unlockWebAudio() {
+    try {
+      if (!webAudioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        webAudioCtx = new AC();
+        const node = webAudioCtx.createScriptProcessor(2048, 0, 2);
+        node.onaudioprocess = function(e) {
+          const outL = e.outputBuffer.getChannelData(0);
+          const outR = e.outputBuffer.getChannelData(1);
+          for (let i = 0; i < outL.length; i++) {
+            if (ringRead !== ringWrite) {
+              outL[i] = ringL[ringRead];
+              outR[i] = ringR[ringRead];
+              ringRead = (ringRead + 1) & AUDIO_RING_MASK;
+            } else {
+              outL[i] = 0;
+              outR[i] = 0;
+            }
+          }
+        };
+        node.connect(webAudioCtx.destination);
+        logDebug("Audio APU desbloqueado (" + webAudioCtx.sampleRate + "Hz)", "log-ok");
+      }
+      if (webAudioCtx && webAudioCtx.state === "suspended") {
+        webAudioCtx.resume();
+      }
+    } catch (e) {}
+  }
+
+  window.XAudioServer = function(channels, sampleRate, minBuf, maxBuf, underRunCb, volume) {
+    emulatorSampleRate = Math.max(8000, Number(sampleRate) || 70000);
+    this.vol = typeof volume === "number" ? volume : 1.0;
+  };
+  window.XAudioServer.prototype.pushStereoSamples = function(buffer, length) {
+    const outRate = webAudioCtx ? webAudioCtx.sampleRate : 44100;
+    const ratio = emulatorSampleRate / outRate;
+    const totalFrames = (length || buffer.length) >> 1;
+    let srcFrame = 0;
+    while (srcFrame < totalFrames) {
+      const idx = (srcFrame | 0) << 1;
+      const nextWrite = (ringWrite + 1) & AUDIO_RING_MASK;
+      if (nextWrite !== ringRead) {
+        ringL[ringWrite] = (buffer[idx] || 0) * 0.5 * this.vol;
+        ringR[ringWrite] = (buffer[idx + 1] || 0) * 0.5 * this.vol;
+        ringWrite = nextWrite;
+      }
+      srcFrame += ratio;
+    }
+  };
+  window.XAudioServer.prototype.writeAudioNoCallback = function(buffer, length) {
+    this.pushStereoSamples(buffer, length);
+  };
+  window.XAudioServer.prototype.writeAudio = function(buffer, length) {
+    this.pushStereoSamples(buffer, length);
+  };
+  window.XAudioServer.prototype.remainingBuffer = function() {
+    return (ringWrite - ringRead) & AUDIO_RING_MASK;
+  };
+  window.XAudioServer.prototype.executeCallback = function() {};
+  window.XAudioServer.prototype.changeVolume = function(v) {
+    this.vol = v;
+  };
+
+  async function gunzipBase64ToBytes(b64) {
     const bin = atob(b64);
     const compressed = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) compressed[i] = bin.charCodeAt(i);
-    const ds = new DecompressionStream("gzip");
-    const writer = ds.writable.getWriter();
-    writer.write(compressed);
-    writer.close();
-    const resp = new Response(ds.readable);
-    const ab = await resp.arrayBuffer();
+    for (let i = 0; i < bin.length; i++) {
+      compressed[i] = bin.charCodeAt(i);
+    }
+    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const ab = await new Response(stream).arrayBuffer();
     return new Uint8Array(ab);
+  }
+
+  function uint8ToBinaryString(u8) {
+    const chunks = [];
+    const step = 8192;
+    for (let i = 0; i < u8.length; i += step) {
+      chunks.push(String.fromCharCode.apply(null, u8.subarray(i, i + step)));
+    }
+    return chunks.join("");
+  }
+
+  function parseCartridgeHeader(u8) {
+    let title = "";
+    for (let i = 0x0134; i <= 0x0142 && i < u8.length; i++) {
+      const c = u8[i];
+      if (c === 0) break;
+      if (c >= 32 && c <= 126) title += String.fromCharCode(c);
+    }
+    const cgbFlag = u8[0x0143] || 0;
+    const isColor = cgbFlag === 0x80 || cgbFlag === 0xC0;
+    const mbcByte = u8[0x0147] || 0;
+    const mbcNames = {
+      0x00: "ROM ONLY",
+      0x01: "MBC1", 0x02: "MBC1+RAM", 0x03: "MBC1+BAT",
+      0x05: "MBC2", 0x06: "MBC2+BAT",
+      0x0F: "MBC3+RTC", 0x10: "MBC3+RTC+RAM", 0x11: "MBC3", 0x12: "MBC3+RAM", 0x13: "MBC3+BAT",
+      0x19: "MBC5", 0x1A: "MBC5+RAM", 0x1B: "MBC5+BAT", 0x1C: "MBC5+RUMBLE", 0x1E: "MBC5+RUMBLE+BAT"
+    };
+    const mbc = mbcNames[mbcByte] || ("0x" + mbcByte.toString(16).toUpperCase());
+    return {
+      title: title.trim() || "UNKNOWN ROM",
+      isColor: isColor,
+      mbc: mbc,
+      sizeKb: Math.round(u8.length / 1024)
+    };
+  }
+
+  const releaseTimers = {};
+
+  function updatePadTelemetry() {
+    const arr = Array.from(activeKeys);
+    tPad.textContent = arr.length ? "PAD: " + arr.join("+").toUpperCase() : "PAD: IDLE";
+  }
+
+  function pressGbKey(keyName, el) {
+    unlockWebAudio();
+    if (el) el.classList.add("touching");
+    activeKeys.add(keyName);
+    updatePadTelemetry();
+    if (releaseTimers[keyName]) {
+      clearTimeout(releaseTimers[keyName]);
+      delete releaseTimers[keyName];
+    }
+    try {
+      if (typeof GameBoyKeyDown === "function") {
+        GameBoyKeyDown(keyName);
+      }
+    } catch (e) {}
+  }
+
+  function releaseGbKey(keyName, el) {
+    if (el) el.classList.remove("touching");
+    releaseTimers[keyName] = setTimeout(function() {
+      activeKeys.delete(keyName);
+      updatePadTelemetry();
+      try {
+        if (typeof GameBoyKeyUp === "function") {
+          GameBoyKeyUp(keyName);
+        }
+      } catch (e) {}
+      delete releaseTimers[keyName];
+    }, 50);
   }
 
   function setupControls() {
     document.querySelectorAll("[data-key]").forEach(function(btn) {
-      const k = btn.getAttribute("data-key");
-      const press = e => { if(e && e.cancelable) e.preventDefault(); btn.classList.add("touching"); LuferOSGBCEngine.keyDown(k); };
-      const release = e => { if(e && e.cancelable) e.preventDefault(); btn.classList.remove("touching"); LuferOSGBCEngine.keyUp(k); };
-      btn.addEventListener("touchstart", press, { passive: false });
-      btn.addEventListener("touchend", release, { passive: false });
-      btn.addEventListener("touchcancel", release, { passive: false });
-      btn.addEventListener("mousedown", press);
-      btn.addEventListener("mouseup", release);
-      btn.addEventListener("mouseleave", release);
+      const keyName = btn.getAttribute("data-key");
+      const onDown = function(e) {
+        if (e && e.cancelable) e.preventDefault();
+        pressGbKey(keyName, btn);
+      };
+      const onUp = function(e) {
+        if (e && e.cancelable) e.preventDefault();
+        releaseGbKey(keyName, btn);
+      };
+      btn.addEventListener("touchstart", onDown, { passive: false });
+      btn.addEventListener("touchend", onUp, { passive: false });
+      btn.addEventListener("touchcancel", onUp, { passive: false });
+      btn.addEventListener("mousedown", onDown);
+      btn.addEventListener("mouseup", onUp);
+      btn.addEventListener("mouseleave", onUp);
     });
 
-    document.getElementById("reset-btn").addEventListener("click", e => {
+    document.getElementById("reset-btn").addEventListener("click", function(e) {
       e.preventDefault();
-      window.location.reload();
+      unlockWebAudio();
+      if (loadedRomBinary && typeof start === "function") {
+        logDebug("Reiniciando CPU y registros...", "log-warn");
+        start(canvas, loadedRomBinary);
+        logDebug("Reinicio completado OK.", "log-ok");
+      }
+    });
+
+    const turboBtn = document.getElementById("turbo-btn");
+    turboBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      unlockWebAudio();
+      turboOn = !turboOn;
+      turboBtn.classList.toggle("active", turboOn);
+      turboBtn.textContent = turboOn ? "⚡ TURBO 2X" : "⚡ TURBO 1X";
+      if (window.gameboy && typeof window.gameboy.setSpeed === "function") {
+        window.gameboy.setSpeed(turboOn ? 2.0 : 1.0);
+        logDebug("Velocidad CPU ajustada a " + (turboOn ? "2.0x" : "1.0x"), "log-sys");
+      }
+    });
+
+    document.getElementById("dbg-toggle-btn").addEventListener("click", function(e) {
+      e.preventDefault();
+      dbgLog.classList.toggle("collapsed");
+    });
+
+    const kbMap = {
+      ArrowUp: "up", KeyW: "up",
+      ArrowDown: "down", KeyS: "down",
+      ArrowLeft: "left", KeyA: "left",
+      ArrowRight: "right", KeyD: "right",
+      KeyK: "a", KeyZ: "a", Space: "a",
+      KeyJ: "b", KeyX: "b", ShiftLeft: "b",
+      Enter: "start",
+      Tab: "select", Backspace: "select"
+    };
+
+    window.addEventListener("keydown", function(e) {
+      const k = kbMap[e.code];
+      if (k) {
+        e.preventDefault();
+        pressGbKey(k, null);
+      }
+    });
+
+    window.addEventListener("keyup", function(e) {
+      const k = kbMap[e.code];
+      if (k) {
+        e.preventDefault();
+        releaseGbKey(k, null);
+      }
     });
   }
 
-  async function boot() {
+  let totalRenderedFrames = 0;
+  let lastCheckFrames = 0;
+
+  function startTelemetryLoop() {
+    setInterval(function() {
+      if (!window.gameboy) return;
+      const fps = (totalRenderedFrames - lastCheckFrames) * 2;
+      lastCheckFrames = totalRenderedFrames;
+      tFps.textContent = "FPS: " + fps;
+      const pc = typeof window.gameboy.programCounter === "number"
+        ? "0x" + window.gameboy.programCounter.toString(16).toUpperCase().padStart(4, "0")
+        : "0x0000";
+      tPc.textContent = "PC: " + pc;
+    }, 500);
+  }
+
+  async function bootSystemV3() {
     try {
+      logDebug("Iniciando LuferOS Game color Sys V: 3.0", "log-sys");
       setupControls();
-      const romBytes = await gunzipBase64(ROM_GZIP_B64);
-      LuferOSGBCEngine.init(canvas, romBytes);
+
+      logDebug("Descomprimiendo núcleo LR35902 GBC...", "");
+      const engineBytes = await gunzipBase64ToBytes(ENGINE_GZIP_B64);
+      const engineJsText = new TextDecoder("utf-8").decode(engineBytes);
+      logDebug("Núcleo descomprimido (" + Math.round(engineBytes.length / 1024) + " KB). Inyectando DOM...", "");
+
+      const scriptEl = document.createElement("script");
+      scriptEl.text = engineJsText;
+      document.head.appendChild(scriptEl);
+
+      if (typeof window.GameBoyCore !== "function" || typeof window.start !== "function") {
+        throw new Error("El núcleo GameBoyCore no se registró en window.");
+      }
+      logDebug("Motor GameBoyCore cargado en memoria OK.", "log-ok");
+
+      logDebug("Descomprimiendo cartucho ROM...", "");
+      const romBytes = await gunzipBase64ToBytes(ROM_GZIP_B64);
+      const hdr = parseCartridgeHeader(romBytes);
+      dbgCart.textContent = hdr.title + " (" + hdr.sizeKb + "KB)";
+      tMbc.textContent = hdr.mbc;
+      logDebug("Cartucho: [" + hdr.title + "] | " + hdr.sizeKb + "KB | " + hdr.mbc + " | " + (hdr.isColor ? "GBC Color" : "DMG"), "log-sys");
+
+      loadedRomBinary = uint8ToBinaryString(romBytes);
+
+      const origDraw = window.GameBoyCore.prototype.drawToCanvas;
+      if (typeof origDraw === "function") {
+        window.GameBoyCore.prototype.drawToCanvas = function() {
+          totalRenderedFrames++;
+          return origDraw.apply(this, arguments);
+        };
+      }
+
+      settings[0] = true;
+      settings[3] = 1.0;
+
+      emuReady = true;
+      logDebug("Arrancando CPU y LCD 160x144...", "");
+      start(canvas, loadedRomBinary);
+
+      statusLed.className = "on";
+      statusTxt.textContent = "READY";
+      dbgState.textContent = "🟢 SISTEMA LISTO • CORRIENDO";
+      logDebug("[READY] ¡Sistema LISTO! Emulación en curso.", "log-ok");
+      startTelemetryLoop();
     } catch (err) {
-      const eb = document.getElementById("error");
-      if (eb) { eb.style.display = "block"; eb.textContent = "Error: " + err.message; }
+      statusLed.className = "err";
+      statusTxt.textContent = "ERROR";
+      dbgState.textContent = "❌ FALLO EN ARRANQUE";
+      logDebug("ERROR FATAL: " + (err && err.message ? err.message : String(err)), "log-err");
     }
   }
 
-  boot();
+  bootSystemV3();
 })();
 </script>
 </body>`;
-
-  return template;
 }
 
 export default {
   name: ["gb", "gbc", "gameboy"],
   category: "group",
-  description: "Emulador LuferOS Game Boy Color interactivo optimizado para WhatsApp.",
+  description: "LuferOS Game color Sys V: 3.0 con consola de diagnóstico en vivo y soporte .gb, .gbc y .zip.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -496,14 +870,14 @@ export default {
           .join("\n");
 
         return reply(
-          `╭〔 🎮 ${fytBold("JUEGOS EN MEMORIA LUFEROS GBC")} 〕⬣\n` +
+          `╭〔 🎮 ${fytBold("LuferOS Game color Sys V: 3.0")} 〕⬣\n` +
             `${listTxt}\n` +
             `╰━━━━━━━━━━━━⬣\n` +
-            `Usa \`${prefix}gbc <Nombre>\` para jugar.`,
+            `Usa \`${prefix}gbc <Nombre>\` para iniciar.`,
         );
       }
 
-      const engineCode = await getEngineCode();
+      const engineGzipB64 = await getGzippedGbcEngineB64();
       let romBuffer: Buffer | null = null;
       let displayTitle = "GAME BOY COLOR";
       let customSaveName = "";
@@ -520,7 +894,7 @@ export default {
       if (quotedDoc) {
         const extracted = extractRomFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
         if (!extracted) {
-          throw new Error("El archivo adjunto no contiene una ROM válida dentro del archivo.");
+          throw new Error("El archivo adjunto no contiene una ROM .gb/.gbc válida.");
         }
         romBuffer = extracted.buffer;
 
@@ -530,7 +904,7 @@ export default {
 
         const duplicateRealName = checkForDuplicateRom(romBuffer);
         if (duplicateRealName && duplicateRealName.toLowerCase() !== requestedName.toLowerCase()) {
-          duplicateNotice = `⚠️ *Emulador LuferOS GBC:* Este juego ya está guardado en memoria con el nombre \`${duplicateRealName}\`.`;
+          duplicateNotice = `⚠️ *LuferOS Game color Sys V: 3.0:* Este juego ya existe en memoria bajo el nombre \`${duplicateRealName}\`.`;
           displayTitle = `${duplicateRealName.toUpperCase()} • GBC`;
         } else {
           const safeFileName = requestedName.replace(/[^a-zA-Z0-9._-]/g, "_") + ext;
@@ -552,7 +926,8 @@ export default {
             .filter((f) => /\.(gb|gbc)$/i.test(f));
 
           if (!searchName && savedRoms.length > 0) {
-            const preferred = savedRoms[0];
+            const preferred =
+              savedRoms.find((f) => f.toLowerCase().includes("bowling")) || savedRoms[0];
             const extracted = extractRomFromAnyBuffer(
               fs.readFileSync(path.join(CACHE_DIR, preferred)),
               preferred,
@@ -579,9 +954,8 @@ export default {
       const romGzipB64 = zlib.gzipSync(romBuffer, { level: 9 }).toString("base64");
 
       const HTML = buildGbcConsoleHtml({
-        engineCode,
+        engineGzipB64,
         romGzipB64,
-        banner: "★  EMULADOR LUFEROS GBC  ★",
         bezelTitle: displayTitle,
       });
 
@@ -594,7 +968,7 @@ export default {
               __typename: "GenAISingleLayoutViewModel",
               primitive: {
                 __typename: "GenAIBotProgressStatusPrimitive",
-                title: `🎮 LUFEROS GBC: ${displayTitle}`,
+                title: `🎮 LuferOS Game color Sys V: 3.0 (${displayTitle})`,
                 is_in_progress: true,
               },
             },
@@ -602,14 +976,14 @@ export default {
         ],
         embedded_screens: [
           {
-            title: `LuferOS GBC • ${displayTitle}`,
+            title: `LuferOS Game color Sys V: 3.0`,
             content: [
               {
                 __typename: "FOAIDNixelButtonSheets",
                 tabs: [
                   {
                     id: "tab_0",
-                    tab_header: "LuferOS GBC",
+                    tab_header: "LuferOS Game color Sys V: 3.0",
                     sections: [
                       {
                         __typename: "GenAIUnifiedResponseSection",
@@ -633,7 +1007,10 @@ export default {
         ],
       };
 
-      const msgId = randomUUID();
+      const msgId =
+        typeof (sock as any).generateMessageTag === "function"
+          ? await (sock as any).generateMessageTag()
+          : randomUUID();
 
       await sock.relayMessage(
         from,
@@ -672,7 +1049,7 @@ export default {
     } catch (e: any) {
       await react("❌").catch(() => undefined);
       await reply(
-        `❌ ${fytBold("Emulador LuferOS GBC:")} ${e?.message || String(e)}`,
+        `❌ ${fytBold("LuferOS Game color Sys V: 3.0:")} ${e?.message || String(e)}`,
       ).catch(() => undefined);
     }
   },
