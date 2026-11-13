@@ -39,9 +39,7 @@ function isZipBuffer(buf: Buffer): boolean {
 }
 
 function isValidSegaRom(buf: Buffer): boolean {
-  if (!Buffer.isBuffer(buf) || buf.length < 16384) return false;
-  if (isZipBuffer(buf)) return false;
-  return true;
+  return Buffer.isBuffer(buf) && buf.length >= 16384 && !isZipBuffer(buf);
 }
 
 function convertSmdToBinIfNeeded(buf: Buffer, fileName: string): Buffer {
@@ -52,8 +50,9 @@ function convertSmdToBinIfNeeded(buf: Buffer, fileName: string): Buffer {
     buf[8] === 0xaa &&
     buf[9] === 0xbb;
 
-  if (!isSmdExt && !hasSmdHeader) return buf;
-  if ((buf.length - 512) % 16384 !== 0) return buf;
+  if ((!isSmdExt && !hasSmdHeader) || (buf.length - 512) % 16384 !== 0) {
+    return buf;
+  }
 
   const out = Buffer.alloc(buf.length - 512);
   const blocks = (buf.length - 512) / 16384;
@@ -98,8 +97,7 @@ function extractSegaFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: s
 
       ptr += 46 + fnLen + extraLen + commentLen;
 
-      if (entryName.endsWith("/")) continue;
-      if (localOffset + 30 > zipBuf.length) continue;
+      if (entryName.endsWith("/") || localOffset + 30 > zipBuf.length) continue;
       if (zipBuf.readUInt32LE(localOffset) !== 0x04034b50) continue;
 
       const lFnLen = zipBuf.readUInt16LE(localOffset + 26);
@@ -107,25 +105,19 @@ function extractSegaFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: s
       const dataStart = localOffset + 30 + lFnLen + lExtraLen;
       const dataEnd = dataStart + compSize;
 
-      if (compSize === 0 || dataEnd > zipBuf.length) continue;
-      if (uncompSize > 16 * 1024 * 1024) continue;
+      if (compSize === 0 || dataEnd > zipBuf.length || uncompSize > 16 * 1024 * 1024) continue;
 
       const slice = zipBuf.subarray(dataStart, dataEnd);
       const low = entryName.toLowerCase();
 
-      if (
-        low.endsWith(".bin") ||
-        low.endsWith(".md") ||
-        low.endsWith(".gen") ||
-        low.endsWith(".smd") ||
-        low.endsWith(".32x") ||
-        uncompSize >= 16384
-      ) {
+      if (/\.(bin|md|gen|smd|32x)$/i.test(low) || uncompSize >= 16384) {
         try {
           const rawOut = method === 0 ? Buffer.from(slice) : zlib.inflateRawSync(slice);
           if (isValidSegaRom(rawOut)) {
-            const cleanBuf = convertSmdToBinIfNeeded(rawOut, entryName);
-            return { buffer: cleanBuf, fileName: path.basename(entryName) };
+            return {
+              buffer: convertSmdToBinIfNeeded(rawOut, entryName),
+              fileName: path.basename(entryName),
+            };
           }
         } catch {}
       }
@@ -151,8 +143,10 @@ function extractSegaFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: s
     try {
       const rawOut = method === 0 ? Buffer.from(slice) : zlib.inflateRawSync(slice);
       if (isValidSegaRom(rawOut)) {
-        const cleanBuf = convertSmdToBinIfNeeded(rawOut, entryName);
-        return { buffer: cleanBuf, fileName: path.basename(entryName || "game.bin") };
+        return {
+          buffer: convertSmdToBinIfNeeded(rawOut, entryName),
+          fileName: path.basename(entryName || "game.bin"),
+        };
       }
     } catch {}
 
@@ -163,14 +157,9 @@ function extractSegaFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: s
 }
 
 function extractSegaFromAnyBuffer(rawBuf: Buffer, originalName = "game.bin"): { buffer: Buffer; fileName: string } | null {
-  if (isZipBuffer(rawBuf)) {
-    return extractSegaFromZipBuffer(rawBuf);
-  }
+  if (isZipBuffer(rawBuf)) return extractSegaFromZipBuffer(rawBuf);
   if (isValidSegaRom(rawBuf)) {
-    return {
-      buffer: convertSmdToBinIfNeeded(rawBuf, originalName),
-      fileName: originalName,
-    };
+    return { buffer: convertSmdToBinIfNeeded(rawBuf, originalName), fileName: originalName };
   }
   return null;
 }
@@ -211,7 +200,7 @@ async function fetchBufferWithTimeout(url: string, timeoutMs = 18000): Promise<B
 async function getGzippedGenesisEngineB64(): Promise<string> {
   if (cachedEngineGzipB64) return cachedEngineGzipB64;
 
-  if (fs.existsSync(ENGINE_CACHE_FILE) && fs.statSync(ENGINE_CACHE_FILE).size > 40000) {
+  if (fs.existsSync(ENGINE_CACHE_FILE) && fs.statSync(ENGINE_CACHE_FILE).size > 30000) {
     cachedEngineGzipB64 = fs.readFileSync(ENGINE_CACHE_FILE).toString("base64");
     return cachedEngineGzipB64;
   }
@@ -229,7 +218,7 @@ async function getGzippedGenesisEngineB64(): Promise<string> {
     } catch {}
   }
 
-  throw new Error("No se pudo descargar el núcleo SEGA Genesis (PicoDrive JS).");
+  throw new Error("No se pudo descargar el núcleo SEGA Genesis.");
 }
 
 async function ensureDefaultDemoRom(): Promise<Buffer | null> {
@@ -258,21 +247,11 @@ function getStoredSegaByName(nameKey: string): { buffer: Buffer; realName: strin
   for (const f of files) {
     const baseName = f.replace(/\.(bin|md|gen|smd|32x)$/i, "");
     const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanBase === cleanKey) {
+    if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
       const buf = fs.readFileSync(path.join(CACHE_DIR, f));
       if (isValidSegaRom(buf)) return { buffer: buf, realName: baseName };
     }
   }
-
-  for (const f of files) {
-    const baseName = f.replace(/\.(bin|md|gen|smd|32x)$/i, "");
-    const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
-      const buf = fs.readFileSync(path.join(CACHE_DIR, f));
-      if (isValidSegaRom(buf)) return { buffer: buf, realName: baseName };
-    }
-  }
-
   return null;
 }
 
@@ -282,9 +261,8 @@ function checkForDuplicateSegaRom(newBuf: Buffer): string | null {
   const files = fs.readdirSync(CACHE_DIR).filter((f) => /\.(bin|md|gen|smd|32x)$/i.test(f));
 
   for (const f of files) {
-    const p = path.join(CACHE_DIR, f);
     try {
-      const existingBuf = fs.readFileSync(p);
+      const existingBuf = fs.readFileSync(path.join(CACHE_DIR, f));
       if (existingBuf.length === newBuf.length && existingBuf.equals(newBuf)) {
         return f.replace(/\.(bin|md|gen|smd|32x)$/i, "");
       }
@@ -324,66 +302,59 @@ function buildSegaConsoleHtml(options: {
   romFileName: string;
   bezelTitle: string;
 }): string {
-  return `<style>
+  const html = `<style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
-html,body{width:100%;min-height:100%;background:#05060a}
-body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;overflow-x:hidden;overflow-y:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;color:#f4f4f5;background:#05060a}
-#sega-case{width:min(98vw,540px);max-width:540px;margin:0 auto;background:linear-gradient(165deg,#18181b 0%,#0f0f12 52%,#09090b 100%);border:3px solid #27272a;border-radius:22px 22px 46px 22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 48px rgba(0,0,0,.92),inset 0 2px 1px rgba(255,255,255,.15)}
-#sega-top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:linear-gradient(90deg,#7f1d1d,#dc2626 50%,#7f1d1d);border-bottom:2px solid #facc15;font-size:11px;font-weight:900;letter-spacing:1.2px;color:#fff;text-shadow:0 1px 2px #000}
+html,body{width:100%;min-height:100%;background:#05060a;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;overflow-x:hidden;overflow-y:auto}
+body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center}
+#sega-case{width:min(98vw,540px);margin:0 auto;background:linear-gradient(165deg,#18181b 0%,#0f0f12 52%,#09090b 100%);border:3px solid #27272a;border-radius:22px 22px 46px 22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 48px rgba(0,0,0,.92)}
+#sega-top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:linear-gradient(90deg,#7f1d1d,#dc2626 50%,#7f1d1d);border-bottom:2px solid #facc15;font-size:11px;font-weight:900;letter-spacing:1.2px;color:#fff}
 .sega-ver{background:#09090b;color:#facc15;border:1px solid #facc15;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:900}
 #lens-outer{width:100%;padding:8px 12px 6px;display:flex;flex-direction:column;align-items:center}
-#lens-bezel{width:100%;background:linear-gradient(180deg,#1f1f23 0%,#09090b 100%);border:3px solid #3f3f46;border-radius:14px;padding:7px 10px 8px;box-shadow:inset 0 2px 6px rgba(0,0,0,.85),0 6px 16px rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;position:relative}
+#lens-bezel{width:100%;background:linear-gradient(180deg,#1f1f23 0%,#09090b 100%);border:3px solid #3f3f46;border-radius:14px;padding:7px 10px 8px;display:flex;flex-direction:column;align-items:center}
 #lens-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 .pwr-wrap{display:flex;align-items:center;gap:5px}
-#status-led{width:8px;height:8px;border-radius:50%;background:#facc15;box-shadow:0 0 8px #facc15;transition:all .2s}
+#status-led{width:8px;height:8px;border-radius:50%;background:#facc15;box-shadow:0 0 8px #facc15}
 #status-led.on{background:#ef4444;box-shadow:0 0 10px #ef4444}
 #status-led.err{background:#f97316;box-shadow:0 0 9px #f97316}
 .pwr-txt{font-size:8px;font-weight:900;color:#d4d4d8;letter-spacing:1px}
 .rom-tag{font-size:8.5px;font-weight:900;color:#60a5fa;letter-spacing:.8px;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#screen-container{position:relative;width:96%;aspect-ratio:320/224;background:#000;border:2.5px solid #dc2626;border-radius:6px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 14px rgba(0,0,0,.95)}
-#game{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
-#game canvas,canvas#boot-cv{width:100%!important;height:100%!important;object-fit:fill!important;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
-canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
+#screen-container{position:relative;width:96%;aspect-ratio:320/224;background:#000;border:2.5px solid #dc2626;border-radius:6px;overflow:hidden;display:flex;justify-content:center;align-items:center}
+#game{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
+#game canvas,canvas#boot-cv{width:100%!important;height:100%!important;object-fit:fill!important;display:block!important;position:absolute!important;inset:0!important;image-rendering:pixelated}
+canvas#boot-cv{z-index:3;pointer-events:none}
 #lens-logo{margin-top:6px;display:flex;align-items:center;justify-content:space-between;width:96%}
-.md-gold{font-family:Impact,"Arial Black",sans-serif;font-size:13px;font-style:italic;letter-spacing:1.5px;background:linear-gradient(180deg,#fef08a 0%,#ca8a04 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900}
-.sega-blue{font-family:"Arial Black",sans-serif;font-size:12px;font-weight:900;letter-spacing:2px;color:#3b82f6;text-shadow:0 0 6px rgba(59,130,246,.5)}
-#debug-wrap{width:94%;margin:2px auto 4px;background:#06080f;border:1.5px solid #3b82f6;border-radius:8px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.75)}
-#debug-head{background:linear-gradient(90deg,#0f172a,#1e3a8a);padding:4px 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(59,130,246,.35);font-family:monospace;font-size:9px;color:#93c5fd;font-weight:900}
-#telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#030508;padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.08);font-family:monospace;font-size:8.5px;color:#bfdbfe;text-align:center}
+.md-gold{font-family:Impact,sans-serif;font-size:13px;font-style:italic;letter-spacing:1.5px;color:#facc15;font-weight:900}
+.sega-blue{font-family:"Arial Black",sans-serif;font-size:12px;font-weight:900;letter-spacing:2px;color:#3b82f6}
+#debug-wrap{width:94%;margin:2px auto 4px;background:#06080f;border:1.5px solid #3b82f6;border-radius:8px;overflow:hidden}
+#debug-head{background:linear-gradient(90deg,#0f172a,#1e3a8a);padding:4px 8px;display:flex;justify-content:space-between;align-items:center;font-family:monospace;font-size:9px;color:#93c5fd;font-weight:900}
+#telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#030508;padding:3px 6px;font-family:monospace;font-size:8.5px;color:#bfdbfe;text-align:center}
 .t-cell{background:rgba(255,255,255,.04);padding:2px 3px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#debug-panel{display:block}
 #debug-panel.collapsed{display:none}
-#debug-log{height:76px;overflow-y:auto;padding:5px 7px;font-family:"Courier New",monospace;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text;-webkit-user-select:text}
-#debug-actions{display:flex;justify-content:flex-end;gap:6px;padding:3px 6px;background:#070a12;border-top:1px solid rgba(255,255,255,.08)}
+#debug-log{height:74px;overflow-y:auto;padding:5px 7px;font-family:monospace;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text;-webkit-user-select:text}
+#debug-actions{display:flex;justify-content:flex-end;gap:6px;padding:3px 6px;background:#070a12}
 .dbg-mini-btn{background:#1e293b;color:#60a5fa;border:1px solid #2563eb;border-radius:4px;padding:2px 7px;font-size:8px;font-weight:900;cursor:pointer}
 .log-line{margin-bottom:1px;word-break:break-all}
-.log-warn{color:#facc15}
-.log-err{color:#f87171;font-weight:900}
-.log-sys{color:#60a5fa;font-weight:900}
-.log-ok{color:#4ade80;font-weight:900}
+.log-warn{color:#facc15}.log-err{color:#f87171;font-weight:900}.log-sys{color:#60a5fa;font-weight:900}.log-ok{color:#4ade80;font-weight:900}
 #pad-area{width:100%;padding:6px 14px 16px;display:flex;flex-direction:column;gap:10px}
-#top-pad-row{width:100%;display:flex;justify-content:center;align-items:center;gap:28px;margin-top:2px}
+#top-pad-row{width:100%;display:flex;justify-content:center;align-items:center;gap:28px}
 .sega-pill{min-width:82px;height:26px;border-radius:14px;border:1.5px solid #09090b;font-size:10px;font-weight:900;letter-spacing:1.2px;cursor:pointer;box-shadow:0 3px 0 #000}
 #btn-mode{background:linear-gradient(180deg,#52525b,#27272a);color:#e4e4e7}
 #btn-start{background:linear-gradient(180deg,#ef4444,#991b1b);color:#fff}
-.sega-pill.touching{transform:translateY(2px);box-shadow:0 1px 0 #000;filter:brightness(1.25)}
+.sega-pill.touching{transform:translateY(2px);filter:brightness(1.25)}
 #main-controls{width:100%;display:flex;justify-content:space-between;align-items:center;padding:2px 4px}
-#dpad{position:relative;width:132px;height:132px;border-radius:50%;background:radial-gradient(circle,#27272a 0%,#121215 78%);border:2px solid #3f3f46;box-shadow:inset 0 2px 5px rgba(0,0,0,.8),0 5px 12px rgba(0,0,0,.6);flex-shrink:0}
+#dpad{position:relative;width:132px;height:132px;border-radius:50%;background:radial-gradient(circle,#27272a 0%,#121215 78%);border:2px solid #3f3f46;flex-shrink:0}
 .dpad-btn{position:absolute;width:42px;height:42px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);color:#f4f4f5;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;box-shadow:0 3px 0 #000}
-.dpad-btn.touching{background:#dc2626;color:#fff;transform:translateY(2px);box-shadow:0 1px 0 #000}
-#u{left:43px;top:5px}
-#d{left:43px;bottom:5px}
-#l{left:5px;top:43px}
-#r{right:5px;top:43px}
+.dpad-btn.touching{background:#dc2626;color:#fff;transform:translateY(2px)}
+#u{left:43px;top:5px}#d{left:43px;bottom:5px}#l{left:5px;top:43px}#r{right:5px;top:43px}
 #dpad-center{position:absolute;left:50px;top:50px;width:28px;height:28px;border-radius:50%;background:#09090b}
 #sega-buttons{display:flex;flex-direction:column;gap:8px;align-items:center;background:rgba(255,255,255,.03);padding:10px 12px;border-radius:26px;border:1.5px solid rgba(255,255,255,.08);transform:rotate(-14deg)}
 .xyz-row,.abc-row{display:flex;gap:10px;align-items:center}
 .xyz-btn{width:38px;height:38px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 30% 30%,#52525b,#18181b 78%);color:#d4d4d8;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 0 #000;transform:rotate(14deg)}
 .abc-btn{width:46px;height:46px;border-radius:50%;border:2px solid #09090b;background:radial-gradient(circle at 30% 30%,#3b82f6,#1d4ed8 78%);color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 #000;transform:rotate(14deg)}
-.xyz-btn.touching,.abc-btn.touching{background:radial-gradient(circle at 30% 30%,#ef4444,#991b1b 78%);color:#fff;transform:rotate(14deg) translateY(2px) scale(.94);box-shadow:0 1px 0 #000}
-#bottom-tools{width:100%;display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:2px}
-.tool-btn{border:1.5px solid #27272a;border-radius:7px;background:linear-gradient(180deg,#27272a,#09090b);color:#facc15;padding:5px 10px;font-weight:900;font-size:9.5px;letter-spacing:.5px;cursor:pointer;box-shadow:0 2px 0 #000}
-.tool-btn:active,.tool-btn.active{background:#dc2626;color:#fff;border-color:#facc15;transform:translateY(1px)}
+.xyz-btn.touching,.abc-btn.touching{background:#ef4444;color:#fff;transform:rotate(14deg) translateY(2px) scale(.94)}
+#bottom-tools{width:100%;display:flex;justify-content:center;flex-wrap:wrap;gap:6px}
+.tool-btn{border:1.5px solid #27272a;border-radius:7px;background:linear-gradient(180deg,#27272a,#09090b);color:#facc15;padding:5px 10px;font-weight:900;font-size:9.5px;cursor:pointer}
+.tool-btn:active,.tool-btn.active{background:#dc2626;color:#fff;border-color:#facc15}
 </style>
 <body>
 <div id="sega-case">
@@ -391,7 +362,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
     <span>★ LuferOS SEGA GENESIS 16-BIT ★</span>
     <span class="sega-ver">V: 5.0</span>
   </div>
-
   <div id="lens-outer">
     <div id="lens-bezel">
       <div id="lens-top">
@@ -399,7 +369,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
           <div id="status-led"></div>
           <span class="pwr-txt" id="status-text">BOOT</span>
         </div>
-        <div class="rom-tag">${options.bezelTitle}</div>
+        <div class="rom-tag">__BEZEL_TITLE__</div>
       </div>
       <div id="screen-container">
         <div id="game"></div>
@@ -411,7 +381,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       </div>
     </div>
   </div>
-
   <div id="debug-wrap">
     <div id="debug-head">
       <span id="dbg-state">⚡ M68000 + Z80 INIT...</span>
@@ -431,13 +400,11 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       </div>
     </div>
   </div>
-
   <div id="pad-area">
     <div id="top-pad-row">
       <button class="sega-pill" id="btn-mode" data-key="mode">MODE</button>
       <button class="sega-pill" id="btn-start" data-key="start">START</button>
     </div>
-
     <div id="main-controls">
       <div id="dpad">
         <div id="dpad-center"></div>
@@ -446,7 +413,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         <button class="dpad-btn" id="r" data-key="right">▶</button>
         <button class="dpad-btn" id="d" data-key="down">▼</button>
       </div>
-
       <div id="sega-buttons">
         <div class="xyz-row">
           <button class="xyz-btn" data-key="x">X</button>
@@ -460,7 +426,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         </div>
       </div>
     </div>
-
     <div id="bottom-tools">
       <button class="tool-btn active" id="dbg-toggle-btn">📟 LOGS (ON)</button>
       <button class="tool-btn" id="sound-btn">🔊 SONIDO</button>
@@ -468,8 +433,10 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
     </div>
   </div>
 </div>
+<script>__SEGA_SCRIPT__</script>
+</body>`;
 
-<script>
+  const script = `
 (function(){
   const ENGINE_GZIP_B64 = "${options.engineGzipB64}";
   const ROM_GZIP_B64 = "${options.romGzipB64}";
@@ -494,10 +461,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
 
   function logSys(msg, cls) {
     const now = new Date();
-    const ts =
-      String(now.getMinutes()).padStart(2, "0") + ":" +
-      String(now.getSeconds()).padStart(2, "0") + "." +
-      String(now.getMilliseconds()).padStart(3, "0").slice(0, 2);
+    const ts = String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0") + "." + String(now.getMilliseconds()).padStart(3, "0").slice(0, 2);
     const fullLine = "[" + ts + "] " + msg;
     logHistory.push(fullLine);
     if (logHistory.length > 120) logHistory.shift();
@@ -506,9 +470,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
     div.className = "log-line " + (cls || "");
     div.textContent = fullLine;
     dbgLog.appendChild(div);
-    while (dbgLog.childNodes.length > 80) {
-      dbgLog.removeChild(dbgLog.firstChild);
-    }
+    while (dbgLog.childNodes.length > 80) dbgLog.removeChild(dbgLog.firstChild);
     dbgLog.scrollTop = dbgLog.scrollHeight;
 
     if (!emuReady && bootCtx) {
@@ -517,15 +479,15 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       bootCtx.fillStyle = "#050710";
       bootCtx.fillRect(0, 0, 320, 224);
       bootCtx.fillStyle = "#3b82f6";
-      bootCtx.font = "bold 12px monospace";
-      bootCtx.fillText("SEGA MEGA DRIVE // LUFEROS V5.0", 14, 24);
+      bootCtx.font = "bold 11px monospace";
+      bootCtx.fillText("SEGA MEGA DRIVE // LUFEROS V5.0", 12, 24);
       bootCtx.fillStyle = "#facc15";
       bootCtx.font = "bold 9px monospace";
-      bootCtx.fillText("MOTOROLA 68000 + Z80 + YM2612 BIOS", 14, 40);
+      bootCtx.fillText("MOTOROLA 68000 + Z80 + YM2612 BIOS", 12, 40);
       bootCtx.fillStyle = "#4ade80";
       bootCtx.font = "9px monospace";
       for (let i = 0; i < bootLines.length; i++) {
-        bootCtx.fillText("> " + bootLines[i], 12, 62 + i * 16);
+        bootCtx.fillText("> " + bootLines[i], 10, 60 + i * 16);
       }
     }
   }
@@ -535,12 +497,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
     statusTxt.textContent = "FAULT";
     dbgState.textContent = "❌ 68000 EXCEPTION";
     logSys("ERR: " + (e.message || "Error desconocido"), "log-err");
-  });
-
-  window.addEventListener("unhandledrejection", function(e) {
-    statusLed.className = "err";
-    statusTxt.textContent = "FAULT";
-    logSys("PROMISE ERR: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), "log-err");
   });
 
   async function gunzipBase64ToBytes(b64) {
@@ -558,25 +514,16 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
     if (u8.length >= 0x200) {
       let sysRaw = "";
       for (let i = 0x100; i < 0x110; i++) {
-        const c = u8[i];
-        if (c >= 32 && c <= 126) sysRaw += String.fromCharCode(c);
+        if (u8[i] >= 32 && u8[i] <= 126) sysRaw += String.fromCharCode(u8[i]);
       }
       if (sysRaw.trim()) consoleType = sysRaw.trim();
-
       for (let i = 0x150; i < 0x180; i++) {
-        const c = u8[i];
-        if (c >= 32 && c <= 126) domesticName += String.fromCharCode(c);
-      }
-      if (!domesticName.trim()) {
-        for (let i = 0x120; i < 0x150; i++) {
-          const c = u8[i];
-          if (c >= 32 && c <= 126) domesticName += String.fromCharCode(c);
-        }
+        if (u8[i] >= 32 && u8[i] <= 126) domesticName += String.fromCharCode(u8[i]);
       }
     }
     return {
       consoleType: consoleType.slice(0, 16),
-      gameTitle: domesticName.replace(/\\s+/g, " ").trim() || ROM_FILE_NAME,
+      gameTitle: domesticName.trim() || ROM_FILE_NAME,
       sizeKb: Math.round(u8.length / 1024)
     };
   }
@@ -623,7 +570,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       const k = btn.getAttribute("data-key");
       const spec = KEY_SPEC[k];
       if (!spec) return;
-
       const onDown = function(e) {
         if (e && e.cancelable) e.preventDefault();
         btn.classList.add("touching");
@@ -631,7 +577,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         updatePadTelemetry();
         dispatchSyntheticKey("keydown", spec);
       };
-
       const onUp = function(e) {
         if (e && e.cancelable) e.preventDefault();
         btn.classList.remove("touching");
@@ -639,7 +584,6 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         updatePadTelemetry();
         dispatchSyntheticKey("keyup", spec);
       };
-
       btn.addEventListener("touchstart", onDown, { passive: false });
       btn.addEventListener("touchend", onUp, { passive: false });
       btn.addEventListener("touchcancel", onUp, { passive: false });
@@ -664,10 +608,9 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
 
     document.getElementById("btn-copy-log").addEventListener("click", function(e) {
       e.preventDefault();
-      const txt = logHistory.join("\\n");
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(txt).then(function() {
-          logSys("Logs copiados al portapapeles OK.", "log-ok");
+        navigator.clipboard.writeText(logHistory.join("\\n")).then(function() {
+          logSys("Logs copiados OK.", "log-ok");
         }).catch(function() {});
       }
     });
@@ -676,7 +619,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       e.preventDefault();
       if (typeof window.toggleSoundGenesis === "function") {
         window.toggleSoundGenesis();
-        logSys("Audio YM2612 FM + SN76489 conmutado.", "log-sys");
+        logSys("Audio YM2612 conmutado.", "log-sys");
       }
     });
 
@@ -684,7 +627,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
       e.preventDefault();
       if (typeof window.resetGenesis === "function") {
         window.resetGenesis();
-        logSys("Hard-Reset Motorola 68000 ejecutado OK.", "log-warn");
+        logSys("Reset M68000 ejecutado OK.", "log-warn");
       }
     });
   }
@@ -700,9 +643,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         const fps = Math.min(60, Math.round((rafFrames * 1000) / (now - lastFpsStamp)));
         rafFrames = 0;
         lastFpsStamp = now;
-        if (emuReady) {
-          tFps.textContent = "FPS: " + fps;
-        }
+        if (emuReady) tFps.textContent = "FPS: " + fps;
       }
     }
     requestAnimationFrame(tick);
@@ -710,40 +651,31 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
 
   async function bootSegaSystem() {
     try {
-      logSys("Iniciando LuferOS SEGA Genesis 16-Bit Sys V: 5.0", "log-sys");
+      logSys("Iniciando LuferOS SEGA Genesis 16-Bit V: 5.0", "log-sys");
       setupControls();
       startFpsMonitor();
 
-      logSys("Descomprimiendo núcleo PicoDrive M68K/Z80 (GZIP)...", "");
+      logSys("Descomprimiendo núcleo PicoDrive M68K/Z80...", "");
       const engineBytes = await gunzipBase64ToBytes(ENGINE_GZIP_B64);
       const engineJsText = new TextDecoder("utf-8").decode(engineBytes);
-      logSys("Núcleo descomprimido (" + Math.round(engineBytes.length / 1024) + " KB). Inyectando DOM...", "");
-
       const scriptEl = document.createElement("script");
       scriptEl.text = engineJsText;
       document.head.appendChild(scriptEl);
 
       if (typeof window.embedGenesis !== "function") {
-        throw new Error("El motor embedGenesis no se registró en window.");
+        throw new Error("El núcleo embedGenesis no se registró en window.");
       }
-      logSys("Motor PicoDrive 16-Bit registrado en memoria OK.", "log-ok");
+      logSys("Núcleo PicoDrive cargado (" + Math.round(engineBytes.length / 1024) + " KB).", "log-ok");
 
-      logSys("Descomprimiendo cartucho SEGA ROM...", "");
+      logSys("Descomprimiendo cartucho SEGA...", "");
       const romBytes = await gunzipBase64ToBytes(ROM_GZIP_B64);
       const hdr = parseSegaHeader(romBytes);
       dbgCart.textContent = hdr.gameTitle.slice(0, 18) + " (" + hdr.sizeKb + "KB)";
       tHdr.textContent = hdr.consoleType.slice(0, 12);
-      logSys(
-        "Cartucho: [" + hdr.gameTitle + "] | " + hdr.sizeKb + "KB | Sistema: " + hdr.consoleType,
-        "log-sys"
-      );
+      logSys("Cartucho: [" + hdr.gameTitle + "] | " + hdr.sizeKb + "KB | " + hdr.consoleType, "log-sys");
 
-      const romArrayBuffer = romBytes.buffer.slice(
-        romBytes.byteOffset,
-        romBytes.byteOffset + romBytes.byteLength
-      );
+      const romArrayBuffer = romBytes.buffer.slice(romBytes.byteOffset, romBytes.byteOffset + romBytes.byteLength);
 
-      logSys("Arrancando VDP 320x224 y sintetizador YM2612...", "");
       window.embedGenesis({
         container: "game",
         name: ROM_FILE_NAME,
@@ -755,32 +687,14 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
         loadText: "LOAD",
         saveText: "SAVE",
         player1: {
-          up: "ArrowUp",
-          down: "ArrowDown",
-          left: "ArrowLeft",
-          right: "ArrowRight",
-          start: "Enter",
-          mode: "KeyZ",
-          a: "KeyA",
-          b: "KeyS",
-          c: "KeyD",
-          x: "KeyQ",
-          y: "KeyW",
-          z: "KeyE"
+          up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight",
+          start: "Enter", mode: "KeyZ",
+          a: "KeyA", b: "KeyS", c: "KeyD", x: "KeyQ", y: "KeyW", z: "KeyE"
         },
         player2: {
-          up: "KeyI",
-          down: "KeyK",
-          left: "KeyJ",
-          right: "KeyL",
-          start: "KeyH",
-          mode: "KeyV",
-          a: "KeyB",
-          b: "KeyN",
-          c: "KeyM",
-          x: "KeyU",
-          y: "KeyO",
-          z: "KeyP"
+          up: "KeyI", down: "KeyK", left: "KeyJ", right: "KeyL",
+          start: "KeyH", mode: "KeyV",
+          a: "KeyB", b: "KeyN", c: "KeyM", x: "KeyU", y: "KeyO", z: "KeyP"
         },
         cbStarted: function() {
           emuReady = true;
@@ -788,7 +702,7 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
           statusLed.className = "on";
           statusTxt.textContent = "16-BIT ON";
           dbgState.textContent = "🟢 SEGA 68000 • CORRIENDO";
-          logSys("[READY] ¡Emulación SEGA Genesis iniciada a 60 FPS!", "log-ok");
+          logSys("[READY] ¡Emulación SEGA Genesis activa a 60 FPS!", "log-ok");
         }
       });
     } catch (err) {
@@ -800,9 +714,11 @@ canvas#boot-cv{position:absolute;inset:0;z-index:3;pointer-events:none}
   }
 
   bootSegaSystem();
-})();
-</script>
-</body>`;
+})();`;
+
+  return html
+    .replace("__BEZEL_TITLE__", () => options.bezelTitle)
+    .replace("__SEGA_SCRIPT__", () => script);
 }
 
 export default {
