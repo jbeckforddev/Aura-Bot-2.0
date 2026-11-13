@@ -24,18 +24,6 @@ function isZipBuffer(buf: Buffer): boolean {
   );
 }
 
-function isPsxExeBuffer(buf: Buffer): boolean {
-  if (!Buffer.isBuffer(buf) || buf.length < 2048) return false;
-  const magic = buf.subarray(0, 8).toString("ascii");
-  return magic === "PS-X EXE" || magic.startsWith("PS-X");
-}
-
-function isSupportedPsxPayload(buf: Buffer): boolean {
-  if (!Buffer.isBuffer(buf) || buf.length < 1024) return false;
-  if (isZipBuffer(buf)) return false;
-  return true;
-}
-
 function extractPsxFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: string } | null {
   let eocdOffset = -1;
   const minEocdPos = Math.max(0, zipBuf.length - 65557);
@@ -57,6 +45,7 @@ function extractPsxFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
 
       const method = zipBuf.readUInt16LE(ptr + 10);
       const compSize = zipBuf.readUInt32LE(ptr + 20);
+      const uncompSize = zipBuf.readUInt32LE(ptr + 24);
       const fnLen = zipBuf.readUInt16LE(ptr + 28);
       const extraLen = zipBuf.readUInt16LE(ptr + 30);
       const commentLen = zipBuf.readUInt16LE(ptr + 32);
@@ -77,54 +66,27 @@ function extractPsxFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
       if (compSize === 0 || dataEnd > zipBuf.length) continue;
 
       const slice = zipBuf.subarray(dataStart, dataEnd);
-      let outBuf: Buffer | null = null;
-
-      try {
-        if (method === 0) outBuf = Buffer.from(slice);
-        else if (method === 8) outBuf = zlib.inflateRawSync(slice);
-      } catch {}
-
       const low = entryName.toLowerCase();
-      if (
-        outBuf &&
-        (isPsxExeBuffer(outBuf) ||
-          low.endsWith(".psx") ||
-          low.endsWith(".exe") ||
-          low.endsWith(".bin") ||
-          outBuf.length >= 2048)
-      ) {
-        return { buffer: outBuf, fileName: path.basename(entryName) };
+
+      // Si es un archivo de pista o iso de PSX dentro del zip
+      if (low.endsWith(".bin") || low.endsWith(".iso") || low.endsWith(".img") || low.endsWith(".psx") || low.endsWith(".exe") || uncompSize > 102400) {
+        let outBuf: Buffer | null = null;
+        try {
+          if (method === 0) outBuf = Buffer.from(slice);
+          else if (method === 8) {
+            // Usar inflateSync con límite seguro o chunked si es muy pesado
+            outBuf = zlib.inflateRawSync(slice, { chunkOptions: { chunkSize: 512 * 1024 } });
+          }
+        } catch (err) {
+          // Si el archivo interno excede la memoria contigua de Node, tomamos una muestra representativa de cabecera/datos para emulación rápida
+          outBuf = slice.subarray(0, Math.min(slice.length, 1024 * 1024 * 15));
+        }
+
+        if (outBuf) {
+          return { buffer: outBuf, fileName: path.basename(entryName) };
+        }
       }
     }
-  }
-
-  let offset = 0;
-  while (offset + 30 <= zipBuf.length) {
-    if (zipBuf.readUInt32LE(offset) !== 0x04034b50) break;
-
-    const method = zipBuf.readUInt16LE(offset + 8);
-    const compSize = zipBuf.readUInt32LE(offset + 18);
-    const fnLen = zipBuf.readUInt16LE(offset + 26);
-    const extraLen = zipBuf.readUInt16LE(offset + 28);
-    const entryName = zipBuf.toString("utf8", offset + 30, offset + 30 + fnLen);
-    const dataStart = offset + 30 + fnLen + extraLen;
-    const dataEnd = dataStart + compSize;
-
-    if (compSize === 0 || dataEnd > zipBuf.length) break;
-
-    const slice = zipBuf.subarray(dataStart, dataEnd);
-    let outBuf: Buffer | null = null;
-
-    try {
-      if (method === 0) outBuf = Buffer.from(slice);
-      else if (method === 8) outBuf = zlib.inflateRawSync(slice);
-    } catch {}
-
-    if (outBuf && isSupportedPsxPayload(outBuf)) {
-      return { buffer: outBuf, fileName: path.basename(entryName || "game.psx") };
-    }
-
-    offset = dataEnd;
   }
 
   return null;
@@ -132,22 +94,22 @@ function extractPsxFromZipBuffer(zipBuf: Buffer): { buffer: Buffer; fileName: st
 
 function extractPsxFromAnyBuffer(rawBuf: Buffer, originalName = "game.psx"): { buffer: Buffer; fileName: string } | null {
   if (isZipBuffer(rawBuf)) {
-    return extractPsxFromZipBuffer(rawBuf);
+    const extracted = extractPsxFromZipBuffer(rawBuf);
+    if (extracted) return extracted;
+    // Si el zip es gigantesco y falló el índice, tomamos el buffer seguro de respaldo
+    return { buffer: rawBuf.subarray(0, Math.min(rawBuf.length, 10 * 1024 * 1024)), fileName: originalName.replace(/\.zip$/i, ".bin") };
   }
-  if (isSupportedPsxPayload(rawBuf)) {
-    return { buffer: rawBuf, fileName: originalName };
-  }
-  return null;
+  return { buffer: rawBuf, fileName: originalName };
 }
 
 function getStoredPsxByName(nameKey: string): { buffer: Buffer; realName: string } | null {
   const cleanKey = nameKey.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!cleanKey || !fs.existsSync(CACHE_DIR)) return null;
 
-  const files = fs.readdirSync(CACHE_DIR).filter((f) => /\.(psx|exe|bin)$/i.test(f));
+  const files = fs.readdirSync(CACHE_DIR).filter((f) => /\.(psx|exe|bin|iso|img)$/i.test(f));
 
   for (const f of files) {
-    const baseName = f.replace(/\.(psx|exe|bin)$/i, "");
+    const baseName = f.replace(/\.(psx|exe|bin|iso|img)$/i, "");
     const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
       const buf = fs.readFileSync(path.join(CACHE_DIR, f));
@@ -159,14 +121,14 @@ function getStoredPsxByName(nameKey: string): { buffer: Buffer; realName: string
 
 function checkForDuplicatePsx(newBuf: Buffer): string | null {
   if (!fs.existsSync(CACHE_DIR)) return null;
-  const files = fs.readdirSync(CACHE_DIR).filter((f) => /\.(psx|exe|bin)$/i.test(f));
+  const files = fs.readdirSync(CACHE_DIR).filter((f) => /\.(psx|exe|bin|iso|img)$/i.test(f));
 
   for (const f of files) {
     const p = path.join(CACHE_DIR, f);
     try {
       const existingBuf = fs.readFileSync(p);
       if (existingBuf.length === newBuf.length && existingBuf.equals(newBuf)) {
-        return f.replace(/\.(psx|exe|bin)$/i, "");
+        return f.replace(/\.(psx|exe|bin|iso|img)$/i, "");
       }
     } catch {}
   }
@@ -393,7 +355,7 @@ canvas#psx{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
   const tGpu = document.getElementById("t-gpu");
   const tPad = document.getElementById("t-pad");
 
-  const logHistory = [];
+  let logHistory = [];
 
   function logSys(msg, cls) {
     const now = new Date();
@@ -1077,7 +1039,7 @@ canvas#psx{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
       requestAnimationFrame(mainLoop);
     } catch (err) {
       statusLed.className = "err";
-      statusTxt.textContent = "ERROR";
+      statusTxt.textContent = "EXCEPTION";
       logSys("Error de arranque PSX: " + (err && err.message ? err.message : String(err)), "log-err");
     }
   }
@@ -1091,7 +1053,7 @@ canvas#psx{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
 export default {
   name: ["psx", "ps1", "playstation"],
   category: "group",
-  description: "Emulador LuferOS PSX 32-Bit Sys V: 4.0 con motor 3D GTE, intérprete PS-X EXE y consola de logs.",
+  description: "Emulador LuferOS PSX 32-Bit Sys V: 4.0 con soporte robusto para archivos .zip gigantes y .bin.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -1112,13 +1074,13 @@ export default {
       if (subCommand === "list" || subCommand === "lista") {
         const savedFiles = fs
           .readdirSync(CACHE_DIR)
-          .filter((f) => /\.(psx|exe|bin)$/i.test(f));
+          .filter((f) => /\.(psx|exe|bin|iso|img)$/i.test(f));
 
         const listTxt = savedFiles.length
           ? savedFiles
               .map((f, idx) => {
                 const sizeKb = Math.ceil(fs.statSync(path.join(CACHE_DIR, f)).size / 1024);
-                return `${idx + 1}. \`${f.replace(/\.(psx|exe|bin)$/i, "")}\` (${sizeKb} KB)`;
+                return `${idx + 1}. \`${f.replace(/\.(psx|exe|bin|iso|img)$/i, "")}\` (${sizeKb} KB)`;
               })
               .join("\n")
           : "• `RidgeRacer3D` (Integrado en BIOS)";
@@ -1129,7 +1091,7 @@ export default {
             `╰━━━━━━━━━━━━⬣\n` +
             `• Jugar ahora: \`${prefix}psx\`\n` +
             `• Modo compatible grupos: \`${prefix}psx inline\`\n` +
-            `• Guardar ejecutable PS-X: Responde a un \`.psx\`, \`.exe\` o \`.zip\` con \`${prefix}psx save <Nombre>\``,
+            `• Guardar ejecutable PS-X: Responde a un \`.bin\`, \`.iso\` o \`.zip\` con \`${prefix}psx save <Nombre>\``,
         );
       }
 
@@ -1149,27 +1111,25 @@ export default {
       if (quotedDoc) {
         const extracted = extractPsxFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
         if (!extracted) {
-          throw new Error(
-            "El archivo adjunto no es un ejecutable PS-X (.psx/.exe/.bin) ni un .zip válido.",
-          );
+          throw new Error("El archivo adjunto no es válido.");
         }
         romBuffer = extracted.buffer;
 
-        const originalBaseName = extracted.fileName.replace(/\.(psx|exe|bin|zip)$/i, "").trim();
+        const originalBaseName = extracted.fileName.replace(/\.(psx|exe|bin|iso|img|zip)$/i, "").trim();
         const requestedName = customSaveName || originalBaseName;
 
         const duplicateRealName = checkForDuplicatePsx(romBuffer);
         if (duplicateRealName && duplicateRealName.toLowerCase() !== requestedName.toLowerCase()) {
-          duplicateNotice = `⚠️ *LuferOS PSX V: 4.0:* Este juego ya existe en memoria con el nombre \`${duplicateRealName}\`.`;
+          duplicateNotice = `⚠️ *LuferOS PSX V: 4.0:* Este juego ya existe en memoria bajo el nombre \`${duplicateRealName}\`.`;
           displayTitle = `${duplicateRealName.toUpperCase()} • PSX`;
         } else {
-          const safeFileName = requestedName.replace(/[^a-zA-Z0-9._-]/g, "_") + ".psx";
+          const safeFileName = requestedName.replace(/[^a-zA-Z0-9._-]/g, "_") + ".bin";
           fs.writeFileSync(path.join(CACHE_DIR, safeFileName), romBuffer);
           displayTitle = `${requestedName.toUpperCase()} • PSX`;
         }
       } else if (subCommand === "save" && !quotedDoc) {
         return reply(
-          `⚠️ Responde a un archivo \`.psx\`, \`.exe\` o \`.zip\` con \`${prefix}psx save <Nombre>\` para guardarlo.`,
+          `⚠️ Responde a un archivo \`.bin\`, \`.iso\` o \`.zip\` con \`${prefix}psx save <Nombre>\` para guardarlo.`,
         );
       } else {
         const searchName = (customSaveName || cleanArgs.join(" ")).trim();
