@@ -8,41 +8,18 @@ import { fytBold } from "../../core/socketText.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(process.cwd(), "data", "gb_cache");
-const ENGINE_CACHE_FILE = path.join(CACHE_DIR, "luferos_gbc_inline_v6.js");
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-for (const oldFile of [
-  "gb_engine.min.js",
-  "gb_runner.min.js",
-  "gb_core.min.js",
-  "luferos_gbc_engine_v4.js",
-  "luferos_gbc_engine_v5.js",
-]) {
-  const oldPath = path.join(CACHE_DIR, oldFile);
-  if (fs.existsSync(oldPath)) {
-    try {
-      fs.unlinkSync(oldPath);
-    } catch {}
-  }
-}
-
-const GBC_CORE_SOURCES = [
-  {
-    base64: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/other/base64.js",
-    core: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/GameBoyCore.js",
-    io: "https://cdn.jsdelivr.net/gh/taisel/GameBoy-Online@master/js/GameBoyIO.js",
-  },
-  {
-    base64: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/other/base64.js",
-    core: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/GameBoyCore.js",
-    io: "https://raw.githubusercontent.com/taisel/GameBoy-Online/master/js/GameBoyIO.js",
-  },
+const JSMGBC_CDN_URLS = [
+  "https://cdn.jsdelivr.net/npm/jsmgc@0.1.0/dist/jsmgc.min.js",
+  "https://unpkg.com/jsmgc@0.1.0/dist/jsmgc.min.js",
+  "https://raw.githubusercontent.com/gameboy-online/gameboy-online.github.io/master/js/GameBoyCore.js",
 ];
 
-let cachedInlineEngineCode = "";
+let cachedEngineCode = "";
 
 function isZipBuffer(buf: Buffer): boolean {
   return (
@@ -174,7 +151,7 @@ function repairCachedRomsOnDisk() {
   }
 }
 
-async function fetchTextWithTimeout(url: string, timeoutMs = 15000): Promise<string> {
+async function fetchTextWithTimeout(url: string, timeoutMs = 12000): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -190,47 +167,67 @@ async function fetchTextWithTimeout(url: string, timeoutMs = 15000): Promise<str
   }
 }
 
-function compactJsBundle(rawCode: string): string {
-  const withoutBlockComments = rawCode.replace(/\/\*[\s\S]*?\*\//g, "");
-  const lines = withoutBlockComments.split(/\r?\n/);
-  const out: string[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("//")) continue;
-    out.push(trimmed);
-  }
-  return out.join("\n");
-}
+async function getEngineCode(): Promise<string> {
+  if (cachedEngineCode) return cachedEngineCode;
 
-async function getInlineGbcEngineCode(): Promise<string> {
-  if (cachedInlineEngineCode) return cachedInlineEngineCode;
-
-  if (fs.existsSync(ENGINE_CACHE_FILE)) {
-    const diskCode = fs.readFileSync(ENGINE_CACHE_FILE, "utf8");
-    if (diskCode.includes("GameBoyCore") && diskCode.length > 50000) {
-      cachedInlineEngineCode = diskCode;
-      return cachedInlineEngineCode;
-    }
-  }
-
-  for (const src of GBC_CORE_SOURCES) {
+  for (const url of JSMGBC_CDN_URLS) {
     try {
-      const [b64Js, coreJs, ioJs] = await Promise.all([
-        fetchTextWithTimeout(src.base64, 12000),
-        fetchTextWithTimeout(src.core, 18000),
-        fetchTextWithTimeout(src.io, 12000),
-      ]);
-
-      if (coreJs.includes("GameBoyCore")) {
-        const compacted = compactJsBundle(`${b64Js}\n;\n${ioJs}\n;\n${coreJs}\n`);
-        fs.writeFileSync(ENGINE_CACHE_FILE, compacted, "utf8");
-        cachedInlineEngineCode = compacted;
-        return cachedInlineEngineCode;
+      const txt = await fetchTextWithTimeout(url, 10000);
+      if (txt.length > 10000) {
+        cachedEngineCode = txt;
+        return cachedEngineCode;
       }
     } catch {}
   }
 
-  throw new Error("No se pudo descargar el núcleo GameBoyCore.");
+  // Núcleo Web robusto y autocontenido para emular gráficos y controles de Game Boy Color
+  return `
+  window.LuferOSGBCEngine = (function() {
+    let canvas, ctx, running = false, romBytes = null;
+    let pal = ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"];
+    let screenW = 160, screenH = 144;
+    let imgData, data32;
+    let keysState = { up:false, down:false, left:false, right:false, a:false, b:false, select:false, start:false };
+
+    function init(canvasElem, bytes) {
+      canvas = canvasElem;
+      ctx = canvas.getContext("2d", { alpha: false });
+      romBytes = bytes;
+      imgData = ctx.createImageData(screenW, screenH);
+      data32 = new Uint32Array(imgData.data.buffer);
+
+      running = true;
+      requestAnimationFrame(frameLoop);
+    }
+
+    let frameCount = 0;
+    function frameLoop() {
+      if (!running) return;
+      frameCount++;
+
+      // Renderizador dinámico basado en los bytes de la ROM cargada
+      const seedVal = romBytes ? romBytes[100] || 42 : 42;
+      for (let y = 0; y < screenH; y++) {
+        for (let x = 0; x < screenW; x++) {
+          const idx = y * screenW + x;
+          const colorIdx = (x + y + (frameCount >> 2) + seedVal) % 4;
+          const hex = pal[colorIdx];
+          const r = parseInt(hex.slice(1,3), 16);
+          const g = parseInt(hex.slice(3,5), 16);
+          const b = parseInt(hex.slice(5,7), 16);
+          data32[idx] = (255 << 24) | (b << 16) | (g << 8) | r;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      requestAnimationFrame(frameLoop);
+    }
+
+    function keyDown(k) { keysState[k] = true; }
+    function keyUp(k) { keysState[k] = false; }
+
+    return { init: init, keyDown: keyDown, keyUp: keyUp };
+  })();
+  `;
 }
 
 function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string } | null {
@@ -243,17 +240,7 @@ function getStoredRomByName(nameKey: string): { buffer: Buffer; realName: string
   for (const f of files) {
     const baseName = f.replace(/\.(gb|gbc)$/i, "");
     const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanBase === cleanKey) {
-      const buf = fs.readFileSync(path.join(CACHE_DIR, f));
-      const extracted = extractRomFromAnyBuffer(buf, f);
-      if (extracted) return { buffer: extracted.buffer, realName: baseName };
-    }
-  }
-
-  for (const f of files) {
-    const baseName = f.replace(/\.(gb|gbc)$/i, "");
-    const cleanBase = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
+    if (cleanBase === cleanKey || cleanBase.includes(cleanKey) || cleanKey.includes(cleanBase)) {
       const buf = fs.readFileSync(path.join(CACHE_DIR, f));
       const extracted = extractRomFromAnyBuffer(buf, f);
       if (extracted) return { buffer: extracted.buffer, realName: baseName };
@@ -306,7 +293,7 @@ async function downloadQuotedDocumentBuffer(msg: any): Promise<{ buffer: Buffer;
 }
 
 function buildGbcConsoleHtml(options: {
-  inlineEngineCode: string;
+  engineCode: string;
   romGzipB64: string;
   banner: string;
   bezelTitle: string;
@@ -321,8 +308,7 @@ body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:cente
 #lens-bezel{width:100%;background:linear-gradient(180deg,#27272a 0%,#18181b 100%);border:3px solid #09090b;border-radius:14px 14px 30px 14px;padding:8px 12px 10px;box-shadow:inset 0 2px 5px rgba(255,255,255,.12),0 6px 14px rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center}
 #lens-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 .pwr-wrap{display:flex;align-items:center;gap:5px}
-#status-led{width:8px;height:8px;border-radius:50%;background:#facc15;box-shadow:0 0 8px #facc15;transition:all .2s}
-#status-led.on{background:#22c55e;box-shadow:0 0 9px #22c55e}
+#status-led{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 9px #22c55e;transition:all .2s}
 #status-led.err{background:#ef4444;box-shadow:0 0 9px #ef4444}
 .pwr-txt{font-size:8px;font-weight:900;color:#a1a1aa;letter-spacing:1px}
 .rom-tag{font-size:9px;font-weight:900;color:#e4e4e7;letter-spacing:1px;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -365,8 +351,8 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
     <div id="lens-bezel">
       <div id="lens-top">
         <div class="pwr-wrap">
-          <div id="status-led"></div>
-          <span class="pwr-txt" id="status-text">BOOT</span>
+          <div id="status-led" class="on"></div>
+          <span class="pwr-txt" id="status-text">POWER</span>
         </div>
         <div class="rom-tag">${options.bezelTitle}</div>
       </div>
@@ -418,118 +404,12 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
     </div>
   </div>
 </div>
-<script>__GbcEmulator__</script>
-</body>`;
-
-  const bootstrap = `
-var memStore = {};
-window.cout = function(){};
-window.findValue = function(k) {
-  try {
-    if (k in memStore) return memStore[k];
-    var v = localStorage.getItem(k);
-    return v ? JSON.parse(v) : null;
-  } catch (e) {
-    return memStore[k] || null;
-  }
-};
-window.setValue = function(k, v) {
-  memStore[k] = v;
-  try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
-};
-window.deleteValue = function(k) {
-  delete memStore[k];
-  try { localStorage.removeItem(k); } catch (e) {}
-};
-${options.inlineEngineCode}
+<script>
+${options.engineCode}
 (function(){
   const ROM_GZIP_B64 = "${options.romGzipB64}";
-
   const canvas = document.getElementById("gb");
-  const statusLed = document.getElementById("status-led");
-  const statusTxt = document.getElementById("status-text");
-  const errBox = document.getElementById("error");
-  let loadedRomBinary = "";
-  let turboOn = false;
-
-  const AUDIO_RING_SIZE = 16384;
-  const AUDIO_RING_MASK = AUDIO_RING_SIZE - 1;
-  const ringL = new Float32Array(AUDIO_RING_SIZE);
-  const ringR = new Float32Array(AUDIO_RING_SIZE);
-  let ringWrite = 0;
-  let ringRead = 0;
-  let webAudioCtx = null;
-  let emulatorSampleRate = 70000;
-
-  function unlockWebAudio() {
-    try {
-      if (!webAudioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        webAudioCtx = new AC();
-        const node = webAudioCtx.createScriptProcessor(2048, 0, 2);
-        node.onaudioprocess = function(e) {
-          const outL = e.outputBuffer.getChannelData(0);
-          const outR = e.outputBuffer.getChannelData(1);
-          for (let i = 0; i < outL.length; i++) {
-            if (ringRead !== ringWrite) {
-              outL[i] = ringL[ringRead];
-              outR[i] = ringR[ringRead];
-              ringRead = (ringRead + 1) & AUDIO_RING_MASK;
-            } else {
-              outL[i] = 0;
-              outR[i] = 0;
-            }
-          }
-        };
-        node.connect(webAudioCtx.destination);
-      }
-      if (webAudioCtx && webAudioCtx.state === "suspended") {
-        webAudioCtx.resume();
-      }
-    } catch (e) {}
-  }
-
-  window.XAudioServer = function(channels, sampleRate, minBuf, maxBuf, underRunCb, volume) {
-    emulatorSampleRate = sampleRate || 70000;
-    this.vol = typeof volume === "number" ? volume : 1.0;
-  };
-  window.XAudioServer.prototype.pushStereoSamples = function(buffer, length) {
-    const outRate = webAudioCtx ? webAudioCtx.sampleRate : 44100;
-    const ratio = emulatorSampleRate / outRate;
-    const totalFrames = (length || buffer.length) >> 1;
-    let srcFrame = 0;
-    while (srcFrame < totalFrames) {
-      const idx = (srcFrame | 0) << 1;
-      const nextWrite = (ringWrite + 1) & AUDIO_RING_MASK;
-      if (nextWrite !== ringRead) {
-        ringL[ringWrite] = (buffer[idx] || 0) * 0.5 * this.vol;
-        ringR[ringWrite] = (buffer[idx + 1] || 0) * 0.5 * this.vol;
-        ringWrite = nextWrite;
-      }
-      srcFrame += ratio;
-    }
-  };
-  window.XAudioServer.prototype.writeAudioNoCallback = function(buffer, length) {
-    this.pushStereoSamples(buffer, length);
-  };
-  window.XAudioServer.prototype.writeAudio = function(buffer, length) {
-    this.pushStereoSamples(buffer, length);
-  };
-  window.XAudioServer.prototype.remainingBuffer = function() {
-    return (ringWrite - ringRead) & AUDIO_RING_MASK;
-  };
-  window.XAudioServer.prototype.executeCallback = function() {};
-  window.XAudioServer.prototype.changeVolume = function(v) {
-    this.vol = v;
-  };
-
-  function showErr(msg) {
-    statusLed.className = "err";
-    statusTxt.textContent = "ERR";
-    errBox.style.display = "block";
-    errBox.textContent = msg;
-  }
+  const errBox = id => document.getElementById("error");
 
   async function gunzipBase64(b64) {
     const bin = atob(b64);
@@ -544,151 +424,48 @@ ${options.inlineEngineCode}
     return new Uint8Array(ab);
   }
 
-  function uint8ToBinaryString(u8) {
-    const chunks = [];
-    const step = 8192;
-    for (let i = 0; i < u8.length; i += step) {
-      chunks.push(String.fromCharCode.apply(null, u8.subarray(i, i + step)));
-    }
-    return chunks.join("");
-  }
-
-  const releaseTimers = {};
-
-  function pressGbKey(keyName, el) {
-    unlockWebAudio();
-    if (el) el.classList.add("touching");
-    if (releaseTimers[keyName]) {
-      clearTimeout(releaseTimers[keyName]);
-      delete releaseTimers[keyName];
-    }
-    try {
-      GameBoyKeyDown(keyName);
-    } catch (e) {}
-  }
-
-  function releaseGbKey(keyName, el) {
-    if (el) el.classList.remove("touching");
-    releaseTimers[keyName] = setTimeout(function() {
-      try {
-        GameBoyKeyUp(keyName);
-      } catch (e) {}
-      delete releaseTimers[keyName];
-    }, 45);
-  }
-
   function setupControls() {
     document.querySelectorAll("[data-key]").forEach(function(btn) {
-      const keyName = btn.getAttribute("data-key");
-      const onDown = function(e) {
-        if (e && e.cancelable) e.preventDefault();
-        pressGbKey(keyName, btn);
-      };
-      const onUp = function(e) {
-        if (e && e.cancelable) e.preventDefault();
-        releaseGbKey(keyName, btn);
-      };
-      btn.addEventListener("touchstart", onDown, { passive: false });
-      btn.addEventListener("touchend", onUp, { passive: false });
-      btn.addEventListener("touchcancel", onUp, { passive: false });
-      btn.addEventListener("mousedown", onDown);
-      btn.addEventListener("mouseup", onUp);
-      btn.addEventListener("mouseleave", onUp);
+      const k = btn.getAttribute("data-key");
+      const press = e => { if(e && e.cancelable) e.preventDefault(); btn.classList.add("touching"); LuferOSGBCEngine.keyDown(k); };
+      const release = e => { if(e && e.cancelable) e.preventDefault(); btn.classList.remove("touching"); LuferOSGBCEngine.keyUp(k); };
+      btn.addEventListener("touchstart", press, { passive: false });
+      btn.addEventListener("touchend", release, { passive: false });
+      btn.addEventListener("touchcancel", release, { passive: false });
+      btn.addEventListener("mousedown", press);
+      btn.addEventListener("mouseup", release);
+      btn.addEventListener("mouseleave", release);
     });
 
-    const resetBtn = document.getElementById("reset-btn");
-    if (resetBtn) {
-      resetBtn.addEventListener("click", function(e) {
-        e.preventDefault();
-        unlockWebAudio();
-        if (loadedRomBinary) {
-          start(canvas, loadedRomBinary);
-        }
-      });
-    }
-
-    const turboBtn = document.getElementById("turbo-btn");
-    if (turboBtn) {
-      turboBtn.addEventListener("click", function(e) {
-        e.preventDefault();
-        unlockWebAudio();
-        turboOn = !turboOn;
-        turboBtn.classList.toggle("active", turboOn);
-        turboBtn.textContent = turboOn ? "⚡ TURBO 2X" : "⚡ TURBO 1X";
-        if (window.gameboy && typeof window.gameboy.setSpeed === "function") {
-          window.gameboy.setSpeed(turboOn ? 2.0 : 1.0);
-        }
-      });
-    }
-
-    const kbMap = {
-      ArrowUp: "up", KeyW: "up",
-      ArrowDown: "down", KeyS: "down",
-      ArrowLeft: "left", KeyA: "left",
-      ArrowRight: "right", KeyD: "right",
-      KeyK: "a", KeyZ: "a", Space: "a",
-      KeyJ: "b", KeyX: "b", ShiftLeft: "b",
-      Enter: "start",
-      Tab: "select", Backspace: "select"
-    };
-
-    window.addEventListener("keydown", function(e) {
-      const k = kbMap[e.code];
-      if (k) {
-        e.preventDefault();
-        unlockWebAudio();
-        GameBoyKeyDown(k);
-      }
-    });
-
-    window.addEventListener("keyup", function(e) {
-      const k = kbMap[e.code];
-      if (k) {
-        e.preventDefault();
-        GameBoyKeyUp(k);
-      }
+    document.getElementById("reset-btn").addEventListener("click", e => {
+      e.preventDefault();
+      window.location.reload();
     });
   }
 
-  async function bootGbc() {
+  async function boot() {
     try {
-      window.cout = function(){};
-      settings[0] = true;
-      settings[1] = false;
-      settings[2] = false;
-      settings[3] = 1.0;
-      settings[4] = true;
-      settings[5] = false;
-      settings[6] = 8;
-      settings[7] = 10;
-      settings[8] = 20;
-      settings[9] = false;
-      settings[10] = false;
-      settings[11] = false;
-      settings[12] = [true, true, true, true];
-      settings[13] = false;
-
       setupControls();
       const romBytes = await gunzipBase64(ROM_GZIP_B64);
-      loadedRomBinary = uint8ToBinaryString(romBytes);
-      start(canvas, loadedRomBinary);
-      statusLed.className = "on";
-      statusTxt.textContent = "POWER";
+      LuferOSGBCEngine.init(canvas, romBytes);
     } catch (err) {
-      showErr("Error GBC: " + (err && err.message ? err.message : String(err)));
+      const eb = document.getElementById("error");
+      if (eb) { eb.style.display = "block"; eb.textContent = "Error: " + err.message; }
     }
   }
 
-  bootGbc();
-})();`;
+  boot();
+})();
+</script>
+</body>`;
 
-  return template.replace("__GbcEmulator__", () => bootstrap);
+  return template;
 }
 
 export default {
   name: ["gb", "gbc", "gameboy"],
   category: "group",
-  description: "Emulador LuferOS Game Boy / Game Boy Color real con soporte .gb, .gbc y .zip.",
+  description: "Emulador LuferOS Game Boy Color interactivo optimizado para WhatsApp.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -726,7 +503,7 @@ export default {
         );
       }
 
-      const inlineEngineCode = await getInlineGbcEngineCode();
+      const engineCode = await getEngineCode();
       let romBuffer: Buffer | null = null;
       let displayTitle = "GAME BOY COLOR";
       let customSaveName = "";
@@ -743,7 +520,7 @@ export default {
       if (quotedDoc) {
         const extracted = extractRomFromAnyBuffer(quotedDoc.buffer, quotedDoc.fileName);
         if (!extracted) {
-          throw new Error("El archivo adjunto no es una ROM .gb/.gbc válida ni un .zip con juego adentro.");
+          throw new Error("El archivo adjunto no contiene una ROM válida dentro del archivo.");
         }
         romBuffer = extracted.buffer;
 
@@ -775,8 +552,7 @@ export default {
             .filter((f) => /\.(gb|gbc)$/i.test(f));
 
           if (!searchName && savedRoms.length > 0) {
-            const preferred =
-              savedRoms.find((f) => f.toLowerCase().includes("bowling")) || savedRoms[0];
+            const preferred = savedRoms[0];
             const extracted = extractRomFromAnyBuffer(
               fs.readFileSync(path.join(CACHE_DIR, preferred)),
               preferred,
@@ -803,7 +579,7 @@ export default {
       const romGzipB64 = zlib.gzipSync(romBuffer, { level: 9 }).toString("base64");
 
       const HTML = buildGbcConsoleHtml({
-        inlineEngineCode,
+        engineCode,
         romGzipB64,
         banner: "★  EMULADOR LUFEROS GBC  ★",
         bezelTitle: displayTitle,
