@@ -31,161 +31,74 @@ body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:cente
 .pwr-txt{font-size:8px;font-weight:900;color:#d4d4d8}
 .rom-tag{font-size:8.5px;font-weight:900;color:#00f3ff;text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #screen-container{position:relative;width:96%;aspect-ratio:4/3;background:#000;border:2.5px solid #00f3ff;border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
-#dos-screen{flex:1;background:#000;color:#00ff00;font-family:"Courier New",monospace;font-size:11px;padding:10px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
-#dos-input-row{display:flex;background:#05070c;border-top:1px solid #00f3ff;padding:6px 8px;align-items:center}
-#dos-prompt{color:#00f3ff;font-weight:900;font-size:11px;margin-right:6px}
-#dos-input{flex:1;background:transparent;border:none;color:#fff;font-family:monospace;font-size:11px;outline:none}
-#debug-wrap{width:94%;margin:2px auto 4px;background:#06080f;border:1.5px solid #00f3ff;border-radius:8px;overflow:hidden}
+#dosbox{width:100%;height:100%}
+#debug-wrap{width:94%;margin:4px auto;background:#06080f;border:1.5px solid #00f3ff;border-radius:8px;overflow:hidden}
 #debug-head{background:#0f172a;padding:4px 8px;display:flex;justify-content:space-between;align-items:center;font-size:9px;color:#00f3ff;font-weight:900}
-#debug-log{height:60px;overflow-y:auto;padding:5px 7px;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text}
+#debug-log{height:64px;overflow-y:auto;padding:5px 7px;font-size:9px;line-height:1.35;color:#4ade80;background:#04060b;touch-action:pan-y;user-select:text}
 #pad-area{width:100%;padding:6px 14px 16px;display:flex;flex-direction:column;gap:6px}
-.tool-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
-.tool-btn{border:1.5px solid #00f3ff;border-radius:7px;background:#090d16;color:#00f3ff;padding:5px 8px;font-weight:900;font-size:9px;cursor:pointer;text-align:center}
+.tool-btn{border:1.5px solid #00f3ff;border-radius:7px;background:#090d16;color:#00f3ff;padding:8px;font-weight:900;font-size:10px;cursor:pointer;text-align:center;width:100%}
 .tool-btn:active{background:#00f3ff;color:#09090b}
 </style>
+<link rel="stylesheet" href="https://v6.js-dos.com/latest/js-dos.css">
+<script src="https://v6.js-dos.com/latest/js-dos.js"></script>
 <body>
 <div id="dos-case">
   <div id="dos-top-bar">
-    <span>★ LuferOS MS-DOS PORT ★</span>
-    <span class="dos-ver">V: 2.0</span>
+    <span>★ LuferOS MS-DOS REAL DOSBOX ★</span>
+    <span class="dos-ver">V: 3.0</span>
   </div>
   <div id="lens-outer">
     <div id="lens-bezel">
       <div id="lens-top">
         <div class="pwr-wrap">
           <div id="status-led"></div>
-          <span class="pwr-txt" id="status-text">C:\\></span>
+          <span class="pwr-txt" id="status-text">DOSBOX</span>
         </div>
         <div class="rom-tag">${options.bezelTitle}</div>
       </div>
       <div id="screen-container">
-        <div id="dos-screen">LuferOS DOS Shell [Version 6.22.95]
-(C) Copyright LuferOS Systems Corp. 2026.
-
-C:\\> HELP
-Available commands: DIR, CLS, DOOM, PRINCE, WOLFEN, DUKE, VER, DATE, TIME, MEM, ECHO.
-
-C:\\> _</div>
-        <div id="dos-input-row">
-          <span id="dos-prompt">C:\\></span>
-          <input type="text" id="dos-input" placeholder="Escribe un comando..." autocomplete="off" />
-        </div>
+        <div id="dosbox"></div>
       </div>
     </div>
   </div>
   <div id="debug-wrap">
     <div id="debug-head">
-      <span>📟 KERNEL LOGS // DOSBOX v0.74</span>
+      <span>📟 DOSBOX WEBASSEMBLY KERNEL LOGS</span>
     </div>
-    <div id="debug-log">[00:00.01] MS-DOS Core V2.0 initialized.
-[00:00.04] Conventional Memory: 640 KB OK.
-[00:00.08] Extended Memory (XMS): 32 MB OK.
-[00:00.12] Ready for instructions.</div>
+    <div id="debug-log">Inicializando DOSBox WebAssembly Wasm core...</div>
   </div>
   <div id="pad-area">
-    <div class="tool-grid">
-      <button class="tool-btn" id="btn-doom">▶ DOOM</button>
-      <button class="tool-btn" id="btn-prince">▶ PRINCE</button>
-      <button class="tool-btn" id="btn-wolfen">▶ WOLFENSTEIN</button>
-      <button class="tool-btn" id="btn-cls">🧹 CLS</button>
-    </div>
+    <button class="tool-btn" id="btn-restart">🔄 REINICIAR DOSBOX</button>
   </div>
 </div>
 <script>
 (function(){
-  const screen = document.getElementById("dos-screen");
-  const input = document.getElementById("dos-input");
-  const log = document.getElementById("debug-log");
-
-  let audioCtx = null;
-  function beep(freq, dur) {
-    try {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        audioCtx = new AC();
-      }
-      if (audioCtx.state === "suspended") audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.frequency.value = freq || 800;
-      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (dur || 0.08));
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + (dur || 0.08));
-    } catch(e) {}
+  const logEl = document.getElementById("debug-log");
+  function log(msg) {
+    logEl.textContent += "\\n[" + new Date().toLocaleTimeString() + "] " + msg;
+    logEl.scrollTop = logEl.scrollHeight;
   }
-
-  function appendLog(txt) {
-    log.innerHTML += "\\n" + txt;
-    log.scrollTop = log.scrollHeight;
-  }
-
-  function appendScreen(txt) {
-    screen.textContent += "\\n" + txt;
-    screen.scrollTop = screen.scrollHeight;
-  }
-
-  function processCommand(rawCmd) {
-    const cmd = rawCmd.trim();
-    if (!cmd) return;
-    appendScreen("C:\\\\> " + cmd);
-    appendLog("EXEC: " + cmd);
-    const parts = cmd.split(" ");
-    const low = parts[0].toLowerCase();
-
-    beep(950, 0.05);
-
-    if (low === "cls") {
-      screen.textContent = "C:\\\\> ";
-    } else if (low === "dir") {
-      appendScreen(" Volume in drive C has no label.\\n Directory of C:\\\\6 files found.\\n  DOOM     WAD  12,450,120\\n  PRINCE   EXE     45,210\\n  WOLFEN   EXE     88,400\\n  DUKE3D   EXE    142,500\\n  SETUP    BAT        512\\n  README   TXT      1,200");
-    } else if (low === "help") {
-      appendScreen("Commands: DIR, CLS, DOOM, PRINCE, WOLFEN, DUKE, VER, DATE, TIME, MEM, ECHO <txt>");
-    } else if (low === "ver") {
-      appendScreen("MS-DOS Version 6.22 (LuferOS Port V2.0)");
-    } else if (low === "date") {
-      appendScreen("Current date is " + new Date().toLocaleDateString());
-    } else if (low === "time") {
-      appendScreen("Current time is " + new Date().toLocaleTimeString());
-    } else if (low === "mem") {
-      appendScreen("655360 bytes total conventional memory\\n655360 bytes available to MS-DOS\\n33554432 bytes XMS memory available");
-    } else if (low === "echo") {
-      appendScreen(parts.slice(1).join(" "));
-    } else if (low === "doom") {
-      appendScreen("M_Init: Loading WAD graphics & audio...\\nP_Init: Parsing maps...\\nST_START: Entering Hell. [OK]");
-      appendLog("DOOM.WAD executed successfully.");
-      beep(440, 0.15);
-    } else if (low === "prince") {
-      appendScreen("Prince of Persia v1.0\\nLoading level 1...\\n[!] Jaffar's guards are approaching!");
-      appendLog("PRINCE.EXE executed successfully.");
-      beep(550, 0.15);
-    } else if (low === "wolfen") {
-      appendScreen("Wolfenstein 3D v1.4\\nRaycasting engine initialized...\\n[!] 'Der Geist von Adolf' loaded.");
-      appendLog("WOLFEN.EXE executed successfully.");
-    } else if (low === "duke") {
-      appendScreen("Duke Nukem 3D v1.3d\\n'Hail to the king, baby!'\\n[!] Aliens detected in Los Angeles.");
-      appendLog("DUKE3D.EXE executed successfully.");
-    } else {
-      appendScreen("Bad command or file name: " + parts[0]);
-      appendLog("ERR: unknown command -> " + parts[0]);
-      beep(200, 0.12);
-    }
-  }
-
-  input.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") {
-      processCommand(input.value);
-      input.value = "";
-    }
+  
+  window.addEventListener("error", function(e) {
+    log("ERR: " + (e.message || e));
   });
 
-  document.getElementById("btn-doom").addEventListener("click", () => processCommand("doom"));
-  document.getElementById("btn-prince").addEventListener("click", () => processCommand("prince"));
-  document.getElementById("btn-wolfen").addEventListener("click", () => processCommand("wolfen"));
-  document.getElementById("btn-cls").addEventListener("click", () => processCommand("cls"));
+  if (typeof Dos === "function") {
+    log("Librería js-dos detectada OK. Montando entorno...");
+    Dos(document.getElementById("dosbox"), {
+      url: "https://v6.js-dos.com/latest/games/doom.jsdos"
+    }).then(function (ci) {
+      log("¡DOSBox Wasm iniciado con éxito! Corriendo Doom / MS-DOS real.");
+    }).catch(function (err) {
+      log("Fallo al iniciar DOSBox: " + err);
+    });
+  } else {
+    log("ERROR: No se pudo cargar js-dos desde CDN.");
+  }
+
+  document.getElementById("btn-restart").addEventListener("click", function() {
+    window.location.reload();
+  });
 })();
 </script>
 </body>`;
@@ -194,7 +107,7 @@ C:\\> _</div>
 export default {
   name: ["dos", "msdos", "pc", "doom"],
   category: "group",
-  description: "LuferOS MS-DOS Port V: 2.0 con terminal interactiva, comandos DOS reales, audio PC Speaker y logs en vivo.",
+  description: "Emulador LuferOS MS-DOS Real con DOSBox WebAssembly y consola de logs en vivo.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -210,7 +123,7 @@ export default {
       const cleanArgs = args.filter(
         (a) => !["inline", "lite", "burbuja"].includes(a.toLowerCase()),
       );
-      const gameTitle = cleanArgs.join(" ").toUpperCase() || "MS-DOS 6.22 SHELL";
+      const gameTitle = cleanArgs.join(" ").toUpperCase() || "DOOM.JSDOS (REAL)";
 
       const HTML = buildDosConsoleHtml({
         bezelTitle: gameTitle,
@@ -244,7 +157,7 @@ export default {
                   __typename: "GenAISingleLayoutViewModel",
                   primitive: {
                     __typename: "GenAITextPrimitive",
-                    text: `💻 *LuferOS MS-DOS Port V: 2.0* • ${gameTitle}\n_Pulsa el botón inferior para abrir la terminal PC. Si tu WhatsApp no muestra el botón, escribe:_ \`${prefix}dos inline\``,
+                    text: `💻 *LuferOS MS-DOS Real DOSBox* • ${gameTitle}\n_Pulsa el botón inferior para abrir la máquina virtual MS-DOS. Si tu WhatsApp no muestra el botón, escribe:_ \`${prefix}dos inline\``,
                   },
                 },
               },
@@ -254,7 +167,7 @@ export default {
                   __typename: "GenAISingleLayoutViewModel",
                   primitive: {
                     __typename: "GenAIBotProgressStatusPrimitive",
-                    title: `💻 LuferOS MS-DOS V: 2.0 (${gameTitle})`,
+                    title: `💻 LuferOS MS-DOS Real (${gameTitle})`,
                     is_in_progress: true,
                   },
                 },
@@ -262,14 +175,14 @@ export default {
             ],
             embedded_screens: [
               {
-                title: `LuferOS MS-DOS V: 2.0`,
+                title: `LuferOS MS-DOS Real`,
                 content: [
                   {
                     __typename: "FOAIDNixelButtonSheets",
                     tabs: [
                       {
                         id: "tab_0",
-                        tab_header: "LuferOS MS-DOS V: 2.0",
+                        tab_header: "LuferOS MS-DOS Real",
                         sections: [
                           {
                             __typename: "GenAIUnifiedResponseSection",
@@ -302,7 +215,7 @@ export default {
             deviceListMetadata: {},
             deviceListMetadataVersion: 2,
             botMetadata: {
-              messageDisclaimerText: "LuferOS MS-DOS Port V: 2.0",
+              messageDisclaimerText: "LuferOS MS-DOS Real System",
               richResponseSourcesMetadata: {},
             },
           },
@@ -334,7 +247,7 @@ export default {
     } catch (e: any) {
       await react("❌").catch(() => undefined);
       await reply(
-        `❌ ${fytBold("LuferOS MS-DOS V: 2.0:")} ${e?.message || String(e)}`,
+        `❌ ${fytBold("LuferOS MS-DOS Real:")} ${e?.message || String(e)}`,
       ).catch(() => undefined);
     }
   },
