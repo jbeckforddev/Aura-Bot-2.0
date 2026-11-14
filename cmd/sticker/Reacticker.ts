@@ -5,10 +5,15 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 const CACHE_DIR = path.resolve(process.cwd(), "data", "reacsticker_cache");
+const DEFAULT_BOOM_COUNT = 15;
+const MAX_BOOM_LIMIT = 50;
+const BURST_DELAY_MS = 110;
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function sanitizeKey(name: string): string {
   return name
@@ -80,36 +85,58 @@ function saveStickerToDisk(name: string, stickerObj: Record<string, any>): void 
   fs.writeFileSync(filePath, serialized, "utf8");
 }
 
+function parseStickerFile(fullPath: string): Record<string, any> | null {
+  try {
+    const raw = fs.readFileSync(fullPath, "utf8");
+    const parsed = JSON.parse(raw, BufferJSON.reviver);
+    delete parsed.contextInfo;
+    if (!parsed.url && typeof parsed.directPath === "string" && parsed.directPath.startsWith("/")) {
+      parsed.url = `https://mmg.whatsapp.net${parsed.directPath}`;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function loadStickerFromDisk(query: string): { name: string; stickerMessage: Record<string, any> } | null {
   const clean = sanitizeKey(query);
   if (!clean || !fs.existsSync(CACHE_DIR)) return null;
 
   const exactPath = path.join(CACHE_DIR, `${clean}.json`);
   if (fs.existsSync(exactPath)) {
-    const raw = fs.readFileSync(exactPath, "utf8");
-    const parsed = JSON.parse(raw, BufferJSON.reviver);
-    delete parsed.contextInfo;
-    if (!parsed.url && typeof parsed.directPath === "string" && parsed.directPath.startsWith("/")) {
-      parsed.url = `https://mmg.whatsapp.net${parsed.directPath}`;
-    }
-    return { name: clean, stickerMessage: parsed };
+    const parsed = parseStickerFile(exactPath);
+    if (parsed) return { name: clean, stickerMessage: parsed };
   }
 
   const files = fs.readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
   for (const file of files) {
     const base = file.replace(/\.json$/i, "");
     if (base.includes(clean) || clean.includes(base)) {
-      const raw = fs.readFileSync(path.join(CACHE_DIR, file), "utf8");
-      const parsed = JSON.parse(raw, BufferJSON.reviver);
-      delete parsed.contextInfo;
-      if (!parsed.url && typeof parsed.directPath === "string" && parsed.directPath.startsWith("/")) {
-        parsed.url = `https://mmg.whatsapp.net${parsed.directPath}`;
-      }
-      return { name: base, stickerMessage: parsed };
+      const parsed = parseStickerFile(path.join(CACHE_DIR, file));
+      if (parsed) return { name: base, stickerMessage: parsed };
     }
   }
 
   return null;
+}
+
+function loadAllStickersFromDisk(): Array<{ name: string; stickerMessage: Record<string, any> }> {
+  if (!fs.existsSync(CACHE_DIR)) return [];
+  const files = fs.readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
+  const list: Array<{ name: string; stickerMessage: Record<string, any> }> = [];
+
+  for (const file of files) {
+    const parsed = parseStickerFile(path.join(CACHE_DIR, file));
+    if (parsed) {
+      list.push({
+        name: file.replace(/\.json$/i, ""),
+        stickerMessage: parsed,
+      });
+    }
+  }
+
+  return list;
 }
 
 function getSha256Hex(stickerObj: any): string {
@@ -167,10 +194,31 @@ function buildParentMessageKey(sock: any, from: string, msg: any, ctxInfo: any) 
   return parentKey;
 }
 
+async function sendStickerAssociation(
+  sock: any,
+  from: string,
+  parentMessageKey: Record<string, any>,
+  stickerMessage: Record<string, any>,
+) {
+  await sock.relayMessage(
+    from,
+    {
+      messageContextInfo: {
+        messageAssociation: {
+          associationType: 11,
+          parentMessageKey,
+        },
+      },
+      stickerMessage,
+    } as any,
+    {},
+  );
+}
+
 export default {
   name: ["reacsticker", "reacticker", "reactsticker", "rsticker"],
   category: "group",
-  description: "Guarda stickers y reacciona con ellos a cualquier mensaje usando asociación nativa.",
+  description: "Guarda stickers y reacciona con ellos de forma individual o en ráfaga (boom / boom2).",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -196,7 +244,9 @@ export default {
           `╭〔 🎯 ${fytBold("Stickers de Reacción")} 〕⬣\n` +
             `${listFormatted}\n` +
             `╰━━━━━━━━━━━━⬣\n` +
-            `• Para reaccionar, responde a un mensaje con:\n  \`${prefix}reacticker <nombre>\``,
+            `• Reacción simple: \`${prefix}reacticker <nombre>\`\n` +
+            `• Ráfaga 1 sticker: \`${prefix}reacsticker boom <nombre> [cant]\`\n` +
+            `• Ráfaga todos: \`${prefix}reacsticker boom2 [rondas]\``,
         );
       }
 
@@ -250,8 +300,97 @@ export default {
         saveStickerToDisk(cleanName, stickerPayload);
         await react("💾").catch(() => undefined);
         return reply(
-          `✅ Sticker guardado como \`${cleanName}\`.\n• Responde a cualquier mensaje con \`${prefix}reacticker ${cleanName}\` para reaccionar.`,
+          `✅ Sticker guardado como \`${cleanName}\`.\n• Responde a cualquier mensaje con \`${prefix}reacticker ${cleanName}\` o \`${prefix}reacsticker boom ${cleanName}\`.`,
         );
+      }
+
+      if (sub === "boom") {
+        if (!ctxInfo?.stanzaId) {
+          return reply(
+            `⚠️ Responde al mensaje que quieres rodear de reacciones y escribe:\n\`${prefix}reacsticker boom <nombre> [cantidad]\``,
+          );
+        }
+
+        const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
+        const arg1 = String(args[1] || "").trim();
+        const arg2 = String(args[2] || "").trim();
+
+        let count = DEFAULT_BOOM_COUNT;
+        let targetSticker: Record<string, any> | null = null;
+
+        if (/^\d+$/.test(arg1)) {
+          count = Math.min(MAX_BOOM_LIMIT, Math.max(2, parseInt(arg1, 10)));
+        } else if (arg1) {
+          const found = loadStickerFromDisk(arg1);
+          if (!found) {
+            return reply(
+              `❌ No se encontró el sticker \`${sanitizeKey(arg1)}\`.\n• Usa \`${prefix}reacsticker list\` para ver tus stickers guardados.`,
+            );
+          }
+          targetSticker = found.stickerMessage;
+          if (/^\d+$/.test(arg2)) {
+            count = Math.min(MAX_BOOM_LIMIT, Math.max(2, parseInt(arg2, 10)));
+          }
+        }
+
+        if (!targetSticker) {
+          if (quotedRoot?.stickerMessage) {
+            targetSticker = cleanStickerPayload(quotedRoot.stickerMessage);
+          } else {
+            const allSaved = loadAllStickersFromDisk();
+            if (!allSaved.length) {
+              return reply(
+                `❌ No tienes stickers guardados. Guarda uno primero con \`${prefix}reacsticker save <nombre>\`.`,
+              );
+            }
+            targetSticker = allSaved[0].stickerMessage;
+          }
+        }
+
+        await react("💥").catch(() => undefined);
+
+        for (let i = 0; i < count; i++) {
+          await sendStickerAssociation(sock, from, parentMessageKey, targetSticker);
+          if (i + 1 < count) {
+            await sleep(BURST_DELAY_MS);
+          }
+        }
+
+        await react("✅").catch(() => undefined);
+        return;
+      }
+
+      if (sub === "boom2") {
+        if (!ctxInfo?.stanzaId) {
+          return reply(
+            `⚠️ Responde al mensaje al que quieres reaccionar con todos los stickers y escribe:\n\`${prefix}reacsticker boom2 [rondas]\``,
+          );
+        }
+
+        const allSaved = loadAllStickersFromDisk();
+        if (!allSaved.length) {
+          return reply(
+            `📂 No hay stickers guardados para ejecutar \`boom2\`.\n• Guarda varios con \`${prefix}reacsticker save <nombre>\`.`,
+          );
+        }
+
+        const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
+        const roundsArg = parseInt(String(args[1] || "1"), 10);
+        const rounds = Number.isFinite(roundsArg) && roundsArg > 0 ? roundsArg : 1;
+        const totalToSend = Math.min(MAX_BOOM_LIMIT, allSaved.length * rounds);
+
+        await react("💣").catch(() => undefined);
+
+        for (let i = 0; i < totalToSend; i++) {
+          const item = allSaved[i % allSaved.length];
+          await sendStickerAssociation(sock, from, parentMessageKey, item.stickerMessage);
+          if (i + 1 < totalToSend) {
+            await sleep(BURST_DELAY_MS);
+          }
+        }
+
+        await react("✅").catch(() => undefined);
+        return;
       }
 
       const requestedStickerName = sanitizeKey(args.join(""));
@@ -265,21 +404,7 @@ export default {
         }
 
         const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
-
-        await sock.relayMessage(
-          from,
-          {
-            messageContextInfo: {
-              messageAssociation: {
-                associationType: 11,
-                parentMessageKey,
-              },
-            },
-            stickerMessage: found.stickerMessage,
-          } as any,
-          {},
-        );
-
+        await sendStickerAssociation(sock, from, parentMessageKey, found.stickerMessage);
         await react("✅").catch(() => undefined);
         return;
       }
@@ -287,21 +412,7 @@ export default {
       if (quotedRoot?.stickerMessage) {
         const stickerMessage = cleanStickerPayload(quotedRoot.stickerMessage);
         const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
-
-        await sock.relayMessage(
-          from,
-          {
-            messageContextInfo: {
-              messageAssociation: {
-                associationType: 11,
-                parentMessageKey,
-              },
-            },
-            stickerMessage,
-          } as any,
-          {},
-        );
-
+        await sendStickerAssociation(sock, from, parentMessageKey, stickerMessage);
         await react("✅").catch(() => undefined);
         return;
       }
@@ -310,8 +421,9 @@ export default {
         `╭〔 🎯 ${fytBold("Uso de ReacSticker")} 〕⬣\n` +
           `• *Guardar sticker:*\n  Responde a un sticker con \`${prefix}reacsticker save gatoxd\`\n` +
           `• *Reaccionar a un mensaje:*\n  Responde al mensaje con \`${prefix}reacticker gatoxd\`\n` +
-          `• *Ver lista:*\n  \`${prefix}reacsticker list\`\n` +
-          `• *Eliminar:*\n  \`${prefix}reacsticker del gatoxd\`\n` +
+          `• *Modo Boom (1 sticker repetido):*\n  Responde al mensaje con \`${prefix}reacsticker boom gatoxd 20\`\n` +
+          `• *Modo Boom2 (Todos los guardados):*\n  Responde al mensaje con \`${prefix}reacsticker boom2\`\n` +
+          `• *Ver lista / Eliminar:*\n  \`${prefix}reacsticker list\` | \`${prefix}reacsticker del gatoxd\`\n` +
           `╰━━━━━━━━━━━━⬣`,
       );
     } catch (e: any) {
