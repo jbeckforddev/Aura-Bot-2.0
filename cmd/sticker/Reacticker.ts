@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { BufferJSON, areJidsSameUser, jidNormalizedUser } from "baileys";
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
@@ -8,25 +8,6 @@ const CACHE_DIR = path.resolve(process.cwd(), "data", "reacsticker_cache");
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
-
-interface StoredStickerData {
-  url?: string;
-  fileSha256?: string;
-  fileEncSha256?: string;
-  mediaKey?: string;
-  mimetype?: string;
-  height?: number;
-  width?: number;
-  directPath?: string;
-  fileLength?: number;
-  mediaKeyTimestamp?: number;
-  isAnimated?: boolean;
-  firstFrameLength?: number;
-  firstFrameSidecar?: string;
-  isAvatar?: boolean;
-  isAiSticker?: boolean;
-  isLottie?: boolean;
 }
 
 function sanitizeKey(name: string): string {
@@ -52,122 +33,102 @@ function extractContextInfo(msg: any): any {
   const root = unwrapMessage(msg?.message);
   if (!root) return null;
 
+  const preferredOrder = [
+    "extendedTextMessage",
+    "imageMessage",
+    "videoMessage",
+    "stickerMessage",
+    "documentMessage",
+    "audioMessage",
+  ];
+
+  for (const key of preferredOrder) {
+    if (root[key]?.contextInfo?.stanzaId) {
+      return root[key].contextInfo;
+    }
+  }
+
   for (const key of Object.keys(root)) {
+    if (key === "messageContextInfo") continue;
     const content = root[key];
-    if (content && typeof content === "object" && content.contextInfo) {
+    if (content && typeof content === "object" && content.contextInfo?.stanzaId) {
       return content.contextInfo;
     }
   }
+
   return null;
 }
 
-function toBase64IfBinary(val: any): string | undefined {
-  if (!val) return undefined;
-  if (typeof val === "string") return val;
-  if (Buffer.isBuffer(val)) return val.toString("base64");
-  if (val instanceof Uint8Array) return Buffer.from(val).toString("base64");
-  if (typeof val === "object" && Array.isArray(val.data)) {
-    return Buffer.from(val.data).toString("base64");
+function cleanStickerPayload(quotedSticker: any): Record<string, any> {
+  const cloned = JSON.parse(
+    JSON.stringify(quotedSticker, BufferJSON.replacer),
+    BufferJSON.reviver,
+  );
+
+  delete cloned.contextInfo;
+
+  if (!cloned.url && typeof cloned.directPath === "string" && cloned.directPath.startsWith("/")) {
+    cloned.url = `https://mmg.whatsapp.net${cloned.directPath}`;
   }
-  if (typeof val === "object") {
-    const values = Object.values(val);
-    if (values.length > 0 && values.every((n) => typeof n === "number")) {
-      return Buffer.from(values as number[]).toString("base64");
-    }
-  }
-  return undefined;
+
+  return cloned;
 }
 
-function toNumberClean(val: any): number | undefined {
-  if (typeof val === "number" && Number.isFinite(val)) return val;
-  if (typeof val === "string" && val.trim() !== "") {
-    const parsed = Number(val);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  if (val && typeof val === "object" && typeof val.low === "number") {
-    return val.low >>> 0;
-  }
-  return undefined;
+function saveStickerToDisk(name: string, stickerObj: Record<string, any>): void {
+  const filePath = path.join(CACHE_DIR, `${name}.json`);
+  const serialized = JSON.stringify(stickerObj, BufferJSON.replacer);
+  fs.writeFileSync(filePath, serialized, "utf8");
 }
 
-function serializeStickerMessage(raw: any): StoredStickerData {
-  const data: StoredStickerData = {
-    url: typeof raw.url === "string" ? raw.url : undefined,
-    fileSha256: toBase64IfBinary(raw.fileSha256),
-    fileEncSha256: toBase64IfBinary(raw.fileEncSha256),
-    mediaKey: toBase64IfBinary(raw.mediaKey),
-    mimetype: typeof raw.mimetype === "string" ? raw.mimetype : "image/webp",
-    height: toNumberClean(raw.height) || 512,
-    width: toNumberClean(raw.width) || 512,
-    directPath: typeof raw.directPath === "string" ? raw.directPath : undefined,
-    fileLength: toNumberClean(raw.fileLength),
-    mediaKeyTimestamp: toNumberClean(raw.mediaKeyTimestamp),
-    isAnimated: Boolean(raw.isAnimated),
-    firstFrameLength: toNumberClean(raw.firstFrameLength),
-    firstFrameSidecar: toBase64IfBinary(raw.firstFrameSidecar),
-    isAvatar: Boolean(raw.isAvatar),
-    isAiSticker: Boolean(raw.isAiSticker),
-    isLottie: Boolean(raw.isLottie),
-  };
-
-  return data;
-}
-
-function hydrateStickerMessage(stored: StoredStickerData): Record<string, any> {
-  const hydrated: Record<string, any> = {
-    mimetype: stored.mimetype || "image/webp",
-    height: stored.height || 512,
-    width: stored.width || 512,
-    isAnimated: Boolean(stored.isAnimated),
-  };
-
-  if (stored.url) hydrated.url = stored.url;
-  if (stored.directPath) hydrated.directPath = stored.directPath;
-  if (stored.fileSha256) hydrated.fileSha256 = Buffer.from(stored.fileSha256, "base64");
-  if (stored.fileEncSha256) hydrated.fileEncSha256 = Buffer.from(stored.fileEncSha256, "base64");
-  if (stored.mediaKey) hydrated.mediaKey = Buffer.from(stored.mediaKey, "base64");
-  if (typeof stored.fileLength === "number") hydrated.fileLength = stored.fileLength;
-  if (typeof stored.mediaKeyTimestamp === "number") hydrated.mediaKeyTimestamp = stored.mediaKeyTimestamp;
-  if (typeof stored.firstFrameLength === "number") hydrated.firstFrameLength = stored.firstFrameLength;
-  if (stored.firstFrameSidecar) hydrated.firstFrameSidecar = Buffer.from(stored.firstFrameSidecar, "base64");
-  if (stored.isAvatar) hydrated.isAvatar = true;
-  if (stored.isAiSticker) hydrated.isAiSticker = true;
-  if (stored.isLottie) hydrated.isLottie = true;
-
-  return hydrated;
-}
-
-function findStickerOnDisk(query: string): { name: string; stickerMessage: Record<string, any> } | null {
+function loadStickerFromDisk(query: string): { name: string; stickerMessage: Record<string, any> } | null {
   const clean = sanitizeKey(query);
   if (!clean || !fs.existsSync(CACHE_DIR)) return null;
 
   const exactPath = path.join(CACHE_DIR, `${clean}.json`);
   if (fs.existsSync(exactPath)) {
-    const rawJson = JSON.parse(fs.readFileSync(exactPath, "utf8")) as StoredStickerData;
-    return { name: clean, stickerMessage: hydrateStickerMessage(rawJson) };
+    const raw = fs.readFileSync(exactPath, "utf8");
+    const parsed = JSON.parse(raw, BufferJSON.reviver);
+    delete parsed.contextInfo;
+    if (!parsed.url && typeof parsed.directPath === "string" && parsed.directPath.startsWith("/")) {
+      parsed.url = `https://mmg.whatsapp.net${parsed.directPath}`;
+    }
+    return { name: clean, stickerMessage: parsed };
   }
 
   const files = fs.readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
   for (const file of files) {
     const base = file.replace(/\.json$/i, "");
     if (base.includes(clean) || clean.includes(base)) {
-      const fullPath = path.join(CACHE_DIR, file);
-      const rawJson = JSON.parse(fs.readFileSync(fullPath, "utf8")) as StoredStickerData;
-      return { name: base, stickerMessage: hydrateStickerMessage(rawJson) };
+      const raw = fs.readFileSync(path.join(CACHE_DIR, file), "utf8");
+      const parsed = JSON.parse(raw, BufferJSON.reviver);
+      delete parsed.contextInfo;
+      if (!parsed.url && typeof parsed.directPath === "string" && parsed.directPath.startsWith("/")) {
+        parsed.url = `https://mmg.whatsapp.net${parsed.directPath}`;
+      }
+      return { name: base, stickerMessage: parsed };
     }
   }
 
   return null;
 }
 
-function findDuplicateByHash(sha256B64?: string): string | null {
-  if (!sha256B64 || !fs.existsSync(CACHE_DIR)) return null;
+function getSha256Hex(stickerObj: any): string {
+  const sha = stickerObj?.fileSha256;
+  if (!sha) return "";
+  if (Buffer.isBuffer(sha)) return sha.toString("hex");
+  if (sha instanceof Uint8Array) return Buffer.from(sha).toString("hex");
+  return "";
+}
+
+function findDuplicateByHash(targetHex: string): string | null {
+  if (!targetHex || !fs.existsSync(CACHE_DIR)) return null;
   const files = fs.readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
 
   for (const file of files) {
     try {
-      const content = JSON.parse(fs.readFileSync(path.join(CACHE_DIR, file), "utf8")) as StoredStickerData;
-      if (content.fileSha256 && content.fileSha256 === sha256B64) {
+      const raw = fs.readFileSync(path.join(CACHE_DIR, file), "utf8");
+      const parsed = JSON.parse(raw, BufferJSON.reviver);
+      if (getSha256Hex(parsed) === targetHex) {
         return file.replace(/\.json$/i, "");
       }
     } catch {}
@@ -175,35 +136,35 @@ function findDuplicateByHash(sha256B64?: string): string | null {
   return null;
 }
 
-function buildTargetParentKey(sock: any, from: string, msg: any, ctxInfo: any) {
+function buildParentMessageKey(sock: any, from: string, msg: any, ctxInfo: any) {
   if (!ctxInfo?.stanzaId) {
     return msg.key;
   }
 
   const isGroup = from.endsWith("@g.us");
-  const rawBotId = sock?.user?.id ? String(sock.user.id).split(":")[0] + "@s.whatsapp.net" : "";
-  const rawBotLid = sock?.user?.lid ? String(sock.user.lid).split(":")[0] + "@lid" : "";
-  const participant = String(ctxInfo.participant || "");
-  const cleanParticipant = participant.includes(":")
-    ? participant.split(":")[0] + "@" + participant.split("@")[1]
-    : participant;
+  const rawParticipant = String(ctxInfo.participant || "");
+  const normalizedParticipant = rawParticipant ? jidNormalizedUser(rawParticipant) : "";
+
+  const botId = sock?.user?.id ? jidNormalizedUser(sock.user.id) : "";
+  const botLid = sock?.user?.lid ? jidNormalizedUser(sock.user.lid) : "";
 
   const isFromMe = Boolean(
-    (rawBotId && (participant === rawBotId || cleanParticipant === rawBotId)) ||
-      (rawBotLid && (participant === rawBotLid || cleanParticipant === rawBotLid)),
+    normalizedParticipant &&
+      ((botId && areJidsSameUser(normalizedParticipant, botId)) ||
+        (botLid && areJidsSameUser(normalizedParticipant, botLid))),
   );
 
-  const key: Record<string, any> = {
+  const parentKey: Record<string, any> = {
     remoteJid: from,
     fromMe: isFromMe,
     id: String(ctxInfo.stanzaId),
   };
 
-  if (isGroup && participant) {
-    key.participant = participant;
+  if (isGroup && normalizedParticipant) {
+    parentKey.participant = normalizedParticipant;
   }
 
-  return key;
+  return parentKey;
 }
 
 export default {
@@ -257,8 +218,7 @@ export default {
       const quotedRoot = unwrapMessage(ctxInfo?.quotedMessage);
 
       if (sub === "save" || sub === "guardar") {
-        const rawName = args.slice(1).join("");
-        const cleanName = sanitizeKey(rawName);
+        const cleanName = sanitizeKey(args.slice(1).join(""));
 
         if (!cleanName) {
           return reply(
@@ -273,22 +233,21 @@ export default {
           );
         }
 
-        const serialized = serializeStickerMessage(quotedSticker);
-        if (!serialized.mediaKey || (!serialized.directPath && !serialized.url)) {
-          return reply(`❌ El sticker seleccionado no contiene metadatos válidos de WhatsApp.`);
+        const stickerPayload = cleanStickerPayload(quotedSticker);
+        if (!stickerPayload.mediaKey || (!stickerPayload.directPath && !stickerPayload.url)) {
+          return reply(`❌ El sticker seleccionado no contiene metadatos válidos.`);
         }
 
-        const existingDup = findDuplicateByHash(serialized.fileSha256);
+        const existingDup = findDuplicateByHash(getSha256Hex(stickerPayload));
         if (existingDup && existingDup !== cleanName) {
-          await react("⚠️").catch(() => undefined);
+          saveStickerToDisk(cleanName, stickerPayload);
+          await react("💾").catch(() => undefined);
           return reply(
-            `⚠️ Ese sticker ya está guardado bajo el nombre \`${existingDup}\`.\nÚsalo respondiendo a un mensaje con: \`${prefix}reacticker ${existingDup}\``,
+            `✅ Sticker actualizado y guardado como \`${cleanName}\` (también disponible como \`${existingDup}\`).`,
           );
         }
 
-        const savePath = path.join(CACHE_DIR, `${cleanName}.json`);
-        fs.writeFileSync(savePath, JSON.stringify(serialized), "utf8");
-
+        saveStickerToDisk(cleanName, stickerPayload);
         await react("💾").catch(() => undefined);
         return reply(
           `✅ Sticker guardado como \`${cleanName}\`.\n• Responde a cualquier mensaje con \`${prefix}reacticker ${cleanName}\` para reaccionar.`,
@@ -298,24 +257,14 @@ export default {
       const requestedStickerName = sanitizeKey(args.join(""));
 
       if (requestedStickerName) {
-        if (!ctxInfo?.stanzaId) {
-          return reply(
-            `⚠️ Responde al mensaje al que quieres reaccionar y escribe:\n\`${prefix}reacticker ${requestedStickerName}\``,
-          );
-        }
-
-        const found = findStickerOnDisk(requestedStickerName);
+        const found = loadStickerFromDisk(requestedStickerName);
         if (!found) {
           return reply(
             `❌ No se encontró el sticker \`${requestedStickerName}\`.\n• Usa \`${prefix}reacsticker list\` para ver los disponibles o guárdalo con \`${prefix}reacsticker save ${requestedStickerName}\`.`,
           );
         }
 
-        const parentMessageKey = buildTargetParentKey(sock, from, msg, ctxInfo);
-        const msgId =
-          typeof (sock as any).generateMessageTag === "function"
-            ? await (sock as any).generateMessageTag()
-            : randomUUID();
+        const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
 
         await sock.relayMessage(
           from,
@@ -328,7 +277,7 @@ export default {
             },
             stickerMessage: found.stickerMessage,
           } as any,
-          { messageId: msgId },
+          {},
         );
 
         await react("✅").catch(() => undefined);
@@ -336,12 +285,8 @@ export default {
       }
 
       if (quotedRoot?.stickerMessage) {
-        const directSticker = hydrateStickerMessage(serializeStickerMessage(quotedRoot.stickerMessage));
-        const parentMessageKey = buildTargetParentKey(sock, from, msg, ctxInfo);
-        const msgId =
-          typeof (sock as any).generateMessageTag === "function"
-            ? await (sock as any).generateMessageTag()
-            : randomUUID();
+        const stickerMessage = cleanStickerPayload(quotedRoot.stickerMessage);
+        const parentMessageKey = buildParentMessageKey(sock, from, msg, ctxInfo);
 
         await sock.relayMessage(
           from,
@@ -352,9 +297,9 @@ export default {
                 parentMessageKey,
               },
             },
-            stickerMessage: directSticker,
+            stickerMessage,
           } as any,
-          { messageId: msgId },
+          {},
         );
 
         await react("✅").catch(() => undefined);
