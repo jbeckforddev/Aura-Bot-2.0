@@ -8,7 +8,7 @@ import { fytBold } from "../../core/socketText.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(process.cwd(), "data", "arcade_cache");
-const MAX_SAFE_ROM_BYTES = 160000;
+const MAX_SAFE_ROM_BYTES = 49152;
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -76,7 +76,16 @@ function detectArcadeCoreType(title: string, chips: RomChipEntry[]): string {
   ) {
     return "slug";
   }
-  return "fighter";
+  if (
+    joined.includes("sf2") ||
+    joined.includes("street") ||
+    joined.includes("kof") ||
+    joined.includes("fatal") ||
+    joined.includes("cps")
+  ) {
+    return "fighter";
+  }
+  return "pacman";
 }
 
 function inspectAndExtractArcadeZip(
@@ -139,11 +148,11 @@ function inspectAndExtractArcadeZip(
         const dataStart = localOffset + 30 + lFnLen + lExtraLen;
         const dataEnd = dataStart + compSize;
 
-        if (compSize > 0 && dataEnd <= zipBuf.length && uncompSize <= 8 * 1024 * 1024) {
+        if (compSize > 0 && dataEnd <= zipBuf.length && uncompSize <= 4 * 1024 * 1024) {
           const slice = zipBuf.subarray(dataStart, dataEnd);
           try {
             const out = method === 0 ? Buffer.from(slice) : zlib.inflateRawSync(slice);
-            if (out.length >= 256) {
+            if (out.length >= 128) {
               mainPayload = out.subarray(0, Math.min(out.length, MAX_SAFE_ROM_BYTES));
             }
           } catch {}
@@ -231,14 +240,15 @@ function getStoredArcadeRom(query: string): { buffer: Buffer; fileName: string }
 }
 
 function buildArcadeCabinetHtml(options: {
-  romGzipB64: string;
+  romRawB64: string;
   chipsJson: string;
   gameTitle: string;
   initialCore: string;
 }): string {
+  const safeTitle = options.gameTitle.replace(/["'<>\\]/g, "");
   const html = `<style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:none}
-html,body{width:100%;min-height:100%;background:#05060b;color:#f8fafc;font-family:monospace;overflow-x:hidden;overflow-y:auto}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{width:100%;min-height:100%;background:#05060b;color:#f8fafc;font-family:monospace;overflow-x:hidden;overflow-y:auto;touch-action:pan-y}
 body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:center}
 #arcade-cab{width:min(98vw,540px);margin:0 auto;background:linear-gradient(170deg,#18181b 0%,#090a10 55%,#050508 100%);border:3px solid #f59e0b;border-radius:20px 20px 42px 20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 22px 50px rgba(0,0,0,.95)}
 #marquee{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:linear-gradient(90deg,#7c2d12,#ea580c 50%,#7c2d12);border-bottom:2.5px solid #fde047}
@@ -253,11 +263,11 @@ body{min-height:100dvh;display:flex;align-items:flex-start;justify-content:cente
 #pwr-led.on{background:#22c55e;box-shadow:0 0 10px #22c55e}
 .pwr-lbl{font-size:8.5px;font-weight:900;color:#cbd5e1}
 .rom-badge{font-size:8.5px;font-weight:900;color:#fde047;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#crt-frame{position:relative;width:97%;aspect-ratio:384/264;background:#020305;border:2.5px solid #27272a;border-radius:8px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 18px #000}
+#crt-frame{position:relative;width:97%;aspect-ratio:384/264;background:#020305;border:2.5px solid #27272a;border-radius:8px;overflow:hidden;display:flex;justify-content:center;align-items:center;box-shadow:inset 0 0 18px #000;touch-action:none}
 canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rendering:pixelated;cursor:pointer}
 #crt-scanlines{position:absolute;inset:0;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,.25) 50%);background-size:100% 4px;pointer-events:none;z-index:2}
 #cab-bar{width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:6px 12px 4px}
-.cab-btn{border:1.5px solid #3f3f46;border-radius:7px;padding:6px 4px;font-family:monospace;font-size:9.5px;font-weight:900;cursor:pointer;text-align:center;box-shadow:0 3px 0 #000}
+.cab-btn{border:1.5px solid #3f3f46;border-radius:7px;padding:7px 4px;font-family:monospace;font-size:9.5px;font-weight:900;cursor:pointer;text-align:center;box-shadow:0 3px 0 #000;touch-action:manipulation}
 .cab-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000}
 #btn-power{background:linear-gradient(180deg,#dc2626,#7f1d1d);color:#fff;border-color:#fca5a5}
 #btn-power.powered{background:linear-gradient(180deg,#16a34a,#14532d);border-color:#86efac}
@@ -269,20 +279,20 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
 #telemetry-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#030408;padding:3px 5px;font-size:8px;color:#67e8f9;text-align:center}
 .t-cell{background:rgba(255,255,255,.04);padding:2px 3px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #debug-panel.collapsed{display:none}
-#debug-log{height:72px;overflow-y:auto;padding:5px 7px;font-size:8.5px;line-height:1.35;color:#4ade80;background:#03050a;touch-action:pan-y;-webkit-user-select:text;user-select:text}
+#debug-log{height:76px;overflow-y:auto;padding:5px 7px;font-size:8.5px;line-height:1.35;color:#4ade80;background:#03050a;touch-action:pan-y;-webkit-user-select:text;user-select:text}
 #debug-actions{display:flex;justify-content:flex-end;gap:6px;padding:3px 6px;background:#070a12}
-.dbg-mini-btn{background:#1e293b;color:#fde047;border:1px solid #d97706;border-radius:4px;padding:2px 7px;font-size:8px;font-weight:900;cursor:pointer}
+.dbg-mini-btn{background:#1e293b;color:#fde047;border:1px solid #d97706;border-radius:4px;padding:3px 8px;font-size:8px;font-weight:900;cursor:pointer;touch-action:manipulation}
 .log-line{margin-bottom:1px;word-break:break-all}
 .log-warn{color:#facc15}.log-err{color:#f87171;font-weight:900}.log-sys{color:#38bdf8;font-weight:900}.log-ok{color:#4ade80;font-weight:900}
-#cp-area{width:100%;padding:6px 12px 16px;display:flex;flex-direction:column;gap:8px}
+#cp-area{width:100%;padding:6px 12px 16px;display:flex;flex-direction:column;gap:8px;touch-action:none}
 #cp-main{width:100%;display:flex;justify-content:space-between;align-items:center;padding:2px}
-.joy-btn{position:absolute;width:40px;height:40px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);color:#f8fafc;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;box-shadow:0 3px 0 #000}
+.joy-btn{position:absolute;width:40px;height:40px;border:1.5px solid #09090b;background:linear-gradient(180deg,#3f3f46,#18181b);color:#f8fafc;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;box-shadow:0 3px 0 #000;touch-action:none}
 .joy-btn.touching{background:#ef4444;color:#fff;transform:translateY(2px)}
 #j-u{left:43px;top:4px}#j-d{left:43px;bottom:4px}#j-l{left:4px;top:43px}#j-r{right:4px;top:43px}
 #joy-ball{position:absolute;left:47px;top:47px;width:32px;height:32px;border-radius:50%;background:radial-gradient(circle at 32% 32%,#f87171,#dc2626 65%,#7f1d1d);border:2px solid #000;box-shadow:0 3px 8px rgba(0,0,0,.8);pointer-events:none}
 #six-buttons{display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.03);padding:10px 12px;border-radius:18px;border:1.5px solid rgba(255,255,255,.08);transform:rotate(-8deg)}
 .punch-row,.kick-row{display:flex;gap:9px}
-.arc-btn{width:44px;height:44px;border-radius:50%;border:2px solid #09090b;font-size:11px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 #000;transform:rotate(8deg)}
+.arc-btn{width:44px;height:44px;border-radius:50%;border:2px solid #09090b;font-size:11px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 0 #000;transform:rotate(8deg);touch-action:none}
 .arc-btn.touching{transform:rotate(8deg) translateY(2px) scale(.94);box-shadow:0 1px 0 #000;filter:brightness(1.3)}
 .b-lp{background:radial-gradient(circle at 30% 30%,#38bdf8,#0284c7)}
 .b-mp{background:radial-gradient(circle at 30% 30%,#facc15,#ca8a04);color:#09090b}
@@ -291,7 +301,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
 .b-mk{background:radial-gradient(circle at 30% 30%,#c084fc,#7e22ce)}
 .b-hk{background:radial-gradient(circle at 30% 30%,#fb923c,#ea580c)}
 #bottom-tools{width:100%;display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
-.tool-btn{background:#18181b;color:#fde047;border:1.5px solid #3f3f46;border-radius:6px;padding:5px 9px;font-family:monospace;font-size:9px;font-weight:900;cursor:pointer}
+.tool-btn{background:#18181b;color:#fde047;border:1.5px solid #3f3f46;border-radius:6px;padding:6px 10px;font-family:monospace;font-size:9px;font-weight:900;cursor:pointer;touch-action:manipulation}
 .tool-btn.active{background:#f59e0b;color:#09090b;border-color:#fde047}
 </style>
 <body>
@@ -305,7 +315,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       <div id="crt-top">
         <div class="pwr-box">
           <div id="pwr-led"></div>
-          <span class="pwr-lbl" id="pwr-status">STANDBY (OFF)</span>
+          <span class="pwr-lbl" id="pwr-status">BOOT v1.2</span>
         </div>
         <div class="rom-badge" id="rom-badge-lbl">__GAME_TITLE__</div>
       </div>
@@ -323,14 +333,14 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
   </div>
   <div id="debug-wrap">
     <div id="debug-head">
-      <span id="dbg-state">🔌 GABINETE APAGADO (PULSA POWER ON)</span>
+      <span id="dbg-state">⚡ INICIANDO LUFEROS BOOT ARCADE V1.2...</span>
       <span id="dbg-board">Z80 • 3.07MHz</span>
     </div>
     <div id="telemetry-bar">
-      <div class="t-cell" id="t-fps">FPS: 0</div>
+      <div class="t-cell" id="t-fps">FPS: 60</div>
       <div class="t-cell" id="t-pc">PC: 0x0000</div>
-      <div class="t-cell" id="t-crc">ROM: WAIT</div>
-      <div class="t-cell" id="t-cred">CREDITS: 0</div>
+      <div class="t-cell" id="t-crc">ROM: OK</div>
+      <div class="t-cell" id="t-cred">CREDITS: 1</div>
     </div>
     <div id="debug-panel">
       <div id="debug-log"></div>
@@ -375,9 +385,9 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
 
   const script = `
 (function(){
-  const ROM_GZIP_B64 = "${options.romGzipB64}";
+  const ROM_RAW_B64 = "${options.romRawB64}";
   const ROM_CHIPS = ${options.chipsJson};
-  let GAME_TITLE = "${options.gameTitle}";
+  let GAME_TITLE = "${safeTitle}";
   let activeCore = "${options.initialCore}";
 
   const canvas = document.getElementById("arcade-cv");
@@ -413,6 +423,10 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     while (dbgLog.childNodes.length > 80) dbgLog.removeChild(dbgLog.firstChild);
     dbgLog.scrollTop = dbgLog.scrollHeight;
   }
+
+  window.addEventListener("error", function(e) {
+    logArc("ERR: " + (e && e.message ? e.message : "Error de script"), "log-err");
+  });
 
   let audioCtx = null;
   function unlockAudio() {
@@ -456,18 +470,20 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     });
   }
 
-  async function gunzipBase64ToBytes(b64) {
-    const bin = atob(b64);
-    const compressed = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) compressed[i] = bin.charCodeAt(i);
-    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"));
-    const ab = await new Response(stream).arrayBuffer();
-    return new Uint8Array(ab);
+  function decodeBase64ToBytes(b64) {
+    try {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } catch (e) {
+      return new Uint8Array(1024);
+    }
   }
 
   function calcRuntimeCrc32(u8) {
     let crc = 0xFFFFFFFF;
-    const step = Math.max(1, Math.floor(u8.length / 8192));
+    const step = Math.max(1, Math.floor(u8.length / 4096));
     for (let i = 0; i < u8.length; i += step) {
       crc ^= u8[i];
       for (let j = 0; j < 8; j++) {
@@ -497,7 +513,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
   let masterCrc = "00000000";
   let sysState = "OFF";
   let bootTick = 0;
-  let credits = 0;
+  let credits = 1;
   let cpuPc = 0x0000;
   let currentChipIdx = 0;
 
@@ -588,7 +604,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     pacPlayer.nextDx = -1;
     pacPlayer.nextDy = 0;
     pacFrightTimer = 0;
-    pacReadyTimer = 55;
+    pacReadyTimer = 40;
     pacGhosts = [
       { name: "BLINKY", col: "#ef4444", x: 13.5, y: 11, dx: -1, dy: 0, scatX: 25, scatY: 0, state: "normal" },
       { name: "PINKY",  col: "#f472b6", x: 13.5, y: 13, dx: 0,  dy: -1, scatX: 2,  scatY: 0, state: "normal" },
@@ -597,14 +613,12 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     ];
   }
 
-  function isPacWall(tx, ty, isGhost, ghostState) {
+  function isPacWall(tx, ty, isGhost) {
     if (ty < 0 || ty >= PAC_RAW_MAP.length) return true;
     const wrappedX = (tx + 28) % 28;
     const cell = pacGrid[ty][wrappedX];
     if (cell === 1) return true;
-    if (cell === 4) {
-      return !isGhost;
-    }
+    if (cell === 4) return !isGhost;
     return false;
   }
 
@@ -629,13 +643,13 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       const spd = 0.125;
       const cx = Math.round(pacPlayer.x);
       const cy = Math.round(pacPlayer.y);
-      const nearCenter = Math.abs(pacPlayer.x - cx) < 0.19 && Math.abs(pacPlayer.y - cy) < 0.19;
+      const nearCenter = Math.abs(pacPlayer.x - cx) < 0.2 && Math.abs(pacPlayer.y - cy) < 0.2;
 
       if (pacPlayer.nextDx === -pacPlayer.dx && pacPlayer.nextDy === -pacPlayer.dy && (pacPlayer.nextDx !== 0 || pacPlayer.nextDy !== 0)) {
         pacPlayer.dx = pacPlayer.nextDx;
         pacPlayer.dy = pacPlayer.nextDy;
       } else if (nearCenter && (pacPlayer.nextDx !== pacPlayer.dx || pacPlayer.nextDy !== pacPlayer.dy)) {
-        if (!isPacWall(cx + pacPlayer.nextDx, cy + pacPlayer.nextDy, false, "")) {
+        if (!isPacWall(cx + pacPlayer.nextDx, cy + pacPlayer.nextDy, false)) {
           pacPlayer.x = cx;
           pacPlayer.y = cy;
           pacPlayer.dx = pacPlayer.nextDx;
@@ -648,7 +662,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       const checkTileX = Math.round(nextX + pacPlayer.dx * 0.36);
       const checkTileY = Math.round(nextY + pacPlayer.dy * 0.36);
 
-      if (!isPacWall(checkTileX, checkTileY, false, "")) {
+      if (!isPacWall(checkTileX, checkTileY, false)) {
         pacPlayer.x = (nextX + 28) % 28;
         pacPlayer.y = nextY;
         pacPlayer.mouth += 0.04 * pacPlayer.mouthDir;
@@ -677,7 +691,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
             }
           });
           playWsgTone(680, 0.18, "sawtooth", 0.07, 240);
-          logArc("POWER PELLET: ¡Fantasmas vulnerables (Modo Azul)!", "log-warn");
+          logArc("POWER PELLET: Fantasmas vulnerables (Modo Azul)!", "log-warn");
         } else {
           pacScore += 10;
           wakaToggle = !wakaToggle;
@@ -729,7 +743,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
           ];
           const valid = dirs.filter(function(d) {
             if (d.dx === -g.dx && d.dy === -g.dy) return false;
-            return !isPacWall(gx + d.dx, gy + d.dy, true, g.state);
+            return !isPacWall(gx + d.dx, gy + d.dy, true);
           });
 
           if (valid.length === 0) {
@@ -796,9 +810,9 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
           } else if (g.state === "normal") {
             pacLives--;
             playWsgTone(420, 0.45, "sawtooth", 0.08, -340);
-            logArc("PAC-MAN CAUGHT BY " + g.name + "! Vidas restantes: " + pacLives, "log-warn");
+            logArc("PAC-MAN ATRAPADO POR " + g.name + "! Vidas: " + pacLives, "log-warn");
             if (pacLives <= 0) {
-              logArc("GAME OVER! Puntuación final: " + pacScore, "log-err");
+              logArc("GAME OVER! Puntuacion final: " + pacScore, "log-err");
               initPacmanMaze(true);
             } else {
               resetPacmanPositions();
@@ -858,12 +872,6 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       ctx.arc(fx - 2, fy + 1, 3.2, 0, Math.PI * 2);
       ctx.arc(fx + 2, fy + 2, 3.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#4ade80";
-      ctx.beginPath();
-      ctx.moveTo(fx - 2, fy - 1);
-      ctx.lineTo(fx + 1, fy - 5);
-      ctx.lineTo(fx + 2, fy);
-      ctx.stroke();
     }
 
     const pScreenX = ox + pacPlayer.x * ts + 4.5;
@@ -1064,14 +1072,14 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       pacFrightTimer = 280;
       pacGhosts.forEach(function(g) { g.state = "fright"; });
       playWsgTone(740, 0.2, "sawtooth", 0.07, 220);
-      logArc("CHEAT / MACRO: Power Pellet Forzado en Pac-Man.", "log-warn");
+      logArc("MACRO: Power Pellet Forzado en Pac-Man.", "log-warn");
       return;
     }
     p1.act = "special";
     p1.actTimer = 18;
     projectiles.push({ x: p1.x + p1.dir * 24, y: p1.y - 28, vx: p1.dir * 5.5 });
     playWsgTone(320, 0.22, "sawtooth", 0.08, 420);
-    logArc("INPUT MACRO: ↓ ↘ → + P (SPECIAL / HEAVY MACHINE GUN)", "log-warn");
+    logArc("MACRO: HADOUKEN / HEAVY MACHINE GUN", "log-warn");
   }
 
   function renderFighterOrSlugScreen() {
@@ -1237,9 +1245,29 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     });
   }
 
-  function powerOnCabinet() {
+  function startSelectedGame() {
+    sysState = "GAME";
+    pwrLed.className = "on";
+    pwrStatus.textContent = "JAMMA ON";
+    dbgState.textContent = "🟢 JUGANDO • " + GAME_TITLE;
+    if (activeCore === "pacman") {
+      initPacmanMaze(true);
+      playPacmanStartJingle();
+    } else if (activeCore === "galaga") {
+      galScore = 0;
+      initGalagaStage();
+      playWsgTone(587.33, 0.2, "square", 0.07, 260);
+    } else {
+      p1.hp = 100;
+      cpuFoe.hp = 100;
+      playWsgTone(587.33, 0.2, "square", 0.07, 260);
+    }
+    logArc("EJECUCION ACTIVA: [" + GAME_TITLE + "] en nucleo " + activeCore.toUpperCase() + ".", "log-ok");
+  }
+
+  function powerOnCabinet(forceOn) {
     unlockAudio();
-    if (sysState !== "OFF") {
+    if (!forceOn && sysState !== "OFF") {
       sysState = "OFF";
       pwrLed.className = "";
       pwrStatus.textContent = "STANDBY (OFF)";
@@ -1293,17 +1321,17 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     cpuPc = (bootTick * 128) & 0xFFFF;
     tPc.textContent = "PC: 0x" + cpuPc.toString(16).toUpperCase().padStart(4, "0");
 
-    if (bootTick < 22) {
+    if (bootTick < 18) {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, 384, 264);
-      const h = Math.max(2, (bootTick / 22) * 264);
-      const w = Math.min(384, 60 + bootTick * 16);
+      const h = Math.max(2, (bootTick / 18) * 264);
+      const w = Math.min(384, 60 + bootTick * 18);
       ctx.fillStyle = "#e0f2fe";
       ctx.fillRect(192 - w / 2, 132 - h / 2, w, h);
       return;
     }
 
-    if (bootTick === 23) {
+    if (bootTick === 19) {
       sysState = "POST";
       logArc("BOOTLOADER: LuferOS boot Arcade v1.2 verificando ROMs...", "log-sys");
     }
@@ -1317,8 +1345,8 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     ctx.font = "bold 10px monospace";
     ctx.fillText("★ LuferOS boot Arcade v1.2 — ROM & RAM CHECK ★", 12, 14);
 
-    const memIndex = Math.floor((bootTick - 25) / 12);
-    if (bootTick >= 25 && (bootTick - 25) % 12 === 0 && memIndex < memTests.length) {
+    const memIndex = Math.floor((bootTick - 20) / 8);
+    if (bootTick >= 20 && (bootTick - 20) % 8 === 0 && memIndex < memTests.length) {
       memTests[memIndex].status = "OK";
       playWsgTone(660 + memIndex * 90, 0.04, "square", 0.04, 0);
       logArc("POST MEM CHECK: " + memTests[memIndex].name + " -> OK", "log-ok");
@@ -1337,8 +1365,8 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     ctx.fillStyle = "#38bdf8";
     ctx.fillText("ROMSET VERIFICATION (" + GAME_TITLE + "):", 10, 118);
 
-    const romStartTick = 25 + memTests.length * 12 + 5;
-    if (bootTick >= romStartTick && (bootTick - romStartTick) % 12 === 0 && currentChipIdx < chipResults.length) {
+    const romStartTick = 20 + memTests.length * 8 + 4;
+    if (bootTick >= romStartTick && (bootTick - romStartTick) % 8 === 0 && currentChipIdx < chipResults.length) {
       const chip = chipResults[currentChipIdx];
       chip.status = "CRC OK";
       tCrc.textContent = "CRC:" + chip.crc;
@@ -1358,7 +1386,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
       ctx.fillText(c.status, 295, y);
     }
 
-    const totalNeeded = romStartTick + chipResults.length * 12 + 16;
+    const totalNeeded = romStartTick + chipResults.length * 8 + 12;
     const progress = Math.min(100, Math.round((bootTick / totalNeeded) * 100));
     ctx.fillStyle = "#1e293b";
     ctx.fillRect(10, 238, 364, 14);
@@ -1399,69 +1427,10 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     ctx.font = "bold 9.5px monospace";
     ctx.fillText("LuferOS boot Arcade v1.2 — BOOT NORMAL OK", 78, 183);
 
-    if (bootTick >= 38) {
-      sysState = "ATTRACT";
-      bootTick = 0;
-      pwrLed.className = "on";
-      pwrStatus.textContent = "JAMMA ON";
-      dbgState.textContent = "🟢 ARCADE RUNNING • " + GAME_TITLE;
-      logArc("BOOT COMPLETE: Lanzando [" + GAME_TITLE + "] en núcleo " + activeCore.toUpperCase() + ".", "log-ok");
-      logArc("Pulsa [🪙 COIN] y luego [👤 1P START] para jugar.", "log-sys");
+    if (bootTick >= 28) {
+      logArc("BOOT COMPLETE: Arranque exitoso de [" + GAME_TITLE + "].", "log-ok");
+      startSelectedGame();
     }
-  }
-
-  function renderAttractTitleScreen() {
-    bootTick++;
-    ctx.fillStyle = "#04050c";
-    ctx.fillRect(0, 0, 384, 264);
-
-    ctx.strokeStyle = "#facc15";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(20, 18, 344, 66);
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fde047";
-    ctx.font = "italic 900 20px Impact, Arial Black, sans-serif";
-    ctx.fillText(GAME_TITLE.slice(0, 24), 192, 48);
-
-    ctx.fillStyle = "#38bdf8";
-    ctx.font = "bold 9px monospace";
-    ctx.fillText("LUFEROS BOOT ARCADE V1.2 • CORE: " + activeCore.toUpperCase(), 192, 70);
-
-    if (activeCore === "pacman") {
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "bold 10px monospace";
-      ctx.fillText("CHARACTER  /  NICKNAME", 192, 104);
-      const demoGhosts = [
-        { c: "#ef4444", t: "-SHADOW    \"BLINKY\"" },
-        { c: "#f472b6", t: "-SPEEDY    \"PINKY\"" },
-        { c: "#22d3ee", t: "-BASHFUL   \"INKY\"" },
-        { c: "#fb923c", t: "-POKEY     \"CLYDE\"" }
-      ];
-      ctx.textAlign = "left";
-      demoGhosts.forEach(function(dg, idx) {
-        const y = 122 + idx * 16;
-        ctx.fillStyle = dg.c;
-        ctx.fillRect(92, y - 8, 10, 10);
-        ctx.fillText(dg.t, 114, y);
-      });
-      ctx.textAlign = "center";
-    } else {
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "bold 10px monospace";
-      ctx.fillText("ARQUITECTURA DE SALON RECREATIVO LISTA", 192, 136);
-    }
-
-    if ((bootTick & 16) === 0) {
-      ctx.fillStyle = credits > 0 ? "#4ade80" : "#facc15";
-      ctx.font = "bold 12px monospace";
-      ctx.fillText(credits > 0 ? "PULSA [1P START] PARA JUGAR" : "INSERT COIN — PULSA [🪙 COIN]", 192, 212);
-    }
-
-    ctx.fillStyle = "#f87171";
-    ctx.font = "bold 10px monospace";
-    ctx.fillText("CREDIT(S): " + credits + "  •  CRC32: 0x" + masterCrc, 192, 242);
-    ctx.textAlign = "left";
   }
 
   let frames = 0;
@@ -1480,7 +1449,6 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     if (sysState === "OFF") renderPowerOffScreen();
     else if (sysState === "DEGAUSS" || sysState === "POST") renderDegaussAndPost();
     else if (sysState === "CROSSHATCH") renderCrosshatchScreen();
-    else if (sysState === "ATTRACT") renderAttractTitleScreen();
     else if (sysState === "GAME") {
       if (activeCore === "pacman") updateAndRenderPacman();
       else if (activeCore === "galaga") renderGalagaScreen();
@@ -1488,135 +1456,100 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     }
   }
 
-  function startSelectedGame() {
-    sysState = "GAME";
-    if (activeCore === "pacman") {
-      initPacmanMaze(true);
-      playPacmanStartJingle();
-    } else if (activeCore === "galaga") {
-      galScore = 0;
-      initGalagaStage();
-      playWsgTone(587.33, 0.2, "square", 0.07, 260);
-    } else {
-      p1.hp = 100;
-      cpuFoe.hp = 100;
-      playWsgTone(587.33, 0.2, "square", 0.07, 260);
-    }
-    logArc("1P START PRESSED: Ejecutando [" + GAME_TITLE + "] en modo " + activeCore.toUpperCase() + ".", "log-ok");
+  function bindFastTap(el, handler) {
+    if (!el) return;
+    let lastTrigger = 0;
+    const invoke = function(e) {
+      const now = Date.now();
+      if (now - lastTrigger < 220) return;
+      lastTrigger = now;
+      if (e && e.cancelable) e.preventDefault();
+      handler(e);
+    };
+    el.addEventListener("pointerdown", invoke);
+    el.addEventListener("click", invoke);
   }
 
   function setupInputs() {
-    btnPower.addEventListener("click", function(e) {
-      e.preventDefault();
-      powerOnCabinet();
+    bindFastTap(btnPower, function() {
+      powerOnCabinet(false);
     });
 
-    canvas.addEventListener("pointerdown", function(e) {
-      e.preventDefault();
-      if (sysState === "OFF") powerOnCabinet();
-      else if (sysState === "ATTRACT") {
-        if (credits <= 0) credits = 1;
-        credits--;
-        btnCoin.textContent = "🪙 COIN (" + credits + ")";
-        tCred.textContent = "CREDITS: " + credits;
-        startSelectedGame();
-      }
+    bindFastTap(canvas, function() {
+      if (sysState === "OFF") powerOnCabinet(true);
     });
 
-    btnCoin.addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(btnCoin, function() {
       unlockAudio();
-      if (sysState === "OFF") {
-        powerOnCabinet();
-      }
+      if (sysState === "OFF") powerOnCabinet(true);
       credits = Math.min(99, credits + 1);
       btnCoin.textContent = "🪙 COIN (" + credits + ")";
       tCred.textContent = "CREDITS: " + credits;
       playCoinChime();
-      logArc("JAMMA COIN SWITCH #1: Crédito insertado (Total: " + credits + ")", "log-ok");
+      logArc("JAMMA COIN SWITCH #1: Credito insertado (Total: " + credits + ")", "log-ok");
     });
 
-    document.getElementById("btn-start").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-start"), function() {
       unlockAudio();
       if (sysState === "OFF") {
-        powerOnCabinet();
+        powerOnCabinet(true);
         return;
       }
-      if (sysState === "DEGAUSS" || sysState === "POST" || sysState === "CROSSHATCH") {
-        sysState = "ATTRACT";
-        pwrLed.className = "on";
-        pwrStatus.textContent = "JAMMA ON";
-        logArc("BOOT FAST-SKIP: Saltando directo a Attract Mode.", "log-sys");
-        return;
-      }
-      if (credits <= 0) {
-        credits = 1;
-        logArc("FREE PLAY AUTO-COIN: +1 Crédito asignado.", "log-sys");
-      }
-      credits--;
+      if (credits > 0) credits--;
       btnCoin.textContent = "🪙 COIN (" + credits + ")";
       tCred.textContent = "CREDITS: " + credits;
       startSelectedGame();
     });
 
-    document.getElementById("btn-service").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-service"), function() {
       unlockAudio();
       resetBootDiagnostics();
       sysState = "DEGAUSS";
-      bootTick = 22;
-      logArc("SERVICE SWITCH: Ejecutando verificación de ROMs y RAM...", "log-warn");
+      bootTick = 18;
+      logArc("SERVICE SWITCH: Ejecutando verificacion de ROMs y RAM...", "log-warn");
     });
 
-    document.getElementById("btn-reboot-boot").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-reboot-boot"), function() {
       unlockAudio();
-      sysState = "OFF";
-      powerOnCabinet();
+      powerOnCabinet(true);
     });
 
-    document.getElementById("btn-action-macro").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-action-macro"), function() {
       unlockAudio();
       triggerSpecialMove();
     });
 
-    document.getElementById("btn-game-switch").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-game-switch"), function() {
       unlockAudio();
       const order = ["pacman", "galaga", "slug", "fighter"];
       const titles = {
         pacman: "PAC-MAN / PUCKMAN (NAMCO)",
-        galaga: "GALAGA '88 (NAMCO)",
+        galaga: "GALAGA 88 (NAMCO)",
         slug: "METAL SLUG X (NEO-GEO)",
-        fighter: "STREET FIGHTER II' (CPS-II)"
+        fighter: "STREET FIGHTER II (CPS-II)"
       };
       const nextIdx = (order.indexOf(activeCore) + 1) % order.length;
       activeCore = order[nextIdx];
       GAME_TITLE = titles[activeCore];
       romBadgeLbl.textContent = GAME_TITLE;
       updateBoardLabels();
-      if (sysState === "GAME") startSelectedGame();
+      startSelectedGame();
       logArc("PLACA CONMUTADA A: " + GAME_TITLE, "log-ok");
     });
 
     const btnLogs = document.getElementById("btn-logs-toggle");
-    btnLogs.addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(btnLogs, function() {
       const hidden = dbgPanel.classList.toggle("collapsed");
       btnLogs.classList.toggle("active", !hidden);
       btnLogs.textContent = hidden ? "📟 LOGS (OFF)" : "📟 LOGS (ON)";
     });
 
-    document.getElementById("btn-clear-log").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-clear-log"), function() {
       dbgLog.innerHTML = "";
       logArc("Consola de logs limpiada.", "log-sys");
     });
 
-    document.getElementById("btn-copy-log").addEventListener("click", function(e) {
-      e.preventDefault();
+    bindFastTap(document.getElementById("btn-copy-log"), function() {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(logHistory.join("\\n")).then(function() {
           logArc("Logs copiados al portapapeles OK.", "log-ok");
@@ -1646,12 +1579,12 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
         keys[k] = false;
         updateStickVisual();
       };
+      btn.addEventListener("pointerdown", down);
+      btn.addEventListener("pointerup", up);
+      btn.addEventListener("pointercancel", up);
+      btn.addEventListener("pointerleave", up);
       btn.addEventListener("touchstart", down, { passive: false });
       btn.addEventListener("touchend", up, { passive: false });
-      btn.addEventListener("touchcancel", up, { passive: false });
-      btn.addEventListener("mousedown", down);
-      btn.addEventListener("mouseup", up);
-      btn.addEventListener("mouseleave", up);
     });
 
     const kbMap = {
@@ -1671,23 +1604,20 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
     });
   }
 
-  async function initArcadeMachine() {
+  function initArcadeMachine() {
     setupInputs();
     updateBoardLabels();
     initPacmanMaze(true);
-    logArc("Gabinete LuferOS boot Arcade v1.2 en STANDBY.", "log-sys");
-    try {
-      romBytes = await gunzipBase64ToBytes(ROM_GZIP_B64);
-      masterCrc = calcRuntimeCrc32(romBytes);
-      tCrc.textContent = "CRC:" + masterCrc;
-      logArc(
-        "ROMSET montado: [" + GAME_TITLE + "] | Placa: " + activeCore.toUpperCase() + " | Chips: " + ROM_CHIPS.length + " | CRC32: 0x" + masterCrc,
-        "log-ok"
-      );
-      logArc("Pulsa el botón [⚡ POWER ON] para arrancar el gabinete.", "log-warn");
-    } catch (e) {
-      logArc("ERR descomprimiendo ROM: " + (e && e.message ? e.message : String(e)), "log-err");
-    }
+    romBytes = decodeBase64ToBytes(ROM_RAW_B64);
+    masterCrc = calcRuntimeCrc32(romBytes);
+    tCrc.textContent = "CRC:" + masterCrc;
+    btnCoin.textContent = "🪙 COIN (" + credits + ")";
+    tCred.textContent = "CREDITS: " + credits;
+    logArc(
+      "ROMSET montado: [" + GAME_TITLE + "] | Placa: " + activeCore.toUpperCase() + " | Chips: " + ROM_CHIPS.length + " | CRC32: 0x" + masterCrc,
+      "log-ok"
+    );
+    powerOnCabinet(true);
     requestAnimationFrame(mainLoop);
   }
 
@@ -1695,7 +1625,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
 })();`;
 
   return html
-    .replace("__GAME_TITLE__", () => options.gameTitle)
+    .replace("__GAME_TITLE__", () => safeTitle)
     .replace("__ARCADE_SCRIPT__", () => script);
 }
 
@@ -1703,7 +1633,7 @@ export default {
   name: ["arcade", "cps", "cps1", "cps2", "maquinita", "mame", "pacman"],
   category: "group",
   description:
-    "Sistema LuferOS boot Arcade v1.2 con autodetección de ROMs (Pac-Man/PuckMan, Galaga, Metal Slug, SF2), POST CRC32 y consola de logs.",
+    "Sistema LuferOS boot Arcade v1.2 con auto-arranque, comprobación CRC32 de ROMs (Pac-Man/PuckMan, Galaga, Metal Slug, SF2) y consola de logs.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -1733,7 +1663,7 @@ export default {
                 return `${i + 1}. \`${f.replace(/\.(zip|bin|rom)$/i, "")}\` (${kb} KB)`;
               })
               .join("\n")
-          : "• `pacman` (Pac-Man / PuckMan Namco Z80 Integrado)\n• `galaga` (Galaga Namco Integrado)\n• `slug` (Metal Slug Neo-Geo Integrado)\n• `sf2` (Street Fighter II' CPS-II Integrado)";
+          : "• `pacman` (Pac-Man / PuckMan Namco Z80 Integrado)\n• `galaga` (Galaga Namco Integrado)\n• `slug` (Metal Slug Neo-Geo Integrado)\n• `sf2` (Street Fighter II CPS-II Integrado)";
 
         return reply(
           `╭〔 🕹️ ${fytBold("LuferOS boot Arcade v1.2")} 〕⬣\n` +
@@ -1824,9 +1754,11 @@ export default {
       }
 
       const initialCore = detectArcadeCoreType(gameTitle, chipsList);
-      const romGzipB64 = zlib.gzipSync(payloadBuffer, { level: 9 }).toString("base64");
+      const compactSlice = payloadBuffer.subarray(0, Math.min(payloadBuffer.length, 16384));
+      const romRawB64 = compactSlice.toString("base64");
+
       const HTML = buildArcadeCabinetHtml({
-        romGzipB64,
+        romRawB64,
         chipsJson: JSON.stringify(chipsList),
         gameTitle,
         initialCore,
@@ -1860,7 +1792,7 @@ export default {
                   __typename: "GenAISingleLayoutViewModel",
                   primitive: {
                     __typename: "GenAITextPrimitive",
-                    text: `🕹️ *LuferOS boot Arcade v1.2* • ${gameTitle}\n_Abre el gabinete inferior y pulsa_ *⚡ POWER ON* _para iniciar la comprobación de chips y arrancar el juego._`,
+                    text: `🕹️ *LuferOS boot Arcade v1.2* • ${gameTitle}\n_Abre el gabinete inferior para ver el test de ROMs y jugar inmediatamente._`,
                   },
                 },
               },
