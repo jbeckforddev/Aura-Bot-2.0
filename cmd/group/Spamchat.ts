@@ -1,119 +1,179 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const G = globalThis as any;
+const jobs: Map<string, { stop: boolean }> = (G.__spamChatJobs ??= new Map());
+const dead: Map<any, number> = (G.__spamDead ??= new Map());
 
-function getActiveSockets(mainSock: any): any[] {
-  const sockets: any[] = [];
-  
-  if (mainSock && typeof mainSock.sendMessage === "function") {
-    sockets.push(mainSock);
-  }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const digits = (j: string) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+const bare = (j: string) => `${digits(j)}@s.whatsapp.net`;
 
-  const possibleArrays = [
-    // @ts-ignore
-    global.conns, global.subbots, global.clients, global.jadibot,
-    mainSock?.conns, mainSock?.subbots, mainSock?.clients
-  ];
+/* ───────────────────────── subbots ───────────────────────── */
 
-  for (const arr of possibleArrays) {
-    if (Array.isArray(arr)) {
-      for (const item of arr) {
-        if (item && typeof item.sendMessage === "function" && !sockets.includes(item)) {
-          sockets.push(item);
-        }
-      }
-    } else if (arr && typeof arr === "object") {
-      const vals = Object.values(arr);
-      for (const item of vals) {
-        if (item && typeof (item as any).sendMessage === "function" && !sockets.includes(item)) {
-          sockets.push(item);
-        }
-      }
-    }
-  }
-  return sockets;
+const isSock = (v: any) =>
+  v && typeof v.sendMessage === "function" && v.ws && v.authState?.creds?.me?.id;
+
+const isLive = (s: any) => {
+  if (!s?.ws) return false;
+  if (typeof s.ws.readyState === "number") return s.ws.readyState === 1;
+  if (typeof s.ws.isOpen === "boolean") return s.ws.isOpen;
+  return true;
+};
+
+function fromAny(x: any): any[] {
+  if (!x) return [];
+  if (isSock(x)) return [x];
+  let arr: any[] = [];
+  if (typeof x.values === "function") { try { arr = [...x.values()]; } catch {} }
+  else if (Array.isArray(x)) arr = x;
+  else if (typeof x === "object") arr = Object.values(x);
+  return arr.map((v: any) => v?.sock ?? v?.client ?? v?.conn ?? v).filter(isSock);
 }
 
+function pool(ctx: any): any[] {
+  const found: any[] = [];
+  for (const k of Object.keys(G)) {
+    if (k.startsWith("__spam")) continue;
+    if (!/sub|bot|conn|sock|client|instance/i.test(k)) continue;
+    let v: any;
+    try { v = G[k]; } catch { continue; }
+    found.push(...fromAny(v));
+  }
+  for (const c of [G.subbots, G.__subbots, ctx.subbots]) found.push(...fromAny(c));
+  return [...new Set(found)];
+}
+
+/* ───────────────────────── texto ───────────────────────── */
+
+function armar(plantilla: string, i: number, total: number): string {
+  return plantilla
+    .replace(/\{n\}/gi, String(i + 1))
+    .replace(/\{total\}/gi, String(total))
+    .replace(/\{i\}/gi, String(i + 1));
+}
+
+function textoCitado(msg: any): string {
+  const q: any = (msg.message as any)?.extendedTextMessage?.contextInfo?.quotedMessage;
+  if (!q) return "";
+  return String(q.conversation || q.extendedTextMessage?.text || q.imageMessage?.caption || q.videoMessage?.caption || "").trim();
+}
+
+/* ───────────────────────── comando ───────────────────────── */
+
 export default {
-  name: ["spamchat", "multispam", "subbotspam"],
+  name: ["spamchat", "spam"],
   category: "group",
-  description: "Envía mensajes masivos a un número extrayendo dinámicamente todos los sub-bots activos.",
-  groupOnly: false,
-
+  description: "Manda el texto que pidas a un número con N subbots, M veces cada uno.",
   async run(ctx: CommandContext) {
-    const { sock, from, msg, args = [], usedPrefix, reply, react } = ctx;
-    const prefix = usedPrefix || ".";
+    const { sock, from, msg, args, reply, react } = ctx;
+    const a0 = (args[0] || "").toLowerCase().trim();
 
-    if (args.length < 4) {
-      return reply(
-        `╭〔 🤖 ${fytBold("Multi-Subbot SpamChat")} 〕⬣\n` +
-        `• *Uso correcto:*\n` +
-        `  \`${prefix}spamchat <numero> <cantidad> <subbots> <mensaje>\`\n\n` +
-        `• *Ejemplo:*\n` +
-        `  \`${prefix}spamchat 573118353868 2 2 Hola test\`\n` +
-        `  \`${prefix}spamchat 573118353868 10 all Hola test\`\n` +
-        `╰━━━━━━━━━━━━⬣`
-      );
+    if (a0 === "stop" || a0 === "parar") {
+      const j = jobs.get(from);
+      if (!j) { await reply("No hay spam corriendo aquí.").catch(() => undefined); return; }
+      j.stop = true;
+      await react("⏹️").catch(() => undefined);
+      await reply("⏹️ Detenido.").catch(() => undefined);
+      return;
     }
 
-    const targetNumber = args[0].replace(/[^0-9]/g, "");
-    const count = parseInt(args[1], 10);
-    const subbotCountArg = args[2].toLowerCase();
-    const messageText = args.slice(3).join(" ").trim();
-
-    if (!targetNumber || isNaN(count) || count <= 0 || !messageText) {
-      return reply(`❌ Parámetros inválidos. Verifica el número, la cantidad y el mensaje.`);
+    if (jobs.get(from)) {
+      await reply("Ya hay un spam corriendo. Usa `.spamchat stop`.").catch(() => undefined);
+      return;
     }
 
-    const targetJid = `${targetNumber}@s.whatsapp.net`;
+    const info: any = (msg.message as any)?.extendedTextMessage?.contextInfo || {};
+    const rawNum = (args[0] || "").replace(/\D/g, "");
+    const citado = info.participant ? digits(info.participant) : "";
 
-    const subbotsList = getActiveSockets(sock);
+    const num = rawNum.length >= 8 ? rawNum : citado;
 
-    let botsToUse = subbotsList;
-    if (subbotCountArg !== "all") {
-      const requestedBots = parseInt(subbotCountArg, 10);
-      if (!isNaN(requestedBots) && requestedBots > 0) {
-        botsToUse = subbotsList.slice(0, requestedBots);
-      }
+    if (!num) {
+      await reply(
+        `Uso: \`.spamchat <número> [mensajes] [subbots] <texto>\`\n\n` +
+          `Ej: \`.spamchat 573118353868 10 5 hola, revisa esto\`\n\n` +
+          `· mensajes por subbot: 1–40 (def. 10)\n` +
+          `· subbots: 1–30 (def. 5)\n` +
+          `· en el texto puedes usar \`{n}\` y \`{total}\`\n` +
+          `· si no escribes texto, toma el del mensaje citado\n` +
+          `Cortar: \`.spamchat stop\``,
+      ).catch(() => undefined);
+      return;
     }
 
-    if (botsToUse.length === 0) {
-      return reply(`❌ Error crítico: No se encontró ningún socket para enviar mensajes.`);
+    let i = 1;
+    let porSub = 10;
+    let cuantos = 5;
+
+    if (/^\d+$/.test(args[i] || "")) {
+      porSub = Number(args[i]); i++;
+      if (/^\d+$/.test(args[i] || "")) { cuantos = Number(args[i]); i++; }
     }
 
-    await react("🚀").catch(() => undefined);
-    
-    let infoMsg = `🚀 Enviando \`${count}\` mensaje(s) a \`${targetNumber}\` usando \`${botsToUse.length}\` sub-bot(s)...`;
-    if (botsToUse.length === 1 && subbotCountArg !== "1") {
-       infoMsg += `\n_⚠️ Nota: Se detectó 1 solo socket válido en la memoria global._`;
+    porSub = Math.min(40, Math.max(1, porSub));
+    cuantos = Math.min(30, Math.max(1, cuantos));
+
+    let texto = args.slice(i).join(" ").trim();
+    if (!texto) texto = textoCitado(msg);
+
+    if (!texto) {
+      await reply("Falta el texto. Escríbelo al final o responde a un mensaje con `.spamchat <número>`.").catch(() => undefined);
+      return;
     }
-    await reply(infoMsg);
 
-    let sentTotal = 0;
-    const delayMs = 300; 
+    if (texto.length > 4000) texto = texto.slice(0, 4000);
 
-    try {
-      for (let i = 0; i < count; i++) {
-        const currentBot = botsToUse[i % botsToUse.length];
-        
-        await currentBot.sendMessage(targetJid, {
-          text: `${messageText} [${i + 1}/${count}]`,
-        });
+    const todos = pool(ctx);
+    const vivos = todos.filter((s) => isLive(s) && !(dead.get(s) && Date.now() - dead.get(s)! < 60000));
 
-        sentTotal++;
-        if (i + 1 < count) {
-          await sleep(delayMs);
+    const lista = [...vivos].sort(() => Math.random() - 0.5).slice(0, cuantos);
+    if (lista.length < cuantos) lista.push(sock);
+
+    const destino = bare(num);
+    const total = lista.length * porSub;
+
+    const job = { stop: false };
+    jobs.set(from, job);
+
+    await react("📨").catch(() => undefined);
+    await reply(
+      `📨 ${fytBold("Spam distribuido")} → +${num}\n` +
+        `Subbots: ${fytBold(String(lista.length))}\n` +
+        `${porSub} por subbot · ${fytBold(String(total))} en total\n\n` +
+        `Texto: ${texto.length > 90 ? texto.slice(0, 90) + "…" : texto}\n\n` +
+        `Cortar: \`.spamchat stop\``,
+    ).catch(() => undefined);
+
+    let enviados = 0;
+    let fallos = 0;
+
+    const trabajo = async (s: any, idx: number) => {
+      await sleep(idx * 180);
+      for (let k = 0; k < porSub; k++) {
+        if (job.stop) return;
+        try {
+          await s.sendMessage(destino, { text: armar(texto, k, porSub) });
+          enviados++;
+          await sleep(260 + Math.random() * 220);
+        } catch {
+          fallos++;
+          dead.set(s, Date.now());
+          await sleep(700);
+          if (fallos >= 25) return;
         }
       }
+    };
 
-      await react("✅").catch(() => undefined);
-      await reply(
-        `✅ Ráfaga completada con éxito.\n• Mensajes: \`${sentTotal}\`\n• Sub-bots usados: \`${botsToUse.length}\``
-      );
-    } catch (e: any) {
-      await react("❌").catch(() => undefined);
-      await reply(`❌ Error al ejecutar el spamchat: ${e?.message || String(e)}`);
-    }
+    await Promise.all(lista.map((s, i2) => trabajo(s, i2)));
+
+    jobs.delete(from);
+    await react(job.stop ? "⏹️" : "✅").catch(() => undefined);
+
+    await reply(
+      `${job.stop ? "⏹️ Cortado" : "✅ Terminado"} · ${fytBold(String(enviados))} enviados de ${total}` +
+        (fallos ? ` · ${fallos} fallos` : "") +
+        (fallos >= 25 ? "\n⚠️ Muchos fallos, corté por rate limit." : ""),
+    ).catch(() => undefined);
   },
 };
