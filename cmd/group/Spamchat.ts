@@ -6,7 +6,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export default {
   name: ["spamchat", "multispam", "subbotspam"],
   category: "group",
-  description: "Envía mensajes masivos a un número usando subbots con un analizador de argumentos flexible.",
+  description: "Envía mensajes masivos usando banderas estrictas -c (cantidad) y -b (subbots).",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -15,12 +15,12 @@ export default {
 
     if (args.length < 2) {
       return reply(
-        `╭〔 🤖 ${fytBold("Multi-Subbot SpamChat")} 〕⬣\n` +
-        `• *Uso correcto:* \`${prefix}spamchat <numero> [cantidad] [all|subbots] <mensaje>\`\n\n` +
-        `• *Ejemplos válidos:*\n` +
-        `  \`${prefix}spamchat 573138523021 10 all Hola prueba\`\n` +
-        `  \`${prefix}spamchat 573138523021 all 10 Hola prueba\`\n` +
-        `  \`${prefix}spamchat 573138523021 Hola prueba\` (Usa 10 por defecto y todos los bots)\n` +
+        `╭〔 🤖 ${fytBold("Multi-Subbot SpamChat (Flags)")} 〕⬣\n` +
+        `• *Uso correcto:*\n` +
+        `  \`${prefix}spamchat <numero> -c <cantidad> -b <all|num> <mensaje>\`\n\n` +
+        `• *Ejemplos:*\n` +
+        `  \`${prefix}spamchat 573118353868 -c 2 -b 2 Hola test\`\n` +
+        `  \`${prefix}spamchat 573118353868 -c 10 -b all Hola test\`\n` +
         `╰━━━━━━━━━━━━⬣`
       );
     }
@@ -30,43 +30,39 @@ export default {
       return reply(`❌ El número de destino no es válido.`);
     }
 
-    let count = 10;
+    let count = 2;
     let subbotArg = "all";
-    let textStartIndex = 1;
+    const textTokens: string[] = [];
 
-    // Analizador inteligente de argumentos flexibles
+    // Parseo estricto por banderas para evitar confusiones de números
     for (let i = 1; i < args.length; i++) {
       const token = args[i];
       const low = token.toLowerCase();
 
-      if (low === "all" || /^\d+$/.test(token)) {
-        if (/^\d+$/.test(token) && i === 1 && args.length > 2 && !/^\d+$/.test(args[2]) && args[2].toLowerCase() !== "all") {
-          // Es claramente la cantidad numérica
-          count = parseInt(token, 10);
-          textStartIndex = i + 1;
-        } else if (low === "all" || (/^\d+$/.test(token) && parseInt(token, 10) <= 20)) {
-          // Es el selector de subbots
-          subbotArg = low;
-          textStartIndex = i + 1;
-        } else if (/^\d+$/.test(token) && count === 10) {
-          count = parseInt(token, 10);
-          textStartIndex = i + 1;
+      if (low === "-c" || low === "--count") {
+        if (args[i + 1] && /^\d+$/.test(args[i + 1])) {
+          count = parseInt(args[i + 1], 10);
+          i++;
+          continue;
+        }
+      } else if (low === "-b" || low === "--bots" || low === "--subbots") {
+        if (args[i + 1]) {
+          subbotArg = args[i + 1].toLowerCase();
+          i++;
+          continue;
         }
       } else {
-        // Encontramos el inicio del mensaje de texto
-        textStartIndex = i;
-        break;
+        textTokens.push(token);
       }
     }
 
-    const messageText = args.slice(textStartIndex).join(" ");
+    const messageText = textTokens.join(" ").trim();
     if (!messageText) {
       return reply(`❌ Debes incluir el mensaje que deseas enviar.`);
     }
 
     const targetJid = `${targetNumber}@s.whatsapp.net`;
 
-    // Obtener subbots activos del entorno global
     // @ts-ignore
     const subbotsList: any[] = global.conns || global.subbots || [sock];
 
@@ -104,7 +100,7 @@ export default {
       }
 
       await react("✅").catch(() => undefined);
-      await reply(`✅ Ráfaga completada con éxito. Mensajes enviados: \`${sentTotal}\`.`);
+      await reply(`✅ Ráfaga completada con éxito. Mensajes enviados: \`${sentTotal}\` usando \`${botsToUse.length}\` subbot(s).`);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
       await reply(`❌ Error al ejecutar el spamchat: ${e?.message || String(e)}`);
