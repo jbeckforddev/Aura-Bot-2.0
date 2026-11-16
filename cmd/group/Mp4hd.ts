@@ -6,10 +6,14 @@ import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
 const TEMP_DIR = path.resolve(process.cwd(), "data", "mp4hd_temp");
+const CPU_CORES = 2;
+const STAGE_TIMEOUT_MS = 110000;
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
+
+let activeRenderJobs = 0;
 
 interface VideoProbeInfo {
   width: number;
@@ -21,41 +25,56 @@ interface VideoProbeInfo {
 }
 
 interface TargetConfig {
+  key: string;
   label: string;
   maxLongEdge: number;
   minSourceShortEdge: number;
   minSourceBitrate: number;
   crf: number;
+  maxrate: string;
+  bufsize: string;
 }
 
 const QUALITY_PRESETS: Record<string, TargetConfig> = {
   "720p": {
+    key: "720p",
     label: "720p HD",
     maxLongEdge: 1280,
     minSourceShortEdge: 120,
     minSourceBitrate: 40,
-    crf: 20,
+    crf: 21,
+    maxrate: "4500k",
+    bufsize: "9000k",
   },
   "1080p": {
+    key: "1080p",
     label: "1080p Full HD",
     maxLongEdge: 1920,
     minSourceShortEdge: 160,
     minSourceBitrate: 65,
-    crf: 19,
+    crf: 20,
+    maxrate: "8500k",
+    bufsize: "17000k",
   },
   "2k": {
+    key: "2k",
     label: "2K QHD (1440p)",
     maxLongEdge: 2560,
     minSourceShortEdge: 200,
     minSourceBitrate: 95,
-    crf: 18,
+    crf: 20,
+    maxrate: "14000k",
+    bufsize: "24000k",
   },
   "4k": {
+    key: "4k",
     label: "4K Ultra HD (2160p)",
     maxLongEdge: 3840,
     minSourceShortEdge: 240,
     minSourceBitrate: 120,
-    crf: 18,
+    crf: 21,
+    maxrate: "22000k",
+    bufsize: "36000k",
   },
 };
 
@@ -102,34 +121,61 @@ function extractVideoNode(msg: any): { node: any; type: "video" | "document" } |
   return null;
 }
 
-async function downloadVideoBuffer(target: { node: any; type: "video" | "document" }): Promise<Buffer> {
+async function downloadVideoToFile(
+  target: { node: any; type: "video" | "document" },
+  destPath: string,
+): Promise<number> {
   const bMod: any = await import("baileys");
   if (typeof bMod.downloadContentFromMessage !== "function") {
-    throw new Error("Función downloadContentFromMessage no disponible en Baileys.");
+    throw new Error("Función downloadContentFromMessage no disponible.");
   }
 
   const stream = await bMod.downloadContentFromMessage(target.node, target.type);
-  const chunks: Buffer[] = [];
+  const writeStream = fs.createWriteStream(destPath);
+  let totalBytes = 0;
+
   for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buf.length;
+    if (!writeStream.write(buf)) {
+      await new Promise<void>((res) => writeStream.once("drain", () => res()));
+    }
   }
-  return Buffer.concat(chunks);
+
+  await new Promise<void>((resolve, reject) => {
+    writeStream.end();
+    writeStream.on("finish", () => resolve());
+    writeStream.on("error", (err) => reject(err));
+  });
+
+  return totalBytes;
 }
 
 function probeVideoFile(filePath: string, fileSizeBytes: number): Promise<VideoProbeInfo> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", ["-hide_banner", "-i", filePath]);
+    const proc = spawn("ffmpeg", ["-hide_banner", "-threads", "1", "-i", filePath]);
     let stderr = "";
 
+    const timer = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
+      reject(new Error("Tiempo agotado al analizar el video de entrada."));
+    }, 15000);
+
     proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+      if (stderr.length < 32768) {
+        stderr += chunk.toString();
+      }
     });
 
     proc.on("error", (err) => {
+      clearTimeout(timer);
       reject(new Error(`No se pudo ejecutar FFmpeg: ${err.message}`));
     });
 
     proc.on("close", () => {
+      clearTimeout(timer);
       const durMatch = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
       let durationSec = 0;
       if (durMatch) {
@@ -230,32 +276,64 @@ function calculateTargetDimensions(srcW: number, srcH: number, maxLongEdge: numb
     outW = Math.round((srcW / srcH) * maxLongEdge);
   }
 
-  if (outW % 2 !== 0) outW += 1;
-  if (outH % 2 !== 0) outH += 1;
+  outW = Math.max(2, outW - (outW % 2));
+  outH = Math.max(2, outH - (outH % 2));
 
-  return { outW: Math.max(2, outW), outH: Math.max(2, outH) };
+  return { outW, outH };
 }
 
-function upscaleAndEnhanceVideo(options: {
+function runFfmpegStage(options: {
   inputPath: string;
   outputPath: string;
   outW: number;
   outH: number;
   targetFps: number;
-  crf: number;
+  presetCfg: TargetConfig;
+  mode: "primary" | "turbo_fallback";
+  durationSec: number;
+  onProgress?: (percent: number) => void;
 }): Promise<void> {
   return new Promise((resolve, reject) => {
-    const vfChain = [
-      `hqdn3d=1.8:1.8:5:5`,
-      `scale=${options.outW}:${options.outH}:flags=lanczos+accurate_rnd+full_chroma_int`,
-      `unsharp=5:5:1.15:3:3:0.35`,
-      `eq=contrast=1.04:saturation=1.07`,
-      `fps=${options.targetFps}`,
-    ].join(",");
+    const vfChain =
+      options.mode === "primary"
+        ? [
+            `hqdn3d=1.5:1.5:3:3`,
+            `eq=contrast=1.04:saturation=1.06`,
+            `scale=${options.outW}:${options.outH}:flags=lanczos`,
+            `unsharp=3:3:0.75:3:3:0.0`,
+            `fps=${options.targetFps}`,
+          ].join(",")
+        : [
+            `eq=contrast=1.03:saturation=1.05`,
+            `scale=${options.outW}:${options.outH}:flags=bicubic`,
+            `unsharp=3:3:0.5:3:3:0.0`,
+            `fps=${options.targetFps}`,
+          ].join(",");
+
+    const x264Params = [
+      `threads=${CPU_CORES}`,
+      `lookahead_threads=1`,
+      `rc_lookahead=8`,
+      `ref=1`,
+      `subme=2`,
+      `me=dia`,
+      `trellis=0`,
+      `slices=${CPU_CORES}`,
+    ].join(":");
 
     const ffArgs = [
       "-y",
       "-hide_banner",
+      "-loglevel",
+      "error",
+      "-progress",
+      "pipe:1",
+      "-threads",
+      String(CPU_CORES),
+      "-filter_threads",
+      String(CPU_CORES),
+      "-filter_complex_threads",
+      String(CPU_CORES),
       "-i",
       options.inputPath,
       "-vf",
@@ -263,37 +341,76 @@ function upscaleAndEnhanceVideo(options: {
       "-c:v",
       "libx264",
       "-preset",
-      "veryfast",
+      "ultrafast",
       "-crf",
-      String(options.crf),
+      String(options.presetCfg.crf),
+      "-maxrate",
+      options.presetCfg.maxrate,
+      "-bufsize",
+      options.presetCfg.bufsize,
+      "-x264-params",
+      x264Params,
       "-pix_fmt",
       "yuv420p",
       "-c:a",
       "aac",
       "-b:a",
-      "192k",
+      "160k",
+      "-ac",
+      "2",
       "-movflags",
       "+faststart",
       options.outputPath,
     ];
 
-    const proc = spawn("ffmpeg", ffArgs);
+    const proc = spawn("ffmpeg", ffArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
     let errLog = "";
+    let lastReportedPct = 0;
+
+    const watchdog = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
+      reject(new Error("TIMEOUT_EXCEEDED"));
+    }, STAGE_TIMEOUT_MS);
+
+    proc.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      const match = text.match(/out_time_ms=(\d+)/);
+      if (match && options.durationSec > 0 && options.onProgress) {
+        const currentSec = parseInt(match[1], 10) / 1000000;
+        const pct = Math.min(99, Math.max(1, Math.round((currentSec / options.durationSec) * 100)));
+        if (pct >= lastReportedPct + 25) {
+          lastReportedPct = pct;
+          options.onProgress(pct);
+        }
+      }
+    });
 
     proc.stderr.on("data", (d) => {
-      errLog += d.toString();
+      if (errLog.length < 8192) {
+        errLog += d.toString();
+      }
     });
 
     proc.on("error", (err) => {
-      reject(new Error(`Fallo al iniciar FFmpeg: ${err.message}`));
+      clearTimeout(watchdog);
+      reject(err);
     });
 
-    proc.on("close", (code) => {
-      if (code === 0 && fs.existsSync(options.outputPath) && fs.statSync(options.outputPath).size > 1024) {
+    proc.on("close", (code, signal) => {
+      clearTimeout(watchdog);
+      if (code === 0 && fs.existsSync(options.outputPath) && fs.statSync(options.outputPath).size > 2048) {
         resolve();
       } else {
-        const tail = errLog.trim().split("\n").slice(-3).join(" ");
-        reject(new Error(`Error en renderizado de video (Código ${code}): ${tail || "Proceso interrumpido"}`));
+        const reason =
+          signal === "SIGKILL"
+            ? "OOM_OR_KILLED"
+            : errLog.trim().split("\n").slice(-2).join(" ") || `Exit code ${code}`;
+        reject(new Error(reason));
       }
     });
   });
@@ -310,7 +427,7 @@ function safeUnlink(filePath: string) {
 export default {
   name: ["mp4hd", "video4k", "hdvideo", "upscalevideo"],
   category: "group",
-  description: "Restaura videos borrosos o de baja calidad y los reescala hasta 4K con los fotogramas especificados.",
+  description: "Reescala y mejora videos hasta 4K usando 2 núcleos dedicados con sistema de fallbacks automáticos.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -322,122 +439,181 @@ export default {
 
     if (!videoTarget) {
       return reply(
-        `╭〔 🎬 ${fytBold("LuferOS MP4-HD & 4K Upscaler")} 〕⬣\n` +
-          `• Responde a un video o adjúntalo especificando *calidad* y *fotogramas*:\n\n` +
+        `╭〔 🎬 ${fytBold("LuferOS MP4-HD & 4K (2-Core Engine)")} 〕⬣\n` +
+          `• Responde a un video especificando *calidad* y *fotogramas*:\n\n` +
           `  \`${prefix}mp4hd 4k 60fps\`\n` +
           `  \`${prefix}mp4hd 2k 60fps\`\n` +
           `  \`${prefix}mp4hd 1080p 60fps\`\n` +
           `  \`${prefix}mp4hd 720p 30fps\`\n\n` +
-          `• *Calidades soportadas:* \`720p\`, \`1080p\`, \`2k\`, \`4k\`\n` +
-          `• *Fotogramas soportados:* \`24fps\` a \`120fps\`\n` +
-          `• *Opcional:* Añade \`doc\` al final para recibirlo como documento sin compresión.\n` +
+          `• *Calidades:* \`720p\`, \`1080p\`, \`2k\`, \`4k\`\n` +
+          `• *Fotogramas:* \`24fps\` a \`120fps\`\n` +
+          `• *Opcional:* Añade \`doc\` para recibirlo como archivo documento.\n` +
           `╰━━━━━━━━━━━━⬣`,
       );
     }
 
     if (!qualityKey || !targetFps) {
       return reply(
-        `⚠️ Debes especificar tanto la *calidad* (\`720p\`, \`1080p\`, \`2k\`, \`4k\`) como los *fotogramas* (\`30fps\`, \`60fps\`, \`120fps\`).\n\n` +
+        `⚠️ Especifica la *calidad* (\`720p\`, \`1080p\`, \`2k\`, \`4k\`) y los *fotogramas* (\`30fps\`, \`60fps\`, \`120fps\`).\n` +
           `• *Ejemplo:* \`${prefix}mp4hd 4k 60fps\``,
       );
     }
 
-    const id = randomUUID().replace(/-/g, "").slice(0, 12);
-    const inputPath = path.join(TEMP_DIR, `in_${id}.mp4`);
-    const outputPath = path.join(TEMP_DIR, `out_${id}_${qualityKey}_${targetFps}fps.mp4`);
+    if (activeRenderJobs >= 1) {
+      return reply(`⏳ Ya hay un renderizado de video en curso en los 2 núcleos. Espera unos segundos a que finalice.`);
+    }
 
+    const id = randomUUID().replace(/-/g, "").slice(0, 10);
+    const inputPath = path.join(TEMP_DIR, `in_${id}.mp4`);
+    const outputPath = path.join(TEMP_DIR, `out_${id}.mp4`);
+
+    activeRenderJobs++;
     await react("🔍").catch(() => undefined);
 
     try {
-      const inputBuffer = await downloadVideoBuffer(videoTarget);
-      if (inputBuffer.length < 4096) {
-        throw new Error("El archivo de video está vacío o corrupto.");
+      const fileSizeBytes = await downloadVideoToFile(videoTarget, inputPath);
+      if (fileSizeBytes < 4096) {
+        throw new Error("El archivo de video descargado está vacío o corrupto.");
       }
 
-      fs.writeFileSync(inputPath, inputBuffer);
-      const info = await probeVideoFile(inputPath, inputBuffer.length);
-      const preset = QUALITY_PRESETS[qualityKey];
+      const info = await probeVideoFile(inputPath, fileSizeBytes);
+      let activePreset = QUALITY_PRESETS[qualityKey];
+      let finalFps = targetFps;
 
       const shortEdge = Math.min(info.width, info.height);
       const totalFrames = Math.round(info.durationSec * info.fps);
 
-      if (info.width <= 0 || info.height <= 0 || info.durationSec < 0.4 || totalFrames < 8) {
+      if (info.width <= 0 || info.height <= 0 || info.durationSec < 0.4 || totalFrames < 6) {
         await react("❌").catch(() => undefined);
         return reply(
           `❌ *Información insuficiente en el video:*\n` +
-            `• Dimensiones detectadas: \`${info.width}x${info.height}\`\n` +
-            `• Fotogramas totales: \`${totalFrames}\`\n` +
-            `• Duración: \`${info.durationSec.toFixed(1)}s\`\n\n` +
-            `_El archivo no posee suficientes cuadros ni datos base para reconstruirse._`,
+            `• Resolución: \`${info.width}x${info.height}\` | Cuadros: \`${totalFrames}\``,
         );
       }
 
-      if (info.durationSec > 95) {
+      if (info.durationSec > 60) {
         await react("⚠️").catch(() => undefined);
         return reply(
-          `⚠️ El video dura \`${info.durationSec.toFixed(1)}s\`. Para evitar sobrecargar el procesador en reescalado *${preset.label}*, el límite máximo es de *95 segundos*.`,
+          `⚠️ El video dura \`${info.durationSec.toFixed(1)}s\`. El límite máximo para renderizado con 2 núcleos es de *60 segundos*.`,
         );
       }
 
-      if (shortEdge < preset.minSourceShortEdge || info.bitrateKbps < preset.minSourceBitrate) {
-        const suggestedQuality =
-          shortEdge >= 200 ? "2k" : shortEdge >= 160 ? "1080p" : "720p";
-
-        await react("⚠️").catch(() => undefined);
-        return reply(
-          `⚠️ *Densidad de información insuficiente para ${preset.label}:*\n` +
-            `• Resolución de origen: \`${info.width}x${info.height}\` (Mínimo requerido en lado corto: \`${preset.minSourceShortEdge}px\`)\n` +
-            `• Bitrate de origen: \`${info.bitrateKbps} kbps\` (Mínimo requerido: \`${preset.minSourceBitrate} kbps\`)\n` +
-            `• FPS de origen: \`${info.fps} fps\`\n\n` +
-            `💡 *Recomendación:* Este video tiene información suficiente para procesarse con \`${prefix}mp4hd ${suggestedQuality} ${Math.min(60, targetFps)}fps\`.`,
-        );
+      if (shortEdge < activePreset.minSourceShortEdge || info.bitrateKbps < activePreset.minSourceBitrate) {
+        const autoFallbackKey = shortEdge >= 200 ? "2k" : shortEdge >= 160 ? "1080p" : "720p";
+        activePreset = QUALITY_PRESETS[autoFallbackKey];
       }
 
-      if (targetFps > info.fps * 4) {
-        const maxSafeFps = Math.min(120, Math.round(info.fps * 3));
-        await react("⚠️").catch(() => undefined);
-        return reply(
-          `⚠️ *Información temporal insuficiente para ${targetFps} FPS:*\n` +
-            `• El video original solo tiene \`${info.fps} FPS\`, por lo que estirar a \`${targetFps} FPS\` generaría cuadros duplicados artificiales.\n` +
-            `• Usa un máximo de \`${prefix}mp4hd ${qualityKey} ${maxSafeFps}fps\`.`,
-        );
+      if (finalFps > info.fps * 3) {
+        finalFps = Math.min(120, Math.round(info.fps * 2));
       }
 
-      const { outW, outH } = calculateTargetDimensions(info.width, info.height, preset.maxLongEdge);
+      let { outW, outH } = calculateTargetDimensions(info.width, info.height, activePreset.maxLongEdge);
+      let engineUsed = `Lanczos + Unsharp 3x3 + HQDN3D (${CPU_CORES} Cores)`;
 
       await react("⚙️").catch(() => undefined);
-      await reply(
-        `╭〔 ⚙️ ${fytBold("Procesando Video en " + preset.label)} 〕⬣\n` +
-          `• *Origen:* \`${info.width}x${info.height}\` @ \`${info.fps}fps\` (\`${info.bitrateKbps} kbps\`)\n` +
-          `• *Salida:* \`${outW}x${outH}\` @ \`${targetFps}fps\`\n` +
-          `• *Filtros:* \`Lanczos + Unsharp Mask + Denoise HQDN3D\`\n` +
-          `╰━━━━━━━━━━━━⬣`,
-      ).catch(() => undefined);
+      const statusMsg = await sock.sendMessage(
+        from,
+        {
+          text:
+            `╭〔 ⚙️ ${fytBold("Procesando en " + activePreset.label)} 〕⬣\n` +
+            `• *Origen:* \`${info.width}x${info.height}\` @ \`${info.fps}fps\` (\`${info.bitrateKbps} kbps\`)\n` +
+            `• *Salida:* \`${outW}x${outH}\` @ \`${finalFps}fps\`\n` +
+            `• *CPU:* \`${CPU_CORES} Núcleos dedicados\`\n` +
+            `• *Estado:* \`Renderizando (0%)...\`\n` +
+            `╰━━━━━━━━━━━━⬣`,
+        },
+        { quoted: msg },
+      );
 
-      await upscaleAndEnhanceVideo({
-        inputPath,
-        outputPath,
-        outW,
-        outH,
-        targetFps,
-        crf: preset.crf,
-      });
+      const updateStatusText = async (stageText: string) => {
+        if (!statusMsg?.key) return;
+        await sock
+          .sendMessage(from, {
+            edit: statusMsg.key,
+            text:
+              `╭〔 ⚙️ ${fytBold("Procesando en " + activePreset.label)} 〕⬣\n` +
+              `• *Origen:* \`${info.width}x${info.height}\` @ \`${info.fps}fps\`\n` +
+              `• *Salida:* \`${outW}x${outH}\` @ \`${finalFps}fps\`\n` +
+              `• *CPU:* \`${CPU_CORES} Núcleos dedicados\`\n` +
+              `• *Estado:* \`${stageText}\`\n` +
+              `╰━━━━━━━━━━━━⬣`,
+          })
+          .catch(() => undefined);
+      };
 
-      const outBuffer = fs.readFileSync(outputPath);
-      const outSizeMb = (outBuffer.length / (1024 * 1024)).toFixed(2);
+      try {
+        await runFfmpegStage({
+          inputPath,
+          outputPath,
+          outW,
+          outH,
+          targetFps: finalFps,
+          presetCfg: activePreset,
+          mode: "primary",
+          durationSec: info.durationSec,
+          onProgress: (pct) => {
+            updateStatusText(`Renderizando motor principal (${pct}%)...`);
+          },
+        });
+      } catch {
+        safeUnlink(outputPath);
+        engineUsed = `Turbo Bicubic + Unsharp (${CPU_CORES} Cores Fallback 1)`;
+        await updateStatusText(`Aplicando Fallback 1 (Turbo Bicubic 2-Cores)...`);
+
+        try {
+          await runFfmpegStage({
+            inputPath,
+            outputPath,
+            outW,
+            outH,
+            targetFps: finalFps,
+            presetCfg: activePreset,
+            mode: "turbo_fallback",
+            durationSec: info.durationSec,
+          });
+        } catch {
+          safeUnlink(outputPath);
+          const safeStepDownKey =
+            activePreset.key === "4k" ? "2k" : activePreset.key === "2k" ? "1080p" : "720p";
+          activePreset = QUALITY_PRESETS[safeStepDownKey];
+          const steppedDims = calculateTargetDimensions(info.width, info.height, activePreset.maxLongEdge);
+          outW = steppedDims.outW;
+          outH = steppedDims.outH;
+          engineUsed = `Safe ${activePreset.label} Engine (${CPU_CORES} Cores Fallback 2)`;
+
+          await updateStatusText(`Aplicando Fallback 2 (${activePreset.label} seguro)...`);
+
+          await runFfmpegStage({
+            inputPath,
+            outputPath,
+            outW,
+            outH,
+            targetFps: finalFps,
+            presetCfg: activePreset,
+            mode: "turbo_fallback",
+            durationSec: info.durationSec,
+          });
+        }
+      }
+
+      const finalStat = fs.statSync(outputPath);
+      const outSizeMb = (finalStat.size / (1024 * 1024)).toFixed(2);
       const caption =
         `✅ *${fytBold("LuferOS MP4-HD Completado")}*\n` +
-        `• *Calidad:* \`${preset.label}\` (\`${outW}x${outH}\`)\n` +
-        `• *Fluidez:* \`${targetFps} FPS\`\n` +
-        `• *Peso final:* \`${outSizeMb} MB\``;
+        `• *Calidad:* \`${activePreset.label}\` (\`${outW}x${outH}\`)\n` +
+        `• *Fluidez:* \`${finalFps} FPS\`\n` +
+        `• *Motor:* \`${engineUsed}\`\n` +
+        `• *Peso:* \`${outSizeMb} MB\``;
 
-      if (asDoc || outBuffer.length > 60 * 1024 * 1024) {
+      await updateStatusText(`Subiendo video procesado (${outSizeMb} MB)...`);
+
+      if (asDoc || finalStat.size > 45 * 1024 * 1024 || outW >= 2560) {
         await sock.sendMessage(
           from,
           {
-            document: outBuffer,
+            document: { url: outputPath },
             mimetype: "video/mp4",
-            fileName: `LuferOS_${qualityKey.toUpperCase()}_${targetFps}FPS.mp4`,
+            fileName: `LuferOS_${activePreset.key.toUpperCase()}_${outW}x${outH}_${finalFps}FPS.mp4`,
             caption,
           },
           { quoted: msg },
@@ -446,7 +622,7 @@ export default {
         await sock.sendMessage(
           from,
           {
-            video: outBuffer,
+            video: { url: outputPath },
             mimetype: "video/mp4",
             caption,
           },
@@ -459,6 +635,7 @@ export default {
       await react("❌").catch(() => undefined);
       await reply(`❌ ${fytBold("MP4-HD:")} ${e?.message || String(e)}`).catch(() => undefined);
     } finally {
+      activeRenderJobs = Math.max(0, activeRenderJobs - 1);
       safeUnlink(inputPath);
       safeUnlink(outputPath);
     }
