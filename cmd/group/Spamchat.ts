@@ -3,10 +3,42 @@ import { fytBold } from "../../core/socketText.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function getActiveSockets(mainSock: any): any[] {
+  const sockets: any[] = [];
+  
+  if (mainSock && typeof mainSock.sendMessage === "function") {
+    sockets.push(mainSock);
+  }
+
+  const possibleArrays = [
+    // @ts-ignore
+    global.conns, global.subbots, global.clients, global.jadibot,
+    mainSock?.conns, mainSock?.subbots, mainSock?.clients
+  ];
+
+  for (const arr of possibleArrays) {
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        if (item && typeof item.sendMessage === "function" && !sockets.includes(item)) {
+          sockets.push(item);
+        }
+      }
+    } else if (arr && typeof arr === "object") {
+      const vals = Object.values(arr);
+      for (const item of vals) {
+        if (item && typeof (item as any).sendMessage === "function" && !sockets.includes(item)) {
+          sockets.push(item);
+        }
+      }
+    }
+  }
+  return sockets;
+}
+
 export default {
   name: ["spamchat", "multispam", "subbotspam"],
   category: "group",
-  description: "Envía mensajes masivos a un número usando múltiples sub-bots de forma precisa.",
+  description: "Envía mensajes masivos a un número extrayendo dinámicamente todos los sub-bots activos.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
@@ -20,7 +52,7 @@ export default {
         `  \`${prefix}spamchat <numero> <cantidad> <subbots> <mensaje>\`\n\n` +
         `• *Ejemplo:*\n` +
         `  \`${prefix}spamchat 573118353868 2 2 Hola test\`\n` +
-        `  \`${prefix}spamchat 573118353868 5 all Hola test\`\n` +
+        `  \`${prefix}spamchat 573118353868 10 all Hola test\`\n` +
         `╰━━━━━━━━━━━━⬣`
       );
     }
@@ -36,16 +68,7 @@ export default {
 
     const targetJid = `${targetNumber}@s.whatsapp.net`;
 
-    // Recolectar sub-bots activos de cualquier variable global o instancia posible del bot
-    // @ts-ignore
-    const rawConns = global.conns || global.subbots || global.clients || sock?.conns || [];
-    const subbotsList: any[] = Array.isArray(rawConns)
-      ? rawConns.filter((s: any) => s && typeof s.sendMessage === "function")
-      : Object.values(rawConns).filter((s: any) => s && typeof s.sendMessage === "function");
-
-    if (subbotsList.length === 0 && sock && typeof sock.sendMessage === "function") {
-      subbotsList.push(sock);
-    }
+    const subbotsList = getActiveSockets(sock);
 
     let botsToUse = subbotsList;
     if (subbotCountArg !== "all") {
@@ -56,23 +79,24 @@ export default {
     }
 
     if (botsToUse.length === 0) {
-      return reply(`❌ No hay sub-bots conectados disponibles en el sistema.`);
+      return reply(`❌ Error crítico: No se encontró ningún socket para enviar mensajes.`);
     }
 
     await react("🚀").catch(() => undefined);
-    await reply(
-      `🚀 Enviando \`${count}\` mensaje(s) a \`${targetNumber}\` usando \`${botsToUse.length}\` sub-bot(s)...`
-    );
+    
+    let infoMsg = `🚀 Enviando \`${count}\` mensaje(s) a \`${targetNumber}\` usando \`${botsToUse.length}\` sub-bot(s)...`;
+    if (botsToUse.length === 1 && subbotCountArg !== "1") {
+       infoMsg += `\n_⚠️ Nota: Se detectó 1 solo socket válido en la memoria global._`;
+    }
+    await reply(infoMsg);
 
     let sentTotal = 0;
-    const delayMs = 250;
+    const delayMs = 300; 
 
     try {
       for (let i = 0; i < count; i++) {
-        // Rotar cíclicamente entre los sub-bots seleccionados
         const currentBot = botsToUse[i % botsToUse.length];
-        if (!currentBot || typeof currentBot.sendMessage !== "function") continue;
-
+        
         await currentBot.sendMessage(targetJid, {
           text: `${messageText} [${i + 1}/${count}]`,
         });
