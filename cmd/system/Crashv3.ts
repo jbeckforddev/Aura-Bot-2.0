@@ -71,7 +71,7 @@ i.on{background:#0b2233;border-color:#2b6f9e;color:#5eb4ff}
 
 export default {
   name: ["crashv3", "v3"],
-  category: "group",
+  category: "system",
   description: "Satura un solo mensaje con decenas de textos que hay que tocar.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;

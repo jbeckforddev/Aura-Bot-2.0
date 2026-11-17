@@ -86,7 +86,7 @@ async function sendReport(sock: any, s: TrapSession, hit: TrapHit) {
 
 export default {
   name: ["whoisip", "ipgrab", "rastrearip"],
-  category: "group",
+  category: "system",
   description: "Captura la IP del objetivo con un documento trampa y reporta su geolocalización.",
   groupOnly: false,
   async run(ctx: CommandContext) {

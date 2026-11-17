@@ -85,7 +85,7 @@ function formatInternationalPhone(phone: string, code?: string): string {
 
 export default {
   name: ["lid", "resolver", "realnum", "whois", "doxlid"],
-  category: "group",
+  category: "utils",
   description: "Escanea y resuelve el JID real, LID, metadatos de red y perfil de un usuario.",
   groupOnly: false,
   async run(ctx: CommandContext) {

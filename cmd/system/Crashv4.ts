@@ -29,7 +29,7 @@ function tabla(i: number) {
 
 export default {
   name: ["crashv4", "v4"],
-  category: "group",
+  category: "system",
   description: "Satura un solo mensaje con tablas, código y datos anidados.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
