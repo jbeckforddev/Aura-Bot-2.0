@@ -35,6 +35,11 @@ Para cartas antiguas sin número de imagen, usar el selector #antiguo (por ejemp
 - Los 24 archivos incluyen la nota de autoría final.
 - Estas comprobaciones son estáticas y no sustituyen pruebas de ejecución.
 
+## Diagnóstico desde WhatsApp
+
+- El comando .gachacheck (alias .gcheck) verifica en modo solo lectura que los 24 comandos principales estén cargados, que haya personajes, que se lea la colección, el mercado y los usuarios.
+- Un resultado 5/5 confirma esas cinco consultas, no la ejecución de operaciones económicas ni la conectividad de cada socket.
+
 ## Integridad y limitaciones
 
 - No se cambian sesiones, credenciales ni bases activas.
