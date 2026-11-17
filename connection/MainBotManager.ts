@@ -36,7 +36,8 @@ import type {
   ExtendedWASocket,
   GroupCallEvent,
 } from "../types/index";
-import { t } from "../src/langs/index.ts";
+import { buildGroupWelcome } from "../core/groupWelcome.ts";
+
 
 export const logger = operationLogger.child({ component: "main-bot" });
 
@@ -929,38 +930,21 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
           db.setGroup(id, { group_name: groupName });
         }
 
-        const template = String(
-          (action === "add"
-            ? group.welcomeMessage ||
-              `╭〔 👋 𝐁𝐈𝐄𝐍𝐕𝐄𝐍𝐈𝐃𝐎/𝐀 〕⬣\n┃ ✨ 𝐀 𝐔𝐍 𝐍𝐔𝐄𝐕𝐎 𝐈𝐍𝐓𝐄𝐆𝐑𝐀𝐍𝐓𝐄\n╰━━━━━━━━━━━━⬣\n\n┃ 👋 𝐇𝐨𝐥𝐚 @user\n┃ ✨ 𝐁𝐢𝐞𝐧𝐯𝐞𝐧𝐢𝐝𝐨/𝐚 𝐚:\n┃ 🏰 *@group*\n\n┃ 📜 𝐍𝐨 𝐨𝐥𝐯𝐢𝐝𝐞𝐬 𝐥𝐞𝐞𝐫 𝐥𝐚𝐬 𝐫𝐞𝐠𝐥𝐚𝐬\n┃ 𝐲 𝐝𝐢𝐬𝐟𝐫𝐮𝐭𝐚𝐫 𝐭𝐮 𝐞𝐬𝐭𝐚𝐧𝐜𝐢𝐚.\n\n╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`
-            : group.goodbyeMessage ||
-              `╭〔 😔 𝐒𝐄 𝐍𝐎𝐒 𝐅𝐔𝐄 〕⬣\n┃ ✨ 𝐇𝐀𝐒𝐓𝐀 𝐏𝐑𝐎𝐍𝐓𝐎\n╰━━━━━━━━━━━━⬣\n\n┃ 👋 𝐀𝐝𝐢ó𝐬 @user\n┃ > 𝐄𝐬 𝐮𝐧𝐚 𝐩𝐞𝐧𝐚 𝐪𝐮𝐞 𝐭𝐞 𝐯𝐚𝐲𝐚𝐬 𝐝𝐞:\n┃ > *@group*\n\n┃ > 𝐍𝐮𝐧𝐜𝐚 𝐭𝐞 𝐨𝐥𝐯𝐢𝐝𝐚𝐫𝐞𝐦𝐨𝐬\n\n╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`) ||
-            "",
-        );
-
         const participantJids = participants
           .map((participant: string | { id?: string }) =>
             typeof participant === "string" ? participant : participant?.id,
           )
           .filter((p): p is string => Boolean(p));
 
-        if (participantJids.length === 0) return;
+        const result = buildGroupWelcome({
+          action,
+          group,
+          metadata,
+          participants: participantJids,
+        });
+        if (!result) return;
 
-        const tags = participantJids
-          .map((participant: string) => `@${participant.split("@")[0]}`)
-          .join(", ");
-        const groupDescription = metadata?.desc?.toString() || "Sin descripción";
-        const memberCount = metadata?.participants?.length || 0;
-
-        const text = template
-          .replaceAll(t("core_group_fe6a00b1"), groupName)
-          .replaceAll(t("core_mention_d5b00d52"), tags)
-          .replaceAll(t("core_user_0f23d79d"), tags)
-          .replaceAll(t("core_group_c77112aa"), groupName)
-          .replaceAll(t("core_desc_476f541a"), groupDescription)
-          .replaceAll(t("core_count_7886d3a6"), String(memberCount));
-
-        await sock.sendMessage(id, { text, mentions: participantJids });
+        await sock.sendMessage(id, result);
       } catch (error) {
         logInfo(
           `Error en evento de participantes del grupo: ${String(error)}`,

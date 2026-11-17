@@ -9,21 +9,19 @@ if (!existsSync(DATA_BASE_DIR)) {
 
 const db_instance = new DataBase(`${DATA_BASE_DIR}/GachaAura.db`);
 export const GACHA_CLAIM_TTL_MS = 60_000;
+db_instance.pragma("busy_timeout = 15000");
 db_instance.pragma("journal_mode = WAL");
 db_instance.pragma("synchronous = NORMAL");
 db_instance.pragma("foreign_keys = ON");
 db_instance.pragma("wal_autocheckpoint = 1000");
-db_instance.pragma("busy_timeout = 2000");
 db_instance.pragma("cache_size = -16000");
 db_instance.pragma("mmap_size = 67108864");
 
-db_instance.exec(`
-CREATE INDEX IF NOT EXISTS idx_gachadraws_user ON GachaDraws(user_id);
-CREATE INDEX IF NOT EXISTS idx_gachaowner_user ON GachaOwnership(user_id);
-CREATE INDEX IF NOT EXISTS idx_gachaimgowner_user ON GachaImageOwnership(user_id);
-`);
-
-db_instance.exec(`
+// La inicialización completa es atómica e idempotente.
+// Evita índices sobre tablas inexistentes y migraciones parciales
+// cuando varios procesos o sockets abren GachaAura.db.
+db_instance.transaction(() => {
+  db_instance.exec(`
 CREATE TABLE IF NOT EXISTS GachaClaims (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -52,18 +50,21 @@ CREATE TABLE IF NOT EXISTS GachaOwnership (
   claimed_at INTEGER NOT NULL,
   source_message_id TEXT NOT NULL,
   PRIMARY KEY(group_id, character_id)
-);`);
+);
+`);
 
-const drawColumns = db_instance
-  .prepare("PRAGMA table_info('GachaDraws')")
-  .all() as Array<{ name: string }>;
-if (!drawColumns.some((column) => column.name === "image_id")) {
-  db_instance.exec(
-    "ALTER TABLE GachaDraws ADD COLUMN image_id INTEGER NOT NULL DEFAULT 0",
-  );
-}
+  // Migración compatible con bases antiguas que aún no tienen image_id.
+  const drawColumns = db_instance
+    .prepare("PRAGMA table_info('GachaDraws')")
+    .all() as Array<{ name: string }>;
 
-db_instance.exec(`
+  if (!drawColumns.some((column) => column.name === "image_id")) {
+    db_instance.exec(
+      "ALTER TABLE GachaDraws ADD COLUMN image_id INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+
+  db_instance.exec(`
 CREATE TABLE IF NOT EXISTS GachaImageOwnership (
   group_id TEXT NOT NULL,
   character_id TEXT NOT NULL,
@@ -72,7 +73,16 @@ CREATE TABLE IF NOT EXISTS GachaImageOwnership (
   claimed_at INTEGER NOT NULL,
   source_message_id TEXT NOT NULL,
   PRIMARY KEY(group_id, character_id, image_id)
-);`);
+);
+`);
+
+  // Los índices se crean únicamente después de que existan las tablas.
+  db_instance.exec(`
+CREATE INDEX IF NOT EXISTS idx_gachadraws_user ON GachaDraws(user_id);
+CREATE INDEX IF NOT EXISTS idx_gachaowner_user ON GachaOwnership(user_id);
+CREATE INDEX IF NOT EXISTS idx_gachaimgowner_user ON GachaImageOwnership(user_id);
+`);
+})();
 
 export interface GachaOwnership {
   group_id: string;

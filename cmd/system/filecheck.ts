@@ -2,7 +2,7 @@ import type { CommandContext } from "../../types/index";
 import { fytBold } from "../../core/socketText.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -78,13 +78,13 @@ function collectCodeFiles(dirPath: string, list: string[] = []): string[] {
   }
 
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
+    if (new Set(["node_modules", ".git", "dist", "sessions", "data", "cache", ".npm", ".tx3", ".wip"]).has(entry.name)) continue;
     const full = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
       collectCodeFiles(full, list);
     } else if (
       entry.isFile() &&
-      (entry.name.endsWith(".ts") || entry.name.endsWith(".js") || entry.name.endsWith(".json"))
+      /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$/i.test(entry.name)
     ) {
       list.push(full);
     }
@@ -123,89 +123,199 @@ function resolveImportTarget(baseDir: string, importSpec: string): boolean {
   return false;
 }
 
+
+function literalString(node: ts.Node | undefined): string | null {
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text : null;
+}
+
+function makeSource(filePath: string, content: string): ts.SourceFile {
+  return ts.createSourceFile(
+    filePath, content, ts.ScriptTarget.Latest, true,
+    /\.(js|jsx|mjs|cjs)$/i.test(filePath) ? ts.ScriptKind.JS : ts.ScriptKind.TS,
+  );
+}
+
 function checkStaticSyntaxAndImports(filePath: string, rootDir: string): FileIssue[] {
   const issues: FileIssue[] = [];
-  const rel = path.relative(rootDir, filePath);
+  const file = path.relative(rootDir, filePath);
   let content = "";
 
   try {
     content = fs.readFileSync(filePath, "utf8");
-  } catch (err: any) {
-    issues.push({ file: rel, type: "SYNTAX", detail: `No se pudo leer el archivo: ${err?.message || "Error"}` });
+  } catch (error) {
+    issues.push({ file, type: "SYNTAX", detail: "No se pudo leer: " + String(error) });
     return issues;
   }
-
-  if (content.trim().length === 0) {
-    issues.push({ file: rel, type: "SYNTAX", detail: "El archivo está completamente vacío (0 bytes)." });
+  if (!content.trim()) {
+    issues.push({ file, type: "SYNTAX", detail: "El archivo está vacío." });
     return issues;
   }
 
   if (filePath.endsWith(".json")) {
     try {
       JSON.parse(content);
-    } catch (err: any) {
-      issues.push({
-        file: rel,
-        type: "JSON_CORRUPTO",
-        detail: String(err?.message || "JSON inválido").slice(0, 100),
-      });
+    } catch (error) {
+      issues.push({ file, type: "JSON_CORRUPTO", detail: String(error).slice(0, 180) });
     }
     return issues;
   }
 
-  const lines = content.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (/^(Import|Export|Const|Let|Var|Async|Function|Return)\s+/.test(line)) {
-      const badWord = line.split(/\s+/)[0];
-      issues.push({
-        file: rel,
-        type: "SYNTAX",
-        detail: `Línea ${i + 1}: Palabra clave con mayúscula inicial ("${badWord}").`,
-      });
-    }
+  const source = makeSource(filePath, content);
+  const diagnostics =
+    (source as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] })
+      .parseDiagnostics || [];
+
+  for (const diagnostic of diagnostics) {
+    const location = source.getLineAndCharacterOfPosition(diagnostic.start || 0);
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, " ");
+    issues.push({
+      file, type: "SYNTAX",
+      detail: "Línea " + (location.line + 1) + ", columna " +
+        (location.character + 1) + ": " + message.slice(0, 220),
+    });
   }
 
-  const importRegex = /(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
-  const dynamicImportRegex = /import\s*\(\s*["']([^"']+)["']\s*\)/g;
-  const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g;
   const baseDir = path.dirname(filePath);
+  const inspected = new Set<string>();
 
-  let match: RegExpExecArray | null;
-  while ((match = importRegex.exec(content)) !== null) {
-    const spec = match[1];
-    if (spec.startsWith(".") && !resolveImportTarget(baseDir, spec)) {
-      issues.push({
-        file: rel,
-        type: "IMPORT_ROTO",
-        detail: `Ruta inexistente: "${spec}"`,
-      });
+  function inspectImport(spec: string) {
+    if (!spec.startsWith(".") || inspected.has(spec)) return;
+    inspected.add(spec);
+    if (!resolveImportTarget(baseDir, spec)) {
+      issues.push({ file, type: "IMPORT_ROTO", detail: "Ruta inexistente: " + spec });
     }
   }
 
-  while ((match = dynamicImportRegex.exec(content)) !== null) {
-    const spec = match[1];
-    if (spec.startsWith(".") && !resolveImportTarget(baseDir, spec)) {
-      issues.push({
-        file: rel,
-        type: "IMPORT_ROTO",
-        detail: `Import dinámico roto: "${spec}"`,
-      });
+  function visit(node: ts.Node): void {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      const spec = literalString(node.moduleSpecifier);
+      if (spec) inspectImport(spec);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference)
+    ) {
+      const spec = literalString(node.moduleReference.expression);
+      if (spec) inspectImport(spec);
+    } else if (ts.isCallExpression(node) && node.arguments.length > 0) {
+      const imported = node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require");
+      if (imported) {
+        const spec = literalString(node.arguments[0]);
+        if (spec) inspectImport(spec);
+      }
     }
+    ts.forEachChild(node, visit);
   }
-
-  while ((match = requireRegex.exec(content)) !== null) {
-    const spec = match[1];
-    if (spec.startsWith(".") && !resolveImportTarget(baseDir, spec)) {
-      issues.push({
-        file: rel,
-        type: "IMPORT_ROTO",
-        detail: `Require hacia ruta inexistente: "${spec}"`,
-      });
-    }
-  }
-
+  visit(source);
   return issues;
+}
+
+interface CommandMetadata {
+  names: string[];
+  category: string | null;
+  hasExecutor: boolean;
+  readable: boolean;
+}
+
+function readCommandMetadata(filePath: string): CommandMetadata {
+  const source = makeSource(filePath, fs.readFileSync(filePath, "utf8"));
+  const statement = source.statements.find(
+    (item): item is ts.ExportAssignment =>
+      ts.isExportAssignment(item) && !item.isExportEquals,
+  );
+
+  const empty: CommandMetadata = {
+    names: [], category: null, hasExecutor: false, readable: false,
+  };
+  if (!statement) return empty;
+
+  let expression: ts.Expression = statement.expression;
+  while (ts.isParenthesizedExpression(expression)) {
+    expression = expression.expression;
+  }
+  // Algunos módulos exportan un identificador: const command = {...}; export default command.
+  if (ts.isIdentifier(expression)) {
+    const declaration = source.statements
+      .filter(ts.isVariableStatement)
+      .flatMap((statement) => statement.declarationList.declarations)
+      .find((item) => ts.isIdentifier(item.name) && item.name.text === expression.text);
+    if (declaration?.initializer) expression = declaration.initializer;
+  }
+
+  const isEconomyFactory = ts.isCallExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    expression.expression.text === "createEconomyActivity" &&
+    expression.arguments.length > 0 &&
+    ts.isObjectLiteralExpression(expression.arguments[0]);
+  if (isEconomyFactory && ts.isCallExpression(expression)) {
+    expression = expression.arguments[0];
+  }
+
+  if (!ts.isObjectLiteralExpression(expression)) return empty;
+  const commandObject = expression;
+
+  function propertyKey(item: ts.ObjectLiteralElementLike): string | null {
+    if (!item.name) return null;
+    return ts.isIdentifier(item.name) ? item.name.text : literalString(item.name);
+  }
+
+  function property(key: string): ts.ObjectLiteralElementLike | undefined {
+    return commandObject.properties.find((item) => propertyKey(item) === key);
+  }
+
+  const nameProp = property(isEconomyFactory ? "names" : "name");
+  let names: string[] = [];
+  if (nameProp && ts.isPropertyAssignment(nameProp)) {
+    const value = nameProp.initializer;
+    if (ts.isArrayLiteralExpression(value)) {
+      names = value.elements.map(literalString).filter(
+        (name): name is string => name !== null,
+      );
+    } else if (
+      ts.isCallExpression(value) &&
+      ts.isPropertyAccessExpression(value.expression) &&
+      ts.isIdentifier(value.expression.expression) &&
+      value.expression.expression.text === "Object" &&
+      value.expression.name.text === "keys" &&
+      value.arguments.length === 1 &&
+      ts.isIdentifier(value.arguments[0]) &&
+      value.arguments[0].text === "DATA"
+    ) {
+      // Interacciones SFW/NSFW: nombres declarados en JSON, sin ejecutar el comando.
+      const match = source.text.match(
+        /const\s+DATA_PATH\s*=\s*path\.resolve\(\s*process\.cwd\(\)\s*,\s*["']([^"']+\.json)["']\s*\)/,
+      );
+      if (match) {
+        const root = path.resolve(process.cwd(), "database") + path.sep;
+        const jsonFile = path.resolve(process.cwd(), match[1]);
+        if (jsonFile.startsWith(root) && fs.existsSync(jsonFile)) {
+          try {
+            names = Object.keys(JSON.parse(fs.readFileSync(jsonFile, "utf8")));
+          } catch {}
+        }
+      }
+    } else {
+      const name = literalString(value);
+      if (name !== null) names = [name];
+    }
+  }
+
+  const catProp = property("category");
+  const category = isEconomyFactory
+    ? "economy"
+    : catProp && ts.isPropertyAssignment(catProp)
+      ? literalString(catProp.initializer) : null;
+
+  const hasExecutor = isEconomyFactory || ["run", "execute"].some((key) => {
+    const item = property(key);
+    if (!item) return false;
+    if (ts.isMethodDeclaration(item)) return true;
+    return ts.isPropertyAssignment(item) &&
+      (ts.isArrowFunction(item.initializer) || ts.isFunctionExpression(item.initializer));
+  });
+
+  return { names, category, hasExecutor, readable: true };
 }
 
 export default {
@@ -288,118 +398,98 @@ export default {
     let healthyCmdFiles = 0;
     let totalAliasesRegistered = 0;
 
+
     if (fs.existsSync(cmdRoot)) {
-      const catDirs = fs.readdirSync(cmdRoot, { withFileTypes: true }).filter((d) => d.isDirectory());
-      for (const cDir of catDirs) {
-        validCmdFolders.add(cDir.name);
-      }
+      const dirs = fs.readdirSync(cmdRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory());
+      for (const entry of dirs) validCmdFolders.add(entry.name);
 
-      for (const cDir of catDirs) {
-        const catName = cDir.name;
-        const catPath = path.join(cmdRoot, catName);
-        const cmdFiles = fs
-          .readdirSync(catPath)
-          .filter((f) => (f.endsWith(".ts") || f.endsWith(".js")) && !f.endsWith(".d.ts"));
+      // Se inspeccionan archivos, sin importarlos ni ejecutar inicializaciones.
+      // Incluye los comandos sueltos en cmd/ y todas sus subcarpetas.
+      const commandFiles = collectCodeFiles(cmdRoot)
+        .filter((file) => /\.(ts|js)$/.test(file) && !file.endsWith(".d.ts"))
+        .sort((a, b) => a.localeCompare(b));
 
-        for (const file of cmdFiles) {
-          totalCmdFiles++;
-          const fullCmdPath = path.join(catPath, file);
-          const relCmdPath = path.relative(rootDir, fullCmdPath);
-          let hasCmdError = false;
+      for (const fullCmdPath of commandFiles) {
+        totalCmdFiles++;
+        const relCmdPath = path.relative(rootDir, fullCmdPath);
+        const dir = path.relative(cmdRoot, path.dirname(fullCmdPath));
+        const catName = dir ? dir.split(path.sep)[0] : null;
+        let hasCmdError = issues.some((issue) =>
+          issue.file === relCmdPath &&
+          (issue.type === "SYNTAX" || issue.type === "IMPORT_ROTO"),
+        );
 
-          try {
-            const mod = await import(pathToFileURL(fullCmdPath).href);
-            const plugin = mod?.default;
-
-            if (!plugin || typeof plugin !== "object") {
-              issues.push({
-                file: relCmdPath,
-                type: "ESTRUCTURA_CMD",
-                detail: "No exporta un objeto por defecto (export default).",
-              });
-              continue;
-            }
-
-            if (typeof plugin.run !== "function") {
-              issues.push({
-                file: relCmdPath,
-                type: "ESTRUCTURA_CMD",
-                detail: "Falta la función ejecutora run(ctx).",
-              });
-              hasCmdError = true;
-            }
-
-            const names = Array.isArray(plugin.name)
-              ? plugin.name
-              : typeof plugin.name === "string"
-              ? [plugin.name]
-              : [];
-
-            if (names.length === 0 || !names[0]) {
-              issues.push({
-                file: relCmdPath,
-                type: "ESTRUCTURA_CMD",
-                detail: "Propiedad 'name' vacía o inválida.",
-              });
-              hasCmdError = true;
-            } else {
-              for (const alias of names) {
-                const cleanAlias = String(alias).toLowerCase().trim();
-                if (!cleanAlias) continue;
-                totalAliasesRegistered++;
-                if (commandRegistry.has(cleanAlias)) {
-                  const prevFile = commandRegistry.get(cleanAlias)!;
-                  if (prevFile !== relCmdPath) {
-                    issues.push({
-                      file: relCmdPath,
-                      type: "DUPLICADO",
-                      detail: `El comando ".${cleanAlias}" colisiona con ${prevFile}`,
-                    });
-                  }
-                } else {
-                  commandRegistry.set(cleanAlias, relCmdPath);
-                }
+        try {
+          const plugin = readCommandMetadata(fullCmdPath);
+          if (!plugin.readable) {
+            issues.push({
+              file: relCmdPath, type: "ESTRUCTURA_CMD",
+              detail: "No se pudo inspeccionar el export default estáticamente.",
+            });
+            hasCmdError = true;
+          }
+          if (!plugin.hasExecutor) {
+            issues.push({
+              file: relCmdPath, type: "ESTRUCTURA_CMD",
+              detail: "No se identificó un método run o execute literal.",
+            });
+            hasCmdError = true;
+          }
+          if (plugin.names.length === 0 || plugin.names.some((name) => !name.trim())) {
+            issues.push({
+              file: relCmdPath, type: "ESTRUCTURA_CMD",
+              detail: "No se identificaron alias literales válidos en name.",
+            });
+            hasCmdError = true;
+          } else {
+            for (const name of plugin.names) {
+              const alias = name.toLowerCase().trim();
+              if (!alias) continue;
+              totalAliasesRegistered++;
+              const previous = commandRegistry.get(alias);
+              if (previous) {
+                issues.push({
+                  file: relCmdPath, type: "DUPLICADO",
+                  detail: previous === relCmdPath
+                    ? "Alias repetido en el mismo archivo: ." + alias
+                    : "El comando ." + alias + " colisiona con " + previous,
+                });
+                hasCmdError = true;
+              } else {
+                commandRegistry.set(alias, relCmdPath);
               }
             }
-
-            const declaredCategory = String(plugin.category || "").trim();
-            if (!declaredCategory) {
-              issues.push({
-                file: relCmdPath,
-                type: "CATEGORIA",
-                detail: `No tiene 'category' definida (debería ser "${catName}").`,
-              });
-              hasCmdError = true;
-            } else if (!validCmdFolders.has(declaredCategory)) {
-              issues.push({
-                file: relCmdPath,
-                type: "CATEGORIA",
-                detail: `Categoría inexistente "${declaredCategory}" (carpeta actual: "${catName}").`,
-              });
-              hasCmdError = true;
-            } else if (declaredCategory !== catName) {
-              issues.push({
-                file: relCmdPath,
-                type: "CATEGORIA",
-                detail: `Categoría "${declaredCategory}" no coincide con su carpeta "${catName}".`,
-              });
-            }
-
-            if (!hasCmdError) {
-              healthyCmdFiles++;
-            }
-          } catch (err: any) {
-            const rawMsg = String(err?.stack || err?.message || err)
-              .split("\n")
-              .slice(0, 2)
-              .join(" ")
-              .slice(0, 140);
-            issues.push({
-              file: relCmdPath,
-              type: "SYNTAX",
-              detail: `Fallo al compilar/importar: ${rawMsg}`,
-            });
           }
+
+          const category = plugin.category?.trim() || "";
+          if (!category) {
+            issues.push({
+              file: relCmdPath, type: "CATEGORIA",
+              detail: "No se identificó una categoría literal.",
+            });
+            hasCmdError = true;
+          } else if (!validCmdFolders.has(category)) {
+            issues.push({
+              file: relCmdPath, type: "CATEGORIA",
+              detail: "Categoría inexistente: " + category,
+            });
+            hasCmdError = true;
+          } else if (category !== catName) {
+            issues.push({
+              file: relCmdPath, type: "CATEGORIA",
+              detail: catName
+                ? "Categoría " + category + " no coincide con carpeta " + catName
+                : "Comando fuera de su carpeta: cmd/" + category + "/",
+            });
+            hasCmdError = true;
+          }
+          if (!hasCmdError) healthyCmdFiles++;
+        } catch (error) {
+          issues.push({
+            file: relCmdPath, type: "ESTRUCTURA_CMD",
+            detail: "Análisis estático incompleto: " + String(error).slice(0, 140),
+          });
         }
       }
     }
@@ -456,7 +546,7 @@ export default {
       `┃ 🚦 *Diagnóstico:* ${healthStatus}`,
       `┃ ⏱️ *Tiempo de escaneo:* \`${elapsedMs} ms\``,
       `┃ 📄 *Archivos de código analizados:* \`${allCodeFiles.length}\``,
-      `┃ 🤖 *Comandos operativos:* \`${healthyCmdFiles} / ${totalCmdFiles}\` (\`${totalAliasesRegistered}\` alias)`,
+      `┃ 🤖 *Comandos validados estáticamente:* \`${healthyCmdFiles} / ${totalCmdFiles}\` (\`${totalAliasesRegistered}\` alias)`,
       `┃ ⚠️ *Incidencias totales:* \`${issues.length}\``,
       `╰─────────────────────`,
       ``,

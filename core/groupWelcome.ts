@@ -1,6 +1,4 @@
-
 import { t } from "../src/langs/index.ts";
-
 export type GroupWelcomeAction = "add" | "remove";
 
 interface GroupData {
