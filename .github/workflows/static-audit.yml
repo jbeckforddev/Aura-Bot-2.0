@@ -18,6 +18,9 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/aura-ts-parser" --no-save --ignore-scripts --no-package-lock --no-audit --no-fund typescript@5.9.3
       - name: Revisar archivos sin iniciar Aura Bot
         run: TYPESCRIPT_PATH="$RUNNER_TEMP/aura-ts-parser/node_modules/typescript/lib/typescript.js" AURA_AUDIT_REPORT="static-audit-report.json" node scripts/audit-static.cjs
+      - name: Validar contratos y alias de los 24 comandos Gacha
+        if: always()
+        run: TYPESCRIPT_PATH="$RUNNER_TEMP/aura-ts-parser/node_modules/typescript/lib/typescript.js" node scripts/test-gacha-static.cjs
       - name: Conservar auditoria aun si falla
         if: always()
         uses: actions/upload-artifact@v4
@@ -25,3 +28,4 @@ jobs:
           name: aura-static-results
           path: static-audit-report.json
           if-no-files-found: warn
+# Hecho por Lourtnyx Matterssmith [Lou-Nyx].
