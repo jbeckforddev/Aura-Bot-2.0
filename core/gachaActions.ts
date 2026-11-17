@@ -24,9 +24,9 @@ function cardLabel(card: {character_id:string;image_id:number|null}): string {
 }
 function readQuery(value: string): {term:string; image:number|null} {
   const clean=value.trim();
-  const match=clean.match(/^(.*?)(?:\s*#(\d+))$/);
+  const match=clean.match(/^(.*?)(?:\s*#(\d+|antiguo|legacy))$/i);
   return match
-    ? {term:match[1]!.trim(),image:Number(match[2])}
+    ? {term:match[1]!.trim(),image:/^(antiguo|legacy)$/i.test(match[2]!)?-1:Number(match[2])}
     : {term:clean,image:null};
 }
 function searchCharacters(query: string): GachaCharacter[] {
@@ -46,7 +46,7 @@ function findOwned(group:string,user:string,query:string): GachaCard {
   if(!term) throw new Error("Indica el personaje. Puedes añadir #ID para elegir una imagen.");
   const match=searchCharacters(term);
   if(match.length!==1) throw new Error(match.length ? "Especifica el nombre completo del personaje." : "No existe ese personaje.");
-  const cards=listOwned(group,user).filter(c=>c.character_id===match[0]!.id && (image===null||c.image_id===image));
+  const cards=listOwned(group,user).filter(c=>c.character_id===match[0]!.id && (image===null||imageKey(c.image_id)===image));
   if(!cards.length) throw new Error("El usuario no posee ese personaje o variante.");
   if(cards.length>1) throw new Error("Hay varias imágenes. Usa el formato: "+match[0]!.name+" #ID.");
   return cards[0]!;
@@ -116,9 +116,9 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
         if(!query) return reply(ctx,"Uso: "+suffix(ctx,action)+" <personaje> [#ID]");
         const {term,image}=readQuery(query);
         const c=character(term);
-        const chosen=c.images.find(img=>img.id===image)||c.images[0];
-        if(image!==null && !c.images.some(img=>img.id===image)) throw new Error("Esa imagen no existe.");
-        const owners=listOwned(ctx.from).filter(row=>row.character_id===c.id && (image===null||row.image_id===image));
+        const chosen=image===null || image===-1 ? c.images[0] : c.images.find(img=>img.id===image);
+        if(image!==null && image!==-1 && !c.images.some(img=>img.id===image)) throw new Error("Esa imagen no existe.");
+        const owners=listOwned(ctx.from).filter(row=>row.character_id===c.id && (image===null||imageKey(row.image_id)===image));
         const votes=voteCount(ctx.from,c.id);
         const text=[
           "🎴 "+c.name,
