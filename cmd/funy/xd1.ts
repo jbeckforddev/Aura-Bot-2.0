@@ -13,11 +13,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const VIDEO_URL =
   "https://raw.githubusercontent.com/LyncxTeams/Upload/main/Media/0cb9cb.mp4";
-const AUDIO_FILENAME = "when_bambixd_2026-11-10_09-55-38.mp3";
+const AUDIO_FILENAME = "don.pollo2272_2026-11-10_09-58-12.mp3";
 
 function resolveLocalAudioPath(fileName: string): string {
   const candidates = [
     path.join(__dirname, fileName),
+    path.resolve(process.cwd(), "cmd", "funy", fileName),
     path.resolve(process.cwd(), "cmd", "group", fileName),
   ];
   for (const candidate of candidates) {
@@ -27,14 +28,14 @@ function resolveLocalAudioPath(fileName: string): string {
 }
 
 export default {
-  name: ["xd2"],
-  category: "group",
-  description: "Envía tarjeta HTML Rich multimedia con el audio de When Bambi.",
+  name: ["xd1"],
+  category: "funy",
+  description: "Envía tarjeta HTML Rich multimedia con el audio de Don Pollo.",
   groupOnly: false,
 
   async run(ctx: CommandContext) {
     const { sock, from, msg, reply, react } = ctx;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rich-xd2-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rich-xd1-"));
 
     try {
       const video = path.join(dir, "video.mp4");
@@ -219,7 +220,7 @@ ${audioScript}`;
             },
             deviceListMetadataVersion: 2,
             botMetadata: {
-              messageDisclaimerText: "⚡ HTML Rich - When Bambi Audio",
+              messageDisclaimerText: "⚡ HTML Rich - Don Pollo Audio",
               botResponseId: responseId,
               verificationMetadata: {
                 proofs: [
@@ -293,7 +294,7 @@ ${audioScript}`;
                     provider: 0,
                     sourceQuery: "",
                     citationNumber: 1,
-                    sourceTitle: "HTML Rich When Bambi",
+                    sourceTitle: "HTML Rich Don Pollo",
                   },
                 ],
               },
@@ -315,7 +316,7 @@ ${audioScript}`;
                 submessages: [
                   {
                     messageType: 2,
-                    messageText: "⚡ HTML RICH // XD2\n\nToca la tarjeta para activar el audio",
+                    messageText: "⚡ HTML RICH // XD1\n\nToca la tarjeta para activar el audio",
                   },
                 ],
                 unifiedResponse: {
@@ -365,10 +366,10 @@ ${audioScript}`;
       await sock.relayMessage(from, edtMsg.message!, { messageId: edtMsg.key.id! });
 
       await react("✅").catch(() => undefined);
-      await reply(`✅ HTML Rich (.xd2) enviado.\n🎞️ GIF: ${Math.ceil(gifSize / 1024)} KB`);
+      await reply(`✅ HTML Rich (.xd1) enviado.\n🎞️ GIF: ${Math.ceil(gifSize / 1024)} KB`);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
-      await reply(`❌ Error en .xd2:\n${e?.message || String(e)}`);
+      await reply(`❌ Error en .xd1:\n${e?.message || String(e)}`);
     } finally {
       try {
         fs.rmSync(dir, { recursive: true, force: true });

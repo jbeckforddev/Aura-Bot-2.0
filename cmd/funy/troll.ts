@@ -44,6 +44,7 @@ function cleanDigits(val: unknown): string {
 function resolveLocalAudioPath(fileName: string): string {
   const candidates = [
     path.join(__dirname, fileName),
+    path.resolve(process.cwd(), "cmd", "funy", fileName),
     path.resolve(process.cwd(), "cmd", "group", fileName),
   ];
   for (const candidate of candidates) {
@@ -425,8 +426,8 @@ ${audioScript}`;
 }
 
 export default {
-  name: ["troll", "xd1", "xd2"],
-  category: "group",
+  name: ["troll"],
+  category: "funy",
   description: "Envía las tarjetas HTML Rich con audio (.xd1 o .xd2) al chat actual o a un número/usuario específico.",
   groupOnly: false,
 
