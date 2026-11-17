@@ -26,7 +26,7 @@ const formatDuration = (seconds?: number | null): string =>
       : t("tempMsgDisabled");
 
 export default {
-  name: ["tempmsg", "tempmessage", "ephemeral", "ephemeralmsg", "ephemeralmessage", "temporalyMessage", "temporalyMsg", "temporalyMessage"],
+  name: ["tempmsg", "tempmessage", "ephemeral", "ephemeralmsg", "ephemeralmessage", "temporalyMessage", "temporalyMsg"],
   category: "group",
   description: t("tempMsgDescription"),
   groupOnly: true,

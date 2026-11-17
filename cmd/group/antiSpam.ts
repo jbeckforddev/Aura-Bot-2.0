@@ -6,7 +6,7 @@ const ON = ["on", "1", "true", "activar", "enable"];
 const OFF = ["off", "0", "false", "desactivar", "disable"];
 
 export default {
-  name: ["antispam", "antispammsg", "antispammsg"],
+  name: ["antispam", "antispammsg"],
   category: "group",
   description: t("groupAntiSpamDescription"),
   groupOnly: true,

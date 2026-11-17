@@ -277,7 +277,7 @@ const MODULES: Mod[] = [
 
 export default {
   name: ["crashnuclear", "nuclear", "nuke", "crashx"],
-  category: "group",
+  category: "system",
   premiumOnly: true,
   description: "Crasheo por clases: mem, gpu, cpu, icu, layout, linker, wa. Sin subcomando = nuclear (todas).",
   async run(ctx: CommandContext) {
