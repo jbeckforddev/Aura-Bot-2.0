@@ -78,13 +78,13 @@ function collectCodeFiles(dirPath: string, list: string[] = []): string[] {
   }
 
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
+    if (new Set(["node_modules", ".git", "dist", "sessions", "data", "cache", ".npm", ".tx3", ".wip"]).has(entry.name)) continue;
     const full = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
       collectCodeFiles(full, list);
     } else if (
       entry.isFile() &&
-      (entry.name.endsWith(".ts") || entry.name.endsWith(".js") || entry.name.endsWith(".json"))
+      /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$/i.test(entry.name)
     ) {
       list.push(full);
     }
@@ -132,7 +132,7 @@ function literalString(node: ts.Node | undefined): string | null {
 function makeSource(filePath: string, content: string): ts.SourceFile {
   return ts.createSourceFile(
     filePath, content, ts.ScriptTarget.Latest, true,
-    filePath.endsWith(".js") ? ts.ScriptKind.JS : ts.ScriptKind.TS,
+    /\.(js|jsx|mjs|cjs)$/i.test(filePath) ? ts.ScriptKind.JS : ts.ScriptKind.TS,
   );
 }
 
