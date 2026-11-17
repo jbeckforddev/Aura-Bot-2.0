@@ -58,11 +58,16 @@ database.exec([
 
 export function imageKey(id: number | null): number { return id === null ? -1 : id; }
 export function listOwned(group: string, user?: string): GachaCard[] {
-  const rows = database.prepare(
+  if (user) {
+    return database.prepare(
+      "SELECT group_id,character_id,image_id,user_id,claimed_at FROM GachaImageOwnership WHERE group_id=? AND user_id=? " +
+      "UNION ALL SELECT group_id,character_id,NULL AS image_id,user_id,claimed_at FROM GachaOwnership WHERE group_id=? AND user_id=?"
+    ).all(group,user,group,user) as GachaCard[];
+  }
+  return database.prepare(
     "SELECT group_id,character_id,image_id,user_id,claimed_at FROM GachaImageOwnership WHERE group_id=? " +
     "UNION ALL SELECT group_id,character_id,NULL AS image_id,user_id,claimed_at FROM GachaOwnership WHERE group_id=?"
   ).all(group,group) as GachaCard[];
-  return user ? rows.filter(row => row.user_id === user) : rows;
 }
 function owns(group: string, user: string, character: string, image: number): boolean {
   if (image === -1) return Boolean(database.prepare(
@@ -209,7 +214,10 @@ export function stealCard(group:string,thief:string,target:string,roll:number): 
   })();
 }
 export function userRankings(group?:string): GachaRanking[] {
-  const all=database.prepare("SELECT group_id,user_id FROM GachaImageOwnership UNION ALL SELECT group_id,user_id FROM GachaOwnership").all() as Array<{group_id:string;user_id:string}>;
+  const sql=group
+    ? "SELECT group_id,user_id FROM GachaImageOwnership WHERE group_id=? UNION ALL SELECT group_id,user_id FROM GachaOwnership WHERE group_id=?"
+    : "SELECT group_id,user_id FROM GachaImageOwnership UNION ALL SELECT group_id,user_id FROM GachaOwnership";
+  const all=(group?database.prepare(sql).all(group,group):database.prepare(sql).all()) as Array<{group_id:string;user_id:string}>;
   const scores=new Map<string,number>();
   for(const item of all) {
     if(group && item.group_id!==group) continue;
