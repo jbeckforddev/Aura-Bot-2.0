@@ -298,17 +298,6 @@ async function getGzippedGenesisEngineB64(): Promise<string> {
 
   for (const url of GENESIS_ENGINE_URLS) {
     try {
-      const buf = await fetchBufferWithTimeout
-async function getGzippedGenesisEngineB64(): Promise<string> {
-  if (cachedEngineGzipB64) return cachedEngineGzipB64;
-
-  if (fs.existsSync(ENGINE_CACHE_FILE) && fs.statSync(ENGINE_CACHE_FILE).size > 30000) {
-    cachedEngineGzipB64 = fs.readFileSync(ENGINE_CACHE_FILE).toString("base64");
-    return cachedEngineGzipB64;
-  }
-
-  for (const url of GENESIS_ENGINE_URLS) {
-    try {
       const buf = await fetchBufferWithTimeout(url, 20000);
       const code = buf.toString("utf8");
       if (code.includes("embedGenesis") && code.length > 50000) {
