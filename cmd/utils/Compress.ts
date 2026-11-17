@@ -79,7 +79,7 @@ function extractTargetMedia(msg: any): { node: any; type: "document" | "video"; 
 
 export default {
   name: ["compress", "comprimir", "optvideo", "doc2vid"],
-  category: "group",
+  category: "utils",
   description: "Comprime archivos .mp4 enviados como documento sin perder calidad visual y los envía como video nativo.",
   groupOnly: false,
   ownerOnly: false,

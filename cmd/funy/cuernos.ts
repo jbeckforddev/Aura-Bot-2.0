@@ -7,7 +7,7 @@ const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
 
 export default {
   name: ["amante", "noviosecreto", "casialgo", "cuernos"],
-  category: "games",
+  category: "funy",
   description: t("cmd_revela_quien_es_el_amante_o_ca_ab9b7f44"),
   groupOnly: true,
   async run(ctx: CommandContext) {

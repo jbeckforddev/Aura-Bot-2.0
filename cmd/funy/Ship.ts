@@ -13,7 +13,7 @@ const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
 
 export default {
   name: ["pareja"],
-  category: "games",
+  category: "funy",
   description: t("cmd_calcula_el_porcentaje_de_amor__8ab9f00d"),
   groupOnly: true,
   async run(ctx: CommandContext) {

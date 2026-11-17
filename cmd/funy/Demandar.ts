@@ -7,7 +7,7 @@ const activeTrials = new Set<string>();
 
 export default {
   name: ["demandar", "juicio", "tribunal"],
-  category: "games",
+  category: "funy",
   description: t("cmd_inicia_un_juicio_publico_contr_7622ab83"),
   botAdmin: true,
   async run(ctx: CommandContext) {

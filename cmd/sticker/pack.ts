@@ -561,7 +561,7 @@ async function extractQuotedImage(msg: any): Promise<Buffer | null> {
 
 export default {
   name: ["pack", "packs", "stickerly", "packia", "iapack", "creapack"],
-  category: "group",
+  category: "sticker",
   description: "Busca en Sticker.ly y envía los paquetes de stickers en lote con metadatos PLUS.",
   groupOnly: false,
   ownerOnly: false,

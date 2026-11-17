@@ -426,7 +426,7 @@ function safeUnlink(filePath: string) {
 
 export default {
   name: ["mp4hd", "video4k", "hdvideo", "upscalevideo"],
-  category: "group",
+  category: "utils",
   description: "Reescala y mejora videos hasta 4K usando 2 núcleos dedicados con sistema de fallbacks automáticos.",
   groupOnly: false,
 
