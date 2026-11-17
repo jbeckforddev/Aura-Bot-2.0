@@ -59,6 +59,9 @@ export default {
 		}
 
 		const image = drawRandomImage(character);
+    const votes = await import("../../database/gachaMarketDB.ts")
+      .then(module => module.voteCount(ctx.from, character.id)).catch(() => 0);
+    const currentValue = character.value + votes * 100;
 		const rarity = t(RARITY_TRANSLATIONS[character.rarity]);
 		const characterType =
 			character.type.toLowerCase() === "support"
@@ -75,7 +78,7 @@ export default {
 			...(character.source
 				? [`┃ ✦ ${t("gacha_source_label")}: ${character.source}`]
 				: []),
-			`┃ ✦ ${t("gacha_value_label")}: ${character.value}`,
+			`┃ ✦ ${t("gacha_value_label")}: ${currentValue}`,
 			`┃ ✦ ${t("gacha_status_label")}: ${t("gacha_status_free")}`,
 			`╰━━━━━━━━━━━━⬣`,
 		].join("\n");
