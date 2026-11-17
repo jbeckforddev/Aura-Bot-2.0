@@ -25,6 +25,7 @@ Repositorio: jbeckforddev/Aura-Bot-2.0. Destino exclusivo: test; master no se mo
 - .vote Nombre, .robwaifu @usuario, .gtop 1, .htop 1, .waifusboard 1.
 
 Los prefijos son ejemplos; se usa el prefijo real de cada grupo/socket.
+Para cartas antiguas sin número de imagen, usar el selector #antiguo (por ejemplo .sell Nombre #antiguo 5000).
 
 ## Integridad y limitaciones
 
