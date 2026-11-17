@@ -19,7 +19,7 @@ const RARITY_TRANSLATIONS: Record<string, TranslationKey> = {
 };
 
 export default {
-	name: ["rw", "randomdraw", "random", "gacha", "rollwaifu"],
+	name: ["rw", "roll", "randomdraw", "random", "gacha", "rollwaifu"],
 	category: "gacha",
 	cooldown: GACHA_COOLDOWNS.rw,
 	description: t("gacha_rw_description"),
@@ -93,3 +93,5 @@ export default {
 		saveGachaDraw(ctx.from, messageId, ctx.sender, character.id, image.id);
 	},
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
