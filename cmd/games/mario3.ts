@@ -1175,7 +1175,7 @@ canvas#nes{width:100%;height:100%;display:block;image-rendering:pixelated}
 
 export default {
   name: ["mario3", "smb3", "supermario3"],
-  category: "group",
+  category: "games",
   description: "Juega Super Mario Bros. 3 en consola NES interactiva a pantalla completa.",
   groupOnly: false,
 

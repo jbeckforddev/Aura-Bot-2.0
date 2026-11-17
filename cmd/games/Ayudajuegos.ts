@@ -3,7 +3,7 @@ import { fytBold } from "../../core/socketText.ts";
 
 export default {
   name: ["ayudajuegos", "juegoshelp", "emuladores", "helpnes", "helpgbc"],
-  category: "group",
+  category: "games",
   description: "Muestra la guía completa para usar el emulador NES y LuferOS Game color Sys V: 3.0.",
   groupOnly: false,
 

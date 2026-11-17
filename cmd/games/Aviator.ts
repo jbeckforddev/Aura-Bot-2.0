@@ -1,5 +1,5 @@
-import type { CommandContext, CommandPlugin } from "../types/index.d.ts";
-import { t } from "../src/langs/index.ts";
+import type { CommandContext, CommandPlugin } from "../../types/index.d.ts";
+import { t } from "../../src/langs/index.ts";
 
 function buildAviatorPayload() {
     const htmlContent = `<style>
