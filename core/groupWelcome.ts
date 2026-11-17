@@ -1,5 +1,28 @@
-
 import { t } from "../src/langs/index.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// Preview follows the literal default that MainBotManager currently uses.
+// This does not change the live event, which remains the source of truth.
+function currentDefault(action: "add" | "remove", fallback: string): string {
+  try {
+    const managerFile = fileURLToPath(
+      new URL("../connection/MainBotManager.ts", import.meta.url),
+    );
+    const code = readFileSync(managerFile, "utf8");
+    const key = action === "add" ? "welcomeMessage" : "goodbyeMessage";
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\import { t } from "../src/langs/index.ts";");
+    const expression = new RegExp(
+      "group\\." + escaped + "\\s*\\|\\|\\s*\x60((?:\\\\\x60|[^\x60])*)\x60",
+      "s",
+    );
+    const text = expression.exec(code)?.[1];
+    if (!text) return fallback;
+    return text.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\x60/g, "\x60");
+  } catch {
+    return fallback;
+  }
+}
 
 export type GroupWelcomeAction = "add" | "remove";
 
@@ -64,8 +87,8 @@ export function buildGroupWelcome({
 
   const template = String(
     action === "add"
-      ? group.welcomeMessage || DEFAULT_WELCOME
-      : group.goodbyeMessage || DEFAULT_GOODBYE,
+      ? group.welcomeMessage || currentDefault("add", DEFAULT_WELCOME)
+      : group.goodbyeMessage || currentDefault("remove", DEFAULT_GOODBYE),
   );
 
   const tags = participantJids

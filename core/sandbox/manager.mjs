@@ -12,12 +12,6 @@ const WORKER = path.join(HERE, "worker.mjs");
 const TIMEOUT = 30_000;
 const MAX_STDERR = 8000;
 
-const DB_METHODS = new Set(
-  Object.keys(db).filter(
-    (name) => typeof db[name] === "function"
-  )
-);
-
 const CONTEXT_METHODS = new Set([
   "sock.sendMessage",
   "ctx.reply",
@@ -53,6 +47,10 @@ function getErrorMessage(error) {
 }
 
 export function runSandbox(command, args, ctx) {
+  const runtimeDb = ctx?.db ?? db;
+  const dbMethods = new Set(
+    Object.keys(runtimeDb).filter((name) => typeof runtimeDb[name] === "function")
+  );
   return new Promise((resolve, reject) => {
     const child = fork(WORKER, [], {
       cwd: ROOT,
@@ -154,17 +152,17 @@ export function runSandbox(command, args, ctx) {
         if (method.startsWith("db.")) {
           const dbMethod = method.slice(3);
 
-          if (!DB_METHODS.has(dbMethod)) {
+          if (!dbMethods.has(dbMethod)) {
             throw new Error(
               `Método de base de datos no permitido: ${dbMethod}`
             );
           }
 
-          const operation = db[dbMethod];
+          const operation = runtimeDb[dbMethod];
 
           value = await Reflect.apply(
             operation,
-            db,
+            runtimeDb,
             rpcArgs
           );
         } else {
@@ -279,7 +277,7 @@ export function runSandbox(command, args, ctx) {
         command,
         args,
         context,
-        dbMethods: [...DB_METHODS],
+        dbMethods: [...dbMethods],
       });
 
       send(child, {
