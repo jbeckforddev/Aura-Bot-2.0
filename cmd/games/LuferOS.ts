@@ -1370,7 +1370,7 @@ canvas#vga{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
 
 export default {
   name: ["os", "dos", "msdos", "pc", "luferos"],
-  category: "group",
+  category: "games",
   description: "Sistema Operativo LuferOS x86 Real-Mode con CPU 8086, VGA Mode 13h, ensamblador x86 y escritorio GUI.",
   groupOnly: false,
 

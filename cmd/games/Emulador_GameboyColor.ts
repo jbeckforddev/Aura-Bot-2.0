@@ -838,7 +838,7 @@ canvas#gb{width:100%;height:100%;object-fit:fill;display:block;image-rendering:p
 
 export default {
   name: ["gb", "gbc", "gameboy"],
-  category: "group",
+  category: "games",
   description: "LuferOS Game color Sys V: 3.0 con diagnóstico en vivo, soporte .gb/.gbc/.zip y modo compatible para grupos.",
   groupOnly: false,
 

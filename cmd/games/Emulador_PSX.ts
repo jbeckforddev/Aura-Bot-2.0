@@ -1046,7 +1046,7 @@ canvas#psx{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
 
 export default {
   name: ["psx", "ps1", "playstation"],
-  category: "group",
+  category: "games",
   description: "Emulador LuferOS PSX 32-Bit Sys V: 4.0 con soporte robusto para archivos .zip masivos y .bin.",
   groupOnly: false,
 

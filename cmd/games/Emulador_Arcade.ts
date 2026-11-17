@@ -2195,7 +2195,7 @@ canvas#arcade-cv{width:100%;height:100%;object-fit:fill;display:block;image-rend
 
 export default {
   name: ["arcade", "cps", "cps1", "cps2", "maquinita", "mame", "pacman"],
-  category: "group",
+  category: "games",
   description:
     "Sistema LuferOS boot Arcade v1.2 con reloj bloqueado a 60.0Hz, POST físico de 5 etapas, decodificador de ROMs .zip y múltiples placas JAMMA.",
   groupOnly: false,

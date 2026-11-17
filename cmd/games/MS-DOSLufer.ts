@@ -208,8 +208,8 @@ C:\\> _</div>
 }
 
 export default {
-  name: ["dos", "msdos", "pc", "doom"],
-  category: "group",
+  name: ["dosemu", "msdosemu", "dosconsole", "doom"],
+  category: "games",
   description: "Emulador LuferOS MS-DOS Native Core con terminal interactiva, comandos DOS reales, audio y logs.",
   groupOnly: false,
 

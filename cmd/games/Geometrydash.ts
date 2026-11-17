@@ -1236,7 +1236,7 @@ requestAnimationFrame((t) => {
 
 export default {
   name: ["geometrydash", "gd", "geometry"],
-  category: "group",
+  category: "games",
   description: "Abre el videojuego interactivo Geometry Dash con físicas sub-pixel, orbes, modo nave y visor de hitboxes.",
   async run(ctx: CommandContext) {
     const { reply, react, sock, from, msg } = ctx;

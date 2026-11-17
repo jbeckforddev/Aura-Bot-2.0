@@ -825,7 +825,7 @@ canvas#boot-cv{z-index:3;pointer-events:none}
 
 export default {
   name: ["sega", "genesis", "megadrive", "md", "sonic"],
-  category: "group",
+  category: "games",
   description: "Emulador LuferOS SEGA Genesis / Mega Drive 16-Bit V: 5.0 con soporte .bin, .md, .smd, .gen y .zip.",
   groupOnly: false,
 

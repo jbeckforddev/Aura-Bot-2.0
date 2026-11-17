@@ -589,8 +589,8 @@ canvas#nes{width:100%;height:100%;object-fit:fill;display:block;image-rendering:
 }
 
 export default {
-  name: ["nes", "mario", "mario3", "mario1", "contra", "tetris", "pacman"],
-  category: "group",
+  name: ["nes", "mario", "mario1", "contra", "tetris"],
+  category: "games",
   description: "Emulador LuferOS NES con soporte .nes/.zip, guardado en memoria y modo compatible para grupos.",
   groupOnly: false,
 
