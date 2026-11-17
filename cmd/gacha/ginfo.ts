@@ -13,14 +13,15 @@ import { formatDuration } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
-	name: ["ginfo", "gachainfo"],
+	name: ["ginfo", "infogacha", "gachainfo"],
 	category: "gacha",
 	description: t("gacha_info_intro"),
 
 	async run(ctx: CommandContext) {
 		const prefix = ctx.usedPrefix ?? ".";
 		const collection = getGachaHarem(ctx.from, ctx.sender);
-		const collectionValue = collection.reduce((total, entry) => total + Number(GachaCharacters[entry.character_id]?.value || 0),0,);
+    const market = await import("../../database/gachaMarketDB.ts").catch(() => null);
+		const collectionValue = collection.reduce((total, entry) => total + Number(GachaCharacters[entry.character_id]?.value || 0) + (market?.voteCount(ctx.from, entry.character_id) || 0) * 100,0,);
 		const catalog = getGachaCatalogStats();
 
 		const lastDrawAt = getLastGachaDrawAt(ctx.from, ctx.sender);
@@ -58,3 +59,5 @@ export default {
 		return ctx.reply({ text });
 	},
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].

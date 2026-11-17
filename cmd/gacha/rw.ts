@@ -19,7 +19,7 @@ const RARITY_TRANSLATIONS: Record<string, TranslationKey> = {
 };
 
 export default {
-	name: ["rw", "randomdraw", "random", "gacha", "rollwaifu"],
+	name: ["rw", "roll", "randomdraw", "random", "gacha", "rollwaifu"],
 	category: "gacha",
 	cooldown: GACHA_COOLDOWNS.rw,
 	description: t("gacha_rw_description"),
@@ -59,6 +59,9 @@ export default {
 		}
 
 		const image = drawRandomImage(character);
+    const votes = await import("../../database/gachaMarketDB.ts")
+      .then(module => module.voteCount(ctx.from, character.id)).catch(() => 0);
+    const currentValue = character.value + votes * 100;
 		const rarity = t(RARITY_TRANSLATIONS[character.rarity]);
 		const characterType =
 			character.type.toLowerCase() === "support"
@@ -75,7 +78,7 @@ export default {
 			...(character.source
 				? [`┃ ✦ ${t("gacha_source_label")}: ${character.source}`]
 				: []),
-			`┃ ✦ ${t("gacha_value_label")}: ${character.value}`,
+			`┃ ✦ ${t("gacha_value_label")}: ${currentValue}`,
 			`┃ ✦ ${t("gacha_status_label")}: ${t("gacha_status_free")}`,
 			`╰━━━━━━━━━━━━⬣`,
 		].join("\n");
@@ -93,3 +96,5 @@ export default {
 		saveGachaDraw(ctx.from, messageId, ctx.sender, character.id, image.id);
 	},
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].

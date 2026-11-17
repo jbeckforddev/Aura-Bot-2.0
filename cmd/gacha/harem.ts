@@ -7,7 +7,7 @@ import { t } from "../../src/langs/index.ts";
 const PAGE_SIZE = 10;
 
 export default {
-  name: ["harem", "coleccion", "colección"],
+  name: ["harem", "miswaifus", "claims", "coleccion", "colección"],
   category: "gacha",
   description: t("gacha_harem_description"),
   groupOnly: true,
@@ -24,6 +24,9 @@ export default {
       ? cleanJid((await ctx.resolveLid(rawTarget).catch(() => rawTarget)) || rawTarget)
       : rawTarget;
     const entries = getGachaHarem(ctx.from, userId);
+    const market = await import("../../database/gachaMarketDB.ts").catch(() => null);
+    const cardValue = (id: string) =>
+      Number(GachaCharacters[id]?.value || 0) + (market?.voteCount(ctx.from, id) || 0) * 100;
     if (entries.length === 0) {
       return ctx.reply(t("gacha_harem_empty"));
     }
@@ -47,7 +50,7 @@ export default {
       requestedPage * PAGE_SIZE,
     );
     const totalValue = entries.reduce(
-      (total, entry) => total + Number(GachaCharacters[entry.character_id]?.value || 0),
+      (total, entry) => total + cardValue(entry.character_id),
       0,
     );
     const lines = [
@@ -63,7 +66,7 @@ export default {
         entry.image_id === null
           ? ""
           : ` · ${t("gacha_id_label")}: ${entry.image_id}`;
-      const value = Number(character?.value || 0);
+      const value = cardValue(entry.character_id);
       lines.push(
         `┃ ${t("gacha_harem_item", {
           number: (requestedPage - 1) * PAGE_SIZE + index + 1,
@@ -84,3 +87,5 @@ export default {
     return ctx.reply(lines.join("\n"));
   },
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
