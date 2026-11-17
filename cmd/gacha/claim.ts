@@ -3,7 +3,6 @@ import { claimGachaDraw, findPendingGachaDraw } from "../../database/gachaDB.ts"
 import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { getQuotedMessageId } from "../../core/gachaRuntime.ts";
 import { t } from "../../src/langs/index.ts";
-import { getClaimMessage } from "../../database/gachaMarketDB.ts";
 import { getGachaCharacters } from "../../core/gachaRuntime.ts";
 
 export default {
@@ -80,7 +79,9 @@ export default {
 		}
 
 		const ownerJid = result.owner.user_id;
-		const custom = getClaimMessage(ctx.from, ctx.sender);
+		const custom = await import("../../database/gachaMarketDB.ts")
+      .then(module => module.getClaimMessage(ctx.from, ctx.sender))
+      .catch(() => null);
 		const character = getGachaCharacters().find(item => item.id === result.owner.character_id);
 		const text = custom
 			? custom.replaceAll("{user}", "@" + ownerJid.split("@")[0])
