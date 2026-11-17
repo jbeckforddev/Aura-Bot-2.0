@@ -118,8 +118,8 @@ export function removeSale(group:string,user:string,character:string,image:numbe
 }
 const COINS = "CAST(COALESCE(json_extract(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.economy.bolsillo'),json_extract(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.economy.coins'),json_extract(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.bolsillo'),coins,100000) AS INTEGER)";
 function adjustCoins(user:string,delta:number): void {
-  const sql="UPDATE aura.users SET coins=("+COINS+")+?,data=json_set(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.bolsillo',("+COINS+")+?,'$.coins',("+COINS+")+?,'$.economy.bolsillo',("+COINS+")+?,'$.economy.coins',("+COINS+")+?) WHERE jid=? AND ("+COINS+")+? >= 0 AND ("+COINS+")+? <= 9007199254740991";
-  const changed=database.prepare(sql).run(delta,delta,delta,delta,delta,user,delta,delta).changes;
+  const sql="UPDATE aura.users SET coins=("+COINS+")+?,data=json_set(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.bolsillo',("+COINS+")+?,'$.coins',("+COINS+")+?,'$.economy.bolsillo',("+COINS+")+?,'$.economy.coins',("+COINS+")+?) WHERE (jid=? OR lid=?) AND ("+COINS+")+? >= 0 AND ("+COINS+")+? <= 9007199254740991";
+  const changed=database.prepare(sql).run(delta,delta,delta,delta,delta,user,user,delta,delta).changes;
   if(changed!==1) throw new Error("Saldo insuficiente o cuenta inexistente.");
 }
 export function purchaseCard(group:string,buyer:string,character:string,image:number): {seller:string;price:number} {
