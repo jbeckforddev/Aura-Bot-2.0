@@ -172,6 +172,11 @@ export function setFavorite(group:string,user:string,character:string,image:numb
 export function getFavorite(group:string,user:string): {character_id:string;image_id:number}|undefined {
   return database.prepare("SELECT character_id,image_id FROM GachaFavorites WHERE group_id=? AND user_id=?").get(group,user) as {character_id:string;image_id:number}|undefined;
 }
+export function favoriteRankings(group:string): Array<{character_id:string;votes:number}> {
+  return database.prepare(
+    "SELECT character_id,COUNT(*) AS votes FROM GachaFavorites WHERE group_id=? GROUP BY character_id ORDER BY votes DESC,character_id ASC LIMIT 20",
+  ).all(group) as Array<{character_id:string;votes:number}>;
+}
 export function deleteFavorite(group:string,user:string): void {
   database.prepare("DELETE FROM GachaFavorites WHERE group_id=? AND user_id=?").run(group,user);
 }
