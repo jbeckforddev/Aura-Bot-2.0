@@ -138,7 +138,7 @@ async function getClient(): Promise<any> {
 /* ───────────────────────── comando ───────────────────────── */
 
 export default {
-  name: ["voip", "llamar", "call"],
+  name: ["voip", "llamar"],
   category: "system",
   description: "Llama por VoIP real (WASM), cuelga a los 2-3 s y devuelve IP, país, plataforma y versión.",
   async run(ctx: CommandContext) {
