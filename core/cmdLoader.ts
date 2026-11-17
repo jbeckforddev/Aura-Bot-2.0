@@ -43,7 +43,7 @@ async function collectCommandFiles(directory: string): Promise<string[]> {
     const full = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...await collectCommandFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+    } else if (entry.isFile() && /\.(ts|js)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) {
       files.push(full);
     }
   }
@@ -162,7 +162,7 @@ export async function watchPlugins(): Promise<void> {
     const watcher = watch(PLUGINS_DIR, { recursive: true });
     for await (const event of watcher) {
       const fileName = event.filename?.toString();
-      if (!fileName?.endsWith(".ts") || fileName.endsWith(".d.ts")) continue;
+      if (!fileName || !/\.(ts|js)$/.test(fileName) || fileName.endsWith(".d.ts")) continue;
 
       const filePath = path.resolve(PLUGINS_DIR, fileName);
       if (!filePath.startsWith(PLUGINS_DIR + path.sep)) continue;
