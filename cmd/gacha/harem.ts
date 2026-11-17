@@ -7,7 +7,7 @@ import { t } from "../../src/langs/index.ts";
 const PAGE_SIZE = 10;
 
 export default {
-  name: ["harem", "coleccion", "colección"],
+  name: ["harem", "miswaifus", "claims", "coleccion", "colección"],
   category: "gacha",
   description: t("gacha_harem_description"),
   groupOnly: true,
@@ -84,3 +84,5 @@ export default {
     return ctx.reply(lines.join("\n"));
   },
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
