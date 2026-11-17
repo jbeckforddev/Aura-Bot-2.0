@@ -1,5 +1,5 @@
 import type { CommandContext } from "../../types/index.d.ts";
-import { claimGachaDraw } from "../../database/gachaDB.ts";
+import { claimGachaDraw, findPendingGachaDraw } from "../../database/gachaDB.ts";
 import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { getQuotedMessageId } from "../../core/gachaRuntime.ts";
 import { t } from "../../src/langs/index.ts";
@@ -14,14 +14,33 @@ export default {
 	groupOnly: true,
 
 	async run(ctx: CommandContext) {
-		const messageId = getQuotedMessageId(ctx.msg);
-		if (!messageId) {
-			return ctx.reply(
-				t("gacha_claim_reply_required", {
-					prefix: ctx.usedPrefix || ctx.prefix || ".",
-				}),
-			);
-		}
+    let messageId = getQuotedMessageId(ctx.msg);
+    if (!messageId && ctx.args?.length) {
+      const supplied = String(ctx.rawText || ctx.args.join(" ")).trim();
+      const variant = supplied.match(/^(.*?)\s*#(\d+)$/);
+      const search = (variant ? variant[1] : supplied)
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const catalog = getGachaCharacters();
+      const matches = catalog.filter(item => (
+        item.id.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === search ||
+        item.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === search
+      ));
+      if (matches.length !== 1) {
+        return ctx.reply("✖ Personaje ambiguo o desconocido. Usa su nombre completo.");
+      }
+      messageId = findPendingGachaDraw(
+        ctx.from, ctx.sender, matches[0]!.id,
+        variant ? Number(variant[2]) : undefined,
+      );
+      if (!messageId) {
+        return ctx.reply("✖ No hay una tirada tuya pendiente y vigente de ese personaje.");
+      }
+    }
+    if (!messageId) {
+      return ctx.reply(t("gacha_claim_reply_required", {
+        prefix: ctx.usedPrefix || ctx.prefix || ".",
+      }));
+    }
 
 		const result = claimGachaDraw(ctx.from, messageId, ctx.sender);
 		if (result.status === "not_found") {
