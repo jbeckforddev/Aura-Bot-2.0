@@ -41,6 +41,8 @@ Para cartas antiguas sin número de imagen, usar el selector #antiguo (por ejemp
 - La propiedad de cartas y los intercambios se comprueban transaccionalmente por grupo.
 - La compra debita y abona monedas con una transacción SQLite que incluye Aura.db adjunta. En modo WAL, un corte eléctrico extremo durante un commit de dos archivos puede dejar estados divergentes. Respaldar Aura.db y GachaAura.db de forma coordinada antes del despliegue.
 - El catálogo de series es global y compartido por los sockets, no exclusivo de cada socket.
+- La compra confirma en la transacción que el precio y el vendedor coinciden con la oferta mostrada. Si cambian, se rechaza sin cargo.
+- Se añadieron cinco pruebas ejecutables con Node 22+ y SQLite aislado en scripts/test-gacha-sql.cjs. En la revisión local, cinco escenarios SQL equivalentes finalizaron correctamente. Esto no acredita una prueba de los módulos TS completos.
 - No se han confirmado pruebas SQLite del servidor ni ejecución en un socket real. Los workflows GitHub Actions observados fallan sin pasos o logs recuperables. No declarar validación completa.
 - No fusionar con master hasta probar compras, intercambios, reclamaciones y robo en un socket aislado y ejecutar los scripts de pruebas.
 
