@@ -248,7 +248,9 @@ function readCommandMetadata(filePath: string): CommandMetadata {
     expression.expression.text === "createEconomyActivity" &&
     expression.arguments.length > 0 &&
     ts.isObjectLiteralExpression(expression.arguments[0]);
-  if (isEconomyFactory) expression = expression.arguments[0];
+  if (isEconomyFactory && ts.isCallExpression(expression)) {
+    expression = expression.arguments[0];
+  }
 
   if (!ts.isObjectLiteralExpression(expression)) return empty;
   const commandObject = expression;
