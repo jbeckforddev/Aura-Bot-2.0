@@ -59,8 +59,21 @@ export default {
     }
 
     try {
-      const user = await ctx.db.getUser(ctx.sender);
-      check(Boolean(user), "Base de usuarios", user ? "Disponible" : "Sin respuesta");
+      const { default: Database } = await import("better-sqlite3");
+      const { default: path } = await import("node:path");
+      const dir = globalThis.DATA_BASE_DIR;
+      if (typeof dir !== "string" || !dir) throw new Error("Directorio de datos no configurado");
+      const sql = new Database(path.join(dir, "Aura.db"), {
+        readonly: true,
+        fileMustExist: true,
+      });
+      try {
+        const result = sql.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
+        check(Number.isSafeInteger(result.n), "Base de usuarios",
+          result.n + " usuarios registrados");
+      } finally {
+        sql.close();
+      }
     } catch (error) {
       check(false, "Base de usuarios", String(error));
     }
