@@ -1,6 +1,7 @@
 import type { CommandContext } from "../types/index.d.ts";
 import { randomInt } from "node:crypto";
 import { economyTarget } from "./economyRuntime.ts";
+import { getTargetJids } from "./groupUtils.ts";
 import { formatMoney } from "./economyConfig.ts";
 import { getGachaCharacters, type GachaCharacter } from "./gachaRuntime.ts";
 import {
@@ -141,6 +142,14 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
       case "htop":
       case "waifusboard": {
         const ranking=userRankings(action==="htop"?ctx.from:undefined);
+        if(action==="waifusboard" && getTargetJids(ctx).length) {
+          const target=await economyTarget(ctx);
+          const position=ranking.findIndex(u=>u.user_id===target);
+          return reply(ctx,position<0
+            ? "🎴 "+tag(target)+" todavía no figura en el ranking Gacha."
+            : "🎴 "+tag(target)+" está en la posición #"+(position+1)+" con "+ranking[position]!.cards+" personajes.",
+            [target]);
+        }
         const lines=ranking.map((u,i)=>(i+1)+". "+tag(u.user_id)+" — "+u.cards+" personajes");
         const page=pageNumber(ctx);
         return reply(ctx,["🏆 "+(action==="htop"?"TOP DEL GRUPO":"TOP GLOBAL"),...pagination(lines,page)].join("\n"),ranking.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE).map(x=>x.user_id));

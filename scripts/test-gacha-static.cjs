@@ -14,6 +14,7 @@ const expected = new Map(Object.entries({
   claim: ["claim", "c"],
   deletechar: ["deletechar", "delwaifu", "delchar"],
   ginfo: ["ginfo", "infogacha", "gachainfo"],
+  gachacheck: ["gachacheck", "gcheck"],
   giveallharem: ["giveallharem"],
   givechar: ["givechar", "regalar", "givewaifu"],
   gtop: ["gtop", "gachatop"],
