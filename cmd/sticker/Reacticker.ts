@@ -217,7 +217,7 @@ async function sendStickerAssociation(
 
 export default {
   name: ["reacsticker", "reacticker", "reactsticker", "rsticker"],
-  category: "group",
+  category: "sticker",
   description: "Guarda stickers y reacciona con ellos de forma individual o en ráfaga (boom / boom2).",
   groupOnly: false,
 

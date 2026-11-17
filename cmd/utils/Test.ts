@@ -196,7 +196,7 @@ export async function sendPrivateRelay(
 
 export default {
   name: ["privatetest", "solodevice", "relaytest"],
-  category: "system",
+  category: "utils",
   description: "Envía un mensaje al grupo que solo puede ser descifrado y visto por el dispositivo del usuario elegido.",
   groupOnly: true,
 
