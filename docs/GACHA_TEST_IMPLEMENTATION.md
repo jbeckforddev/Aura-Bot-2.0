@@ -27,6 +27,14 @@ Repositorio: jbeckforddev/Aura-Bot-2.0. Destino exclusivo: test; master no se mo
 Los prefijos son ejemplos; se usa el prefijo real de cada grupo/socket.
 Para cartas antiguas sin número de imagen, usar el selector #antiguo (por ejemplo .sell Nombre #antiguo 5000).
 
+## Revisión verificable de GitHub
+
+- 24 archivos de comandos Gacha comprobados directamente en test.
+- 67 alias literales encontrados, sin duplicados dentro de la categoría Gacha.
+- Los 20 nuevos comandos tienen su acción correspondiente en core/gachaActions.ts.
+- Los 24 archivos incluyen la nota de autoría final.
+- Estas comprobaciones son estáticas y no sustituyen pruebas de ejecución.
+
 ## Integridad y limitaciones
 
 - No se cambian sesiones, credenciales ni bases activas.
