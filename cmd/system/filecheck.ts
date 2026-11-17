@@ -231,7 +231,14 @@ function readCommandMetadata(filePath: string): CommandMetadata {
   if (!statement) return empty;
 
   let expression: ts.Expression = statement.expression;
-  while (ts.isParenthesizedExpression(expression)) {
+  // Desenvuelve expresiones TypeScript que conservan el objeto del comando.
+  // Ejemplos: export default {...} satisfies CommandPlugin; y {...} as CommandPlugin.
+  while (
+    ts.isParenthesizedExpression(expression) ||
+    ts.isSatisfiesExpression(expression) ||
+    ts.isAsExpression(expression) ||
+    ts.isTypeAssertionExpression(expression)
+  ) {
     expression = expression.expression;
   }
   // Algunos módulos exportan un identificador: const command = {...}; export default command.
