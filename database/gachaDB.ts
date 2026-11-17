@@ -293,3 +293,20 @@ export function claimGachaDraw(
 
   return claim();
 }
+
+export function findPendingGachaDraw(
+  groupId: string,
+  userId: string,
+  characterId: string,
+  imageId?: number,
+): string | null {
+  const rows = db_instance.prepare(
+    "SELECT message_id, image_id FROM GachaDraws WHERE group_id = ? AND user_id = ? AND character_id = ? AND status = 'pending' AND created_at >= ? ORDER BY created_at DESC LIMIT 30",
+  ).all(groupId, userId, characterId, Date.now() - GACHA_CLAIM_TTL_MS) as Array<{
+    message_id: string;
+    image_id: number;
+  }>;
+  return rows.find(row => imageId === undefined || row.image_id === imageId)?.message_id ?? null;
+}
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
