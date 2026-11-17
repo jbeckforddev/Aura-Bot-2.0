@@ -2,23 +2,17 @@ import { t } from "../src/langs/index.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// Preview follows the literal default that MainBotManager currently uses.
-// This does not change the live event, which remains the source of truth.
+// Lee la plantilla predeterminada literal del controlador, sin ejecutarlo.
 function currentDefault(action: "add" | "remove", fallback: string): string {
   try {
-    const managerFile = fileURLToPath(
-      new URL("../connection/MainBotManager.ts", import.meta.url),
-    );
+    const managerFile = fileURLToPath(new URL("../connection/MainBotManager.ts", import.meta.url));
     const code = readFileSync(managerFile, "utf8");
-    const key = action === "add" ? "welcomeMessage" : "goodbyeMessage";
-    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\import { t } from "../src/langs/index.ts";");
-    const expression = new RegExp(
-      "group\\." + escaped + "\\s*\\|\\|\\s*\x60((?:\\\\\x60|[^\x60])*)\x60",
-      "s",
-    );
-    const text = expression.exec(code)?.[1];
-    if (!text) return fallback;
-    return text.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\x60/g, "\x60");
+    const pattern = action === "add"
+      ? /group\.welcomeMessage\s*\|\|\s*`([^`]*)`/s
+      : /group\.goodbyeMessage\s*\|\|\s*`([^`]*)`/s;
+    const literal = pattern.exec(code)?.[1];
+    if (!literal || literal.includes("${")) return fallback;
+    return literal.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
   } catch {
     return fallback;
   }
