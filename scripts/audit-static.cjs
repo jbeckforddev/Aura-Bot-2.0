@@ -112,13 +112,29 @@ function check(file) {
   }
   if(!np||!ts.isPropertyAssignment(np)){report(file,"ESTRUCTURA","Sin name");return;}
   const init=np.initializer;
-  const names=ts.isArrayLiteralExpression(init)?init.elements.map(textValue):[textValue(init)];
+  let names=ts.isArrayLiteralExpression(init)?init.elements.map(textValue):[textValue(init)];
+  if(ts.isCallExpression(init)&&ts.isPropertyAccessExpression(init.expression)&&
+     ts.isIdentifier(init.expression.expression)&&init.expression.expression.text==="Object"&&
+     init.expression.name.text==="keys"&&init.arguments.length===1&&
+     ts.isIdentifier(init.arguments[0])&&init.arguments[0].text==="DATA"){
+    const match=source.text.match(
+      /const\s+DATA_PATH\s*=\s*path\.resolve\(\s*process\.cwd\(\)\s*,\s*["']([^"']+\.json)["']\s*\)/,
+    );
+    if(match){
+      const jsonFile=path.resolve(root,match[1]);
+      if(jsonFile.startsWith(path.join(root,"database")+path.sep)){
+        try{names=Object.keys(JSON.parse(fs.readFileSync(jsonFile,"utf8")));}catch(e){
+          report(file,"JSON",String(e));
+        }
+      }
+    }
+  }
   if(!names.length||names.some(n=>!n)){report(file,"ALIAS","name sin literales");return;}
   for(const name of names){
     const alias=name.toLowerCase().trim();
     if(!alias){report(file,"ALIAS","Alias vacio");continue;}
     const prev=aliases.get(alias);
-    if(prev&&prev!==file)report(file,"DUPLICADO",alias+" tambien en "+path.relative(root,prev));
+    if(prev)report(file,"DUPLICADO",alias+" tambien en "+path.relative(root,prev));
     else aliases.set(alias,file);
   }
 }

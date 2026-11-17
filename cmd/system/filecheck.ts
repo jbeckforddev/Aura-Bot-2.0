@@ -270,6 +270,29 @@ function readCommandMetadata(filePath: string): CommandMetadata {
       names = value.elements.map(literalString).filter(
         (name): name is string => name !== null,
       );
+    } else if (
+      ts.isCallExpression(value) &&
+      ts.isPropertyAccessExpression(value.expression) &&
+      ts.isIdentifier(value.expression.expression) &&
+      value.expression.expression.text === "Object" &&
+      value.expression.name.text === "keys" &&
+      value.arguments.length === 1 &&
+      ts.isIdentifier(value.arguments[0]) &&
+      value.arguments[0].text === "DATA"
+    ) {
+      // Interacciones SFW/NSFW: nombres declarados en JSON, sin ejecutar el comando.
+      const match = source.text.match(
+        /const\s+DATA_PATH\s*=\s*path\.resolve\(\s*process\.cwd\(\)\s*,\s*["']([^"']+\.json)["']\s*\)/,
+      );
+      if (match) {
+        const root = path.resolve(process.cwd(), "database") + path.sep;
+        const jsonFile = path.resolve(process.cwd(), match[1]);
+        if (jsonFile.startsWith(root) && fs.existsSync(jsonFile)) {
+          try {
+            names = Object.keys(JSON.parse(fs.readFileSync(jsonFile, "utf8")));
+          } catch {}
+        }
+      }
     } else {
       const name = literalString(value);
       if (name !== null) names = [name];
@@ -423,13 +446,15 @@ export default {
               if (!alias) continue;
               totalAliasesRegistered++;
               const previous = commandRegistry.get(alias);
-              if (previous && previous !== relCmdPath) {
+              if (previous) {
                 issues.push({
                   file: relCmdPath, type: "DUPLICADO",
-                  detail: "El comando ." + alias + " colisiona con " + previous,
+                  detail: previous === relCmdPath
+                    ? "Alias repetido en el mismo archivo: ." + alias
+                    : "El comando ." + alias + " colisiona con " + previous,
                 });
                 hasCmdError = true;
-              } else if (!previous) {
+              } else {
                 commandRegistry.set(alias, relCmdPath);
               }
             }
