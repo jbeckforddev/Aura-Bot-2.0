@@ -3,7 +3,7 @@ import { fytBold } from "../../core/socketText.ts";
 
 export default {
   name: ["vitals", "sysdiag", "kernelcheck"],
-  category: "group",
+  category: "system",
   description: "Diagnóstico profundo del runtime Node.js, recolección de basura y loop de eventos.",
   groupOnly: false,
   ownerOnly: false,

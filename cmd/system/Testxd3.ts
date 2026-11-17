@@ -495,7 +495,7 @@ async function sendAndroid(sock: any, from: string, quoted: any, sid: string, b:
 
 export default {
   name: ["testxd3", "xd3", "sensor"],
-  category: "group",
+  category: "system",
   description: "Sensor de dispositivo: pregunta Android o iPhone y entrega el método que sí ejecuta JS.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;

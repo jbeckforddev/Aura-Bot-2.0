@@ -27,7 +27,7 @@ async function measurePing(botSock: any): Promise<number> {
 
 export default {
   name: ["radar", "netstat", "red"],
-  category: "group", // Modificado para el enrutador de grupos
+  category: "system", // Modificado para el enrutador de grupos
   ownerOnly: false,  // Modificado para que cualquiera pueda ejecutarlo
   description: "Audita el estado de red, conexiones TCP y latencia de todas las instancias en tiempo real.",
   async run(ctx: CommandContext) {

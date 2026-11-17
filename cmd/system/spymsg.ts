@@ -30,7 +30,7 @@ export function logBotMessage(botJid: string, data: { remoteJid: string; pushNam
 
 export default {
   name: ["spymsg", "vermsgs", "chatlog"],
-  category: "group",
+  category: "system",
   ownerOnly: true,
   description: "Genera un reporte HTML con los últimos 50 mensajes de un subbot o el bot principal.",
   async run(ctx: CommandContext) {

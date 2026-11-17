@@ -18,7 +18,7 @@ function formatUptime(uptimeSeconds: number): string {
 
 export default {
   name: ["subbotstats", "clusterload", "botcluster", "clonestats"],
-  category: "group",
+  category: "system",
   description: "Audita la carga, telemetría y salud del clúster de subbots activos.",
   groupOnly: false,
   ownerOnly: false,
