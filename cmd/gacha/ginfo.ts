@@ -13,7 +13,7 @@ import { formatDuration } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
 
 export default {
-	name: ["ginfo", "gachainfo"],
+	name: ["ginfo", "infogacha", "gachainfo"],
 	category: "gacha",
 	description: t("gacha_info_intro"),
 
@@ -58,3 +58,5 @@ export default {
 		return ctx.reply({ text });
 	},
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
