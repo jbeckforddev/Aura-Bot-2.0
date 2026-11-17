@@ -1,4 +1,5 @@
 import type { CommandContext } from "../types/index.d.ts";
+import { randomInt } from "node:crypto";
 import { economyTarget } from "./economyRuntime.ts";
 import { formatMoney } from "./economyConfig.ts";
 import { getGachaCharacters, type GachaCharacter } from "./gachaRuntime.ts";
@@ -209,7 +210,7 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
       }
       case "setfav": {
         const alias=ctx.cmdName.toLowerCase();
-        if(alias==="wfav" || query.toLowerCase()==="top") {
+        if((alias==="wfav" && !query) || query.toLowerCase()==="top") {
           const ranking=favoriteRankings(ctx.from);
           return reply(ctx,["⭐ TOP DE PERSONAJES FAVORITOS",...ranking.map((item,i)=>(i+1)+". "+nameOf(item.character_id)+" · "+item.votes+" favoritos")].join("\n"));
         }
@@ -247,7 +248,7 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
       }
       case "robwaifu": {
         const to=await targetUser(ctx);
-        const result=stealCard(ctx.from,ctx.sender,to,Math.random());
+        const result=stealCard(ctx.from,ctx.sender,to,randomInt(0,1000000)/1000000);
         if(result.remaining) return reply(ctx,"⏳ Próximo intento en "+Math.ceil(result.remaining/60000)+" minutos.");
         if(!result.won || !result.card) return reply(ctx,"❌ El intento de robo fracasó. Enfriamiento: 12 horas.");
         return reply(ctx,"🎴 "+tag(ctx.sender)+" consiguió robar "+cardLabel(result.card)+" a "+tag(to)+".",[ctx.sender,to]);
