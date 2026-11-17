@@ -143,4 +143,8 @@ for(const file of files)check(file);
 console.log("AUDITORÍA ESTÁTICA: "+files.length+" archivos; "+nCmd+
 " comandos; "+aliases.size+" alias; "+issues.length+" incidencias.");
 for(const i of issues)console.log("["+i.type+"] "+i.file+": "+i.reason);
+if(process.env.AURA_AUDIT_REPORT){
+  fs.writeFileSync(process.env.AURA_AUDIT_REPORT,
+    JSON.stringify({fileCount:files.length,commandCount:nCmd,aliasCount:aliases.size,issues},null,2));
+}
 if(issues.length)process.exitCode=1;
