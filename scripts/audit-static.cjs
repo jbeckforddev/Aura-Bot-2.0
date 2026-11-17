@@ -95,14 +95,19 @@ function check(file) {
   nCmd++;
   const relative=path.relative(cmdRoot,file).split(path.sep);
   const folder=relative.length>1?relative[0]:null;
-  const obj=commandObject(source);
+  const defaultAssignment=source.statements.find(s=>ts.isExportAssignment(s)&&!s.isExportEquals);
+  const call=defaultAssignment?.expression;
+  const factory=call&&ts.isCallExpression(call)&&ts.isIdentifier(call.expression)&&
+    call.expression.text==="createEconomyActivity"&&
+    call.arguments.length>0&&ts.isObjectLiteralExpression(call.arguments[0]);
+  const obj=factory?call.arguments[0]:commandObject(source);
   if(!obj){report(file,"ESTRUCTURA","export default no verificable");return;}
-  const cp=property(obj,"category"), np=property(obj,"name");
-  const category=cp&&ts.isPropertyAssignment(cp)?textValue(cp.initializer):null;
+  const cp=property(obj,"category"), np=property(obj,factory?"names":"name");
+  const category=factory?"economy":cp&&ts.isPropertyAssignment(cp)?textValue(cp.initializer):null;
   if(!category||!categories.has(category)||category!==folder){
     report(file,"CATEGORIA","carpeta="+(folder||"cmd/")+" categoria="+(category||"sin literal"));
   }
-  if(!property(obj,"run")&&!property(obj,"execute")){
+  if(!factory&&!property(obj,"run")&&!property(obj,"execute")){
     report(file,"ESTRUCTURA","No existe run/execute");
   }
   if(!np||!ts.isPropertyAssignment(np)){report(file,"ESTRUCTURA","Sin name");return;}

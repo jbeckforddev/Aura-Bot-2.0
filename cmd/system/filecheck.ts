@@ -243,6 +243,13 @@ function readCommandMetadata(filePath: string): CommandMetadata {
     if (declaration?.initializer) expression = declaration.initializer;
   }
 
+  const isEconomyFactory = ts.isCallExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    expression.expression.text === "createEconomyActivity" &&
+    expression.arguments.length > 0 &&
+    ts.isObjectLiteralExpression(expression.arguments[0]);
+  if (isEconomyFactory) expression = expression.arguments[0];
+
   if (!ts.isObjectLiteralExpression(expression)) return empty;
   const commandObject = expression;
 
@@ -255,7 +262,7 @@ function readCommandMetadata(filePath: string): CommandMetadata {
     return commandObject.properties.find((item) => propertyKey(item) === key);
   }
 
-  const nameProp = property("name");
+  const nameProp = property(isEconomyFactory ? "names" : "name");
   let names: string[] = [];
   if (nameProp && ts.isPropertyAssignment(nameProp)) {
     const value = nameProp.initializer;
@@ -270,10 +277,12 @@ function readCommandMetadata(filePath: string): CommandMetadata {
   }
 
   const catProp = property("category");
-  const category = catProp && ts.isPropertyAssignment(catProp)
-    ? literalString(catProp.initializer) : null;
+  const category = isEconomyFactory
+    ? "economy"
+    : catProp && ts.isPropertyAssignment(catProp)
+      ? literalString(catProp.initializer) : null;
 
-  const hasExecutor = ["run", "execute"].some((key) => {
+  const hasExecutor = isEconomyFactory || ["run", "execute"].some((key) => {
     const item = property(key);
     if (!item) return false;
     if (ts.isMethodDeclaration(item)) return true;
