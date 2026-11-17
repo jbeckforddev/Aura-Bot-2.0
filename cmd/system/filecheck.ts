@@ -234,6 +234,15 @@ function readCommandMetadata(filePath: string): CommandMetadata {
   while (ts.isParenthesizedExpression(expression)) {
     expression = expression.expression;
   }
+  // Algunos módulos exportan un identificador: const command = {...}; export default command.
+  if (ts.isIdentifier(expression)) {
+    const declaration = source.statements
+      .filter(ts.isVariableStatement)
+      .flatMap((statement) => statement.declarationList.declarations)
+      .find((item) => ts.isIdentifier(item.name) && item.name.text === expression.text);
+    if (declaration?.initializer) expression = declaration.initializer;
+  }
+
   if (!ts.isObjectLiteralExpression(expression)) return empty;
   const commandObject = expression;
 
