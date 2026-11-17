@@ -32,7 +32,8 @@ test("ventas y compra descuentan y abonan monedas sin duplicar propiedad", () =>
   db.getUser(bob);
   card("asuka", 1, bob);
   market.sellCard(group,bob,"asuka",1,750);
-  const sale=market.purchaseCard(group,alice,"asuka",1);
+  assert.throws(() => market.purchaseCard(group,alice,"asuka",1,751,bob), /precio|vendedor/i);
+  const sale=market.purchaseCard(group,alice,"asuka",1,750,bob);
   assert.equal(sale.price,750);
   assert.equal(sale.seller,bob);
   assert.equal(market.listOwned(group,alice).filter(x=>x.character_id==="asuka").length,1);
@@ -40,7 +41,7 @@ test("ventas y compra descuentan y abonan monedas sin duplicar propiedad", () =>
   assert.equal(market.listSales(group).length,0);
   assert.equal(Number(db.getUser(alice).coins),99250);
   assert.equal(Number(db.getUser(bob).coins),100750);
-  assert.throws(()=>market.purchaseCard(group,alice,"asuka",1));
+  assert.throws(()=>market.purchaseCard(group,alice,"asuka",1,750,bob));
 });
 test("intercambio bidireccional no se puede aceptar dos veces", () => {
   card("rei",2,alice);
