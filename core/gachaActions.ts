@@ -169,7 +169,7 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
       case "buyc": {
         if(!query) return reply(ctx,"Uso: "+suffix(ctx,"buyc")+" <personaje> [#ID]");
         const sale=findListing(ctx.from,query);
-        const done=purchaseCard(ctx.from,ctx.sender,sale.character_id,sale.image_id);
+        const done=purchaseCard(ctx.from,ctx.sender,sale.character_id,sale.image_id,sale.price,sale.seller_id);
         return reply(ctx,"✅ Compraste "+cardLabel({character_id:sale.character_id,image_id:sale.image_id===-1?null:sale.image_id})+" por "+formatMoney(done.price,ctx)+". Vendedor: "+tag(done.seller),[done.seller]);
       }
       case "givechar": {
