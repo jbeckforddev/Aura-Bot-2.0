@@ -3,6 +3,8 @@ import { claimGachaDraw } from "../../database/gachaDB.ts";
 import { GACHA_COOLDOWNS } from "../../core/gachaRuntime.ts";
 import { getQuotedMessageId } from "../../core/gachaRuntime.ts";
 import { t } from "../../src/langs/index.ts";
+import { getClaimMessage } from "../../database/gachaMarketDB.ts";
+import { getGachaCharacters } from "../../core/gachaRuntime.ts";
 
 export default {
 	name: ["claim", "c"],
@@ -59,11 +61,14 @@ export default {
 		}
 
 		const ownerJid = result.owner.user_id;
-		return ctx.reply({
-			text: t("gacha_claim_success", {
-				user: `@${ownerJid.split("@")[0]}`,
-			}),
-			mentions: [ownerJid],
-		});
+		const custom = getClaimMessage(ctx.from, ctx.sender);
+		const character = getGachaCharacters().find(item => item.id === result.owner.character_id);
+		const text = custom
+			? custom.replaceAll("{user}", "@" + ownerJid.split("@")[0])
+				.replaceAll("{character}", character?.name || result.owner.character_id)
+			: t("gacha_claim_success", { user: "@" + ownerJid.split("@")[0] });
+		return ctx.reply({ text, mentions: [ownerJid] });
 	},
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
