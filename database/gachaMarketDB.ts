@@ -127,7 +127,7 @@ function adjustCoins(user:string,delta:number): void {
   const changed=database.prepare(sql).run(delta,delta,delta,delta,delta,user,user,delta,delta).changes;
   if(changed!==1) throw new Error("Saldo insuficiente o cuenta inexistente.");
 }
-export function purchaseCard(group:string,buyer:string,character:string,image:number): {seller:string;price:number} {
+export function purchaseCard(group:string,buyer:string,character:string,image:number,expectedPrice:number,expectedSeller:string): {seller:string;price:number} {
   // Garantiza que existan las cuentas en Aura.db antes de la transacción.
   db.getUser(buyer);
   const listing=database.prepare("SELECT seller_id,price FROM GachaListings WHERE group_id=? AND character_id=? AND image_id=?").get(group,character,image) as {seller_id:string;price:number}|undefined;
@@ -136,14 +136,15 @@ export function purchaseCard(group:string,buyer:string,character:string,image:nu
   const receipt=database.transaction(() => {
     const sale=database.prepare("SELECT seller_id,price FROM GachaListings WHERE group_id=? AND character_id=? AND image_id=?").get(group,character,image) as {seller_id:string;price:number}|undefined;
     if(!sale||!owns(group,sale.seller_id,character,image)) throw new Error("La venta ya no está disponible.");
+    if(sale.price!==expectedPrice||sale.seller_id!==expectedSeller) throw new Error("El precio o vendedor cambió. Consulta de nuevo la tienda.");
     if(sale.seller_id===buyer) throw new Error("No puedes comprar tu propio personaje.");
     adjustCoins(buyer,-sale.price);
     adjustCoins(sale.seller_id,sale.price);
     move(group,sale.seller_id,buyer,character,image);
     return {seller:sale.seller_id,price:sale.price};
   })();
-  invalidateUserDbCache(buyer);
-  invalidateUserDbCache(receipt.seller);
+  // Invalida JID, LID y otras claves equivalentes que puedan estar en caché.
+  invalidateUserDbCache();
   return receipt;
 }
 export function makeTrade(group:string,from:string,to:string,offer:string,offerImage:number,want:string,wantImage:number): string {
@@ -214,16 +215,11 @@ export function stealCard(group:string,thief:string,target:string,roll:number): 
   })();
 }
 export function userRankings(group?:string): GachaRanking[] {
-  const sql=group
-    ? "SELECT group_id,user_id FROM GachaImageOwnership WHERE group_id=? UNION ALL SELECT group_id,user_id FROM GachaOwnership WHERE group_id=?"
-    : "SELECT group_id,user_id FROM GachaImageOwnership UNION ALL SELECT group_id,user_id FROM GachaOwnership";
-  const all=(group?database.prepare(sql).all(group,group):database.prepare(sql).all()) as Array<{group_id:string;user_id:string}>;
-  const scores=new Map<string,number>();
-  for(const item of all) {
-    if(group && item.group_id!==group) continue;
-    scores.set(item.user_id,(scores.get(item.user_id)||0)+1);
-  }
-  return [...scores].map(([user_id,cards])=>({user_id,cards})).sort((a,b)=>b.cards-a.cards||a.user_id.localeCompare(b.user_id));
+  const common = "SELECT group_id,user_id FROM GachaImageOwnership UNION ALL SELECT group_id,user_id FROM GachaOwnership";
+  const query = "SELECT user_id,COUNT(*) AS cards FROM (" + common + ")" +
+    (group ? " WHERE group_id=?" : "") +
+    " GROUP BY user_id ORDER BY cards DESC,user_id ASC";
+  return (group ? database.prepare(query).all(group) : database.prepare(query).all()) as GachaRanking[];
 }
 
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
