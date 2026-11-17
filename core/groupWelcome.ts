@@ -1,23 +1,4 @@
 import { t } from "../src/langs/index.ts";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-// Lee la plantilla predeterminada literal del controlador, sin ejecutarlo.
-function currentDefault(action: "add" | "remove", fallback: string): string {
-  try {
-    const managerFile = fileURLToPath(new URL("../connection/MainBotManager.ts", import.meta.url));
-    const code = readFileSync(managerFile, "utf8");
-    const pattern = action === "add"
-      ? /group\.welcomeMessage\s*\|\|\s*`([^`]*)`/s
-      : /group\.goodbyeMessage\s*\|\|\s*`([^`]*)`/s;
-    const literal = pattern.exec(code)?.[1];
-    if (!literal || literal.includes("${")) return fallback;
-    return literal.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
-  } catch {
-    return fallback;
-  }
-}
-
 export type GroupWelcomeAction = "add" | "remove";
 
 interface GroupData {
@@ -81,8 +62,8 @@ export function buildGroupWelcome({
 
   const template = String(
     action === "add"
-      ? group.welcomeMessage || currentDefault("add", DEFAULT_WELCOME)
-      : group.goodbyeMessage || currentDefault("remove", DEFAULT_GOODBYE),
+      ? group.welcomeMessage || DEFAULT_WELCOME
+      : group.goodbyeMessage || DEFAULT_GOODBYE,
   );
 
   const tags = participantJids
