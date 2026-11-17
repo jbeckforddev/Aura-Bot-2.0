@@ -3,7 +3,7 @@ import { economyTarget } from "./economyRuntime.ts";
 import { formatMoney } from "./economyConfig.ts";
 import { getGachaCharacters, type GachaCharacter } from "./gachaRuntime.ts";
 import {
-  acceptTrade, deleteFavorite, deleteOwnedCard, getFavorite, getClaimMessage,
+  acceptTrade, deleteFavorite, deleteOwnedCard, getFavorite, getClaimMessage, favoriteRankings,
   giveCards, imageKey, listOwned, listSales, makeTrade, purchaseCard,
   removeSale, sellCard, setClaimMessage, setFavorite, stealCard,
   userRankings, voteCharacter, voteCount,
@@ -209,6 +209,10 @@ export async function runGachaAction(ctx:CommandContext,action:string):Promise<u
       }
       case "setfav": {
         const alias=ctx.cmdName.toLowerCase();
+        if(alias==="wfav" || query.toLowerCase()==="top") {
+          const ranking=favoriteRankings(ctx.from);
+          return reply(ctx,["⭐ TOP DE PERSONAJES FAVORITOS",...ranking.map((item,i)=>(i+1)+". "+nameOf(item.character_id)+" · "+item.votes+" favoritos")].join("\n"));
+        }
         if(alias==="delfav"||query.toLowerCase()==="reset") {
           deleteFavorite(ctx.from,ctx.sender);
           return reply(ctx,"✅ Favorito eliminado.");
