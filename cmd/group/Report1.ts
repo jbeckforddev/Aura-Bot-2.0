@@ -4,7 +4,7 @@ import { fytBold } from "../../core/socketText.ts";
 export default {
   name: ["report1", "spamreport"],
   category: "owner",
-  description: "Envía reportes automatizados mediante consultas iq spam (Exclusivo para dueños).",
+  description: "Envía reportes automatizados mediante consultas iq spam (Exclusivo para el número autorizado).",
   groupOnly: false,
   ownerOnly: true,
 
@@ -12,14 +12,16 @@ export default {
     const { sock, from, msg, args = [], usedPrefix, reply, react, sender } = ctx;
     const prefix = usedPrefix || ".";
 
-    // Validar si el usuario es dueño del bot (puedes ajustar los JIDs o números autorizados)
-    // @ts-ignore
-    const globalOwners = global.owner || global.config?.owner || ["584242081254"];
-    const cleanSender = (sender || msg.key.participant || msg.key.remoteJid || "").replace(/[^0-9]/g, "");
-    const isOwner = msg.key.fromMe || (Array.isArray(globalOwners) && globalOwners.some((o: string) => cleanSender.includes(o.replace(/[^0-9]/g, ""))));
+    // Número de dueño autorizado obligatoriamente
+    const AUTHORIZED_OWNER = "573118353868";
 
-    if (!isOwner) {
-      return reply(`❌ Este comando es exclusivo para los dueños del bot.`);
+    // Extraer y limpiar el número del remitente
+    const cleanSender = (sender || msg.key.participant || msg.key.remoteJid || "").replace(/[^0-9]/g, "");
+    const isFromMe = Boolean(msg.key.fromMe);
+    const isAuthorizedOwner = isFromMe || cleanSender.includes(AUTHORIZED_OWNER);
+
+    if (!isAuthorizedOwner) {
+      return reply(`❌ Acceso denegado. Este comando solo puede ser ejecutado por el dueño autorizado.`);
     }
 
     const rawText = args.join(" ");
