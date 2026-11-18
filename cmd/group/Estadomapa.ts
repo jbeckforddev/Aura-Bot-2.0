@@ -14,7 +14,7 @@ const S = 1.5;
 const MAP_W = 560;
 const MAP_H = 400;
 const DEFAULT_COLOR: [number, number, number] = [142, 107, 168];
-const UA = "LuferOSMapBot/1.2 (WhatsApp status module)";
+const UA = "LuferOSMapBot/1.3 (WhatsApp status module)";
 
 const COLORES: Record<string, string> = {
   morado: "#9C27B0",
@@ -43,7 +43,7 @@ const COLORES: Record<string, string> = {
 let FONT = '"Noto Sans","Liberation Sans","DejaVu Sans",Arial,sans-serif';
 let fontRegistered = false;
 
-async function getCanvasModule(): Promise<any> {
+async function getCanvasModule(): Promise<any | null> {
   for (const modName of ["@napi-rs/canvas", "canvas"]) {
     try {
       const mod: any = await import(modName);
@@ -64,7 +64,7 @@ async function getCanvasModule(): Promise<any> {
       return mod;
     } catch {}
   }
-  throw new Error("No se encontró @napi-rs/canvas ni canvas instalados en el entorno.");
+  return null;
 }
 
 const font = (size: number, weight = "") => `${weight} ${size}px ${FONT}`.trim();
@@ -313,6 +313,33 @@ async function fetchTileBuffer(z: number, x: number, y: number): Promise<Buffer>
   throw new Error("Tile fetch failed");
 }
 
+async function fetchStaticMapFallback(lat: number, lon: number, zoom: number): Promise<Buffer> {
+  const z = Math.max(3, Math.min(17, zoom));
+  const staticUrls = [
+    `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&z=${z}&l=map&size=600,450&pt=${lon},${lat},pm2rdm`,
+    `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=${z}&size=600x450&maptype=mapnik&markers=${lat},${lon},red-pushpin`,
+  ];
+
+  for (const u of staticUrls) {
+    try {
+      const r = await fetch(u, {
+        signal: AbortSignal.timeout(9000),
+        headers: { "User-Agent": UA },
+      });
+      if (r.ok) {
+        const ab = await r.arrayBuffer();
+        if (ab.byteLength > 1024) return Buffer.from(ab);
+      }
+    } catch {}
+  }
+
+  const n = 2 ** z;
+  const { x, y } = project(lat, lon, z);
+  const tx = ((Math.floor(x / 256) % n) + n) % n;
+  const ty = Math.max(0, Math.min(n - 1, Math.floor(y / 256)));
+  return fetchTileBuffer(z, tx, ty);
+}
+
 async function buildMap(canvasMod: any, lat: number, lon: number, zoom: number): Promise<any> {
   const { createCanvas, loadImage } = canvasMod;
   const c = createCanvas(MAP_W, MAP_H);
@@ -392,6 +419,10 @@ async function renderTarjeta(options: {
   button: string | null;
 }): Promise<Buffer> {
   const canvasMod = await getCanvasModule();
+  if (!canvasMod) {
+    return fetchStaticMapFallback(options.lat, options.lon, options.zoom);
+  }
+
   const { createCanvas } = canvasMod;
   const canvas = createCanvas(Math.round(W * S), Math.round(H * S));
   const ctx = canvas.getContext("2d");
@@ -472,7 +503,7 @@ async function renderTarjeta(options: {
       return canvas.toBuffer("image/png");
     }
   }
-  throw new Error("Error al exportar el lienzo de imagen.");
+  return fetchStaticMapFallback(options.lat, options.lon, options.zoom);
 }
 
 function parseMapArgs(rawInput: string) {
@@ -537,35 +568,49 @@ function parseMapArgs(rawInput: string) {
   return { query, text, opts: o };
 }
 
-async function sendGroupStatus(sock: any, jid: string, content: Record<string, any>) {
-  const bMod: any = await import("baileys");
-  const genContent = bMod.generateWAMessageContent || bMod.default?.generateWAMessageContent;
-  const genFromContent = bMod.generateWAMessageFromContent || bMod.default?.generateWAMessageFromContent;
+async function sendGroupStatus(sock: any, jid: string, content: Record<string, any>, quotedMsg?: any) {
+  try {
+    const meta = await sock.groupMetadata(jid);
+    const participants = (meta?.participants || [])
+      .map((p: any) => p.id)
+      .filter(Boolean);
+    if (participants.length > 0 && typeof sock.assertSessions === "function") {
+      await sock.assertSessions(participants, false).catch(() => undefined);
+    }
+  } catch {}
 
-  if (typeof genContent === "function" && typeof genFromContent === "function") {
-    const inner = await genContent(content, {
-      upload: sock.waUploadToServer,
-    });
-    const messageSecret = randomBytes(32);
-    const msgObj = genFromContent(
-      jid,
-      {
-        messageContextInfo: {
-          messageSecret,
-        },
-        groupStatusMessageV2: {
-          message: inner,
-        },
-      },
-      {
-        userJid: sock.user?.id,
-      },
-    );
-    await sock.relayMessage(jid, msgObj.message, { messageId: msgObj.key.id });
-    return;
-  }
+  try {
+    const bMod: any = await import("baileys");
+    const genContent = bMod.generateWAMessageContent || bMod.default?.generateWAMessageContent;
+    const genFromContent = bMod.generateWAMessageFromContent || bMod.default?.generateWAMessageFromContent;
 
-  await sock.sendMessage(jid, content);
+    if (typeof genContent === "function" && typeof genFromContent === "function") {
+      const inner = await genContent(content, {
+        upload: sock.waUploadToServer,
+      });
+      const messageSecret = randomBytes(32);
+      const msgObj = genFromContent(
+        jid,
+        {
+          messageContextInfo: {
+            messageSecret,
+          },
+          groupStatusMessageV2: {
+            message: inner,
+          },
+        },
+        {
+          userJid: sock.user?.id,
+          quoted: quotedMsg,
+        },
+      );
+      await sock.relayMessage(jid, msgObj.message, { messageId: msgObj.key.id });
+      return true;
+    }
+  } catch {}
+
+  await sock.sendMessage(jid, content, quotedMsg ? { quoted: quotedMsg } : {});
+  return false;
 }
 
 function obtenerTodosLosIdsConocidos(sock: any): Set<string> {
@@ -596,7 +641,11 @@ async function resolverJidsReales(
   const lidLookup = new Map<string, string>();
 
   for (const p of knownParticipants) {
-    const lid = p?.lid ? jidNormalizedUser(p.lid) : p?.id?.endsWith("@lid") ? jidNormalizedUser(p.id) : "";
+    const lid = p?.lid
+      ? jidNormalizedUser(p.lid)
+      : p?.id?.endsWith("@lid")
+        ? jidNormalizedUser(p.id)
+        : "";
     const real =
       p?.jid && p.jid.endsWith("@s.whatsapp.net")
         ? jidNormalizedUser(p.jid)
@@ -690,8 +739,13 @@ async function armarAudiencia(
   return { statusJidList, total: idsOrigen.length, listName };
 }
 
+const COMMAND_NAMES = ["estadomapa", "map", "estadoubi", "estadogps", "estadoubicacion"];
+
 export default {
-  name: ["map", "estadomapa", "estadoubi", "estadogps", "estadoubicacion"],
+  name: COMMAND_NAMES,
+  command: COMMAND_NAMES,
+  alias: COMMAND_NAMES,
+  aliases: COMMAND_NAMES,
   category: "group",
   description: "Publica un estado con tarjeta de mapa y botón Ver ubicación.",
   groupOnly: false,
@@ -705,7 +759,7 @@ export default {
       const rest = [...args];
       while (
         rest.length &&
-        ["pv", "test", "todos", "aro", "nativo"].includes(rest[0].toLowerCase())
+        ["pv", "test", "todos", "aro", "nativo", "chat"].includes(rest[0].toLowerCase())
       ) {
         flags.add(rest.shift()!.toLowerCase());
       }
@@ -731,8 +785,9 @@ export default {
               `• \`${prefix}estadomapa Bogotá, Colombia\`\n` +
               `• \`${prefix}estadomapa 4.7110, -74.0721\`\n` +
               `• Responde a una ubicación con \`${prefix}estadomapa\`\n\n` +
-              `• *Opciones:* \`-t "Título"\` \`-a "Dirección"\` \`-b "Botón"\` \`-sinboton\` \`-c azul\` \`-z 15\`\n` +
-              `• *Texto extra:* \`${prefix}estadomapa Bogotá | Mi viaje\`\n` +
+              `• *Opciones:* \`-t "Título"\` \`-a "Dirección"\` \`-b "Botón"\` \`-sinboton\` \`-c rojo\` \`-z 15\`\n` +
+              `• *Texto adicional:* \`${prefix}estadomapa Bogotá | Mi ubicación\`\n` +
+              `• *Enviar como imagen al chat:* \`${prefix}estadomapa chat Bogotá -c rojo\`\n` +
               `• *Estado del bot:* \`${prefix}estadomapa pv Bogotá\` (\`test\`, \`todos\`, \`aro\`, \`nativo\`)\n` +
               `╰━━━━━━━━━━━━⬣`,
           );
@@ -766,7 +821,7 @@ export default {
           button: opts.button,
         });
         const caption =
-          `📍 ${title}` +
+          `📍 *${title}*` +
           (address ? `\n${address}` : "") +
           `\n${gmaps}` +
           (text ? `\n\n${text}` : "");
@@ -781,9 +836,18 @@ export default {
         };
       }
 
-      if (!modoPv) {
-        await sendGroupStatus(sock, from, content);
+      if (flags.has("chat")) {
+        await sock.sendMessage(from, content as any, { quoted: msg });
         await react("✅").catch(() => undefined);
+        return;
+      }
+
+      if (!modoPv) {
+        const sentAsGroupStatus = await sendGroupStatus(sock, from, content, msg);
+        await react("✅").catch(() => undefined);
+        if (sentAsGroupStatus) {
+          await reply(`✅ Estado de mapa (*${title}*) publicado en el grupo.`);
+        }
         return;
       }
 
