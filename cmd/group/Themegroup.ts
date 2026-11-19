@@ -47,12 +47,20 @@ const RANDOM_HEX = Object.values(COLORES);
 
 const TEMAS_TONALES: Record<string, string> = {
   azul: "Royal-Blue@Tonal",
+  "royal-blue": "Royal-Blue@Tonal",
+  royalblue: "Royal-Blue@Tonal",
   rojo: "Crimson@Tonal",
+  crimson: "Crimson@Tonal",
   verde: "Emerald@Tonal",
+  emerald: "Emerald@Tonal",
   morado: "Violet@Tonal",
+  violet: "Violet@Tonal",
   rosa: "Rose@Tonal",
+  rose: "Rose@Tonal",
   naranja: "Sunset@Tonal",
+  sunset: "Sunset@Tonal",
   negro: "Graphite@Tonal",
+  graphite: "Graphite@Tonal",
 };
 
 function resolveHexColor(token: string): string | null {
@@ -77,42 +85,29 @@ function resolveHexColor(token: string): string | null {
   return `#${hex.toUpperCase()}`;
 }
 
-function hexToRgb(hex: string): [number, number, number, number] {
+function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace(/^#/, "");
-  if (clean.length === 8) {
-    return [
-      parseInt(clean.slice(0, 2), 16),
-      parseInt(clean.slice(2, 4), 16),
-      parseInt(clean.slice(4, 6), 16),
-      parseInt(clean.slice(6, 8), 16),
-    ];
-  }
+  const offset = clean.length === 8 ? 2 : 0;
   return [
-    255,
-    parseInt(clean.slice(0, 2), 16),
-    parseInt(clean.slice(2, 4), 16),
-    parseInt(clean.slice(4, 6), 16),
+    parseInt(clean.slice(offset, offset + 2), 16),
+    parseInt(clean.slice(offset + 2, offset + 4), 16),
+    parseInt(clean.slice(offset + 4, offset + 6), 16),
   ];
 }
 
-function rgbToArgbUint32(a: number, r: number, g: number, b: number): number {
-  return (((a & 0xff) << 24) | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff)) >>> 0;
-}
-
-function shiftColor(hex: string, factor: number): number {
-  const [a, r, g, b] = hexToRgb(hex);
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  return rgbToArgbUint32(a, clamp(r * factor), clamp(g * factor), clamp(b * factor));
-}
-
-function hexToArgbUint32(hex: string): number {
-  const [a, r, g, b] = hexToRgb(hex);
-  return rgbToArgbUint32(a, r, g, b);
+function shiftHex(hex: string, factor: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const clamp = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${clamp(r * factor)}${clamp(g * factor)}${clamp(b * factor)}`.toUpperCase();
 }
 
 function normalizeColorScheme(raw: string): string {
   const trimmed = raw.trim();
-  const mapped = TEMAS_TONALES[trimmed.toLowerCase()];
+  const baseKey = trimmed.replace(/@.*$/, "").toLowerCase();
+  const mapped = TEMAS_TONALES[baseKey];
   if (mapped) return mapped;
   return trimmed.includes("@") ? trimmed : `${trimmed}@Tonal`;
 }
@@ -196,6 +191,55 @@ function getProtoKeys(ctor: any): string[] {
   return Array.from(keys);
 }
 
+function inspectEncodeSchema(ctor: any): string[] {
+  if (!ctor || typeof ctor.encode !== "function") return [];
+  const src = String(ctor.encode);
+  const results: string[] = [];
+  const blockRegex =
+    /message\.([a-zA-Z0-9_]+)\s*!=\s*null[\s\S]{0,220}?(?:writer\.uint32\(\d+\)\.([a-zA-Z0-9_]+)\(|([a-zA-Z0-9_$.]+)\.encode\()/g;
+  let match: RegExpExecArray | null;
+  const seen = new Set<string>();
+  while ((match = blockRegex.exec(src)) !== null) {
+    const field = match[1];
+    const kind = match[2] || match[3] || "unknown";
+    const entry = `${field}: ${kind.replace(/^\$root\.proto\./, "")}`;
+    if (!seen.has(field)) {
+      seen.add(field);
+      results.push(entry);
+    }
+  }
+  return results;
+}
+
+function collectThemeSchemas(): string {
+  const p = proto as any;
+  const lines: string[] = [];
+  const namespaces: Array<[string, any]> = [
+    ["proto", p],
+    ["proto.Message", p?.Message],
+    ["proto.Message.ProtocolMessage", p?.Message?.ProtocolMessage],
+  ];
+
+  const visited = new Set<any>();
+
+  for (const [nsName, ns] of namespaces) {
+    if (!ns) continue;
+    for (const key of Object.keys(ns)) {
+      if (!/theme|wallpaper/i.test(key)) continue;
+      const ctor = ns[key];
+      if (!ctor || visited.has(ctor)) continue;
+      visited.add(ctor);
+      const schema = inspectEncodeSchema(ctor);
+      const fallbackKeys = getProtoKeys(ctor);
+      lines.push(
+        `*${nsName}.${key}*:\n${schema.length ? schema.map((s) => `  - ${s}`).join("\n") : `  - ${fallbackKeys.join(", ") || "sin campos"}`}`,
+      );
+    }
+  }
+
+  return lines.join("\n\n") || "No se encontraron definiciones de Theme/Wallpaper.";
+}
+
 function detectCustomImageField(themeKeys: string[]): string {
   const candidates = [
     "userImage",
@@ -224,7 +268,7 @@ function assertThemeProtoSupported(protocolMessage: Record<string, any>) {
   const encoded = protoMsgCtor.encode(protoMsgCtor.create(protocolMessage)).finish();
   if (encoded.length <= 4) {
     throw new Error(
-      "Tu WAProto actual no incluye el campo chatThemeSetting (ProtocolMessage tipo 34). Actualiza WAProto o usa un fork 2026 como raiden-baileys / plogme.",
+      "Tu WAProto actual no serializó chatThemeSetting (ProtocolMessage tipo 34).",
     );
   }
 }
@@ -280,18 +324,17 @@ export default {
       if (sub === "proto" || sub === "check" || sub === "debug") {
         const p = proto as any;
         const hasType = p?.Message?.ProtocolMessage?.Type?.CHAT_THEME_SETTING;
-        const themeCtor = getChatThemeProtoCtor();
-        const themeFields = getProtoKeys(themeCtor);
-        const protoMsgFields = getProtoKeys(p?.Message?.ProtocolMessage).filter((k) =>
-          /theme|wallpaper/i.test(k),
+        const protoSchema = inspectEncodeSchema(p?.Message?.ProtocolMessage).filter((s) =>
+          /theme|wallpaper/i.test(s),
         );
+        const detail = collectThemeSchemas();
 
         return await ctx.reply({
           text:
-            `╭〔 🧪 ${fytBold("Diagnóstico WAProto")} 〕⬣\n` +
+            `╭〔 🧪 ${fytBold("Esquema WAProto")} 〕⬣\n` +
             `• *Type CHAT_THEME_SETTING:* \`${hasType ?? "NO EXISTE"}\`\n` +
-            `• *ProtocolMessage:* \`${protoMsgFields.join(", ") || "ninguno"}\`\n` +
-            `• *ChatThemeSetting:* \`${themeFields.join(", ") || "NO EXISTE"}\`\n` +
+            `• *ProtocolMessage:* \`${protoSchema.join(", ") || "ninguno"}\`\n\n` +
+            `${detail}\n` +
             `╰━━━━━━━━━━━━⬣`,
         });
       }
@@ -366,7 +409,7 @@ export default {
             `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo #1A1A2E -nodoodle\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
             `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
-            `• *Ver soporte local:* \`${prefix}fondo proto\`\n` +
+            `• *Ver esquema WAProto:* \`${prefix}fondo proto\`\n` +
             `╰━━━━━━━━━━━━⬣`,
         });
       }
@@ -434,10 +477,10 @@ export default {
           ? resolveHexColor(args[darkFlagIdx + 1]) || hex
           : null;
 
-      const colorLight = hexToArgbUint32(hex);
-      const colorDark = darkHex ? hexToArgbUint32(darkHex) : shiftColor(hex, 0.35);
-      const doodleColorLight = shiftColor(hex, 0.82);
-      const doodleColorDark = darkHex ? shiftColor(darkHex, 1.3) : shiftColor(hex, 0.55);
+      const colorLight = hex;
+      const colorDark = darkHex || shiftHex(hex, 0.35);
+      const doodleColorLight = shiftHex(hex, 0.82);
+      const doodleColorDark = darkHex ? shiftHex(darkHex, 1.3) : shiftHex(hex, 0.55);
 
       await relayChatTheme(sock, from, {
         solidColor: {
