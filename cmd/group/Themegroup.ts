@@ -13,36 +13,36 @@ import { fytBold } from "../../core/socketText.ts";
 const activeSniffers = new Map<string, () => void>();
 
 const COLORES: Record<string, string> = {
-  rojo: "#F44336",
-  red: "#F44336",
-  azul: "#2196F3",
-  blue: "#2196F3",
-  azuloscuro: "#0D47A1",
-  celeste: "#03A9F4",
-  cian: "#00BCD4",
-  cyan: "#00BCD4",
-  turquesa: "#009688",
-  verde: "#25D366",
-  green: "#25D366",
-  verdeoscuro: "#1B5E20",
-  morado: "#9C27B0",
-  purple: "#9C27B0",
-  violeta: "#673AB7",
-  indigo: "#3F51B5",
-  rosa: "#E91E63",
-  pink: "#E91E63",
-  naranja: "#FF5722",
-  orange: "#FF5722",
-  amarillo: "#FFC107",
-  yellow: "#FFC107",
-  dorado: "#FFB300",
-  vino: "#880E4F",
-  cafe: "#795548",
-  gris: "#607D8B",
-  negro: "#121212",
-  black: "#121212",
-  blanco: "#FFFFFF",
-  white: "#FFFFFF",
+  rojo: "#FFF44336",
+  red: "#FFF44336",
+  azul: "#FF2196F3",
+  blue: "#FF2196F3",
+  azuloscuro: "#FF0D47A1",
+  celeste: "#FF03A9F4",
+  cian: "#FF00BCD4",
+  cyan: "#FF00BCD4",
+  turquesa: "#FF009688",
+  verde: "#FF25D366",
+  green: "#FF25D366",
+  verdeoscuro: "#FF1B5E20",
+  morado: "#FF9C27B0",
+  purple: "#FF9C27B0",
+  violeta: "#FF673AB7",
+  indigo: "#FF3F51B5",
+  rosa: "#FFE91E63",
+  pink: "#FFE91E63",
+  naranja: "#FFFF5722",
+  orange: "#FFFF5722",
+  amarillo: "#FFFFC107",
+  yellow: "#FFFFC107",
+  dorado: "#FFFFB300",
+  vino: "#FF880E4F",
+  cafe: "#FF795548",
+  gris: "#FF607D8B",
+  negro: "#FF121212",
+  black: "#FF121212",
+  blanco: "#FFFFFFFF",
+  white: "#FFFFFFFF",
 };
 
 const RANDOM_HEX = Object.values(COLORES);
@@ -65,7 +65,7 @@ const TEMAS_TONALES: Record<string, string> = {
   graphite: "Graphite@Tonal",
 };
 
-function resolveHexColor(token: string): string | null {
+function resolveArgbHex(token: string): string | null {
   const clean = token
     .trim()
     .toLowerCase()
@@ -80,30 +80,26 @@ function resolveHexColor(token: string): string | null {
 
   const m = clean.match(/^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
   if (!m) return null;
-  let hex = m[1];
+  let hex = m[1].toUpperCase();
   if (hex.length === 3) {
-    hex = [...hex].map((c) => `${c}${c}`).join("");
+    hex = `FF${[...hex].map((c) => `${c}${c}`).join("")}`;
+  } else if (hex.length === 6) {
+    hex = `FF${hex}`;
   }
-  return `#${hex.toUpperCase()}`;
+  return `#${hex}`;
 }
 
-function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.replace(/^#/, "");
-  const offset = clean.length === 8 ? 2 : 0;
-  return [
-    parseInt(clean.slice(offset, offset + 2), 16),
-    parseInt(clean.slice(offset + 2, offset + 4), 16),
-    parseInt(clean.slice(offset + 4, offset + 6), 16),
-  ];
-}
-
-function shiftHex(hex: string, factor: number): string {
-  const [r, g, b] = hexToRgb(hex);
+function shiftArgbHex(argb: string, factor: number): string {
+  const clean = argb.replace(/^#/, "");
+  const a = clean.slice(0, 2);
+  const r = parseInt(clean.slice(2, 4), 16);
+  const g = parseInt(clean.slice(4, 6), 16);
+  const b = parseInt(clean.slice(6, 8), 16);
   const clamp = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v)))
       .toString(16)
       .padStart(2, "0");
-  return `#${clamp(r * factor)}${clamp(g * factor)}${clamp(b * factor)}`.toUpperCase();
+  return `#${a}${clamp(r * factor)}${clamp(g * factor)}${clamp(b * factor)}`.toUpperCase();
 }
 
 function normalizeColorScheme(raw: string): string {
@@ -164,6 +160,12 @@ function extractTargetImage(
   return null;
 }
 
+function toBytes(val: unknown): Uint8Array {
+  if (val instanceof Uint8Array) return val;
+  if (typeof val === "string") return Buffer.from(val, "base64");
+  return new Uint8Array();
+}
+
 function safeJson(obj: unknown): string {
   return JSON.stringify(
     obj,
@@ -178,24 +180,6 @@ function safeJson(obj: unknown): string {
     },
     2,
   );
-}
-
-function inspectWireTypes(ctor: any): string {
-  if (!ctor || typeof ctor.encode !== "function") return "sin encode";
-  const src = String(ctor.encode);
-  const lines: string[] = [];
-  const regex =
-    /message\.([a-zA-Z0-9_]+)[\s\S]{0,180}?(?:writer\.uint32\((\d+)\)\.([a-zA-Z0-9_]+)\(|([a-zA-Z0-9_$.]+)\.encode\(message\.\1)/g;
-  let m: RegExpExecArray | null;
-  const seen = new Set<string>();
-  while ((m = regex.exec(src)) !== null) {
-    const field = m[1];
-    if (seen.has(field)) continue;
-    seen.add(field);
-    const wire = m[3] ? `${m[3]} (tag=${Number(m[2]) >>> 3})` : m[4].replace(/^\$root\.proto\./, "");
-    lines.push(`  - ${field}: ${wire}`);
-  }
-  return lines.join("\n") || src.slice(0, 500);
 }
 
 async function relayChatTheme(
@@ -249,20 +233,6 @@ export default {
     const sub = (args[0] || "").toLowerCase();
 
     try {
-      if (sub === "proto" || sub === "check" || sub === "debug") {
-        const p = proto as any;
-        const msgNs = p?.Message;
-        const text =
-          `╭〔 🧪 ${fytBold("Tipos Wire WAProto")} 〕⬣\n` +
-          `*ChatThemeSetting:*\n${inspectWireTypes(msgNs?.ChatThemeSetting)}\n\n` +
-          `*ChatSolidColorWallpaper:*\n${inspectWireTypes(msgNs?.ChatSolidColorWallpaper)}\n\n` +
-          `*ChatCustomImageWallpaper:*\n${inspectWireTypes(msgNs?.ChatCustomImageWallpaper)}\n\n` +
-          `*ChatAnimatedWallpaper:*\n${inspectWireTypes(msgNs?.ChatAnimatedWallpaper)}\n` +
-          `╰━━━━━━━━━━━━⬣`;
-
-        return await ctx.reply({ text });
-      }
-
       if (sub === "sniff") {
         const prev = activeSniffers.get(from);
         if (prev) {
@@ -271,37 +241,64 @@ export default {
           return await ctx.reply({ text: "🛑 Sniffer detenido en este grupo." });
         }
 
-        const handler = async ({ messages }: { messages: WAMessage[] }) => {
+        const recentStanzas = new Map<string, Record<string, any>>();
+
+        const wsHandler = (node: any) => {
+          if (node?.attrs?.from !== from) return;
+          const id = node?.attrs?.id;
+          if (!id) return;
+          const childTags = Array.isArray(node.content)
+            ? node.content.map((c: any) => ({ tag: c?.tag, attrs: c?.attrs }))
+            : [];
+          recentStanzas.set(id, { attrs: node.attrs, children: childTags });
+          if (recentStanzas.size > 40) {
+            const firstKey = recentStanzas.keys().next().value;
+            if (firstKey) recentStanzas.delete(firstKey);
+          }
+        };
+
+        const msgHandler = async ({ messages }: { messages: WAMessage[] }) => {
           for (const incoming of messages) {
             if (incoming.key.remoteJid !== from) continue;
             const norm = normalizeMessageContent(incoming.message);
             const pm = norm?.protocolMessage as any;
             if (!pm) continue;
             if (pm.type === 34 || pm.chatThemeSetting) {
+              const stanza = incoming.key.id ? recentStanzas.get(incoming.key.id) : undefined;
               const dump = safeJson({
+                stanza,
                 key: incoming.key,
                 protocolMessage: pm,
               });
               await sock.sendMessage(from, {
-                text: `📡 *Captura ChatThemeSetting:*\n\`\`\`${dump}\`\`\``,
+                text: `📡 *Captura exacta:*\n\`\`\`${dump}\`\`\``,
               });
             }
           }
         };
 
-        sock.ev.on("messages.upsert", handler);
-        const timer = setTimeout(() => {
-          sock.ev.off("messages.upsert", handler);
-          activeSniffers.delete(from);
-        }, 90_000);
+        const wsAny = (sock as any).ws;
+        if (wsAny && typeof wsAny.on === "function") {
+          wsAny.on("CB:message", wsHandler);
+        }
+        sock.ev.on("messages.upsert", msgHandler);
 
+        const cleanup = () => {
+          if (wsAny && typeof wsAny.off === "function") {
+            wsAny.off("CB:message", wsHandler);
+          }
+          sock.ev.off("messages.upsert", msgHandler);
+          activeSniffers.delete(from);
+        };
+
+        const timer = setTimeout(cleanup, 120_000);
         activeSniffers.set(from, () => {
           clearTimeout(timer);
-          sock.ev.off("messages.upsert", handler);
+          cleanup();
         });
 
         return await ctx.reply({
-          text: "📡 Sniffer activo por 90s. Haz que el otro bot cambie el fondo y capturaré el JSON exacto.",
+          text: "📡 Sniffer activo por 2 min (Protobuf + nodo XML). Haz que el otro bot cambie el fondo ahora.",
         });
       }
 
@@ -335,8 +332,8 @@ export default {
           throw new Error("No se obtuvieron las llaves cifradas al subir la imagen.");
         }
 
-        const dimArg = args.find((a) => /^\d+(\.\d+)?$/.test(a));
-        const dimLevel = dimArg ? parseFloat(dimArg) : 0;
+        const dimArg = args.find((a) => /^0?\.\d+$|^1(\.0+)?$|^0$/.test(a));
+        const dimLevel = dimArg ? Math.max(0, Math.min(1, parseFloat(dimArg))) : 0;
 
         const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
         const colorSchemeId =
@@ -347,9 +344,9 @@ export default {
         const chatThemeSetting: Record<string, any> = {
           customImage: {
             directPath: img.directPath,
-            mediaKey: img.mediaKey,
-            fileEncSha256: img.fileEncSha256,
-            fileSha256: img.fileSha256,
+            mediaKey: toBytes(img.mediaKey),
+            fileEncSha256: toBytes(img.fileEncSha256),
+            fileSha256: toBytes(img.fileSha256),
             dimLevel,
           },
         };
@@ -378,8 +375,7 @@ export default {
             `• *Foto propia:* Responde a una foto con \`${prefix}fondo\`\n` +
             `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo #1A1A2E -nodoodle\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
-            `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.2\`\n` +
-            `• *Fondo stock:* \`${prefix}fondo stock <id> 0\`\n` +
+            `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
             `• *Predeterminado:* \`${prefix}fondo default\`\n` +
             `• *Quitar fondo:* \`${prefix}fondo reset\`\n` +
             `• *Capturar otro bot:* \`${prefix}fondo sniff\`\n` +
@@ -431,8 +427,10 @@ export default {
 
       if (sub === "animado" || sub === "live") {
         const animatedWallpaperId = args[1] || "wallpaper-1";
-        const parsedDim = args[2] ? parseFloat(args[2]) : 0;
-        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0;
+        const parsedDim = args[2] ? parseFloat(args[2]) : 0.25;
+        const dimLevel = Number.isFinite(parsedDim)
+          ? Math.max(0, Math.min(1, parsedDim))
+          : 0.25;
 
         const schemeArg = args[3] ? normalizeColorScheme(args[3]) : undefined;
         const chatThemeSetting: Record<string, any> = {
@@ -455,32 +453,9 @@ export default {
         });
       }
 
-      if (sub === "stock") {
-        const stockImageId = args[1];
-        if (!stockImageId) {
-          throw new Error(`Indica el ID del fondo stock. Ejemplo: ${prefix}fondo stock 1`);
-        }
-        const parsedDim = args[2] ? parseFloat(args[2]) : 0;
-        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0;
-
-        await relayChatTheme(sock, from, {
-          stockImage: {
-            stockImageId,
-            dimLevel,
-          },
-        });
-
-        await sock.sendMessage(from, {
-          react: { text: "✅", key: msg.key },
-        });
-        return await ctx.reply({
-          text: `✅ Fondo stock \`${stockImageId}\` aplicado.`,
-        });
-      }
-
       const rawColorToken = sub === "solid" ? args[1] || "" : args[0] || "";
-      const hex = resolveHexColor(rawColorToken);
-      if (!hex) {
+      const argbLight = resolveArgbHex(rawColorToken);
+      if (!argbLight) {
         throw new Error(
           `Color no reconocido: "${rawColorToken}". Usa un nombre (rojo, morado, negro, random) o hex (#123456).`,
         );
@@ -491,18 +466,15 @@ export default {
       );
 
       const darkFlagIdx = args.findIndex((a) => a === "-dark" || a === "--dark");
-      const darkHex =
+      const argbDark =
         darkFlagIdx !== -1 && args[darkFlagIdx + 1]
-          ? resolveHexColor(args[darkFlagIdx + 1]) || hex
-          : null;
-
-      const colorLight = hex;
-      const colorDark = darkHex || shiftHex(hex, 0.35);
+          ? resolveArgbHex(args[darkFlagIdx + 1]) || shiftArgbHex(argbLight, 0.35)
+          : shiftArgbHex(argbLight, 0.35);
 
       await relayChatTheme(sock, from, {
         solidColor: {
-          colorLight,
-          colorDark,
+          colorLight: argbLight,
+          colorDark: argbDark,
           isDoodleEnabled,
         },
       });
@@ -511,7 +483,7 @@ export default {
         react: { text: "✅", key: msg.key },
       });
       return await ctx.reply({
-        text: `✅ Fondo sólido \`${hex}\` sincronizado (garabatos: ${isDoodleEnabled ? "sí" : "no"}).`,
+        text: `✅ Fondo sólido \`${argbLight}\` sincronizado (garabatos: ${isDoodleEnabled ? "sí" : "no"}).`,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
