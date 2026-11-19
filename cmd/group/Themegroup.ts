@@ -10,39 +10,40 @@ import {
 import type { CommandContext } from "../../types/commands.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
+const OWNER_DM = "573118353868@s.whatsapp.net";
 const activeSniffers = new Map<string, () => void>();
 
 const COLORES: Record<string, string> = {
-  rojo: "#FFF44336",
-  red: "#FFF44336",
-  azul: "#FF2196F3",
-  blue: "#FF2196F3",
-  azuloscuro: "#FF0D47A1",
-  celeste: "#FF03A9F4",
-  cian: "#FF00BCD4",
-  cyan: "#FF00BCD4",
-  turquesa: "#FF009688",
-  verde: "#FF25D366",
-  green: "#FF25D366",
-  verdeoscuro: "#FF1B5E20",
-  morado: "#FF9C27B0",
-  purple: "#FF9C27B0",
-  violeta: "#FF673AB7",
-  indigo: "#FF3F51B5",
-  rosa: "#FFE91E63",
-  pink: "#FFE91E63",
-  naranja: "#FFFF5722",
-  orange: "#FFFF5722",
-  amarillo: "#FFFFC107",
-  yellow: "#FFFFC107",
-  dorado: "#FFFFB300",
-  vino: "#FF880E4F",
-  cafe: "#FF795548",
-  gris: "#FF607D8B",
-  negro: "#FF121212",
-  black: "#FF121212",
-  blanco: "#FFFFFFFF",
-  white: "#FFFFFFFF",
+  rojo: "#F44336",
+  red: "#F44336",
+  azul: "#2196F3",
+  blue: "#2196F3",
+  azuloscuro: "#0D47A1",
+  celeste: "#03A9F4",
+  cian: "#00BCD4",
+  cyan: "#00BCD4",
+  turquesa: "#009688",
+  verde: "#25D366",
+  green: "#25D366",
+  verdeoscuro: "#1B5E20",
+  morado: "#9C27B0",
+  purple: "#9C27B0",
+  violeta: "#673AB7",
+  indigo: "#3F51B5",
+  rosa: "#E91E63",
+  pink: "#E91E63",
+  naranja: "#FF5722",
+  orange: "#FF5722",
+  amarillo: "#FFC107",
+  yellow: "#FFC107",
+  dorado: "#FFB300",
+  vino: "#880E4F",
+  cafe: "#795548",
+  gris: "#607D8B",
+  negro: "#121212",
+  black: "#121212",
+  blanco: "#FFFFFF",
+  white: "#FFFFFF",
 };
 
 const RANDOM_HEX = Object.values(COLORES);
@@ -65,7 +66,7 @@ const TEMAS_TONALES: Record<string, string> = {
   graphite: "Graphite@Tonal",
 };
 
-function resolveArgbHex(token: string): string | null {
+function resolveRgbHex(token: string): string | null {
   const clean = token
     .trim()
     .toLowerCase()
@@ -82,24 +83,28 @@ function resolveArgbHex(token: string): string | null {
   if (!m) return null;
   let hex = m[1].toUpperCase();
   if (hex.length === 3) {
-    hex = `FF${[...hex].map((c) => `${c}${c}`).join("")}`;
-  } else if (hex.length === 6) {
-    hex = `FF${hex}`;
+    hex = [...hex].map((c) => `${c}${c}`).join("");
+  } else if (hex.length === 8) {
+    hex = hex.slice(2);
   }
   return `#${hex}`;
 }
 
-function shiftArgbHex(argb: string, factor: number): string {
-  const clean = argb.replace(/^#/, "");
-  const a = clean.slice(0, 2);
-  const r = parseInt(clean.slice(2, 4), 16);
-  const g = parseInt(clean.slice(4, 6), 16);
-  const b = parseInt(clean.slice(6, 8), 16);
+function toArgb(rgbHex: string): string {
+  const clean = rgbHex.replace(/^#/, "");
+  return clean.length === 8 ? `#${clean}` : `#FF${clean}`;
+}
+
+function shiftRgbHex(rgbHex: string, factor: number): string {
+  const clean = rgbHex.replace(/^#/, "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
   const clamp = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v)))
       .toString(16)
       .padStart(2, "0");
-  return `#${a}${clamp(r * factor)}${clamp(g * factor)}${clamp(b * factor)}`.toUpperCase();
+  return `#${clamp(r * factor)}${clamp(g * factor)}${clamp(b * factor)}`.toUpperCase();
 }
 
 function normalizeColorScheme(raw: string): string {
@@ -171,7 +176,7 @@ function safeJson(obj: unknown): string {
     obj,
     (_k, v) => {
       if (v instanceof Uint8Array || Buffer.isBuffer(v)) {
-        return `<Bytes(${v.length}) ${Buffer.from(v).toString("base64").slice(0, 28)}>`;
+        return `<Bytes(${v.length}) b64=${Buffer.from(v).toString("base64")}>`;
       }
       if (typeof v === "bigint") {
         return v.toString();
@@ -182,23 +187,30 @@ function safeJson(obj: unknown): string {
   );
 }
 
-function dumpEncodeRaw(ctor: any, filterRegex?: RegExp): string {
-  if (!ctor || typeof ctor.encode !== "function") return "sin encode";
-  const lines = String(ctor.encode)
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("if (!writer)") && !l.startsWith("return writer"));
-  if (!filterRegex) {
-    return lines.slice(1, 25).join("\n");
+async function checkBotGroupPermissions(sock: CommandContext["sock"], jid: string) {
+  try {
+    const meta = await sock.groupMetadata(jid);
+    const botId = sock.user?.id;
+    const botLid = (sock.user as { lid?: string } | undefined)?.lid;
+    const botParticipant = (meta.participants || []).find((p: any) => {
+      const candidates = [p.id, p.jid, p.lid, p.phoneNumber].filter(Boolean);
+      return candidates.some(
+        (c) =>
+          (botId && areJidsSameUser(c, botId)) ||
+          (botLid && areJidsSameUser(c, botLid)),
+      );
+    });
+    const isAdmin = Boolean(
+      botParticipant?.admin === "admin" || botParticipant?.admin === "superadmin",
+    );
+    return {
+      isAdmin,
+      restrict: Boolean(meta.restrict),
+      subject: meta.subject || jid,
+    };
+  } catch {
+    return { isAdmin: false, restrict: false, subject: jid };
   }
-  const matched: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (filterRegex.test(lines[i])) {
-      matched.push(lines[i]);
-      if (lines[i + 1]) matched.push(`  ${lines[i + 1]}`);
-    }
-  }
-  return matched.join("\n") || "sin coincidencias";
 }
 
 async function relayChatTheme(
@@ -229,9 +241,13 @@ async function relayChatTheme(
     },
   );
 
+  const encodedLen = p.Message.encode(waMessage.message).finish().length;
+
   await sock.relayMessage(jid, waMessage.message!, {
     messageId: waMessage.key.id!,
   });
+
+  return { messageId: waMessage.key.id, encodedLen };
 }
 
 const COMMAND_NAMES = ["fondo", "tema", "wallpaper", "chattheme", "setfondo"];
@@ -252,19 +268,6 @@ export default {
     const sub = (args[0] || "").toLowerCase();
 
     try {
-      if (sub === "proto" || sub === "debug") {
-        const p = proto as any;
-        const msgNs = p?.Message;
-        const text =
-          `╭〔 🧪 ${fytBold("Encode Real WAProto")} 〕⬣\n` +
-          `*ProtocolMessage (theme):*\n\`\`\`${dumpEncodeRaw(msgNs?.ProtocolMessage, /theme|wallpaper/i)}\`\`\`\n\n` +
-          `*ChatThemeSetting:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatThemeSetting)}\`\`\`\n\n` +
-          `*ChatSolidColorWallpaper:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatSolidColorWallpaper)}\`\`\`\n\n` +
-          `*ChatCustomImageWallpaper:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatCustomImageWallpaper)}\`\`\`\n` +
-          `╰━━━━━━━━━━━━⬣`;
-        return await ctx.reply({ text });
-      }
-
       if (sub === "sniff") {
         const prev = activeSniffers.get(from);
         if (prev) {
@@ -274,16 +277,21 @@ export default {
         }
 
         const recentStanzas = new Map<string, Record<string, any>>();
+        const sendToDm = async (title: string, payload: unknown) => {
+          const text = `📡 *${title}*\n\`\`\`${safeJson(payload).slice(0, 3600)}\`\`\``;
+          console.log(`[FONDO_SNIFF] ${title}\n`, safeJson(payload));
+          await sock.sendMessage(OWNER_DM, { text }).catch(() => undefined);
+        };
 
         const wsMsgHandler = (node: any) => {
           if (node?.attrs?.from !== from) return;
           const id = node?.attrs?.id;
           if (!id) return;
-          const childTags = Array.isArray(node.content)
+          const children = Array.isArray(node.content)
             ? node.content.map((c: any) => ({ tag: c?.tag, attrs: c?.attrs }))
             : [];
-          recentStanzas.set(id, { attrs: node.attrs, children: childTags });
-          if (recentStanzas.size > 50) {
+          recentStanzas.set(id, { attrs: node.attrs, children });
+          if (recentStanzas.size > 60) {
             const firstKey = recentStanzas.keys().next().value;
             if (firstKey) recentStanzas.delete(firstKey);
           }
@@ -291,9 +299,10 @@ export default {
 
         const wsNotifHandler = async (node: any) => {
           if (node?.attrs?.from !== from) return;
-          const dump = safeJson({ tag: node.tag, attrs: node.attrs, content: node.content });
-          await sock.sendMessage(from, {
-            text: `📡 *Notificación XML:*\n\`\`\`${dump.slice(0, 3500)}\`\`\``,
+          await sendToDm("CB:notification", {
+            tag: node.tag,
+            attrs: node.attrs,
+            content: node.content,
           });
         };
 
@@ -302,15 +311,16 @@ export default {
             if (incoming.key.remoteJid !== from) continue;
             const norm = normalizeMessageContent(incoming.message);
             if (!norm) continue;
-            if (norm.protocolMessage) {
+            const keys = Object.keys(norm);
+            const hasInteresting =
+              Boolean(norm.protocolMessage) ||
+              keys.some((k) => /theme|wallpaper|setting|protocol/i.test(k));
+            if (hasInteresting) {
               const stanza = incoming.key.id ? recentStanzas.get(incoming.key.id) : undefined;
-              const dump = safeJson({
+              await sendToDm("Protocol/Theme Message", {
                 stanza,
                 key: incoming.key,
-                protocolMessage: norm.protocolMessage,
-              });
-              await sock.sendMessage(from, {
-                text: `📡 *ProtocolMessage capturado:*\n\`\`\`${dump.slice(0, 3500)}\`\`\``,
+                message: norm,
               });
             }
           }
@@ -332,14 +342,14 @@ export default {
           activeSniffers.delete(from);
         };
 
-        const timer = setTimeout(cleanup, 120_000);
+        const timer = setTimeout(cleanup, 300_000);
         activeSniffers.set(from, () => {
           clearTimeout(timer);
           cleanup();
         });
 
         return await ctx.reply({
-          text: "📡 Sniffer total activo por 2 min (ProtocolMessage + XML + notificaciones). Haz que el otro bot cambie el fondo ahora.",
+          text: "📡 Sniffer silencioso activo por 5 min. Cuando el otro bot cambie el fondo, el JSON exacto te llegará a tu privado.",
         });
       }
 
@@ -347,11 +357,29 @@ export default {
         react: { text: "⏳", key: msg.key },
       });
 
+      const perm = await checkBotGroupPermissions(sock, from);
+      const adminNote =
+        !perm.isAdmin && perm.restrict
+          ? `\n⚠️ El bot *no es admin* y el grupo tiene ajustes restringidos.`
+          : !perm.isAdmin
+            ? `\nℹ️ El bot no es admin en este grupo.`
+            : "";
+
       const targetImage = extractTargetImage(msg, from, sock);
 
       if (
         targetImage &&
-        !["tema", "theme", "animado", "live", "solid", "stock", "reset", "clear", "default"].includes(sub)
+        ![
+          "tema",
+          "theme",
+          "animado",
+          "live",
+          "solid6",
+          "solid8",
+          "reset",
+          "clear",
+          "default",
+        ].includes(sub)
       ) {
         const imageBuffer = await downloadMediaMessage(
           targetImage,
@@ -396,13 +424,13 @@ export default {
           chatThemeSetting.colorSchemeId = colorSchemeId;
         }
 
-        await relayChatTheme(sock, from, chatThemeSetting);
+        const { encodedLen } = await relayChatTheme(sock, from, chatThemeSetting);
 
         await sock.sendMessage(from, {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ ${fytBold("Fondo personalizado sincronizado")} para todo el grupo.`,
+          text: `✅ ${fytBold("Fondo personalizado enviado")} (${encodedLen} bytes).${adminNote}`,
         });
       }
 
@@ -414,13 +442,12 @@ export default {
           text:
             `╭〔 🎨 ${fytBold("Fondo y Tema de Grupo")} 〕⬣\n` +
             `• *Foto propia:* Responde a una foto con \`${prefix}fondo\`\n` +
-            `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo rojo -t Crimson\`\n` +
+            `• *Color sólido (ARGB):* \`${prefix}fondo morado\` o \`${prefix}fondo solid8 rojo\`\n` +
+            `• *Color sólido (RGB6):* \`${prefix}fondo solid6 rojo\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
             `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
-            `• *Predeterminado:* \`${prefix}fondo default\`\n` +
             `• *Quitar fondo:* \`${prefix}fondo reset\`\n` +
-            `• *Inspeccionar proto:* \`${prefix}fondo proto\`\n` +
-            `• *Capturar otro bot:* \`${prefix}fondo sniff\`\n` +
+            `• *Capturar otro bot (al DM):* \`${prefix}fondo sniff\`\n` +
             `╰━━━━━━━━━━━━⬣`,
         });
       }
@@ -431,7 +458,7 @@ export default {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ Tema y fondo restablecidos en el grupo.`,
+          text: `✅ Tema y fondo restablecidos.${adminNote}`,
         });
       }
 
@@ -446,7 +473,7 @@ export default {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ Fondo predeterminado aplicado (garabatos: ${isDoodleEnabled ? "sí" : "no"}).`,
+          text: `✅ Fondo predeterminado enviado.${adminNote}`,
         });
       }
 
@@ -463,7 +490,7 @@ export default {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ Tema aplicado al grupo: \`${colorSchemeId}\``,
+          text: `✅ Tema enviado: \`${colorSchemeId}\`${adminNote}`,
         });
       }
 
@@ -489,13 +516,14 @@ export default {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ Fondo animado \`${animatedWallpaperId}\` aplicado (opacidad \`${dimLevel}\`).`,
+          text: `✅ Fondo animado \`${animatedWallpaperId}\` enviado.${adminNote}`,
         });
       }
 
-      const rawColorToken = sub === "solid" ? args[1] || "" : args[0] || "";
-      const argbLight = resolveArgbHex(rawColorToken);
-      if (!argbLight) {
+      const useRgb6 = sub === "solid6";
+      const rawColorToken = sub === "solid6" || sub === "solid8" ? args[1] || "" : args[0] || "";
+      const rgbLight = resolveRgbHex(rawColorToken);
+      if (!rgbLight) {
         throw new Error(
           `Color no reconocido: "${rawColorToken}". Usa un nombre (rojo, morado, negro, random) o hex (#123456).`,
         );
@@ -506,10 +534,13 @@ export default {
       );
 
       const darkFlagIdx = args.findIndex((a) => a === "-dark" || a === "--dark");
-      const argbDark =
+      const rgbDark =
         darkFlagIdx !== -1 && args[darkFlagIdx + 1]
-          ? resolveArgbHex(args[darkFlagIdx + 1]) || shiftArgbHex(argbLight, 0.35)
-          : shiftArgbHex(argbLight, 0.35);
+          ? resolveRgbHex(args[darkFlagIdx + 1]) || shiftRgbHex(rgbLight, 0.35)
+          : shiftRgbHex(rgbLight, 0.35);
+
+      const colorLight = useRgb6 ? rgbLight : toArgb(rgbLight);
+      const colorDark = useRgb6 ? rgbDark : toArgb(rgbDark);
 
       const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
       const colorSchemeId =
@@ -519,8 +550,8 @@ export default {
 
       const chatThemeSetting: Record<string, any> = {
         solidColor: {
-          colorLight: argbLight,
-          colorDark: argbDark,
+          colorLight,
+          colorDark,
           isDoodleEnabled,
         },
       };
@@ -529,13 +560,13 @@ export default {
         chatThemeSetting.colorSchemeId = colorSchemeId;
       }
 
-      await relayChatTheme(sock, from, chatThemeSetting);
+      const { encodedLen } = await relayChatTheme(sock, from, chatThemeSetting);
 
       await sock.sendMessage(from, {
         react: { text: "✅", key: msg.key },
       });
       return await ctx.reply({
-        text: `✅ Fondo sólido \`${argbLight}\` sincronizado (garabatos: ${isDoodleEnabled ? "sí" : "no"}).`,
+        text: `✅ Fondo sólido \`${colorLight}\` / \`${colorDark}\` enviado (${encodedLen} bytes).${adminNote}`,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
