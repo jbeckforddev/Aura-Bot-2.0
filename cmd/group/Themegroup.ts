@@ -10,6 +10,8 @@ import {
 import type { CommandContext } from "../../types/commands.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 
+const activeSniffers = new Map<string, () => void>();
+
 const COLORES: Record<string, string> = {
   rojo: "#F44336",
   red: "#F44336",
@@ -162,115 +164,38 @@ function extractTargetImage(
   return null;
 }
 
-function getChatThemeProtoCtor(): any {
-  const p = proto as any;
-  return (
-    p?.Message?.ChatThemeSetting ||
-    p?.ChatThemeSetting ||
-    p?.Message?.ProtocolMessage?.ChatThemeSetting ||
-    null
+function safeJson(obj: unknown): string {
+  return JSON.stringify(
+    obj,
+    (_k, v) => {
+      if (v instanceof Uint8Array || Buffer.isBuffer(v)) {
+        return `<Bytes(${v.length}) ${Buffer.from(v).toString("base64").slice(0, 24)}...>`;
+      }
+      if (typeof v === "bigint") {
+        return v.toString();
+      }
+      return v;
+    },
+    2,
   );
 }
 
-function getProtoKeys(ctor: any): string[] {
-  if (!ctor) return [];
-  const keys = new Set<string>();
-  try {
-    if (ctor.prototype) {
-      for (const k of Object.keys(ctor.prototype)) {
-        if (k !== "toJSON" && !k.startsWith("$")) keys.add(k);
-      }
-    }
-    if (typeof ctor.create === "function") {
-      const sample = ctor.create();
-      for (const k of Object.keys(sample || {})) {
-        keys.add(k);
-      }
-    }
-  } catch {}
-  return Array.from(keys);
-}
-
-function inspectEncodeSchema(ctor: any): string[] {
-  if (!ctor || typeof ctor.encode !== "function") return [];
+function inspectWireTypes(ctor: any): string {
+  if (!ctor || typeof ctor.encode !== "function") return "sin encode";
   const src = String(ctor.encode);
-  const results: string[] = [];
-  const blockRegex =
-    /message\.([a-zA-Z0-9_]+)\s*!=\s*null[\s\S]{0,220}?(?:writer\.uint32\(\d+\)\.([a-zA-Z0-9_]+)\(|([a-zA-Z0-9_$.]+)\.encode\()/g;
-  let match: RegExpExecArray | null;
-  const seen = new Set<string>();
-  while ((match = blockRegex.exec(src)) !== null) {
-    const field = match[1];
-    const kind = match[2] || match[3] || "unknown";
-    const entry = `${field}: ${kind.replace(/^\$root\.proto\./, "")}`;
-    if (!seen.has(field)) {
-      seen.add(field);
-      results.push(entry);
-    }
-  }
-  return results;
-}
-
-function collectThemeSchemas(): string {
-  const p = proto as any;
   const lines: string[] = [];
-  const namespaces: Array<[string, any]> = [
-    ["proto", p],
-    ["proto.Message", p?.Message],
-    ["proto.Message.ProtocolMessage", p?.Message?.ProtocolMessage],
-  ];
-
-  const visited = new Set<any>();
-
-  for (const [nsName, ns] of namespaces) {
-    if (!ns) continue;
-    for (const key of Object.keys(ns)) {
-      if (!/theme|wallpaper/i.test(key)) continue;
-      const ctor = ns[key];
-      if (!ctor || visited.has(ctor)) continue;
-      visited.add(ctor);
-      const schema = inspectEncodeSchema(ctor);
-      const fallbackKeys = getProtoKeys(ctor);
-      lines.push(
-        `*${nsName}.${key}*:\n${schema.length ? schema.map((s) => `  - ${s}`).join("\n") : `  - ${fallbackKeys.join(", ") || "sin campos"}`}`,
-      );
-    }
+  const regex =
+    /message\.([a-zA-Z0-9_]+)[\s\S]{0,180}?(?:writer\.uint32\((\d+)\)\.([a-zA-Z0-9_]+)\(|([a-zA-Z0-9_$.]+)\.encode\(message\.\1)/g;
+  let m: RegExpExecArray | null;
+  const seen = new Set<string>();
+  while ((m = regex.exec(src)) !== null) {
+    const field = m[1];
+    if (seen.has(field)) continue;
+    seen.add(field);
+    const wire = m[3] ? `${m[3]} (tag=${Number(m[2]) >>> 3})` : m[4].replace(/^\$root\.proto\./, "");
+    lines.push(`  - ${field}: ${wire}`);
   }
-
-  return lines.join("\n\n") || "No se encontraron definiciones de Theme/Wallpaper.";
-}
-
-function detectCustomImageField(themeKeys: string[]): string {
-  const candidates = [
-    "userImage",
-    "customImage",
-    "customWallpaper",
-    "imageWallpaper",
-    "photoWallpaper",
-    "mediaWallpaper",
-    "imageMessage",
-    "wallpaperImage",
-  ];
-  for (const name of candidates) {
-    if (themeKeys.includes(name)) return name;
-  }
-  const fuzzy = themeKeys.find((k) => /image|photo|custom|user|media/i.test(k) && !/stock/i.test(k));
-  return fuzzy || "userImage";
-}
-
-function assertThemeProtoSupported(protocolMessage: Record<string, any>) {
-  const p = proto as any;
-  const protoMsgCtor = p?.Message?.ProtocolMessage;
-  if (!protoMsgCtor || typeof protoMsgCtor.encode !== "function") {
-    throw new Error("No se encontró proto.Message.ProtocolMessage en tu versión de Baileys.");
-  }
-
-  const encoded = protoMsgCtor.encode(protoMsgCtor.create(protocolMessage)).finish();
-  if (encoded.length <= 4) {
-    throw new Error(
-      "Tu WAProto actual no serializó chatThemeSetting (ProtocolMessage tipo 34).",
-    );
-  }
+  return lines.join("\n") || src.slice(0, 500);
 }
 
 async function relayChatTheme(
@@ -281,12 +206,15 @@ async function relayChatTheme(
   const p = proto as any;
   const typeEnum = p?.Message?.ProtocolMessage?.Type?.CHAT_THEME_SETTING ?? 34;
 
-  const protocolMessage: Record<string, any> = {
-    type: typeEnum,
-    chatThemeSetting,
+  const payload: Record<string, any> = {
+    settingTimestampMs: Date.now(),
+    ...chatThemeSetting,
   };
 
-  assertThemeProtoSupported(protocolMessage);
+  const protocolMessage: Record<string, any> = {
+    type: typeEnum,
+    chatThemeSetting: payload,
+  };
 
   const waMessage = generateWAMessageFromContent(
     jid,
@@ -323,19 +251,57 @@ export default {
     try {
       if (sub === "proto" || sub === "check" || sub === "debug") {
         const p = proto as any;
-        const hasType = p?.Message?.ProtocolMessage?.Type?.CHAT_THEME_SETTING;
-        const protoSchema = inspectEncodeSchema(p?.Message?.ProtocolMessage).filter((s) =>
-          /theme|wallpaper/i.test(s),
-        );
-        const detail = collectThemeSchemas();
+        const msgNs = p?.Message;
+        const text =
+          `╭〔 🧪 ${fytBold("Tipos Wire WAProto")} 〕⬣\n` +
+          `*ChatThemeSetting:*\n${inspectWireTypes(msgNs?.ChatThemeSetting)}\n\n` +
+          `*ChatSolidColorWallpaper:*\n${inspectWireTypes(msgNs?.ChatSolidColorWallpaper)}\n\n` +
+          `*ChatCustomImageWallpaper:*\n${inspectWireTypes(msgNs?.ChatCustomImageWallpaper)}\n\n` +
+          `*ChatAnimatedWallpaper:*\n${inspectWireTypes(msgNs?.ChatAnimatedWallpaper)}\n` +
+          `╰━━━━━━━━━━━━⬣`;
+
+        return await ctx.reply({ text });
+      }
+
+      if (sub === "sniff") {
+        const prev = activeSniffers.get(from);
+        if (prev) {
+          prev();
+          activeSniffers.delete(from);
+          return await ctx.reply({ text: "🛑 Sniffer detenido en este grupo." });
+        }
+
+        const handler = async ({ messages }: { messages: WAMessage[] }) => {
+          for (const incoming of messages) {
+            if (incoming.key.remoteJid !== from) continue;
+            const norm = normalizeMessageContent(incoming.message);
+            const pm = norm?.protocolMessage as any;
+            if (!pm) continue;
+            if (pm.type === 34 || pm.chatThemeSetting) {
+              const dump = safeJson({
+                key: incoming.key,
+                protocolMessage: pm,
+              });
+              await sock.sendMessage(from, {
+                text: `📡 *Captura ChatThemeSetting:*\n\`\`\`${dump}\`\`\``,
+              });
+            }
+          }
+        };
+
+        sock.ev.on("messages.upsert", handler);
+        const timer = setTimeout(() => {
+          sock.ev.off("messages.upsert", handler);
+          activeSniffers.delete(from);
+        }, 90_000);
+
+        activeSniffers.set(from, () => {
+          clearTimeout(timer);
+          sock.ev.off("messages.upsert", handler);
+        });
 
         return await ctx.reply({
-          text:
-            `╭〔 🧪 ${fytBold("Esquema WAProto")} 〕⬣\n` +
-            `• *Type CHAT_THEME_SETTING:* \`${hasType ?? "NO EXISTE"}\`\n` +
-            `• *ProtocolMessage:* \`${protoSchema.join(", ") || "ninguno"}\`\n\n` +
-            `${detail}\n` +
-            `╰━━━━━━━━━━━━⬣`,
+          text: "📡 Sniffer activo por 90s. Haz que el otro bot cambie el fondo y capturaré el JSON exacto.",
         });
       }
 
@@ -345,7 +311,10 @@ export default {
 
       const targetImage = extractTargetImage(msg, from, sock);
 
-      if (targetImage && sub !== "tema" && sub !== "animado" && sub !== "solid") {
+      if (
+        targetImage &&
+        !["tema", "theme", "animado", "live", "solid", "stock", "reset", "clear", "default"].includes(sub)
+      ) {
         const imageBuffer = await downloadMediaMessage(
           targetImage,
           "buffer",
@@ -361,12 +330,13 @@ export default {
           { upload: sock.waUploadToServer },
         );
 
-        if (!uploaded.imageMessage) {
-          throw new Error("No se pudo subir la imagen cifrada a los servidores de WhatsApp.");
+        const img = uploaded.imageMessage;
+        if (!img?.directPath || !img.mediaKey || !img.fileEncSha256 || !img.fileSha256) {
+          throw new Error("No se obtuvieron las llaves cifradas al subir la imagen.");
         }
 
-        const dimArg = args.find((a) => /^0?\.\d+$|^1(\.0+)?$|^0$/.test(a));
-        const dimLevel = dimArg ? Math.max(0, Math.min(1, parseFloat(dimArg))) : 0;
+        const dimArg = args.find((a) => /^\d+(\.\d+)?$/.test(a));
+        const dimLevel = dimArg ? parseFloat(dimArg) : 0;
 
         const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
         const colorSchemeId =
@@ -374,12 +344,12 @@ export default {
             ? normalizeColorScheme(args[themeIdx + 1])
             : undefined;
 
-        const themeKeys = getProtoKeys(getChatThemeProtoCtor());
-        const imgField = detectCustomImageField(themeKeys);
-
         const chatThemeSetting: Record<string, any> = {
-          [imgField]: {
-            ...uploaded.imageMessage,
+          customImage: {
+            directPath: img.directPath,
+            mediaKey: img.mediaKey,
+            fileEncSha256: img.fileEncSha256,
+            fileSha256: img.fileSha256,
             dimLevel,
           },
         };
@@ -405,12 +375,40 @@ export default {
         return await ctx.reply({
           text:
             `╭〔 🎨 ${fytBold("Fondo y Tema de Grupo")} 〕⬣\n` +
-            `• *Foto propia:* Responde a una imagen con \`${prefix}fondo\` (opcional brillo \`0.25\`)\n` +
+            `• *Foto propia:* Responde a una foto con \`${prefix}fondo\`\n` +
             `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo #1A1A2E -nodoodle\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
-            `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
-            `• *Ver esquema WAProto:* \`${prefix}fondo proto\`\n` +
+            `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.2\`\n` +
+            `• *Fondo stock:* \`${prefix}fondo stock <id> 0\`\n` +
+            `• *Predeterminado:* \`${prefix}fondo default\`\n` +
+            `• *Quitar fondo:* \`${prefix}fondo reset\`\n` +
+            `• *Capturar otro bot:* \`${prefix}fondo sniff\`\n` +
             `╰━━━━━━━━━━━━⬣`,
+        });
+      }
+
+      if (sub === "reset" || sub === "clear" || sub === "quitar") {
+        await relayChatTheme(sock, from, { clearTheme: true });
+        await sock.sendMessage(from, {
+          react: { text: "✅", key: msg.key },
+        });
+        return await ctx.reply({
+          text: `✅ Tema y fondo restablecidos en el grupo.`,
+        });
+      }
+
+      if (sub === "default" || sub === "predeterminado") {
+        const isDoodleEnabled = !args.some((a) =>
+          ["-nodoodle", "--nodoodle", "sindoodle"].includes(a.toLowerCase()),
+        );
+        await relayChatTheme(sock, from, {
+          defaultWallpaper: { isDoodleEnabled },
+        });
+        await sock.sendMessage(from, {
+          react: { text: "✅", key: msg.key },
+        });
+        return await ctx.reply({
+          text: `✅ Fondo predeterminado aplicado (garabatos: ${isDoodleEnabled ? "sí" : "no"}).`,
         });
       }
 
@@ -432,16 +430,14 @@ export default {
       }
 
       if (sub === "animado" || sub === "live") {
-        const animatedWallpaperID = args[1] || "wallpaper-1";
-        const parsedDim = args[2] ? parseFloat(args[2]) : 0.2;
-        const dimLevel = Number.isFinite(parsedDim)
-          ? Math.max(0, Math.min(1, parsedDim))
-          : 0.2;
+        const animatedWallpaperId = args[1] || "wallpaper-1";
+        const parsedDim = args[2] ? parseFloat(args[2]) : 0;
+        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0;
 
         const schemeArg = args[3] ? normalizeColorScheme(args[3]) : undefined;
         const chatThemeSetting: Record<string, any> = {
           animatedWallpaper: {
-            animatedWallpaperID,
+            animatedWallpaperId,
             dimLevel,
           },
         };
@@ -455,7 +451,30 @@ export default {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ Fondo animado \`${animatedWallpaperID}\` aplicado (opacidad \`${dimLevel}\`).`,
+          text: `✅ Fondo animado \`${animatedWallpaperId}\` aplicado (opacidad \`${dimLevel}\`).`,
+        });
+      }
+
+      if (sub === "stock") {
+        const stockImageId = args[1];
+        if (!stockImageId) {
+          throw new Error(`Indica el ID del fondo stock. Ejemplo: ${prefix}fondo stock 1`);
+        }
+        const parsedDim = args[2] ? parseFloat(args[2]) : 0;
+        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0;
+
+        await relayChatTheme(sock, from, {
+          stockImage: {
+            stockImageId,
+            dimLevel,
+          },
+        });
+
+        await sock.sendMessage(from, {
+          react: { text: "✅", key: msg.key },
+        });
+        return await ctx.reply({
+          text: `✅ Fondo stock \`${stockImageId}\` aplicado.`,
         });
       }
 
@@ -479,15 +498,11 @@ export default {
 
       const colorLight = hex;
       const colorDark = darkHex || shiftHex(hex, 0.35);
-      const doodleColorLight = shiftHex(hex, 0.82);
-      const doodleColorDark = darkHex ? shiftHex(darkHex, 1.3) : shiftHex(hex, 0.55);
 
       await relayChatTheme(sock, from, {
         solidColor: {
           colorLight,
           colorDark,
-          doodleColorLight,
-          doodleColorDark,
           isDoodleEnabled,
         },
       });
