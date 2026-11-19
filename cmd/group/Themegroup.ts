@@ -187,36 +187,42 @@ function safeJson(obj: unknown): string {
   );
 }
 
-async function checkBotGroupPermissions(sock: CommandContext["sock"], jid: string) {
-  try {
-    const meta = await sock.groupMetadata(jid);
-    const botId = sock.user?.id;
-    const botLid = (sock.user as { lid?: string } | undefined)?.lid;
-    const botParticipant = (meta.participants || []).find((p: any) => {
-      const candidates = [p.id, p.jid, p.lid, p.phoneNumber].filter(Boolean);
-      return candidates.some(
-        (c) =>
-          (botId && areJidsSameUser(c, botId)) ||
-          (botLid && areJidsSameUser(c, botLid)),
-      );
-    });
-    const isAdmin = Boolean(
-      botParticipant?.admin === "admin" || botParticipant?.admin === "superadmin",
-    );
-    return {
-      isAdmin,
-      restrict: Boolean(meta.restrict),
-      subject: meta.subject || jid,
+function waitForStanzaAck(
+  sock: CommandContext["sock"],
+  messageId: string,
+  timeoutMs = 4000,
+): Promise<Record<string, any> | null> {
+  return new Promise((resolve) => {
+    const wsAny = (sock as any).ws;
+    if (!wsAny || typeof wsAny.on !== "function") {
+      resolve(null);
+      return;
+    }
+
+    const onAck = (node: any) => {
+      if (node?.attrs?.id !== messageId) return;
+      clearTimeout(timer);
+      wsAny.off("CB:ack", onAck);
+      resolve(node.attrs || {});
     };
-  } catch {
-    return { isAdmin: false, restrict: false, subject: jid };
-  }
+
+    const timer = setTimeout(() => {
+      wsAny.off("CB:ack", onAck);
+      resolve(null);
+    }, timeoutMs);
+
+    wsAny.on("CB:ack", onAck);
+  });
 }
 
 async function relayChatTheme(
   sock: CommandContext["sock"],
   jid: string,
   chatThemeSetting: Record<string, any>,
+  extraOptions?: {
+    additionalAttributes?: Record<string, string>;
+    additionalNodes?: any[];
+  },
 ) {
   const p = proto as any;
   const typeEnum = p?.Message?.ProtocolMessage?.Type?.CHAT_THEME_SETTING ?? 34;
@@ -241,13 +247,23 @@ async function relayChatTheme(
     },
   );
 
+  const messageId = waMessage.key.id!;
   const encodedLen = p.Message.encode(waMessage.message).finish().length;
+  const ackPromise = waitForStanzaAck(sock, messageId, 4000);
 
   await sock.relayMessage(jid, waMessage.message!, {
-    messageId: waMessage.key.id!,
-  });
+    messageId,
+    ...(extraOptions || {}),
+  } as any);
 
-  return { messageId: waMessage.key.id, encodedLen };
+  const ack = await ackPromise;
+  return { messageId, encodedLen, ack };
+}
+
+function formatAck(ack: Record<string, any> | null): string {
+  if (!ack) return "sin ACK (timeout)";
+  if (ack.error) return `ERROR ${ack.error} (${JSON.stringify(ack)})`;
+  return `OK (${JSON.stringify(ack)})`;
 }
 
 const COMMAND_NAMES = ["fondo", "tema", "wallpaper", "chattheme", "setfondo"];
@@ -284,21 +300,22 @@ export default {
         };
 
         const wsMsgHandler = (node: any) => {
-          if (node?.attrs?.from !== from) return;
           const id = node?.attrs?.id;
           if (!id) return;
+          if (node?.attrs?.from !== from && node?.attrs?.to !== from) return;
           const children = Array.isArray(node.content)
             ? node.content.map((c: any) => ({ tag: c?.tag, attrs: c?.attrs }))
             : [];
           recentStanzas.set(id, { attrs: node.attrs, children });
-          if (recentStanzas.size > 60) {
+          if (recentStanzas.size > 80) {
             const firstKey = recentStanzas.keys().next().value;
             if (firstKey) recentStanzas.delete(firstKey);
           }
         };
 
         const wsNotifHandler = async (node: any) => {
-          if (node?.attrs?.from !== from) return;
+          const rawFrom = node?.attrs?.from;
+          if (rawFrom !== from) return;
           await sendToDm("CB:notification", {
             tag: node.tag,
             attrs: node.attrs,
@@ -310,16 +327,25 @@ export default {
           for (const incoming of messages) {
             if (incoming.key.remoteJid !== from) continue;
             const norm = normalizeMessageContent(incoming.message);
-            if (!norm) continue;
-            const keys = Object.keys(norm);
-            const hasInteresting =
-              Boolean(norm.protocolMessage) ||
-              keys.some((k) => /theme|wallpaper|setting|protocol/i.test(k));
-            if (hasInteresting) {
+            const keys = norm ? Object.keys(norm) : [];
+            const isPlainText =
+              keys.length > 0 &&
+              keys.every((k) =>
+                ["conversation", "extendedTextMessage", "messageContextInfo", "senderKeyDistributionMessage"].includes(k),
+              );
+            const isInteresting =
+              Boolean(incoming.messageStubType) ||
+              Boolean(norm?.protocolMessage) ||
+              !isPlainText;
+
+            if (isInteresting) {
               const stanza = incoming.key.id ? recentStanzas.get(incoming.key.id) : undefined;
-              await sendToDm("Protocol/Theme Message", {
+              await sendToDm("Incoming Special Event", {
                 stanza,
                 key: incoming.key,
+                messageStubType: incoming.messageStubType,
+                messageStubParameters: incoming.messageStubParameters,
+                rawKeys: incoming.message ? Object.keys(incoming.message) : [],
                 message: norm,
               });
             }
@@ -349,21 +375,70 @@ export default {
         });
 
         return await ctx.reply({
-          text: "📡 Sniffer silencioso activo por 5 min. Cuando el otro bot cambie el fondo, el JSON exacto te llegará a tu privado.",
+          text: "📡 Sniffer total activo por 5 min. Haz que el otro bot cambie el fondo y el paquete exacto llegará a tu privado.",
+        });
+      }
+
+      if (sub === "test") {
+        await sock.sendMessage(from, { react: { text: "🧪", key: msg.key } });
+        const results: string[] = [];
+
+        const r1 = await relayChatTheme(sock, from, {
+          solidColor: {
+            colorLight: "#FF2196F3",
+            colorDark: "#FF0C3555",
+            isDoodleEnabled: true,
+          },
+        });
+        results.push(`1. Normal ARGB: ${formatAck(r1.ack)}`);
+
+        await new Promise((r) => setTimeout(r, 1200));
+        const r2 = await relayChatTheme(
+          sock,
+          from,
+          {
+            solidColor: {
+              colorLight: "#2196F3",
+              colorDark: "#0C3555",
+              isDoodleEnabled: true,
+            },
+            colorSchemeId: "Royal-Blue@Tonal",
+          },
+          { additionalAttributes: { edit: "2" } },
+        );
+        results.push(`2. edit=2 + RGB6 + scheme: ${formatAck(r2.ack)}`);
+
+        await new Promise((r) => setTimeout(r, 1200));
+        const r3 = await relayChatTheme(
+          sock,
+          from,
+          {
+            solidColor: {
+              colorLight: "#FF9C27B0",
+              colorDark: "#FF350D3C",
+              isDoodleEnabled: true,
+            },
+            colorSchemeId: "Violet@Tonal",
+          },
+          { additionalAttributes: { edit: "7" } },
+        );
+        results.push(`3. edit=7 + ARGB + scheme: ${formatAck(r3.ack)}`);
+
+        await new Promise((r) => setTimeout(r, 1200));
+        const r4 = await relayChatTheme(sock, from, {
+          colorSchemeId: "Royal-Blue@Tonal",
+          defaultWallpaper: { isDoodleEnabled: true },
+        });
+        results.push(`4. scheme + defaultWallpaper: ${formatAck(r4.ack)}`);
+
+        return await ctx.reply({
+          text: `╭〔 🧪 ${fytBold("Resultados ACK")} 〕⬣\n${results.join("\n")}\n╰━━━━━━━━━━━━⬣`,
         });
       }
 
       await sock.sendMessage(from, {
         react: { text: "⏳", key: msg.key },
       });
-
-      const perm = await checkBotGroupPermissions(sock, from);
-      const adminNote =
-        !perm.isAdmin && perm.restrict
-          ? `\n⚠️ El bot *no es admin* y el grupo tiene ajustes restringidos.`
-          : !perm.isAdmin
-            ? `\nℹ️ El bot no es admin en este grupo.`
-            : "";
 
       const targetImage = extractTargetImage(msg, from, sock);
 
@@ -424,13 +499,13 @@ export default {
           chatThemeSetting.colorSchemeId = colorSchemeId;
         }
 
-        const { encodedLen } = await relayChatTheme(sock, from, chatThemeSetting);
+        const { encodedLen, ack } = await relayChatTheme(sock, from, chatThemeSetting);
 
         await sock.sendMessage(from, {
           react: { text: "✅", key: msg.key },
         });
         return await ctx.reply({
-          text: `✅ ${fytBold("Fondo personalizado enviado")} (${encodedLen} bytes).${adminNote}`,
+          text: `✅ ${fytBold("Fondo personalizado enviado")} (${encodedLen} bytes).\n• *ACK:* \`${formatAck(ack)}\``,
         });
       }
 
@@ -442,38 +517,19 @@ export default {
           text:
             `╭〔 🎨 ${fytBold("Fondo y Tema de Grupo")} 〕⬣\n` +
             `• *Foto propia:* Responde a una foto con \`${prefix}fondo\`\n` +
-            `• *Color sólido (ARGB):* \`${prefix}fondo morado\` o \`${prefix}fondo solid8 rojo\`\n` +
-            `• *Color sólido (RGB6):* \`${prefix}fondo solid6 rojo\`\n` +
+            `• *Color sólido:* \`${prefix}fondo rojo\` o \`${prefix}fondo solid6 rojo\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
-            `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
-            `• *Quitar fondo:* \`${prefix}fondo reset\`\n` +
-            `• *Capturar otro bot (al DM):* \`${prefix}fondo sniff\`\n` +
+            `• *Probar ACKs:* \`${prefix}fondo test\`\n` +
+            `• *Capturar otro bot:* \`${prefix}fondo sniff\`\n` +
             `╰━━━━━━━━━━━━⬣`,
         });
       }
 
       if (sub === "reset" || sub === "clear" || sub === "quitar") {
-        await relayChatTheme(sock, from, { clearTheme: true });
-        await sock.sendMessage(from, {
-          react: { text: "✅", key: msg.key },
-        });
+        const { ack } = await relayChatTheme(sock, from, { clearTheme: true });
+        await sock.sendMessage(from, { react: { text: "✅", key: msg.key } });
         return await ctx.reply({
-          text: `✅ Tema y fondo restablecidos.${adminNote}`,
-        });
-      }
-
-      if (sub === "default" || sub === "predeterminado") {
-        const isDoodleEnabled = !args.some((a) =>
-          ["-nodoodle", "--nodoodle", "sindoodle"].includes(a.toLowerCase()),
-        );
-        await relayChatTheme(sock, from, {
-          defaultWallpaper: { isDoodleEnabled },
-        });
-        await sock.sendMessage(from, {
-          react: { text: "✅", key: msg.key },
-        });
-        return await ctx.reply({
-          text: `✅ Fondo predeterminado enviado.${adminNote}`,
+          text: `✅ Reset enviado.\n• *ACK:* \`${formatAck(ack)}\``,
         });
       }
 
@@ -482,41 +538,11 @@ export default {
         if (!rawTheme) {
           throw new Error(`Indica el tema. Ejemplo: ${prefix}fondo tema Royal-Blue`);
         }
-
         const colorSchemeId = normalizeColorScheme(rawTheme);
-        await relayChatTheme(sock, from, { colorSchemeId });
-
-        await sock.sendMessage(from, {
-          react: { text: "✅", key: msg.key },
-        });
+        const { ack } = await relayChatTheme(sock, from, { colorSchemeId });
+        await sock.sendMessage(from, { react: { text: "✅", key: msg.key } });
         return await ctx.reply({
-          text: `✅ Tema enviado: \`${colorSchemeId}\`${adminNote}`,
-        });
-      }
-
-      if (sub === "animado" || sub === "live") {
-        const animatedWallpaperId = args[1] || "wallpaper-1";
-        const parsedDim = args[2] ? parseFloat(args[2]) : 0.25;
-        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0.25;
-
-        const schemeArg = args[3] ? normalizeColorScheme(args[3]) : undefined;
-        const chatThemeSetting: Record<string, any> = {
-          animatedWallpaper: {
-            animatedWallpaperId,
-            dimLevel,
-          },
-        };
-        if (schemeArg) {
-          chatThemeSetting.colorSchemeId = schemeArg;
-        }
-
-        await relayChatTheme(sock, from, chatThemeSetting);
-
-        await sock.sendMessage(from, {
-          react: { text: "✅", key: msg.key },
-        });
-        return await ctx.reply({
-          text: `✅ Fondo animado \`${animatedWallpaperId}\` enviado.${adminNote}`,
+          text: `✅ Tema enviado: \`${colorSchemeId}\`\n• *ACK:* \`${formatAck(ack)}\``,
         });
       }
 
@@ -524,57 +550,33 @@ export default {
       const rawColorToken = sub === "solid6" || sub === "solid8" ? args[1] || "" : args[0] || "";
       const rgbLight = resolveRgbHex(rawColorToken);
       if (!rgbLight) {
-        throw new Error(
-          `Color no reconocido: "${rawColorToken}". Usa un nombre (rojo, morado, negro, random) o hex (#123456).`,
-        );
+        throw new Error(`Color no reconocido: "${rawColorToken}".`);
       }
 
       const isDoodleEnabled = !args.some((a) =>
         ["-nodoodle", "--nodoodle", "sindoodle"].includes(a.toLowerCase()),
       );
-
-      const darkFlagIdx = args.findIndex((a) => a === "-dark" || a === "--dark");
-      const rgbDark =
-        darkFlagIdx !== -1 && args[darkFlagIdx + 1]
-          ? resolveRgbHex(args[darkFlagIdx + 1]) || shiftRgbHex(rgbLight, 0.35)
-          : shiftRgbHex(rgbLight, 0.35);
-
+      const rgbDark = shiftRgbHex(rgbLight, 0.35);
       const colorLight = useRgb6 ? rgbLight : toArgb(rgbLight);
       const colorDark = useRgb6 ? rgbDark : toArgb(rgbDark);
 
-      const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
-      const colorSchemeId =
-        themeIdx !== -1 && args[themeIdx + 1]
-          ? normalizeColorScheme(args[themeIdx + 1])
-          : undefined;
-
-      const chatThemeSetting: Record<string, any> = {
+      const { encodedLen, ack } = await relayChatTheme(sock, from, {
         solidColor: {
           colorLight,
           colorDark,
           isDoodleEnabled,
         },
-      };
-
-      if (colorSchemeId) {
-        chatThemeSetting.colorSchemeId = colorSchemeId;
-      }
-
-      const { encodedLen } = await relayChatTheme(sock, from, chatThemeSetting);
-
-      await sock.sendMessage(from, {
-        react: { text: "✅", key: msg.key },
       });
+
+      await sock.sendMessage(from, { react: { text: "✅", key: msg.key } });
       return await ctx.reply({
-        text: `✅ Fondo sólido \`${colorLight}\` / \`${colorDark}\` enviado (${encodedLen} bytes).${adminNote}`,
+        text: `✅ Fondo sólido \`${colorLight}\` enviado (${encodedLen} bytes).\n• *ACK:* \`${formatAck(ack)}\``,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      await sock.sendMessage(from, {
-        react: { text: "❌", key: msg.key },
-      });
+      await sock.sendMessage(from, { react: { text: "❌", key: msg.key } });
       return await ctx.reply({
-        text: `⚠️ Error al cambiar el fondo:\n\`\`\`${message}\`\`\``,
+        text: `⚠️ Error:\n\`\`\`${message}\`\`\``,
       });
     }
   },
