@@ -171,7 +171,7 @@ function safeJson(obj: unknown): string {
     obj,
     (_k, v) => {
       if (v instanceof Uint8Array || Buffer.isBuffer(v)) {
-        return `<Bytes(${v.length}) ${Buffer.from(v).toString("base64").slice(0, 24)}...>`;
+        return `<Bytes(${v.length}) ${Buffer.from(v).toString("base64").slice(0, 28)}>`;
       }
       if (typeof v === "bigint") {
         return v.toString();
@@ -180,6 +180,25 @@ function safeJson(obj: unknown): string {
     },
     2,
   );
+}
+
+function dumpEncodeRaw(ctor: any, filterRegex?: RegExp): string {
+  if (!ctor || typeof ctor.encode !== "function") return "sin encode";
+  const lines = String(ctor.encode)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("if (!writer)") && !l.startsWith("return writer"));
+  if (!filterRegex) {
+    return lines.slice(1, 25).join("\n");
+  }
+  const matched: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (filterRegex.test(lines[i])) {
+      matched.push(lines[i]);
+      if (lines[i + 1]) matched.push(`  ${lines[i + 1]}`);
+    }
+  }
+  return matched.join("\n") || "sin coincidencias";
 }
 
 async function relayChatTheme(
@@ -233,6 +252,19 @@ export default {
     const sub = (args[0] || "").toLowerCase();
 
     try {
+      if (sub === "proto" || sub === "debug") {
+        const p = proto as any;
+        const msgNs = p?.Message;
+        const text =
+          `╭〔 🧪 ${fytBold("Encode Real WAProto")} 〕⬣\n` +
+          `*ProtocolMessage (theme):*\n\`\`\`${dumpEncodeRaw(msgNs?.ProtocolMessage, /theme|wallpaper/i)}\`\`\`\n\n` +
+          `*ChatThemeSetting:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatThemeSetting)}\`\`\`\n\n` +
+          `*ChatSolidColorWallpaper:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatSolidColorWallpaper)}\`\`\`\n\n` +
+          `*ChatCustomImageWallpaper:*\n\`\`\`${dumpEncodeRaw(msgNs?.ChatCustomImageWallpaper)}\`\`\`\n` +
+          `╰━━━━━━━━━━━━⬣`;
+        return await ctx.reply({ text });
+      }
+
       if (sub === "sniff") {
         const prev = activeSniffers.get(from);
         if (prev) {
@@ -243,7 +275,7 @@ export default {
 
         const recentStanzas = new Map<string, Record<string, any>>();
 
-        const wsHandler = (node: any) => {
+        const wsMsgHandler = (node: any) => {
           if (node?.attrs?.from !== from) return;
           const id = node?.attrs?.id;
           if (!id) return;
@@ -251,27 +283,34 @@ export default {
             ? node.content.map((c: any) => ({ tag: c?.tag, attrs: c?.attrs }))
             : [];
           recentStanzas.set(id, { attrs: node.attrs, children: childTags });
-          if (recentStanzas.size > 40) {
+          if (recentStanzas.size > 50) {
             const firstKey = recentStanzas.keys().next().value;
             if (firstKey) recentStanzas.delete(firstKey);
           }
+        };
+
+        const wsNotifHandler = async (node: any) => {
+          if (node?.attrs?.from !== from) return;
+          const dump = safeJson({ tag: node.tag, attrs: node.attrs, content: node.content });
+          await sock.sendMessage(from, {
+            text: `📡 *Notificación XML:*\n\`\`\`${dump.slice(0, 3500)}\`\`\``,
+          });
         };
 
         const msgHandler = async ({ messages }: { messages: WAMessage[] }) => {
           for (const incoming of messages) {
             if (incoming.key.remoteJid !== from) continue;
             const norm = normalizeMessageContent(incoming.message);
-            const pm = norm?.protocolMessage as any;
-            if (!pm) continue;
-            if (pm.type === 34 || pm.chatThemeSetting) {
+            if (!norm) continue;
+            if (norm.protocolMessage) {
               const stanza = incoming.key.id ? recentStanzas.get(incoming.key.id) : undefined;
               const dump = safeJson({
                 stanza,
                 key: incoming.key,
-                protocolMessage: pm,
+                protocolMessage: norm.protocolMessage,
               });
               await sock.sendMessage(from, {
-                text: `📡 *Captura exacta:*\n\`\`\`${dump}\`\`\``,
+                text: `📡 *ProtocolMessage capturado:*\n\`\`\`${dump.slice(0, 3500)}\`\`\``,
               });
             }
           }
@@ -279,13 +318,15 @@ export default {
 
         const wsAny = (sock as any).ws;
         if (wsAny && typeof wsAny.on === "function") {
-          wsAny.on("CB:message", wsHandler);
+          wsAny.on("CB:message", wsMsgHandler);
+          wsAny.on("CB:notification", wsNotifHandler);
         }
         sock.ev.on("messages.upsert", msgHandler);
 
         const cleanup = () => {
           if (wsAny && typeof wsAny.off === "function") {
-            wsAny.off("CB:message", wsHandler);
+            wsAny.off("CB:message", wsMsgHandler);
+            wsAny.off("CB:notification", wsNotifHandler);
           }
           sock.ev.off("messages.upsert", msgHandler);
           activeSniffers.delete(from);
@@ -298,7 +339,7 @@ export default {
         });
 
         return await ctx.reply({
-          text: "📡 Sniffer activo por 2 min (Protobuf + nodo XML). Haz que el otro bot cambie el fondo ahora.",
+          text: "📡 Sniffer total activo por 2 min (ProtocolMessage + XML + notificaciones). Haz que el otro bot cambie el fondo ahora.",
         });
       }
 
@@ -332,8 +373,8 @@ export default {
           throw new Error("No se obtuvieron las llaves cifradas al subir la imagen.");
         }
 
-        const dimArg = args.find((a) => /^0?\.\d+$|^1(\.0+)?$|^0$/.test(a));
-        const dimLevel = dimArg ? Math.max(0, Math.min(1, parseFloat(dimArg))) : 0;
+        const dimArg = args.find((a) => /^\d+(\.\d+)?$/.test(a));
+        const dimLevel = dimArg ? parseFloat(dimArg) : 0;
 
         const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
         const colorSchemeId =
@@ -373,11 +414,12 @@ export default {
           text:
             `╭〔 🎨 ${fytBold("Fondo y Tema de Grupo")} 〕⬣\n` +
             `• *Foto propia:* Responde a una foto con \`${prefix}fondo\`\n` +
-            `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo #1A1A2E -nodoodle\`\n` +
+            `• *Color sólido:* \`${prefix}fondo morado\` o \`${prefix}fondo rojo -t Crimson\`\n` +
             `• *Tema tonal:* \`${prefix}fondo tema Royal-Blue\`\n` +
             `• *Fondo animado:* \`${prefix}fondo animado wallpaper-1 0.25\`\n` +
             `• *Predeterminado:* \`${prefix}fondo default\`\n` +
             `• *Quitar fondo:* \`${prefix}fondo reset\`\n` +
+            `• *Inspeccionar proto:* \`${prefix}fondo proto\`\n` +
             `• *Capturar otro bot:* \`${prefix}fondo sniff\`\n` +
             `╰━━━━━━━━━━━━⬣`,
         });
@@ -428,9 +470,7 @@ export default {
       if (sub === "animado" || sub === "live") {
         const animatedWallpaperId = args[1] || "wallpaper-1";
         const parsedDim = args[2] ? parseFloat(args[2]) : 0.25;
-        const dimLevel = Number.isFinite(parsedDim)
-          ? Math.max(0, Math.min(1, parsedDim))
-          : 0.25;
+        const dimLevel = Number.isFinite(parsedDim) ? parsedDim : 0.25;
 
         const schemeArg = args[3] ? normalizeColorScheme(args[3]) : undefined;
         const chatThemeSetting: Record<string, any> = {
@@ -471,13 +511,25 @@ export default {
           ? resolveArgbHex(args[darkFlagIdx + 1]) || shiftArgbHex(argbLight, 0.35)
           : shiftArgbHex(argbLight, 0.35);
 
-      await relayChatTheme(sock, from, {
+      const themeIdx = args.findIndex((a) => a === "-t" || a === "--tema");
+      const colorSchemeId =
+        themeIdx !== -1 && args[themeIdx + 1]
+          ? normalizeColorScheme(args[themeIdx + 1])
+          : undefined;
+
+      const chatThemeSetting: Record<string, any> = {
         solidColor: {
           colorLight: argbLight,
           colorDark: argbDark,
           isDoodleEnabled,
         },
-      });
+      };
+
+      if (colorSchemeId) {
+        chatThemeSetting.colorSchemeId = colorSchemeId;
+      }
+
+      await relayChatTheme(sock, from, chatThemeSetting);
 
       await sock.sendMessage(from, {
         react: { text: "✅", key: msg.key },
