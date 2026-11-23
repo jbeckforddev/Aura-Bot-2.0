@@ -65,7 +65,7 @@ test('busca nombres parciales y no muestra archivos sensibles',()=>{
  assert.equal(findOwnerSources('filech',root)[0].path,'cmd/system/filecheck.ts');
  assert.deepEqual(findOwnerSources('nadaexistente',root),[]);
  assert.throws(()=>findOwnerSources('config.ts',root),/protegido/i);
- assert.deepEqual(findOwnerSources('config',root),[]);
+ assert.throws(()=>findOwnerSources('config',root),/protegido/i);
 });
 test('omite symlinks al buscar, incluidos directorios enlazados',()=>{
  fs.symlinkSync(path.join(root,'sessions','creds.json'),path.join(root,'cmd','system','leak.ts'));
