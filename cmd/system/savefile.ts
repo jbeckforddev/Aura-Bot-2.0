@@ -7,10 +7,9 @@ export default {
   description: "Guarda código en un área privada de preparación, sin modificar los comandos activos.",
   usage: "savefile <ruta> [--replace] (responde al código o adjúntalo tras la ruta)",
   ownerOnly: true,
-  privateOnly: true,
   async run(ctx: CommandContext) {
-    if (!ctx.isOwner || ctx.isGroup) {
-      return ctx.reply("✖ Solo el owner puede guardar código desde un chat privado.");
+    if (!ctx.isOwner) {
+      return ctx.reply("✖ Solo los owners pueden guardar código.");
     }
     const prefix = ctx.usedPrefix || ctx.prefix || ".";
     const raw = String(ctx.rawText || ctx.args?.join(" ") || "").trim();
