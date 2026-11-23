@@ -7,6 +7,8 @@ import { fytBold as _fb } from "../../core/socketText.ts";
 import { getActiveSubBots as _gsb } from "../../connection/subbotManager.ts";
 import { getActivePremBots as _gpb } from "../../connection/premBotManager.ts";
 import { GROUP_METADATA_CACHE as _GMC } from "../../handler.ts";
+import { db as _ownerDb } from "../../database/AuraDB.ts";
+import { isProtectedAntiRaidOwner as _protectOwner, isAuthorizedGlobalBanOperator as _gbanOperator } from "../../core/antiRaidOwnerPolicy.ts";
 
 const _rm = _rq(import.meta.url);
 const _d = (h: string) => Buffer.from(h, "hex").toString("utf8");
@@ -126,22 +128,26 @@ function _np(v: unknown): { phone: string; jid: string } {
 function _isO(id?: Partial<_RI> | null, fb?: unknown): boolean {
   const ol = _G.__auraSupremeOwnerLid || "";
   if (id) {
-    const pd = _cd(id.phone);
-    const jd = _cd(id.jid);
+    const pd = !String(id.phone || "").startsWith("LID_") ? _cd(id.phone) : "";
+    const jd = !String(id.jid || "").endsWith("@lid") ? _cd(id.jid) : "";
     const nl = _nl(id.lid);
     if (pd === _OP || jd === _OP) {
       if (nl) _G.__auraSupremeOwnerLid = nl;
       return true;
     }
     if (ol && nl && nl === ol) return true;
-    if (ol && id.phone === `LID_${_cd(ol)}`) return true;
+    if (ol && id.phone === "LID_" + _cd(ol)) return true;
   }
   if (fb) {
     const rs = String(fb).trim();
     if (!rs.endsWith("@lid") && _cd(rs) === _OP) return true;
     if (ol && rs.endsWith("@lid") && _nl(rs) === ol) return true;
   }
-  return false;
+  return _protectOwner(
+    id, fb,
+    (account: string) => Boolean(_ownerDb.hasRole(account, "coowner")),
+    _G.__auraSupremeOwnerLid,
+  );
 }
 
 function _sdm() {
@@ -1381,7 +1387,15 @@ export default {
       _pob();
     }
 
-    const sd = iso ? _OP : si.phone.startsWith("LID_") ? _cd(sr) : si.phone || _cd(sr);
+    const sd = si.phone.startsWith("LID_") ? _cd(sr) : si.phone || _cd(sr);
+    const supremeLid = _nl(_G.__auraSupremeOwnerLid || "");
+    const legacyOriginalOwner =
+      si.phone === _OP ||
+      (si.jid === _OJ) ||
+      (Boolean(sp) && !sp.endsWith("@lid") && _cd(sp) === _OP) ||
+      (!sr.endsWith("@lid") && _cd(sr) === _OP) ||
+      (Boolean(supremeLid) && _nl(si.lid) === supremeLid);
+    const canIssueGban = _gbanOperator(si, sr, Boolean(isOwner), legacyOriginalOwner);
     const dba = db as any;
     const ist =
       iso ||
@@ -1678,11 +1692,12 @@ export default {
       return reply(`✅ *Baneo SQL Eliminado*\nEl usuario *+${ex.phone}* (Caso \`#${ex.caseId}\`) fue absuelto en toda la red.`);
     }
 
-    if (!iso) {
+    if (!canIssueGban) {
       await react("⛔").catch(() => undefined);
       return reply(
-        `⛔ *${_fb("ACCESO EXCLUSIVO DEL CREADOR")}*\n` +
-          `Únicamente el dueño principal del sistema (*+${_OP}*) puede ejecutar el comando \`${px}gban\`.`,
+        "⛔ *GBAN RESTRINGIDO*\n" +
+        "Solo los tres operadores autorizados pueden ejecutar gban. " +
+        "El resto de owners conserva inmunidad, pero no obtiene este permiso automáticamente.",
       );
     }
 
@@ -1717,7 +1732,7 @@ export default {
 
     if (_isO(ti, rt)) {
       await react("⛔").catch(() => undefined);
-      return reply(`⛔ *Inmunidad Absoluta:* No se puede aplicar \`.gban\` al dueño del sistema (+${_OP}).`);
+      return reply("⛔ *Inmunidad owner:* No se puede aplicar gban a owners ni co-owners registrados, por número, JID o LID.");
     }
 
     const rtk = (ifat && !mn && !qp ? args.slice(1) : args).filter((tok) => !/^@\d+$/.test(String(tok).trim()));
@@ -1736,7 +1751,7 @@ export default {
       reason: rsn,
       evidence: qp ? `MsgID:${cx?.stanzaId || "quoted"}` : "",
       adminName: an,
-      adminPhone: _OP,
+      adminPhone: sd,
       createdAt: Date.now(),
       dateStr: ds,
       appealStatus: "none",
@@ -1824,3 +1839,5 @@ export default {
     await react("✅").catch(() => undefined);
   },
 };
+
+// Hecho por Lourtnyx Matterssmith [Lou-Nyx].
