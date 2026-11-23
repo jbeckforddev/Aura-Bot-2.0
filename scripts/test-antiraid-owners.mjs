@@ -75,7 +75,7 @@ test("los dígitos de un LID no se interpretan como número telefónico", () => 
 test("identificador LID del owner supremo y errores de DB", () => {
   assert.equal(isProtectedAntiRaidOwner({lid:"1234567890123@lid"},"",undefined,"1234567890123@lid"),true);
   const failLookup=()=>{throw Error("DB offline")};
-  assert.equal(isProtectedAntiRaidOwner({jid:"55300001111@s.whatsapp.net"},"",failLookup),false);
+  assert.equal(isProtectedAntiRaidOwner({jid:"55300001111@s.whatsapp.net"},"",failLookup),true);
 });
 
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
