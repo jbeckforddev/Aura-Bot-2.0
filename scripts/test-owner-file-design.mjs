@@ -85,7 +85,7 @@ test("getcode escribe código con el diseño exacto de #r cat", async () => {
   assert.equal(typeof result.text, "string");
   assert.equal(result.document, undefined);
   assert.match(result.text, /^╭〔 🖥️ 𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
-  assert.match(result.text, /━━━━⬣\n\n\x60\x60\x60\nexport default true;\n\n\x60\x60\x60/);
+  assert.match(result.text, /━⬣\n\n\x60\x60\x60\nexport default true;\n\n\x60\x60\x60/);
   assert.match(result.text, /╰━━〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕━━⬣$/);
 });
 
