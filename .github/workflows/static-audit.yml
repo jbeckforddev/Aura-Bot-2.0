@@ -17,7 +17,7 @@ jobs:
       - name: Comprobar transacciones Gacha con SQLite aislado
         run: node scripts/test-gacha-sql.cjs
       - name: Probar getcode y savefile en directorio aislado
-        run: node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs
+        run: node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs scripts/test-owner-file-design.mjs
       - name: Verificar inmunidad de owners y autorizaciones GBAN
         run: node --experimental-strip-types --test scripts/test-antiraid-owners.mjs
       - name: Instalar analizador aislado
