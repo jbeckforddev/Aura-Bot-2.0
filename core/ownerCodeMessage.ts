@@ -1,4 +1,3 @@
-import path from "node:path";
 import { fytBold } from "./socketText.ts";
 import { t } from "../src/langs/index.ts";
 
@@ -59,14 +58,16 @@ export function formatOwnerCodeMessages(filePath: string, content: Buffer): stri
     throw new OwnerCodeMessageError("El código requiere demasiados mensajes para enviarse al chat.");
   }
 
-  const filename = path.basename(filePath);
+  // Mostrar la ruta relativa completa, legible y copiable, no solo
+  // el nombre del archivo. La lectura ya valida esta ruta.
+  const relativePath = filePath.replace(/\\/g, "/");
   return parts.map((part, index) => {
-    const title = "GETCODE // " + filename +
+    const title = fytBold("GETCODE") + " // " + relativePath +
       (parts.length > 1 ? " [" + (index + 1) + "/" + parts.length + "]" : "");
 
     // Exactamente la plantilla visual de cmd/system/r.ts (salida #r cat).
     return t("cmd_value0_value1_value2_7c4207de", {
-      value0: fytBold(title),
+      value0: title,
       value1: part,
       value2: fytBold(t("cmd_system_29d43743")),
     });

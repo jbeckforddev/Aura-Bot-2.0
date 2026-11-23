@@ -16,7 +16,7 @@ test("usa exactamente el marco de #r cat, enviando texto y no documentos", () =>
   const code = "const valor = 7;\nconsole.log(valor);\n";
   const parts = formatOwnerCodeMessages("cmd/system/ejemplo.ts", Buffer.from(code));
   assert.equal(parts.length, 1);
-  assert.match(parts[0], /^╭〔 🖥️ 𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+  assert.match(parts[0], /^╭〔 🖥️ 𝐆𝐄𝐓𝐂𝐎𝐃𝐄 \/\/ cmd\/system\/ejemplo\.ts 〕━⬣/);
   assert.match(parts[0], /╰━━〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕━━⬣$/);
   assert.equal(sourceFromMessage(parts[0]), code);
 });
@@ -28,6 +28,7 @@ test("código largo dividido en partes completas y ordenadas", () => {
   assert.equal(parts.map(sourceFromMessage).join(""), code);
   for (const [index, message] of parts.entries()) {
     assert.match(message, new RegExp("\\[" + (index + 1) + "/" + parts.length + "\\]"));
+    assert.ok(message.includes("cmd/system/largo.ts"), "Todas las partes deben incluir la ruta.");
     assert.ok(message.length < MAX_GETCODE_PART_CHARS + 400);
   }
 });
@@ -38,6 +39,13 @@ test("divide líneas largas sin romper emojis Unicode", () => {
   assert.ok(parts.length >= 2);
   assert.equal(parts.map(sourceFromMessage).join(""), code);
   assert.equal(parts.some(part => part.includes("\ufffd")), false);
+});
+
+test("muestra también la ruta completa de archivos preparados", () => {
+  const code = "export const a = 123;\n";
+  const parts = formatOwnerCodeMessages("staged/cmd/system/ejemplo.ts", Buffer.from(code));
+  assert.match(parts[0], /𝐆𝐄𝐓𝐂𝐎𝐃𝐄 \/\/ staged\/cmd\/system\/ejemplo\.ts/);
+  assert.equal(sourceFromMessage(parts[0]), code);
 });
 
 test("rechaza archivos demasiado largos sin entregar contenido parcial", () => {
