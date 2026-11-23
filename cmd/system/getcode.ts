@@ -7,10 +7,9 @@ export default {
   description: "Envía código autorizado como archivo o lista una carpeta de fuentes.",
   usage: "getcode <ruta> (o getcode staged/<ruta> para archivos preparados)",
   ownerOnly: true,
-  privateOnly: true,
   async run(ctx: CommandContext) {
-    if (!ctx.isOwner || ctx.isGroup) {
-      return ctx.reply("✖ Solo el owner puede consultar código desde un chat privado.");
+    if (!ctx.isOwner) {
+      return ctx.reply("✖ Solo los owners pueden consultar código.");
     }
     const prefix = ctx.usedPrefix || ctx.prefix || ".";
     const requested = String(ctx.rawText || ctx.args?.join(" ") || "").trim();
