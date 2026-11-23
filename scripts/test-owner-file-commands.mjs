@@ -64,6 +64,7 @@ test('getcode directorio y bloqueo de ruta sensible',async()=>{
 test('getcode por nombre sin ruta envía el archivo correcto',async()=>{
  const found=await get.run({...base,isGroup:true,rawText:'ping'});
  assert.match(found.text,/𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+ assert.match(found.text,/cmd\/system\/ping\.ts/);
  assert.match(found.text,/export default 1/);
  assert.equal(found.document,undefined);
  const withExtension=await get.run({...base,rawText:'ping.ts'});
@@ -72,6 +73,7 @@ test('getcode por nombre sin ruta envía el archivo correcto',async()=>{
 test('getcode encuentra archivos preparados solo por nombre',async()=>{
  const found=await get.run({...base,rawText:'grupo'});
  assert.match(found.text,/export default 87;/);
+ assert.match(found.text,/staged\/cmd\/system\/grupo\.ts/);
  assert.match(found.text,/𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
  assert.equal(found.document,undefined);
 });
