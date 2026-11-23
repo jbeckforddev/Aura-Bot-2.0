@@ -83,16 +83,19 @@ export function isProtectedAntiRaidOwner(
   }
 
   if (hasOwnerRole) {
+    let lookupFailed = false;
     for (const phone of target.phones) {
       try {
         if (hasOwnerRole(phone + "@s.whatsapp.net") || hasOwnerRole(phone)) return true;
-      } catch { /* No dar permisos por fallo de base de datos. */ }
+      } catch { lookupFailed = true; /* No sancionar cuando falle la base de roles. */ }
     }
     for (const lid of target.lids) {
       try {
         if (hasOwnerRole(lid)) return true;
-      } catch { /* No dar permisos por fallo de base de datos. */ }
+      } catch { lookupFailed = true; /* No sancionar cuando falle la base de roles. */ }
     }
+    // Fallo de verificación: evitar sancionar a un posible owner.
+    if (lookupFailed) return true;
   }
 
   return false;
