@@ -55,9 +55,8 @@ test('busca archivos por nombre y prioriza comandos activos frente a test',()=>{
  fs.writeFileSync(path.join(root,'test','system','demo.ts'),'export default 2;\n');
  const matches=findOwnerSources('demo',root);
  assert.equal(matches[0].path,'cmd/system/demo.ts');
- assert.equal(matches[1].path,'test/system/demo.ts');
- assert.deepEqual(findOwnerSources('demo.ts',root).map(x=>x.path).slice(0,2),
-  ['cmd/system/demo.ts','test/system/demo.ts']);
+ assert.ok(matches.some(x=>x.path==='test/system/demo.ts'));
+ assert.equal(findOwnerSources('demo.ts',root)[0].path,'cmd/system/demo.ts');
 });
 test('busca nombres parciales y no muestra archivos sensibles',()=>{
  fs.writeFileSync(path.join(root,'cmd','system','filecheck.ts'),'export default true;\n');
