@@ -56,6 +56,36 @@ test('getcode directorio y bloqueo de ruta sensible',async()=>{
  const list=await get.run({...base,rawText:'cmd/system'});
  assert.match(list,/ping.ts/);
  const bad=await get.run({...base,rawText:'config.ts'});
- assert.match(bad,/Ruta prohibida|no está autorizada|ubicación no está autorizada/i);
+ assert.match(bad,/Ruta prohibida|no está autorizada|ubicación no está autorizada|archivo inválido o protegido/i);
+});
+test('getcode por nombre sin ruta envía el archivo correcto',async()=>{
+ const found=await get.run({...base,isGroup:true,rawText:'ping'});
+ assert.equal(found.fileName,'ping.ts');
+ assert.match(found.caption,/cmd\/system\/ping.ts/);
+ assert.match(found.document.toString(),/export default 1/);
+ const withExtension=await get.run({...base,rawText:'ping.ts'});
+ assert.equal(withExtension.fileName,'ping.ts');
+});
+test('getcode encuentra archivos preparados solo por nombre',async()=>{
+ const found=await get.run({...base,rawText:'grupo'});
+ assert.equal(found.fileName,'grupo.ts');
+ assert.match(found.caption,/staged\/cmd\/system\/grupo.ts/);
+});
+test('getcode distingue coincidencias duplicadas y no entrega al azar',async()=>{
+ fs.mkdirSync(path.join(root,'cmd','group'),{recursive:true});
+ fs.writeFileSync(path.join(root,'cmd','group','duplicado.ts'),'export default 2;\n');
+ fs.writeFileSync(path.join(root,'cmd','system','duplicado.ts'),'export default 3;\n');
+ const result=await get.run({...base,rawText:'duplicado'});
+ assert.equal(typeof result,'string');
+ assert.match(result,/cmd\/group\/duplicado.ts/);
+ assert.match(result,/cmd\/system\/duplicado.ts/);
+ const specific=await get.run({...base,rawText:'cmd/group/duplicado.ts'});
+ assert.equal(specific.document.toString(),'export default 2;\n');
+});
+test('getcode rechaza nombres protegidos y búsquedas vacías',async()=>{
+ const sensitive=await get.run({...base,rawText:'config.ts'});
+ assert.match(sensitive,/protegido|inválido/i);
+ const missing=await get.run({...base,rawText:'archivoinexistente'});
+ assert.match(missing,/No encontré/i);
 });
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
