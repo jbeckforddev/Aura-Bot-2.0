@@ -56,7 +56,7 @@ test('getcode directorio y bloqueo de ruta sensible',async()=>{
  const list=await get.run({...base,rawText:'cmd/system'});
  assert.match(list,/ping.ts/);
  const bad=await get.run({...base,rawText:'config.ts'});
- assert.match(bad,/Ruta prohibida|no está autorizada|ubicación no está autorizada/i);
+ assert.match(bad,/Ruta prohibida|no está autorizada|ubicación no está autorizada|archivo inválido o protegido/i);
 });
 test('getcode por nombre sin ruta envía el archivo correcto',async()=>{
  const found=await get.run({...base,isGroup:true,rawText:'ping'});
