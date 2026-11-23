@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  readOwnerSource, listOwnerSources, getOwnerQuotedCode, writeOwnerStage,
+  readOwnerSource, listOwnerSources, findOwnerSources, getOwnerQuotedCode, writeOwnerStage,
   normalizeOwnerCode, OWNER_FILE_STAGE,
 } from '../core/ownerFileWorkspace.ts';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-file-test-'));
@@ -49,5 +49,26 @@ test('extrae mensaje citado con contexto Baileys y limpia cercas',()=>{
  const message={message:{extendedTextMessage:{contextInfo:{quotedMessage:{extendedTextMessage:{text:'\x60\x60\x60js\nconsole.log(1);\n\x60\x60\x60'}}}}}};
  assert.equal(normalizeOwnerCode(getOwnerQuotedCode(message)),'console.log(1);\n');
  assert.equal(getOwnerQuotedCode({message:{conversation:'plain'}}),'');
+});
+test('busca archivos por nombre y prioriza comandos activos frente a test',()=>{
+ fs.mkdirSync(path.join(root,'test','system'),{recursive:true});
+ fs.writeFileSync(path.join(root,'test','system','demo.ts'),'export default 2;\n');
+ const matches=findOwnerSources('demo',root);
+ assert.equal(matches[0].path,'cmd/system/demo.ts');
+ assert.equal(matches[1].path,'test/system/demo.ts');
+ assert.deepEqual(findOwnerSources('demo.ts',root).map(x=>x.path).slice(0,2),
+  ['cmd/system/demo.ts','test/system/demo.ts']);
+});
+test('busca nombres parciales y no muestra archivos sensibles',()=>{
+ fs.writeFileSync(path.join(root,'cmd','system','filecheck.ts'),'export default true;\n');
+ fs.writeFileSync(path.join(root,'cmd','system','config.ts'),'const secret = 10;\n');
+ assert.equal(findOwnerSources('filech',root)[0].path,'cmd/system/filecheck.ts');
+ assert.deepEqual(findOwnerSources('nadaexistente',root),[]);
+ assert.throws(()=>findOwnerSources('config.ts',root),/protegido/i);
+ assert.deepEqual(findOwnerSources('config',root),[]);
+});
+test('omite symlinks al buscar, incluidos directorios enlazados',()=>{
+ fs.symlinkSync(path.join(root,'sessions','creds.json'),path.join(root,'cmd','system','leak.ts'));
+ assert.deepEqual(findOwnerSources('leak',root),[]);
 });
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
