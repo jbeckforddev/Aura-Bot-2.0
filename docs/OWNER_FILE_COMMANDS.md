@@ -17,12 +17,12 @@ Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 
 - $savefile cmd/system/ejemplo.ts — responde a un mensaje que contiene el código o escribe el código después de la ruta.
 - $savefile cmd/system/ejemplo.ts — crea el archivo preparado o, si ya existe, lo actualiza directamente sin argumento adicional.
-- $getcode ping — busca el archivo por nombre y muestra el código directamente dentro del chat, igual que #r cat (sin enviar documentos).
+- $getcode ping — busca el archivo por nombre y muestra el código directamente dentro del chat, igual que #r cat (sin enviar documentos). El encabezado incluye la ruta completa `cmd/system/ping.ts` en texto plano para copiarla.
 - $getcode ping.ts — también admite la extensión del archivo y muestra el código como texto.
 - $getcode filech — permite buscar mediante el inicio del nombre; si hay varias coincidencias igualmente relevantes, lista las rutas.
 - $getcode cmd/system/ping.ts — la ruta exacta continúa siendo opcional.
 - $getcode cmd/system — lista archivos y carpetas autorizadas.
-- $getcode staged/cmd/system/ejemplo.ts — muestra el código preparado sin adjuntar archivos.
+- $getcode staged/cmd/system/ejemplo.ts — muestra el código preparado sin adjuntar archivos. El encabezado muestra también `staged/cmd/system/ejemplo.ts`.
 
 Estas acciones exigen el rol owner global, tanto en grupos como en chats privados. Nunca se admiten solicitudes de usuarios sin el rol owner verificado por el bot. La ejecución en grupos es visible para sus integrantes: no se deben compartir archivos de código sensibles allí.
 
