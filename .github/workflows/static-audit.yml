@@ -16,6 +16,10 @@ jobs:
           node-version: '22'
       - name: Comprobar transacciones Gacha con SQLite aislado
         run: node scripts/test-gacha-sql.cjs
+      - name: Probar getcode y savefile en directorio aislado
+        run: node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs
+      - name: Verificar inmunidad de owners y autorizaciones GBAN
+        run: node --experimental-strip-types --test scripts/test-antiraid-owners.mjs
       - name: Instalar analizador aislado
         run: npm install --prefix "$RUNNER_TEMP/aura-ts-parser" --no-save --ignore-scripts --no-package-lock --no-audit --no-fund typescript@5.9.3
       - name: Revisar archivos sin iniciar Aura Bot

@@ -9,3 +9,5 @@ sessions
 dist
 test.endpoint.*
 scripts
+/.aura-owner-staging/
+# Hecho por Lourtnyx Matterssmith [Lou-Nyx].
