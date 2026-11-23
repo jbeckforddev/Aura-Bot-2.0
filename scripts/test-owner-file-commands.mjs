@@ -13,13 +13,28 @@ process.chdir(root);
 after(()=>{process.chdir(original);fs.rmSync(root,{recursive:true,force:true})});
 const messages=[];
 const base={isOwner:true,isGroup:false,usedPrefix:'$',prefix:'$',msg:{message:{}},args:[],rawText:'',reply:async value=>{messages.push(value);return value}};
-test('solo owner, solo mensaje privado',async()=>{
- await save.run({...base,isOwner:false,rawText:'cmd/system/hack.ts abc'});
- await get.run({...base,isGroup:true,rawText:'cmd/system/ping.ts'});
- assert.match(messages[0],/Solo el owner/);
- assert.match(messages[1],/Solo el owner/);
+test('solo owners en privado o grupos',async()=>{
+ for (const isGroup of [false,true]) {
+   const deniedSave=await save.run({...base,isOwner:false,isGroup,rawText:'cmd/system/hack.ts abc'});
+   const deniedGet=await get.run({...base,isOwner:false,isGroup,rawText:'cmd/system/ping.ts'});
+   assert.match(deniedSave,/Solo los owners/);
+   assert.match(deniedGet,/Solo los owners/);
+ }
  assert.equal(fs.existsSync(path.join(root,'.aura-owner-staging')),false);
 });
+test('owners pueden consultar código dentro de grupos',async()=>{
+ const fromGroup=await get.run({...base,isGroup:true,rawText:'cmd/system/ping.ts'});
+ assert.equal(fromGroup.fileName,'ping.ts');
+ assert.match(fromGroup.document.toString(),/export default 1/);
+});
+test('owners pueden guardar código citado dentro de grupos',async()=>{
+ const msg={message:{extendedTextMessage:{contextInfo:{quotedMessage:{conversation:'export default 87;'}}}}};
+ const out=await save.run({...base,isGroup:true,msg,rawText:'cmd/system/grupo.ts'});
+ assert.match(out,/staged\/cmd\/system\/grupo.ts/);
+ const read=await get.run({...base,isGroup:true,rawText:'staged/cmd/system/grupo.ts'});
+ assert.equal(read.document.toString(),'export default 87;\n');
+});
+
 test('guardar desde mensaje citado y exportarlo con getcode',async()=>{
  const msg={message:{extendedTextMessage:{contextInfo:{quotedMessage:{conversation:'\x60\x60\x60ts\nexport default 11;\n\x60\x60\x60'}}}}};
  await save.run({...base,msg,rawText:'cmd/system/demo.ts',args:['cmd/system/demo.ts']});
