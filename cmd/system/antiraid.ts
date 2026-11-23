@@ -978,7 +978,7 @@ async function _snw(s: any, gid: string, ban: GlobalBanRecord, mn: string[]) {
       extraValue: "DAR ADMIN / EXPULSAR",
       footerNote:
         "Este usuario está en la Lista Negra Global de Aura Reed, pero ningún bot o subbot en el grupo tiene rango de administrador para sacarlo.",
-      copyCommand: `.checkban ${ban.caseId}`,
+      copyCommand: `.checkgban ${ban.caseId}`,
       copyLabel: "🔍 Ver Caso SQL",
       rawSummary: wt,
     },
@@ -1096,7 +1096,7 @@ async function _eia(
           extraValue: `${ban.kickedCount} expulsión(es)`,
           footerNote:
             "El usuario fue expulsado inmediatamente mediante verificación cruzada de Número, JID y LID. Usa .antiraid off si deseas apagar esta defensa.",
-          copyCommand: `.checkban ${ban.caseId}`,
+          copyCommand: `.checkgban ${ban.caseId}`,
           copyLabel: "🔍 Ver Caso SQL",
           rawSummary: at,
         },
@@ -1223,7 +1223,7 @@ function _aah(db?: any, cs?: any) {
 
           if (/^[.!/#\\;,\\-]/.test(tx)) {
             const cw = tx.slice(1).trim().split(/\s+/)[0]?.toLowerCase() || "";
-            const ok = cw === "appeal" || cw === "apelar" || cw === "checkban";
+            const ok = cw === "appeal" || cw === "apelar" || cw === "checkgban";
             if (!ok) {
               delete m.message.conversation;
               delete m.message.extendedTextMessage;
@@ -1345,7 +1345,7 @@ export default {
     "apelar",
     "rejectappeal",
     "denegar",
-    "checkban",
+    "checkgban",
     "raidlist",
   ],
   category: "system",
@@ -1411,10 +1411,10 @@ export default {
     const mn = cx?.mentionedJid?.[0];
     const qp = cx?.participant;
 
-    if (ic === "checkban" || (ic === "antiraid" && args[0]?.toLowerCase() === "info")) {
+    if (ic === "checkgban" || (ic === "antiraid" && args[0]?.toLowerCase() === "info")) {
       const at = args[ic === "antiraid" ? 1 : 0] || "";
       const qr = mn || qp || at;
-      if (!qr) return reply(`🔍 Indica o cita a un usuario, número, LID o ID de caso.\n*Ejemplo:* \`${px}checkban 573001234567\``);
+      if (!qr) return reply(`🔍 Indica o cita a un usuario, número, LID o ID de caso.\n*Ejemplo:* \`${px}checkgban 573001234567\``);
       const qi = await _rfi(sock, db, qr, groupMeta || from);
       const ban = _fbi(qi, qr);
       if (!ban) return reply(`✅ *Sin registros en SQL:* El identificador \`${qr}\` no posee sanciones activas.`);
@@ -1718,7 +1718,7 @@ export default {
           `• *Banear:* \`${px}gban <número/lid/@mención> <motivo>\`\n` +
           `• *Desbanear:* \`${px}ungban <número/lid/#caso>\`\n` +
           `• *Rechazar apelación:* \`${px}rejectappeal <#caso> <motivo>\`\n` +
-          `• *Expediente SQL:* \`${px}checkban <número/lid/#caso>\`\n` +
+          `• *Expediente SQL:* \`${px}checkgban <número/lid/#caso>\`\n` +
           `• *Lista negra:* \`${px}raidlist\``,
       );
     }
