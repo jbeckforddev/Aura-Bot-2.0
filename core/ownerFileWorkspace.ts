@@ -129,6 +129,98 @@ export function listOwnerSources(raw: string, root = process.cwd()): string[] {
     .map(entry => entry.name + (entry.isDirectory() ? "/" : ""));
 }
 
+
+export interface OwnerSourceSearchResult {
+  path: string;
+  matchRank: number;
+  locationRank: number;
+}
+
+/**
+ * Busca por nombre de archivo, sin abrir contenidos.
+ * Limita el recorrido a fuentes autorizadas e ignora enlaces simbólicos.
+ */
+export function findOwnerSources(query: string, root = process.cwd()): OwnerSourceSearchResult[] {
+  const requested = String(query ?? "").trim().normalize("NFC").toLowerCase();
+  if (!requested || requested.length > 90 || requested.startsWith(".") ||
+      !/^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(requested) ||
+      SENSITIVE.test(requested)) {
+    throw new OwnerFileError("Nombre de archivo inválido o protegido.");
+  }
+  const files: OwnerSourceSearchResult[] = [];
+  const queue: Array<{ logical: string; physical: string; depth: number }> = [];
+  const base = path.resolve(root);
+  let visited = 0;
+
+  for (const name of ROOT_FILES) {
+    try {
+      checkLogicalPath(name, "read");
+      const file = path.join(base, name);
+      if (fs.lstatSync(file).isFile()) {
+        queue.push({ logical: name, physical: file, depth: 0 });
+      }
+    } catch { /* Archivo opcional. */ }
+  }
+  for (const name of READ_ROOTS) {
+    const directory = path.join(base, name);
+    try {
+      if (fs.lstatSync(directory).isDirectory()) {
+        queue.push({ logical: name, physical: directory, depth: 0 });
+      }
+    } catch { /* Categoría opcional. */ }
+  }
+  const stagedRoot = path.join(base, OWNER_FILE_STAGE);
+  try {
+    if (fs.lstatSync(stagedRoot).isDirectory()) {
+      queue.push({ logical: "staged", physical: stagedRoot, depth: 0 });
+    }
+  } catch { /* No se ha usado savefile. */ }
+
+  while (queue.length && visited < 5000) {
+    const current = queue.shift()!;
+    visited++;
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(current.physical); }
+    catch { continue; }
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) {
+      if (current.depth >= 8) continue;
+      let entries: fs.Dirent[];
+      try { entries = fs.readdirSync(current.physical, { withFileTypes: true }); }
+      catch { continue; }
+      for (const entry of entries) {
+        if (entry.isSymbolicLink() || !(entry.isDirectory() || entry.isFile())) continue;
+        const relative = current.logical + "/" + entry.name;
+        try { checkLogicalPath(relative, "read", entry.isDirectory()); }
+        catch { continue; }
+        queue.push({
+          logical: relative,
+          physical: path.join(current.physical, entry.name),
+          depth: current.depth + 1,
+        });
+      }
+      continue;
+    }
+    if (!stat.isFile() || stat.size > OWNER_FILE_MAX_READ) continue;
+    const fileName = path.basename(current.logical).normalize("NFC").toLowerCase();
+    const stem = fileName.slice(0, fileName.length - path.extname(fileName).length);
+    const rank = fileName === requested ? 0
+      : stem === requested ? 1
+      : !requested.includes(".") && stem.startsWith(requested) ? 2
+      : !requested.includes(".") && stem.includes(requested) ? 3 : -1;
+    if (rank < 0) continue;
+    const first = current.logical.split("/")[0];
+    const locationRank = first === "cmd" ? 0 : first === "staged" ? 2 : first === "test" ? 3 : 1;
+    files.push({ path: current.logical, matchRank: rank, locationRank });
+  }
+
+  return files.sort((a, b) =>
+    a.matchRank - b.matchRank ||
+    a.locationRank - b.locationRank ||
+    a.path.localeCompare(b.path)
+  ).slice(0, 25);
+}
+
 export function normalizeOwnerCode(raw: string): string {
   const text = String(raw || "").replace(/\r\n?/g, "\n").trim();
   const fenced = text.match(/^\x60{3}[a-zA-Z0-9_-]*\n([\s\S]*?)\n\x60{3}$/);
