@@ -27,7 +27,7 @@ No se permite aplicar `gban` a cuentas que figuren como owner o coowner en los r
 
 Los registros heredados detectados para owners protegidos se eliminan del índice y la persistencia durante la conciliación. No se agregan nuevas restricciones a cuentas con identidad validada como owner.
 
-Cuando una cuenta todavía no puede vincularse a un número o LID conocido, la inmunidad depende de la información disponible de WhatsApp, DEFAULT_USER_ROLES y AuraDB. Para evitar errores, las identidades de owners deben mantenerse correctamente vinculadas en la base de datos y comprobarse en grupos de prueba antes de desplegar el barrido automático.
+Si AuraDB falla al consultar los rangos de una identidad, la verificación se cierra de forma segura: no se procede a sancionar a esa identidad hasta poder comprobar si es owner. Cuando una cuenta todavía no puede vincularse a un número o LID conocido, la inmunidad depende de la información disponible de WhatsApp, DEFAULT_USER_ROLES y AuraDB. Para evitar errores, las identidades de owners deben mantenerse correctamente vinculadas en la base de datos y comprobarse en grupos de prueba antes de desplegar el barrido automático.
 
 ## Uso
 
