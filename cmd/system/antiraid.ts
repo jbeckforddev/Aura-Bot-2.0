@@ -1438,7 +1438,7 @@ export default {
     if (ic === "appeal" || ic === "apelar") {
       if (iso) {
         _pob();
-        return reply(`👑 *Inmunidad Suprema Activa:* Tu cuenta (+${_OP}) es intocable y nunca puede ser sancionada.`);
+        return reply(`👑 *Inmunidad de owner:* La cuenta verificada está protegida contra sanciones globales.`);
       }
       const ban = _fbi(si, sr);
       if (!ban) return reply(`✅ *No tienes sanciones activas*\nTu cuenta (Número/LID) no figura en la Lista Negra de Aura Reed.`);
@@ -1638,7 +1638,7 @@ export default {
         const pg = _pob();
         await react("✅").catch(() => undefined);
         return reply(
-          `👑 *Auto-desbaneo Supremo Ejecutado*\nTu cuenta (+${_OP}) está completamente limpia y blindada (${pg} registro(s) removidos).`,
+          `👑 *Protección owner verificada*\nTu cuenta está protegida y se eliminaron ${pg} registro(s) de owners/co-owners.`,
         );
       }
 
