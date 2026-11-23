@@ -17,7 +17,10 @@ Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 
 - $savefile cmd/system/ejemplo.ts — responde a un mensaje que contiene el código o escribe el código después de la ruta.
 - $savefile cmd/system/ejemplo.ts — crea el archivo preparado o, si ya existe, lo actualiza directamente sin argumento adicional.
-- $getcode cmd/system/ping.ts — envía el código autorizado como documento.
+- $getcode ping — busca el archivo por nombre y envía el código del comando activo.
+- $getcode ping.ts — también admite la extensión del archivo.
+- $getcode filech — permite buscar mediante el inicio del nombre; si hay varias coincidencias igualmente relevantes, lista las rutas.
+- $getcode cmd/system/ping.ts — la ruta exacta continúa siendo opcional.
 - $getcode cmd/system — lista archivos y carpetas autorizadas.
 - $getcode staged/cmd/system/ejemplo.ts — recupera el código preparado.
 
@@ -29,7 +32,7 @@ savefile almacena los archivos en la carpeta local .aura-owner-staging/ dentro d
 
 El sistema rechaza rutas absolutas, enlaces simbólicos, ascensos de directorio, barras invertidas, archivos ocultos, nombres relacionados con credenciales, sesiones, claves, variables de entorno, configuración privada y copias de seguridad. Se usan extensiones autorizadas y límites de tamaño (128 KiB al guardar; 1 MiB al leer). El mismo comando crea o sobrescribe automáticamente el archivo preparado; no es necesario usar --replace. Los ficheros se guardan de manera atómica con permisos restrictivos.
 
-La lectura conserva el nombre y extensión real del archivo, y se entrega como documento de texto. No se recomienda compartir los archivos recibidos: un archivo de código permitido podría tener información sensible incrustada.
+La búsqueda por nombre recorre las carpetas autorizadas, sin leer el contenido durante el recorrido; ignora enlaces simbólicos y ubicaciones sensibles. Prioriza coincidencias exactas y los comandos de cmd/ frente a sus copias de test/. Si encuentra múltiples resultados de igual prioridad, informa sus rutas para elegir el archivo correcto. La lectura conserva el nombre y extensión real del archivo, y se entrega como documento de texto. No se recomienda compartir los archivos recibidos: un archivo de código permitido podría tener información sensible incrustada.
 
 ## Pruebas
 
@@ -38,13 +41,13 @@ Ejecución local con Node.js 22.16.0:
 node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs
 
 La batería incluye las pruebas originales y casos adicionales de ejecución en grupos. El resultado consolidado requiere volver a ejecutar el CI después de estos cambios. Se verifica:
-- Lectura permitida y listado de directorios.
-- Bloqueo de rutas ascendentes, secretos y sesiones.
+- Lectura permitida, listado de directorios y búsqueda de archivos por nombre sin ruta.
+- Bloqueo de rutas ascendentes, secretos y sesiones incluso durante búsquedas por nombre.
 - Creación en área aislada sin tocar el archivo real.
 - Rechazo de enlaces simbólicos y de tamaño excesivo.
 - Extracción de código de un mensaje citado.
 - Rechazo de usuarios no owner en grupos y privados; ejecución correcta de ambos comandos por owners dentro de grupos.
-- Recuperación de archivos preparados con getcode.
+- Recuperación de archivos preparados con getcode indicando únicamente su nombre.
 - Reemplazo automático del archivo preparado, manteniendo intactos los archivos activos.
 - Errores seguros al consultar rutas prohibidas.
 
