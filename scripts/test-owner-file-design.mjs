@@ -80,14 +80,13 @@ test("savefile confirma creación/actualización con panel Aura Reed", async () 
   assert.match(second, /╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐈𝐍𝐅𝐎/);
 });
 
-test("getcode adjunta documento original con caption en diseño Aura Reed", async () => {
+test("getcode escribe código con el diseño exacto de #r cat", async () => {
   const result = await getcode.run({ ...base, rawText: "ping" });
-  assert.equal(result.fileName, "ping.ts");
-  assert.equal(result.document.toString(), "export default true;\n");
-  assert.match(result.caption, /𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
-  assert.match(result.caption, /𝐀𝐑𝐂𝐇𝐈𝐕𝐎 𝐄𝐍𝐂𝐎𝐍𝐓𝐑𝐀𝐃𝐎/);
-  assert.match(result.caption, /cmd\/system\/ping.ts/);
-  assert.match(result.caption, /╰〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐈𝐍𝐅𝐎/);
+  assert.equal(typeof result.text, "string");
+  assert.equal(result.document, undefined);
+  assert.match(result.text, /^╭〔 🖥️ 𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+  assert.match(result.text, /━⬣\n\n\x60\x60\x60\nexport default true;\n\n\x60\x60\x60/);
+  assert.match(result.text, /╰━━〔 ⚡ 𝐒𝐘𝐒𝐓𝐄𝐌 〕━━⬣$/);
 });
 
 test("errores y resultados vacíos también preservan el diseño", async () => {

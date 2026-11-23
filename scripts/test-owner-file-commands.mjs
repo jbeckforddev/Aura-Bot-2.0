@@ -24,15 +24,17 @@ test('solo owners en privado o grupos',async()=>{
 });
 test('owners pueden consultar código dentro de grupos',async()=>{
  const fromGroup=await get.run({...base,isGroup:true,rawText:'cmd/system/ping.ts'});
- assert.equal(fromGroup.fileName,'ping.ts');
- assert.match(fromGroup.document.toString(),/export default 1/);
+ assert.match(fromGroup.text,/𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+ assert.match(fromGroup.text,/export default 1/);
+ assert.equal(fromGroup.document,undefined);
 });
 test('owners pueden guardar código citado dentro de grupos',async()=>{
  const msg={message:{extendedTextMessage:{contextInfo:{quotedMessage:{conversation:'export default 87;'}}}}};
  const out=await save.run({...base,isGroup:true,msg,rawText:'cmd/system/grupo.ts'});
  assert.match(out,/staged\/cmd\/system\/grupo.ts/);
  const read=await get.run({...base,isGroup:true,rawText:'staged/cmd/system/grupo.ts'});
- assert.equal(read.document.toString(),'export default 87;\n');
+ assert.match(read.text,/export default 87;/);
+ assert.equal(read.document,undefined);
 });
 
 test('guardar desde mensaje citado y exportarlo con getcode',async()=>{
@@ -40,8 +42,8 @@ test('guardar desde mensaje citado y exportarlo con getcode',async()=>{
  await save.run({...base,msg,rawText:'cmd/system/demo.ts',args:['cmd/system/demo.ts']});
  assert.match(messages.at(-1),/staged\/cmd\/system\/demo.ts/);
  const exported=await get.run({...base,rawText:'staged/cmd/system/demo.ts'});
- assert.equal(exported.fileName,'demo.ts');
- assert.equal(exported.document.toString(),'export default 11;\n');
+ assert.match(exported.text,/export default 11;/);
+ assert.equal(exported.document,undefined);
 });
 test('actualiza archivo automáticamente sin --replace',async()=>{
  const one=await save.run({...base,rawText:'cmd/system/demo.ts export default 12;'});
@@ -49,7 +51,8 @@ test('actualiza archivo automáticamente sin --replace',async()=>{
  const two=await save.run({...base,rawText:'cmd/system/demo.ts export default 13;'});
  assert.match(two,/actualizado/);
  const result=await get.run({...base,rawText:'staged/cmd/system/demo.ts'});
- assert.equal(result.document.toString(),'export default 13;\n');
+ assert.match(result.text,/export default 13;/);
+ assert.equal(result.document,undefined);
  assert.equal(fs.readFileSync(path.join(root,'cmd','system','ping.ts'),'utf8'),'export default 1;\n');
 });
 test('getcode directorio y bloqueo de ruta sensible',async()=>{
@@ -60,16 +63,17 @@ test('getcode directorio y bloqueo de ruta sensible',async()=>{
 });
 test('getcode por nombre sin ruta envía el archivo correcto',async()=>{
  const found=await get.run({...base,isGroup:true,rawText:'ping'});
- assert.equal(found.fileName,'ping.ts');
- assert.match(found.caption,/cmd\/system\/ping.ts/);
- assert.match(found.document.toString(),/export default 1/);
+ assert.match(found.text,/𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+ assert.match(found.text,/export default 1/);
+ assert.equal(found.document,undefined);
  const withExtension=await get.run({...base,rawText:'ping.ts'});
- assert.equal(withExtension.fileName,'ping.ts');
+ assert.match(withExtension.text,/export default 1/);
 });
 test('getcode encuentra archivos preparados solo por nombre',async()=>{
  const found=await get.run({...base,rawText:'grupo'});
- assert.equal(found.fileName,'grupo.ts');
- assert.match(found.caption,/staged\/cmd\/system\/grupo.ts/);
+ assert.match(found.text,/export default 87;/);
+ assert.match(found.text,/𝐆𝐄𝐓𝐂𝐎𝐃𝐄/);
+ assert.equal(found.document,undefined);
 });
 test('getcode distingue coincidencias duplicadas y no entrega al azar',async()=>{
  fs.mkdirSync(path.join(root,'cmd','group'),{recursive:true});
@@ -80,7 +84,8 @@ test('getcode distingue coincidencias duplicadas y no entrega al azar',async()=>
  assert.match(result,/cmd\/group\/duplicado.ts/);
  assert.match(result,/cmd\/system\/duplicado.ts/);
  const specific=await get.run({...base,rawText:'cmd/group/duplicado.ts'});
- assert.equal(specific.document.toString(),'export default 2;\n');
+ assert.match(specific.text,/export default 2;/);
+ assert.equal(specific.document,undefined);
 });
 test('getcode rechaza nombres protegidos y búsquedas vacías',async()=>{
  const sensitive=await get.run({...base,rawText:'config.ts'});
