@@ -1377,24 +1377,25 @@ export default {
       }
     }
 
-    const iso =
-      _isO(si, sr) ||
-      _cd(sp) === _OP ||
-      (Boolean(msg?.key?.fromMe) && _gbi(sock).phone === _OP);
-
-    if (iso) {
-      if (si.lid) _G.__auraSupremeOwnerLid = _nl(si.lid);
-      _pob();
-    }
-
-    const sd = si.phone.startsWith("LID_") ? _cd(sr) : si.phone || _cd(sr);
+    // La inmunidad de owner nunca equivale al privilegio especial del creador.
+    // De lo contrario, todos los owners/co-owners obtendrían permisos de
+    // autodesbaneo del controlador original de forma involuntaria.
     const supremeLid = _nl(_G.__auraSupremeOwnerLid || "");
     const legacyOriginalOwner =
       si.phone === _OP ||
-      (si.jid === _OJ) ||
+      si.jid === _OJ ||
       (Boolean(sp) && !sp.endsWith("@lid") && _cd(sp) === _OP) ||
       (!sr.endsWith("@lid") && _cd(sr) === _OP) ||
-      (Boolean(supremeLid) && _nl(si.lid) === supremeLid);
+      (Boolean(supremeLid) && _nl(si.lid) === supremeLid) ||
+      (Boolean(msg?.key?.fromMe) && _gbi(sock).phone === _OP);
+    const iso = legacyOriginalOwner;
+
+    // Toda cuenta owner/co-owner está protegida aunque no tenga autorización
+    // para ejecutar gban; limpiar sanciones viejas de cuentas protegidas.
+    if (_isO(si, sr)) _pob();
+    if (iso && si.lid) _G.__auraSupremeOwnerLid = _nl(si.lid);
+
+    const sd = si.phone.startsWith("LID_") ? _cd(sr) : si.phone || _cd(sr);
     const canIssueGban = _gbanOperator(si, sr, Boolean(isOwner), legacyOriginalOwner);
     const dba = db as any;
     const ist =
