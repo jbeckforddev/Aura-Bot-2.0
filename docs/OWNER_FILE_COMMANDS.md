@@ -1,4 +1,4 @@
-# Adaptación de savefile y getcode a Aura Reed — rama test
+# Comandos de código para owners — Aura Reed
 
 ## Origen y estructura
 
@@ -26,6 +26,20 @@ Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 
 Estas acciones exigen el rol owner global, tanto en grupos como en chats privados. Nunca se admiten solicitudes de usuarios sin el rol owner verificado por el bot. La ejecución en grupos es visible para sus integrantes: no se deben compartir archivos de código sensibles allí.
 
+## Diseño visual oficial de Aura Reed
+
+Se revisaron `cmd/system/filecheck.ts`, `cmd/system/ping.ts`, `cmd/system/sysdiag.ts` y las plantillas originales en `src/langs/es.lang.json`. `savefile` y `getcode` emplean desde ahora el mismo formato estilizado en respuestas y leyendas de documentos:
+
+- Encabezado `╭〔 ... AURA REED ... 〕━⬣` con `fytBold` y el nombre traducible del bot.
+- Separador `╰━━━━━━━━━━━━⬣` y bloques informativos `╭─〔 ... 〕` con filas `┃`.
+- Estados visuales de ayuda, éxito y error, finalizando en `╰〔 ⚡ SYSTEM INFO 〕⬣`.
+- Captions de documentos que mantienen nombre, ruta, tamaño, resultado y seguridad en el mismo marco.
+- Un único generador reutilizable en `core/ownerFileDesign.ts` para evitar divergencias entre comandos.
+
+El diseño no cambia las operaciones, permisos, búsqueda por nombre ni aislamiento. Las respuestas del bot mantienen su formato visible también en chats grupales. No se ha alterado el sistema central de traducciones.
+
+Prueba adicional: `scripts/test-owner-file-design.mjs`. Se ejecutaron localmente las tres baterías de comandos, rutas y diseño visual mediante Node.js 22.16.0: **26 pruebas aprobadas; 0 fallidas**. Las huellas de los cuatro archivos nuevos/editados usados en las pruebas locales coinciden con los archivos de la rama `test`.
+
 ## Aislamiento y seguridad
 
 savefile almacena los archivos en la carpeta local .aura-owner-staging/ dentro de la raíz del proyecto. Esta carpeta no se importa mediante el cargador de comandos y se excluye mediante .gitignore. Ningún cambio generado por savefile se instala directamente en cmd/, core/ o la rama master. Las escrituras no actualizan GitHub automáticamente: para asegurar los archivos preparados en GitHub se requiere una revisión y commit normal.
@@ -38,7 +52,7 @@ La búsqueda por nombre recorre las carpetas autorizadas, sin leer el contenido 
 
 Ejecución local con Node.js 22.16.0:
 
-node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs
+node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs scripts/test-owner-file-design.mjs
 
 La batería incluye las pruebas originales y casos adicionales de ejecución en grupos. El resultado consolidado requiere volver a ejecutar el CI después de estos cambios. Se verifica:
 - Lectura permitida, listado de directorios y búsqueda de archivos por nombre sin ruta.
@@ -55,6 +69,6 @@ El workflow de auditoría está preparado para ejecutar las pruebas. El resultad
 
 ## Integración
 
-Conservar los cambios exclusivamente en test hasta validar un socket de ensayo en un chat privado y en un grupo de prueba y comprobar la auditoría. No reiniciar todos los sockets ni fusionar a master por el mero hecho de que el código exista.
+Desarrollar en test, ejecutar la auditoría y fusionar a master una vez validados los cambios. La fusión en GitHub no actualiza automáticamente el servidor: comprobar el commit cargado en la instancia activa antes de dar por completado el despliegue. No reiniciar todos los sockets.
 
 <!-- Hecho por Lourtnyx Matterssmith [Lou-Nyx]. -->
