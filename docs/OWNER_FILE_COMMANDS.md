@@ -16,7 +16,7 @@ Se descartaron los alias genéricos save y guardar para evitar futuras colisione
 Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 
 - $savefile cmd/system/ejemplo.ts — responde a un mensaje que contiene el código o escribe el código después de la ruta.
-- $savefile cmd/system/ejemplo.ts --replace — sustituye una versión preparada anteriormente; no modifica el comando operativo.
+- $savefile cmd/system/ejemplo.ts — crea el archivo preparado o, si ya existe, lo actualiza directamente sin argumento adicional.
 - $getcode cmd/system/ping.ts — envía el código autorizado como documento.
 - $getcode cmd/system — lista archivos y carpetas autorizadas.
 - $getcode staged/cmd/system/ejemplo.ts — recupera el código preparado.
@@ -27,7 +27,7 @@ Estas acciones exigen el rol owner global, tanto en grupos como en chats privado
 
 savefile almacena los archivos en la carpeta local .aura-owner-staging/ dentro de la raíz del proyecto. Esta carpeta no se importa mediante el cargador de comandos y se excluye mediante .gitignore. Ningún cambio generado por savefile se instala directamente en cmd/, core/ o la rama master. Las escrituras no actualizan GitHub automáticamente: para asegurar los archivos preparados en GitHub se requiere una revisión y commit normal.
 
-El sistema rechaza rutas absolutas, enlaces simbólicos, ascensos de directorio, barras invertidas, archivos ocultos, nombres relacionados con credenciales, sesiones, claves, variables de entorno, configuración privada y copias de seguridad. Se usan extensiones autorizadas y límites de tamaño (128 KiB al guardar; 1 MiB al leer). Se exige --replace para sustituir un archivo ya preparado. Los ficheros se guardan de manera atómica con permisos restrictivos.
+El sistema rechaza rutas absolutas, enlaces simbólicos, ascensos de directorio, barras invertidas, archivos ocultos, nombres relacionados con credenciales, sesiones, claves, variables de entorno, configuración privada y copias de seguridad. Se usan extensiones autorizadas y límites de tamaño (128 KiB al guardar; 1 MiB al leer). El mismo comando crea o sobrescribe automáticamente el archivo preparado; no es necesario usar --replace. Los ficheros se guardan de manera atómica con permisos restrictivos.
 
 La lectura conserva el nombre y extensión real del archivo, y se entrega como documento de texto. No se recomienda compartir los archivos recibidos: un archivo de código permitido podría tener información sensible incrustada.
 
@@ -45,7 +45,7 @@ La batería incluye las pruebas originales y casos adicionales de ejecución en 
 - Extracción de código de un mensaje citado.
 - Rechazo de usuarios no owner en grupos y privados; ejecución correcta de ambos comandos por owners dentro de grupos.
 - Recuperación de archivos preparados con getcode.
-- Reemplazo únicamente mediante --replace.
+- Reemplazo automático del archivo preparado, manteniendo intactos los archivos activos.
 - Errores seguros al consultar rutas prohibidas.
 
 El workflow de auditoría está preparado para ejecutar las pruebas. El resultado local no demuestra funcionamiento de un socket real ni reemplaza la ejecución de GitHub Actions.

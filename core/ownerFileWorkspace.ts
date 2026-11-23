@@ -174,7 +174,7 @@ export function getOwnerQuotedCode(msg: unknown): string {
   return quotedBody(context?.quotedMessage);
 }
 
-export function writeOwnerStage(raw: string, source: string, replace = false, root = process.cwd()): { path: string; bytes: number; replaced: boolean } {
+export function writeOwnerStage(raw: string, source: string, replace = true, root = process.cwd()): { path: string; bytes: number; replaced: boolean } {
   const logical = checkLogicalPath(raw, "write");
   const normalized = normalizeOwnerCode(source);
   const content = Buffer.from(normalized, "utf8");

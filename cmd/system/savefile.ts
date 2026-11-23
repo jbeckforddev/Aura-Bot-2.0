@@ -5,7 +5,7 @@ export default {
   name: ["savefile", "guardararchivo", "creararchivo"],
   category: "system",
   description: "Guarda código en un área privada de preparación, sin modificar los comandos activos.",
-  usage: "savefile <ruta> [--replace] (responde al código o adjúntalo tras la ruta)",
+  usage: "savefile <ruta> (responde al código o adjúntalo tras la ruta)",
   ownerOnly: true,
   async run(ctx: CommandContext) {
     if (!ctx.isOwner) {
@@ -19,20 +19,18 @@ export default {
         "*SAVEFILE · Preparación segura*",
         "Uso: " + prefix + "savefile cmd/system/ejemplo.ts",
         "Responde a un mensaje que contenga el código o envíalo después de la ruta.",
-        "Para modificar un archivo ya preparado: " + prefix + "savefile cmd/system/ejemplo.ts --replace",
+        "Si el archivo ya existe, se actualiza automáticamente usando el mismo comando.",
         "Los archivos se almacenan en un área aislada; no se ejecutan ni reemplazan el bot activo.",
       ].join("\n"));
     }
     const relative = first[1]!;
-    let inline = String(first[2] || "").trim();
-    const replace = inline === "--replace" || inline.startsWith("--replace ") || inline.startsWith("--replace\n");
-    if (replace) inline = inline.slice("--replace".length).trim();
+    const inline = String(first[2] || "").trim();
     const source = getOwnerQuotedCode(ctx.msg) || inline;
     if (!source.trim()) {
       return ctx.reply("✖ Falta el código. Responde a un mensaje con código o escríbelo después de la ruta.");
     }
     try {
-      const saved = writeOwnerStage(relative, source, replace);
+      const saved = writeOwnerStage(relative, source);
       return ctx.reply([
         saved.replaced ? "✓ Archivo preparado actualizado" : "✓ Archivo preparado creado",
         "Ruta: " + saved.path,
