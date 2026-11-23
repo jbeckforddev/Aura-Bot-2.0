@@ -93,10 +93,10 @@ test("getcode adjunta documento original con caption en diseño Aura Reed", asyn
 test("errores y resultados vacíos también preservan el diseño", async () => {
   const missing = await getcode.run({ ...base, rawText: "archivo-que-no-existe" });
   assert.match(missing, /╭〔 ❌/);
-  assert.match(missing, /SIN RESULTADOS/);
+  assert.match(missing, /𝐒𝐈𝐍 𝐑𝐄𝐒𝐔𝐋𝐓𝐀𝐃𝐎𝐒/);
   const invalid = await savefile.run({ ...base, rawText: "config.ts export default 1;" });
   assert.match(invalid, /╭〔 ❌/);
-  assert.match(invalid, /ERROR AL GUARDAR/);
+  assert.match(invalid, /𝐄𝐑𝐑𝐎𝐑 𝐀𝐋 𝐆𝐔𝐀𝐑𝐃𝐀𝐑/);
 });
 
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
