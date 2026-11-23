@@ -14,6 +14,8 @@ Para los dos operadores nuevos el comando exige **además** que el sistema princ
 
 El resto de los owners no recibe automáticamente permiso para **ejecutar** `gban`, pero sí conserva su protección frente a las sanciones.
 
+La protección no habilita el privilegio excepcional del creador original: el indicador interno de administrador supremo sigue separado de la comprobación general de inmunidad.
+
 ## Inmunidad obligatoria
 
 No se permite aplicar `gban` a cuentas que figuren como owner o coowner en los roles predeterminados o en la base de datos persistente. La comprobación incluye el número telefónico, JID, LID y equivalencias conocidas, y se usa en:
