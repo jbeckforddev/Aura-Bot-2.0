@@ -43,11 +43,13 @@ test('guardar desde mensaje citado y exportarlo con getcode',async()=>{
  assert.equal(exported.fileName,'demo.ts');
  assert.equal(exported.document.toString(),'export default 11;\n');
 });
-test('reemplazo requiere confirmación explícita',async()=>{
- await save.run({...base,rawText:'cmd/system/demo.ts export default 12;'});
- assert.match(messages.at(-1),/Ya existe/);
- await save.run({...base,rawText:'cmd/system/demo.ts --replace export default 12;'});
- assert.match(messages.at(-1),/actualizado/);
+test('actualiza archivo automáticamente sin --replace',async()=>{
+ const one=await save.run({...base,rawText:'cmd/system/demo.ts export default 12;'});
+ assert.match(one,/actualizado/);
+ const two=await save.run({...base,rawText:'cmd/system/demo.ts export default 13;'});
+ assert.match(two,/actualizado/);
+ const result=await get.run({...base,rawText:'staged/cmd/system/demo.ts'});
+ assert.equal(result.document.toString(),'export default 13;\n');
  assert.equal(fs.readFileSync(path.join(root,'cmd','system','ping.ts'),'utf8'),'export default 1;\n');
 });
 test('getcode directorio y bloqueo de ruta sensible',async()=>{
