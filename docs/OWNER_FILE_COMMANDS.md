@@ -18,11 +18,23 @@ Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 - $savefile cmd/system/ejemplo.ts — responde a un mensaje que contiene el código o escribe el código después de la ruta.
 - $savefile cmd/system/ejemplo.ts — crea el archivo preparado o, si ya existe, lo actualiza directamente sin argumento adicional.
 - $getcode ping — busca el archivo por nombre y muestra el código directamente dentro del chat, igual que #r cat (sin enviar documentos). El encabezado incluye la ruta completa `cmd/system/ping.ts` en texto plano para copiarla.
+- $getcode (respondiendo a un mensaje, sin argumentos) — muestra en JSON la estructura `contextInfo.quotedMessage` que WhatsApp entregó al bot, como `stickerMessage`, `imageMessage`, `videoMessage`, `audioMessage` o `conversation`.
 - $getcode ping.ts — también admite la extensión del archivo y muestra el código como texto.
 - $getcode filech — permite buscar mediante el inicio del nombre; si hay varias coincidencias igualmente relevantes, lista las rutas.
 - $getcode cmd/system/ping.ts — la ruta exacta continúa siendo opcional.
 - $getcode cmd/system — lista archivos y carpetas autorizadas.
 - $getcode staged/cmd/system/ejemplo.ts — muestra el código preparado sin adjuntar archivos. El encabezado muestra también `staged/cmd/system/ejemplo.ts`.
+
+## JSON del mensaje citado
+
+`getcode` mantiene dos modos automáticos sin flags ni comandos adicionales:
+
+- **Nombre proporcionado:** `$getcode ping` muestra el código fuente con la ruta completa y el estilo de `#r cat`.
+- **Sin nombre y respondiendo a un mensaje:** `$getcode` obtiene la estructura existente en `contextInfo.quotedMessage` (incluyendo `stickerMessage` cuando se haya citado un sticker), serializa únicamente los campos recibidos y muestra el JSON escrito en el chat dentro del mismo estilo de terminal.
+- **Sin nombre ni cita:** presenta la ayuda habitual.
+- **Protección en grupos:** se muestran los campos sensibles como `mediaKey`, `e2EeMediaKey`, `url` y `directPath` con el valor `[OCULTO EN GRUPO]`. En chats privados el owner puede consultar los valores que WhatsApp haya entregado. No se descargan medios ni se reconstruyen campos ausentes.
+- **Tipos protobuf:** los Buffers pequeños se representan en base64 y los enteros `Long`/`bigint` como cadenas, evitando pérdidas de precisión. Se limitan longitud, profundidad y partes para no saturar el chat.
+- **Pruebas:** `scripts/test-owner-quoted-message.mjs` verifica JSON de sticker, lectura directa, envolturas, grupos, denegación de usuarios y casos adversos.
 
 Estas acciones exigen el rol owner global, tanto en grupos como en chats privados. Nunca se admiten solicitudes de usuarios sin el rol owner verificado por el bot. La ejecución en grupos es visible para sus integrantes: no se deben compartir archivos de código sensibles allí.
 
@@ -53,7 +65,7 @@ La búsqueda por nombre recorre las carpetas autorizadas, sin leer el contenido 
 
 Ejecución local con Node.js 22.16.0:
 
-node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs scripts/test-owner-file-design.mjs scripts/test-owner-code-message.mjs
+node --experimental-strip-types --test scripts/test-owner-files.mjs scripts/test-owner-file-commands.mjs scripts/test-owner-file-design.mjs scripts/test-owner-code-message.mjs scripts/test-owner-quoted-message.mjs
 
 La batería incluye las pruebas originales y casos adicionales de ejecución en grupos. El resultado consolidado requiere volver a ejecutar el CI después de estos cambios. Se verifica:
 - Lectura permitida, listado de directorios y búsqueda de archivos por nombre sin ruta, enviando el código dentro del mensaje en formato #r cat.

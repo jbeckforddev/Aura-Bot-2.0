@@ -6,12 +6,13 @@ import {
 } from "../../core/ownerFileWorkspace.ts";
 import { ownerFilePanel } from "../../core/ownerFileDesign.ts";
 import { formatOwnerCodeMessages } from "../../core/ownerCodeMessage.ts";
+import { getQuotedMessageForInspection, quotedMessageAsJson } from "../../core/ownerQuotedMessage.ts";
 
 export default {
   name: ["getcode", "getfile", "gc"],
   category: "system",
-  description: "Busca y muestra código directamente en el chat, con el diseño de #r cat.",
-  usage: "getcode <nombre> (ejemplo: getcode ping)",
+  description: "Muestra el código de un archivo o el JSON del mensaje citado, con diseño de #r cat.",
+  usage: "getcode <nombre> o responde a un mensaje con getcode",
   ownerOnly: true,
 
   async run(ctx: CommandContext) {
@@ -24,9 +25,47 @@ export default {
     const prefix = ctx.usedPrefix || ctx.prefix || ".";
     const requested = String(ctx.rawText || ctx.args?.join(" ") || "").trim();
 
+    // Sin argumentos y respondiendo a un mensaje: mostrar JSON original
+    // disponible en contextInfo.quotedMessage, sin descargar el medio.
+    if (!requested) {
+      const quoted = getQuotedMessageForInspection(ctx.msg);
+      if (quoted) {
+        try {
+          const inspected = quotedMessageAsJson(quoted, Boolean(ctx.isGroup));
+          const messages = formatOwnerCodeMessages(
+            inspected.type,
+            Buffer.from(inspected.json, "utf8"),
+          );
+          if (typeof ctx.react === "function") {
+            await ctx.react("💻").catch(() => undefined);
+          }
+          let result: Awaited<ReturnType<CommandContext["reply"]>> = undefined;
+          for (const message of messages) {
+            result = await ctx.reply({ text: message });
+          }
+          if (typeof ctx.react === "function") {
+            await ctx.react("✅").catch(() => undefined);
+          }
+          return result;
+        } catch (error) {
+          if (typeof ctx.react === "function") {
+            await ctx.react("❌").catch(() => undefined);
+          }
+          return ctx.reply(ownerFilePanel("GETCODE", "ERROR DE METADATOS", [
+            "❌ No se pudo mostrar la estructura del mensaje citado.",
+            "⚠️ *Detalle:* " +
+              (error instanceof Error ? error.message : "Error desconocido."),
+          ], "error"));
+        }
+      }
+    }
+
     if (!requested) {
       return ctx.reply(ownerFilePanel("GETCODE", "GUÍA DE USO", [
-        "🔎 *Función:* Busca el código y lo muestra dentro del chat.",
+        "🔎 *Archivo:* Busca el código y lo muestra dentro del chat.",
+        "💬 *Mensaje citado:* Responde a un sticker, texto o medio con " + prefix + "getcode.",
+        "🧩 *JSON:* Muestra solo los campos que WhatsApp haya entregado.",
+        "🔒 *Grupos:* Se ocultan claves y enlaces de descarga sensibles.",
         "📝 *Uso:* \x60" + prefix + "getcode ping\x60",
         "📄 *Extensión opcional:* \x60" + prefix + "getcode ping.ts\x60",
         "🗂️ *Nombre parcial:* \x60" + prefix + "getcode filecheck\x60",
