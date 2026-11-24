@@ -32,11 +32,11 @@ Se muestran con el prefijo de ejemplo $, que puede cambiar por socket o grupo:
 - **Nombre proporcionado:** `$getcode ping` muestra el código fuente con la ruta completa y el estilo de `#r cat`.
 - **Sin nombre y respondiendo a un mensaje:** `$getcode` obtiene la estructura existente en `contextInfo.quotedMessage` (incluyendo `stickerMessage` cuando se haya citado un sticker), serializa únicamente los campos recibidos y muestra el JSON escrito en el chat dentro del mismo estilo de terminal.
 - **Sin nombre ni cita:** presenta la ayuda habitual.
-- **Protección en grupos:** se muestran los campos sensibles como `mediaKey`, `e2EeMediaKey`, `url` y `directPath` con el valor `[OCULTO EN GRUPO]`. En chats privados el owner puede consultar los valores que WhatsApp haya entregado. No se descargan medios ni se reconstruyen campos ausentes.
+- **JSON completo para owners:** tanto en grupos como en chats privados, `getcode` conserva los valores disponibles de `mediaKey`, `e2EeMediaKey`, `url`, `directPath` y demás campos sin censura. El acceso se limita a owners autorizados por el bot (`ownerOnly` y `ctx.isOwner`). No se descargan medios ni se inventan campos ausentes.
 - **Tipos protobuf:** los Buffers pequeños se representan en base64 y los enteros `Long`/`bigint` como cadenas, evitando pérdidas de precisión. Se limitan longitud, profundidad y partes para no saturar el chat.
-- **Pruebas:** `scripts/test-owner-quoted-message.mjs` verifica JSON de sticker, lectura directa, envolturas, grupos, denegación de usuarios y casos adversos.
+- **Pruebas:** `scripts/test-owner-quoted-message.mjs` verifica JSON completo de sticker (también en grupos), lectura directa, envolturas, denegación de no-owners y casos adversos.
 
-Estas acciones exigen el rol owner global, tanto en grupos como en chats privados. Nunca se admiten solicitudes de usuarios sin el rol owner verificado por el bot. La ejecución en grupos es visible para sus integrantes: no se deben compartir archivos de código sensibles allí.
+Estas acciones exigen el rol owner global, tanto en grupos como en chats privados. Nunca se admiten solicitudes de usuarios sin el rol owner verificado por el bot. **Advertencia:** los mensajes enviados a un grupo son visibles para sus integrantes; los metadatos completos pueden incluir claves de cifrado y URL firmadas. El entorno debe estar efectivamente controlado antes de usar `getcode` sobre medios sensibles.
 
 ## Diseño visual oficial de Aura Reed
 
