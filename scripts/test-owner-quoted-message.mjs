@@ -63,7 +63,7 @@ test("permite respuestas citadas dentro de envolturas de WhatsApp", () => {
   assert.equal(getQuotedMessageForInspection(wrapped), sticker);
 });
 test("conserva campos originales y convierte Buffer, bigint y Long", () => {
-  const actual = quotedMessageAsJson(sticker, false);
+  const actual = quotedMessageAsJson(sticker);
   const data = JSON.parse(actual.json);
   assert.equal(actual.type, "stickerMessage");
   assert.equal(data.stickerMessage.fileSha256, Buffer.from("hash").toString("base64"));
@@ -73,18 +73,18 @@ test("conserva campos originales y convierte Buffer, bigint y Long", () => {
   assert.equal(data.stickerMessage.isAnimated, true);
   assert.equal(data.stickerMessage.contextInfo.mediaDomainInfo.e2EeMediaKey, mediaKey);
 });
-test("en grupo oculta las claves y URL firmadas sin perder atributos", () => {
-  const actual = quotedMessageAsJson(sticker, true);
+test("conserva claves, enlaces y atributos completos en el JSON para owners", () => {
+  const actual = quotedMessageAsJson(sticker);
   const data = JSON.parse(actual.json).stickerMessage;
-  assert.equal(data.mediaKey, "[OCULTO EN GRUPO]");
-  assert.equal(data.contextInfo.mediaDomainInfo.e2EeMediaKey, "[OCULTO EN GRUPO]");
-  assert.equal(data.url, "[OCULTO EN GRUPO]");
-  assert.equal(data.directPath, "[OCULTO EN GRUPO]");
+  assert.equal(data.mediaKey, mediaKey);
+  assert.equal(data.contextInfo.mediaDomainInfo.e2EeMediaKey, mediaKey);
+  assert.equal(data.url, sticker.stickerMessage.url);
+  assert.equal(data.directPath, sticker.stickerMessage.directPath);
   assert.equal(data.height, 64);
   assert.equal(data.premium, 1);
-  assert.ok(actual.protectedFields >= 4);
-  assert.ok(!actual.json.includes(mediaKey), "El JSON de grupo no debe exponer la clave cifrada.");
-  assert.doesNotMatch(actual.json, /token=secret/);
+  assert.ok(actual.json.includes(mediaKey));
+  assert.match(actual.json, /token=secret/);
+  assert.doesNotMatch(actual.json, /OCULTO EN GRUPO/);
 });
 test("en privado getcode responde el JSON en el mensaje, no adjunto", async () => {
   const result = await getcode.run(base);
@@ -102,12 +102,22 @@ test("un nombre de archivo explícito sigue mostrando código aunque se responda
   assert.doesNotMatch(result.text, /"stickerMessage":/);
 });
 
-test("en grupo getcode oculta el material criptográfico en el mensaje", async () => {
+test("en grupo getcode devuelve todos los metadatos cuando ejecuta un owner", async () => {
   const result = await getcode.run({ ...base, isGroup: true });
   const parsed = extractJson(result.text);
-  assert.equal(parsed.stickerMessage.mediaKey, "[OCULTO EN GRUPO]");
+  assert.equal(parsed.stickerMessage.mediaKey, mediaKey);
+  assert.equal(parsed.stickerMessage.contextInfo.mediaDomainInfo.e2EeMediaKey, mediaKey);
+  assert.equal(parsed.stickerMessage.url, sticker.stickerMessage.url);
+  assert.equal(parsed.stickerMessage.directPath, sticker.stickerMessage.directPath);
+  assert.equal(result.document, undefined);
   assert.ok(result.text.includes('"stickerMessage"'));
-  assert.ok(!result.text.includes(mediaKey), "La respuesta grupal no debe exponer la clave cifrada.");
+  assert.doesNotMatch(result.text, /OCULTO EN GRUPO/);
+});
+test("usuarios sin rol owner no pueden acceder al JSON completo en grupos", async () => {
+  const denied = await getcode.run({ ...base, isGroup: true, isOwner: false });
+  assert.match(denied, /Solo los owners/);
+  assert.ok(!denied.includes(mediaKey));
+  assert.ok(!denied.includes(sticker.stickerMessage.url));
 });
 test("responder a un texto muestra conversation sin inventar atributos", async () => {
   const quoted = { conversation: "Hola Aura" };
@@ -130,14 +140,14 @@ test("un no-owner no puede consultar datos citados, ni en privado", async () => 
 test("no admite propiedades cíclicas ni binarios grandes sin control", () => {
   const c = { stickerMessage: { height: 64, jpegThumbnail: Buffer.alloc(9000) } };
   c.stickerMessage.self = c.stickerMessage;
-  const obj = JSON.parse(quotedMessageAsJson(c, false).json).stickerMessage;
+  const obj = JSON.parse(quotedMessageAsJson(c).json).stickerMessage;
   assert.match(obj.jpegThumbnail, /Datos binarios omitidos/);
   assert.equal(obj.self, "[Referencia circular]");
 });
 test("solo usa los campos que existen realmente", () => {
   assert.deepEqual(JSON.parse(quotedMessageAsJson({
     stickerMessage: { mimetype: "image/webp" },
-  }, false).json), { stickerMessage: { mimetype: "image/webp" } });
+  }).json), { stickerMessage: { mimetype: "image/webp" } });
 });
 
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
