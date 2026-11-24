@@ -9,5 +9,6 @@ sessions
 dist
 test.endpoint.*
 scripts
+bun.lock
 /.aura-owner-staging/
 # Hecho por Lourtnyx Matterssmith [Lou-Nyx].

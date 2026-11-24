@@ -212,11 +212,14 @@ export async function CONVERT_TO_AVC(inputPath: string): Promise<string> {
   }
 }
 
-export async function CONVERT_AUDIO_TO_OGG(buffer: Buffer): Promise<Buffer> {
+export async function CONVERT_AUDIO_TO_OGG(
+  buffer: Buffer,
+  exactDuration?: number,
+): Promise<Buffer> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "gstatus-audio-"));
-  const inputPath = path.join(tempDir, "input.mp3");
+  const inputPath = path.join(tempDir, "input.media");
   const outputPath = path.join(tempDir, "output.ogg");
 
   try {
@@ -228,6 +231,9 @@ export async function CONVERT_AUDIO_TO_OGG(buffer: Buffer): Promise<Buffer> {
         "-i",
         inputPath,
         "-vn",
+        ...(exactDuration && exactDuration > 0
+          ? ["-t", String(exactDuration)]
+          : []),
         "-c:a",
         "libopus",
         "-b:a",

@@ -69,6 +69,6 @@
     "esbuild": true,
     "ffmpeg-static": true,
     "protobufjs": true,
-    "tunnelmole@2.4.0": true
+    "tunnelmole@2.4.3": true
   }
 }

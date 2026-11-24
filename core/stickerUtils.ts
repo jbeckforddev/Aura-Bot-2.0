@@ -114,6 +114,7 @@ export async function toSticker(
   input: Buffer,
   animated: boolean,
   maxDuration = 20,
+  exactDuration?: number,
 ): Promise<Buffer> {
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
   const directory = process.env.TMPDIR || path.resolve("./cache");
@@ -132,6 +133,11 @@ export async function toSticker(
           { fps: 25, quality: 25, duration: Math.min(maxDuration, 15) },
           { fps: 20, quality: 20, duration: Math.min(maxDuration, 10) },
           { fps: 15, quality: 10, duration: Math.min(maxDuration, 8) },
+          { fps: 12, quality: 8, duration: Math.min(maxDuration, 6) },
+          { fps: 10, quality: 6, duration: Math.min(maxDuration, 5) },
+          { fps: 8, quality: 4, duration: Math.min(maxDuration, 4) },
+          { fps: 6, quality: 3, duration: Math.min(maxDuration, 3) },
+          { fps: 5, quality: 2, duration: Math.min(maxDuration, 3) },
         ]
       : [
           { fps: 0, quality: 80, duration: 0 },
@@ -160,7 +166,15 @@ export async function toSticker(
         String(attempt.quality),
       ];
       if (animated) {
-        args.push("-loop", "0", "-t", String(attempt.duration), "-vsync", "0");
+        const duration = exactDuration && exactDuration > 0
+          ? exactDuration
+          : attempt.duration;
+        args.push("-loop", "0", "-t", String(duration));
+        if (exactDuration && exactDuration > 0) {
+          args.push("-fps_mode", "passthrough");
+        } else {
+          args.push("-vsync", "0");
+        }
       }
       args.push(outputPath);
 
@@ -486,10 +500,11 @@ export async function toStickerWithEffects(
   animated: boolean,
   effects: StickerEffect[] = [],
   maxDuration = 20,
+  exactDuration?: number,
 ): Promise<Buffer> {
   // Si no hay efectos, usar comportamiento original
   if (effects.length === 0) {
-    return await toSticker(input, animated, maxDuration);
+    return await toSticker(input, animated, maxDuration, exactDuration);
   }
 
   if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
