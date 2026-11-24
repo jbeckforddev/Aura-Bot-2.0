@@ -3,6 +3,8 @@
  *
  * La carga procede exclusivamente de contextInfo.quotedMessage.
  * No genera datos que WhatsApp no haya entregado al bot.
+ * Los valores originales se conservan tanto en grupos como en privados;
+ * la autorización exclusiva del owner se aplica en cmd/system/getcode.ts.
  */
 
 type AnyRecord = Record<string, unknown>;
@@ -14,8 +16,6 @@ const MESSAGE_WRAPPERS = [
   "stickerMessage", "buttonsResponseMessage", "templateButtonReplyMessage",
   "listResponseMessage", "interactiveResponseMessage",
 ] as const;
-
-const GROUP_PROTECTED = /^(?:mediaKey|e2EeMediaKey|mediaKeyData|mediaKeyBytes|url|directPath|thumbnailDirectPath|token|accessToken|refreshToken|password|secret|privateKey|apiKey)$/i;
 
 const MAX_DEPTH = 14;
 const MAX_NODES = 4000;
@@ -74,15 +74,13 @@ function longToString(value: AnyRecord): string {
 /** Convierte valores protobuf (Buffer, Uint8Array, Long, bigint) a JSON. */
 export function quotedMessageAsJson(
   quoted: unknown,
-  isGroup: boolean,
-): { type: string; json: string; protectedFields: number } {
+): { type: string; json: string } {
   const root = record(quoted);
   if (!root || !Object.keys(root).length) {
     throw new QuotedMessageError("El mensaje citado no contiene metadatos disponibles.");
   }
 
   let nodes = 0;
-  let protectedFields = 0;
   const ancestors = new WeakSet<object>();
 
   function convert(value: unknown, depth: number): unknown {
@@ -117,11 +115,6 @@ export function quotedMessageAsJson(
       const output: AnyRecord = {};
       for (const key of Object.keys(obj).slice(0, 300)) {
         if (key === "__proto__" || key === "prototype" || key === "constructor") continue;
-        if (isGroup && GROUP_PROTECTED.test(key)) {
-          output[key] = "[OCULTO EN GRUPO]";
-          protectedFields++;
-          continue;
-        }
         const converted = convert(obj[key], depth + 1);
         if (converted !== undefined) output[key] = converted;
       }
@@ -139,7 +132,7 @@ export function quotedMessageAsJson(
   if (json.length > 95_000) {
     throw new QuotedMessageError("La estructura del mensaje citado es demasiado grande para el chat.");
   }
-  return { type, json, protectedFields };
+  return { type, json };
 }
 
 // Hecho por Lourtnyx Matterssmith [Lou-Nyx].
