@@ -45,10 +45,8 @@ export default {
         "buffer",
         {},
         {
-          logger: console as unknown as Parameters<
-            typeof downloadMediaMessage
-          >[3]["logger"],
-          reuploadRequest: ctx.sock.updateMediaMessage,
+          logger: ctx.sock.logger,
+          reuploadRequest: (mediaMessage) => ctx.sock.updateMediaMessage(mediaMessage),
         },
       );
       const track = await identifySong(buffer);

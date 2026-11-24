@@ -8,7 +8,18 @@ import {
 } from 'baileys'
 
 import { randomBytes } from 'node:crypto'
-import type { CommandContext } from '../../types/index.d.ts'
+import type { WAMessage } from 'baileys'
+import type { CommandContext, ExtendedWASocket, ReplyContext } from '../../types/index.d.ts'
+import type {
+	AudioStickerCommandMessage,
+	AudioStickerCommandOptions,
+	AudioStickerMedia,
+	AudioStickerMediaInfo,
+	AudioStickerMediaNode,
+	AudioStickerSession,
+	AudioStickerSessionOptions,
+	StickerWithAudio
+} from '../../types/media.d.ts'
 import {
 	applyStickerMetadata,
 	isAnimatedWebp,
@@ -20,83 +31,27 @@ import { CONVERT_AUDIO_TO_OGG } from '../../utils/converter.ts'
 const DURACION_MAXIMA = 25
 const SEGUNDOS_SESION = 60
 
-type MediaKind = 'video' | 'image' | 'webp' | 'audio' | null
-type DownloadType = 'video' | 'image' | 'sticker' | 'audio' | 'document' | null
+const sesiones = (globalThis.__audioStickerSessions ??= new Map<string, AudioStickerSession>())
 
-interface MediaInfo {
-	kind: MediaKind
-	mime: string
-	seconds: number
-	isAnimated?: boolean
-	mediaObj: Record<string, unknown> | null
-	dlType: DownloadType
-}
-
-interface StickerSession {
-	stickerBuffer: Buffer
-	isAnimated: boolean
-	packname: string
-	author: string
-	expiresAt: number
-	processing: boolean
-	timer: ReturnType<typeof setTimeout>
-}
-
-interface StickerNode {
-	chat: string
-	sender: string
-	key?: Record<string, unknown>
-	pushName?: string
-	text?: string
-	body?: string
-	message?: Record<string, unknown>
-	quoted?: StickerNode | null
-	conn?: StickerClient
-	fromMe?: boolean
-	mtype?: string
-	type?: string
-	msg?: Record<string, unknown>
-	mediaKey?: Uint8Array
-	url?: string
-	directPath?: string
-	mimetype?: string
-	seconds?: number
-	fakeObj?: { message?: Record<string, unknown> }
-	download?: () => Promise<Buffer>
-}
-
-interface StickerClient {
-	user?: { id?: string }
-	waUploadToServer?: (...args: unknown[]) => Promise<unknown>
-	updateMediaMessage?: (message: unknown) => Promise<unknown>
-	sendMessage?: (chat: string, content: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown>
-	relayMessage?: (chat: string, message: unknown, options?: Record<string, unknown>) => Promise<unknown>
-}
-
-if (!globalThis.__audioStickerSessions) {
-	globalThis.__audioStickerSessions = new Map<string, StickerSession>()
-}
-
-const sesiones = globalThis.__audioStickerSessions
-
-function modificarProto(p) {
-	const M = p?.Message
+function modificarProto(p: typeof proto) {
+	const M: typeof proto.Message & { __audioStickerPatchedV3?: boolean } = p.Message
 	if (!M || M.__audioStickerPatchedV3) return
 
 	if (M.StickerMessage) {
 		const codificarStickerAnterior = M.StickerMessage.encode
 
 		M.StickerMessage.encode = function (mensaje, writer) {
-			const audio = mensaje?.audioMessage
+			const sticker: StickerWithAudio = mensaje
+			const audio = sticker.audioMessage
 
 			if (audio && Object.prototype.hasOwnProperty.call(mensaje, 'audioMessage')) {
-				delete mensaje.audioMessage
+				delete sticker.audioMessage
 			}
 
 			const w = codificarStickerAnterior.call(this, mensaje, writer)
 
 			if (audio && M.AudioMessage) {
-				mensaje.audioMessage = audio
+				sticker.audioMessage = audio
 				M.AudioMessage.encode(audio, w.uint32(210).fork()).ldelim()
 			}
 
@@ -107,7 +62,7 @@ function modificarProto(p) {
 			const convertirStickerAnterior = M.StickerMessage.fromObject
 
 			M.StickerMessage.fromObject = function (objeto) {
-				const mensaje = convertirStickerAnterior.call(this, objeto)
+				const mensaje: StickerWithAudio & proto.Message.StickerMessage = convertirStickerAnterior.call(this, objeto)
 
 				if (objeto?.audioMessage) {
 					mensaje.audioMessage = M.AudioMessage?.fromObject
@@ -186,7 +141,7 @@ async function asegurarModificado() {
 	}
 }
 
-function obtenerClaveSesion(m: StickerNode) {
+function obtenerClaveSesion(m: AudioStickerCommandMessage) {
 	return `${m.chat}:${m.sender}`
 }
 
@@ -200,7 +155,7 @@ function eliminarSesion(clave: string) {
 	sesiones.delete(clave)
 }
 
-function desenvolverMensaje(raw) {
+function desenvolverMensaje(raw: proto.IMessage): proto.IMessage {
 	let actual =
 		typeof extractMessageContent === 'function'
 			? extractMessageContent(raw) || raw
@@ -215,7 +170,7 @@ function desenvolverMensaje(raw) {
 			actual.documentWithCaptionMessage?.message ||
 			actual.editedMessage?.message ||
 			actual.audioStickerMessage?.message ||
-			actual.audioStickerMessage
+			(actual.audioStickerMessage as proto.IMessage | undefined)
 
 		if (!siguiente) break
 		actual = siguiente
@@ -224,7 +179,7 @@ function desenvolverMensaje(raw) {
 	return actual || {}
 }
 
-function detectarMedia(nodo: Record<string, unknown> | null | undefined): MediaInfo {
+function detectarMedia(nodo: AudioStickerMediaNode | null | undefined): AudioStickerMediaInfo {
 	if (!nodo) {
 		return {
 			kind: null,
@@ -251,9 +206,10 @@ function detectarMedia(nodo: Record<string, unknown> | null | undefined): MediaI
 			? nodo.msg
 			: null
 
-	const mediaObj =
+	const candidato = contenedor[tipo as keyof proto.IMessage]
+	const mediaObj: AudioStickerMedia | null =
 		mensajeDirecto ||
-		contenedor[tipo] ||
+		(candidato && typeof candidato === 'object' ? candidato as AudioStickerMedia : null) ||
 		contenedor.videoMessage ||
 		contenedor.imageMessage ||
 		contenedor.stickerMessage ||
@@ -321,9 +277,9 @@ function detectarMedia(nodo: Record<string, unknown> | null | undefined): MediaI
 }
 
 async function descargarBuffer(
-	nodo: StickerNode | null | undefined,
-	info: MediaInfo,
-	cliente: StickerClient
+	nodo: AudioStickerMediaNode | null | undefined,
+	info: AudioStickerMediaInfo,
+	cliente: ExtendedWASocket
 ): Promise<Buffer | null> {
 	if (!nodo) return null
 
@@ -334,7 +290,7 @@ async function descargarBuffer(
 	) {
 		try {
 			const flujo = await downloadContentFromMessage(info.mediaObj, info.dlType)
-			const fragmentos = []
+			const fragmentos: Buffer[] = []
 
 			for await (const fragmento of flujo) {
 				fragmentos.push(fragmento)
@@ -348,19 +304,19 @@ async function descargarBuffer(
 
 	if (nodo.fakeObj?.message || nodo.message) {
 		try {
-			const objetoMensaje = nodo.fakeObj?.message ? nodo.fakeObj : nodo
+			const origen = nodo.fakeObj?.message ? nodo.fakeObj : nodo
+			const objetoMensaje: WAMessage = {
+				...origen,
+				key: origen.key ?? nodo.key ?? { remoteJid: nodo.chat, id: '0' }
+			}
 
 			const buffer = await downloadMediaMessage(
 				objetoMensaje,
 				'buffer',
 				{},
 				{
-					logger: {
-						info: () => {},
-						error: () => {},
-						warn: () => {}
-					},
-					reuploadRequest: cliente?.updateMediaMessage
+					logger: cliente.logger,
+					reuploadRequest: (message) => cliente.updateMediaMessage(message)
 				}
 			)
 
@@ -385,12 +341,8 @@ async function descargarBuffer(
 				'buffer',
 				{},
 				{
-					logger: {
-						info: () => {},
-						error: () => {},
-						warn: () => {}
-					},
-					reuploadRequest: cliente?.updateMediaMessage
+					logger: cliente.logger,
+					reuploadRequest: (message) => cliente.updateMediaMessage(message)
 				}
 			)
 
@@ -409,7 +361,7 @@ async function descargarBuffer(
 	return null
 }
 
-function generarFormaDeOnda(bufferBase, longitud = 64) {
+function generarFormaDeOnda(bufferBase: Buffer, longitud = 64) {
 	const forma = Buffer.alloc(longitud)
 
 	for (let i = 0; i < longitud; i++) {
@@ -423,7 +375,7 @@ function generarFormaDeOnda(bufferBase, longitud = 64) {
 	return forma
 }
 
-async function crearMensajeAudio(cliente, buffer, extension, segundosAlternativos = 0) {
+async function crearMensajeAudio(cliente: ExtendedWASocket, buffer: Buffer, segundosAlternativos = 0) {
 	const duracionComun =
 		segundosAlternativos > 0
 			? Math.max(1, Math.min(DURACION_MAXIMA, segundosAlternativos))
@@ -454,6 +406,8 @@ async function crearMensajeAudio(cliente, buffer, extension, segundosAlternativo
 		Math.min(DURACION_MAXIMA, Math.round(segundosElegidos))
 	)
 
+	if (!audioMessage) throw new Error('No se generó el mensaje de audio.')
+
 	audioMessage.seconds = segundosFinales
 	audioMessage.ptt = true
 	audioMessage.mimetype = 'audio/ogg; codecs=opus'
@@ -465,7 +419,14 @@ async function crearMensajeAudio(cliente, buffer, extension, segundosAlternativo
 	return audioMessage
 }
 
-async function enviarStickerConAudio(cliente, chat, bufferSticker, animado, mensajeAudio, quoted) {
+async function enviarStickerConAudio(
+	cliente: ExtendedWASocket,
+	chat: string,
+	bufferSticker: Buffer,
+	animado: boolean,
+	mensajeAudio: proto.Message.IAudioMessage,
+	quoted: WAMessage
+) {
 	await asegurarModificado()
 
 	const preparado = await prepareWAMessageMedia(
@@ -478,8 +439,10 @@ async function enviarStickerConAudio(cliente, chat, bufferSticker, animado, mens
 		}
 	)
 
-	preparado.stickerMessage.isAnimated = Boolean(animado)
-	preparado.stickerMessage.audioMessage = mensajeAudio
+	const sticker: StickerWithAudio | null | undefined = preparado.stickerMessage
+	if (!sticker) throw new Error('No se generó el sticker.')
+	sticker.isAnimated = animado
+	sticker.audioMessage = mensajeAudio
 
 	const carga = {
 		__proto__: preparado,
@@ -500,8 +463,9 @@ async function enviarStickerConAudio(cliente, chat, bufferSticker, animado, mens
 		}
 	)
 
+	if (!mensajeGenerado.message) throw new Error('No se generó el mensaje del sticker.')
 	await cliente.relayMessage(chat, mensajeGenerado.message, {
-		messageId: mensajeGenerado.key.id
+		messageId: mensajeGenerado.key.id ?? undefined
 	})
 }
 
@@ -515,7 +479,7 @@ function iniciarSesionSticker({
 	author,
 	usedPrefix,
 	command
-}) {
+}: AudioStickerSessionOptions) {
 	const clave = obtenerClaveSesion(m)
 
 	eliminarSesion(clave)
@@ -571,7 +535,15 @@ function iniciarSesionSticker({
 	)
 }
 
-async function consumirSesionConAudio(m, client, send, react, session, audioNode, audioInfo) {
+async function consumirSesionConAudio(
+	m: AudioStickerCommandMessage,
+	client: ExtendedWASocket,
+	send: CommandContext['reply'],
+	react: CommandContext['react'],
+	session: AudioStickerSession,
+	audioNode: AudioStickerMediaNode | null | undefined,
+	audioInfo: AudioStickerMediaInfo
+) {
 	const clave = obtenerClaveSesion(m)
 
 	session.processing = true
@@ -585,19 +557,9 @@ async function consumirSesionConAudio(m, client, send, react, session, audioNode
 			throw new Error('No se pudo descargar el archivo de audio o video.')
 		}
 
-		const extension =
-			audioInfo.kind === 'video'
-				? 'mp4'
-				: /ogg|opus/i.test(audioInfo.mime)
-					? 'ogg'
-					: /mp4|m4a|aac/i.test(audioInfo.mime)
-						? 'm4a'
-						: 'mp3'
-
 		const mensajeAudio = await crearMensajeAudio(
 			client,
 			audioBuffer,
-			extension,
 			audioInfo.seconds
 		)
 
@@ -621,45 +583,14 @@ async function consumirSesionConAudio(m, client, send, react, session, audioNode
 		await react('❌')
 
 		await send(
-			`❌ No se pudo combinar el audio con el sticker: ${error?.message || String(error)}`
+			`❌ No se pudo combinar el audio con el sticker: ${error instanceof Error ? error.message : String(error)}`
 		)
 	}
 }
 
-const handler = async (m, extra = {}) => {
-	const {
-		sock,
-		conn,
-		text,
-		reply,
-		db,
-		usedPrefix = '.',
-		command = 'audiosticker'
-	} = extra
-
-	const client = sock || conn || m.conn || global.conn || global.sock
-
-	const send = reply || (
-		texto => client.sendMessage(
-			m.chat,
-			{ text: texto },
-			{ quoted: m }
-		)
-	)
-
-	const react = async emoji => {
-		if (client?.sendMessage) {
-			await client.sendMessage(
-				m.chat,
-				{
-					react: {
-						text: emoji,
-						key: m.key
-					}
-				}
-			).catch(() => {})
-		}
-	}
+const handler = async (m: AudioStickerCommandMessage, options: AudioStickerCommandOptions) => {
+	const { sock: client, text, reply: send, db, command, react } = options
+	const usedPrefix = options.usedPrefix ?? '.'
 
 	const clave = obtenerClaveSesion(m)
 	const sesionActiva = sesiones.get(clave)
@@ -791,7 +722,7 @@ const handler = async (m, extra = {}) => {
 	try {
 		await asegurarModificado()
 
-		const usuario = db?.getUser?.(m.sender) ?? {}
+		const usuario = db.getUser(m.sender)
 
 		const packname =
 			usuario.stickerPackName ||
@@ -855,20 +786,10 @@ const handler = async (m, extra = {}) => {
 		if (!modoAgregarAudio && !esVideo) {
 			eliminarSesion(clave)
 			await react('✅')
-			if (reply) {
-				return reply({
-					sticker: stickerBuffer,
-					mimetype: 'image/webp'
-				})
-			}
-			return client.sendMessage(
-				m.chat,
-				{
-					sticker: stickerBuffer,
-					mimetype: 'image/webp'
-				},
-				{ quoted: m }
-			)
+			return send({
+				sticker: stickerBuffer,
+				mimetype: 'image/webp'
+			})
 		}
 
 		if (modoAgregarAudio && !tieneAudioCitado) {
@@ -897,17 +818,9 @@ const handler = async (m, extra = {}) => {
 				throw new Error('No se pudo descargar el audio citado.')
 			}
 
-			const extension =
-				/ogg|opus/i.test(infoCitada.mime)
-					? 'ogg'
-					: /mp4|m4a|aac/i.test(infoCitada.mime)
-						? 'm4a'
-						: 'mp3'
-
 			const mensajeAudio = await crearMensajeAudio(
 				client,
 				audioBuffer,
-				extension,
 				infoCitada.seconds
 			)
 
@@ -932,7 +845,6 @@ const handler = async (m, extra = {}) => {
 				const mensajeAudio = await crearMensajeAudio(
 					client,
 					datosVisuales,
-					'mp4',
 					duracionVideo
 				)
 
@@ -954,21 +866,10 @@ const handler = async (m, extra = {}) => {
 				await react('❌')
 				eliminarSesion(clave)
 
-				if (reply) {
-					return reply({
-						sticker: stickerBuffer,
-						mimetype: 'image/webp'
-					})
-				}
-
-				return client.sendMessage(
-					m.chat,
-					{
-						sticker: stickerBuffer,
-						mimetype: 'image/webp'
-					},
-					{ quoted: m }
-				)
+				return send({
+					sticker: stickerBuffer,
+					mimetype: 'image/webp'
+				})
 			}
 		}
 
@@ -991,7 +892,7 @@ const handler = async (m, extra = {}) => {
 		await send(
 			`╭〔 ❌ *AUDIO STICKER* 〕⬣\n` +
 			`┃ No se pudo procesar el archivo.\n` +
-			`┃ ${error?.message || String(error)}\n` +
+			`┃ ${error instanceof Error ? error.message : String(error)}\n` +
 			`╰━━〔 ⚡ *AURA REED* 〕━━⬣`
 		)
 	}
@@ -1012,13 +913,11 @@ export default {
 	async run(context: CommandContext) {
 		const quotedMessage = context.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
 		const quotedContext = context.msg.message?.extendedTextMessage?.contextInfo
-		const m = {
+		const m: AudioStickerCommandMessage = {
 			chat: context.from,
 			sender: context.sender,
 			key: context.msg.key,
 			pushName: context.msg.pushName,
-			text: context.text,
-			body: context.body,
 			message: context.msg.message,
 			quoted: quotedMessage
 				? {
@@ -1030,8 +929,6 @@ export default {
 					message: quotedMessage
 				}
 				: null,
-			conn: context.sock,
-			fromMe: Boolean(context.msg.key?.fromMe)
 		}
 
 		return await handler(m, {
@@ -1044,7 +941,7 @@ export default {
 			command: context.cmdName
 		})
 	},
-	async handleReply(context) {
+	async handleReply(context: ReplyContext) {
 		const clave = `${context.from}:${context.sender}`
 		const sesion = sesiones.get(clave)
 
@@ -1072,17 +969,13 @@ export default {
 				message: quotedMessage
 			}
 			: null
-		const m = {
+		const m: AudioStickerCommandMessage = {
 			chat: context.from,
 			sender: context.sender,
 			key: context.msg.key,
 			pushName: context.msg.pushName,
-			text: context.body,
-			body: context.body,
 			message: context.msg.message,
 			quoted: citado,
-			conn: context.sock,
-			fromMe: Boolean(context.msg.key?.fromMe)
 		}
 		const infoPropia = detectarMedia(m)
 		const infoCitada = detectarMedia(citado)

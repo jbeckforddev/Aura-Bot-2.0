@@ -100,8 +100,10 @@ export default {
         const likes = data.data?.digg_count;
         const comments = data.data?.comment_count;
         const shares = data.data?.share_count;
-        const URL_PICTURES = `https://www.tiktok.com/@${data.data.author.unique_id}/photo/${data.data.id}`
-        const AUDIO = data.data.music_info.play;
+        const { id, author: account, music_info: music } = data.data ?? {};
+        const pictureUrl = account?.unique_id && id
+          ? `https://www.tiktok.com/@${account.unique_id}/photo/${id}`
+          : url;
         const caption = DL_TEMPLATE({
           bold: fytBold,
           label: t("cmd_tiktok_images_c263451e"),
@@ -113,7 +115,7 @@ export default {
           comments: formatCount(comments),
           shares: formatCount(shares),
           cost: formatMoney(totalCost, ctx),
-          url: URL_PICTURES,
+          url: pictureUrl,
           showAuthor: true,
           showViews: views !== undefined && views !== null,
           showLikes: likes !== undefined && likes !== null,
@@ -125,11 +127,13 @@ export default {
           image: { url: file },
           caption: index === 0 ? caption : "",
         }));
-        reply({
-          audio: AUDIO ? { url: AUDIO } : undefined,
-          mimetype: AUDIO ? "audio/mpeg" : undefined,
-          fileName: AUDIO ? `${safeFileName(title, "tiktok")}.mp3` : undefined,
-        })
+        if (music?.play) {
+          await reply({
+            audio: { url: music.play },
+            mimetype: "audio/mpeg",
+            fileName: `${safeFileName(title, "tiktok")}.mp3`,
+          });
+        }
         if (album.length === 1) await reply(album[0]);
         else await sendAlbumMessage(sock, from, album, msg);
         confirmDownloadCharge(ctx);
@@ -156,7 +160,10 @@ export default {
       const likes = data.data.digg_count;
       const comments = data.data.comment_count;
       const shares = data.data.share_count;
-      const URL_VIDEO = `https://www.tiktok.com/@${data.data.author.unique_id}/video/${data.data.id}`
+      const { id, author: account } = data.data;
+      const originalUrl = account?.unique_id && id
+        ? `https://www.tiktok.com/@${account.unique_id}/video/${id}`
+        : url;
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: t("cmd_tiktok_document_82fb2560"),
@@ -168,7 +175,7 @@ export default {
         comments: formatCount(comments),
         shares: formatCount(shares),
         cost: formatMoney(cost, ctx),
-        url: URL_VIDEO,
+        url: originalUrl,
         showAuthor: true,
         showViews: views !== undefined && views !== null,
         showLikes: likes !== undefined && likes !== null,

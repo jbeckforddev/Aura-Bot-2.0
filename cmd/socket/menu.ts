@@ -83,7 +83,8 @@ export default {
       prefix ?? usedPrefix ?? globalThis.DEFAULT_PREFIXES?.[0] ?? ".";
     const remoteJid = from;
     const pushName = msg?.pushName || "Usuario";
-    const botRecord = runtimeDb?.getBot?.(ctx.botJid || sock.user?.id);
+    const botJid = ctx.botJid || sock.user?.id;
+    const botRecord = botJid ? runtimeDb.getBot(botJid) : undefined;
     const botName = botRecord?.bot_name || "Aura Reed";
     const botType = resolveBotType(botRecord?.bot_type, sock.isSubBot);
     const tituloEstilizado = fytBold(t("cmd_value0_bb624cd4", { value0: String(botName).toUpperCase() }));
@@ -280,9 +281,9 @@ export default {
     ) {
       bannerPath =
         resolvedCustomPath ||
-        `database-banner-${customBanner.base64.slice(0, 32)}`;
+        `database-banner-${customBanner?.base64?.slice(0, 32) ?? ""}`;
       isGif = Boolean(
-        customBanner.mimetype?.includes("gif") || bannerPath.endsWith(".gif"),
+        customBanner?.mimetype?.includes("gif") || bannerPath.endsWith(".gif"),
       );
     }
 
@@ -350,30 +351,33 @@ export default {
       ...(quotedMessage ? { quoted: quotedMessage } : {}),
     });
 
+    if (!waMsg.message) throw new Error("No se generó el menú.");
     await sock.relayMessage(remoteJid, waMsg.message, {
-      messageId: waMsg.key.id,
+      messageId: waMsg.key.id ?? undefined,
     });
 
-    if (customAudio?.path && existsSync(customAudio.path)) {
+    const audioPath = customAudio?.path;
+    const audioBase64 = customAudio?.base64;
+    if (audioPath && existsSync(audioPath)) {
       await sendWithRecordingPresence(sock, remoteJid, () =>
         sock.sendMessage(
           remoteJid,
           {
-            audio: createReadStream(customAudio.path),
+            audio: createReadStream(audioPath),
             mimetype: "audio/ogg; codecs=opus",
             ptt: true,
           },
           quotedMessage ? { quoted: quotedMessage } : undefined,
         ),
       );
-    } else if (customAudio?.base64) {
+    } else if (audioBase64) {
       await sendWithRecordingPresence(sock, remoteJid, () =>
         sock.sendMessage(
           remoteJid,
           {
-            audio: Buffer.from(customAudio.base64, "base64"),
-            mimetype: customAudio.mimetype || "audio/ogg; codecs=opus",
-            ptt: customAudio.ptt ?? true,
+            audio: Buffer.from(audioBase64, "base64"),
+            mimetype: customAudio?.mimetype || "audio/ogg; codecs=opus",
+            ptt: customAudio?.ptt ?? true,
           },
           quotedMessage ? { quoted: quotedMessage } : undefined,
         ),

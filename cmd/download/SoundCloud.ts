@@ -172,7 +172,7 @@ export default {
           item.format?.mime_type === "audio/mpeg" &&
           item.format?.protocol === "progressive",
       );
-      if (!transcoding)
+      if (!transcoding?.url)
         throw new Error("Este track no tiene un stream MP3 descargable.");
 
       const streamUrl = new URL(transcoding.url);
@@ -226,17 +226,18 @@ export default {
           link: track.permalink_url || query,
           author: globalThis.DEFAULT_BOT_AUTHOR,
           title: track.title || "SoundCloud",
-          banner: prepared.imageMessage,
+          banner: prepared.imageMessage ?? undefined,
           mentionedJid: sender ? [sender] : [],
           isForwarded: false,
           forwardingScore: 0,
         });
         const previewMessage = generateWAMessageFromContent(from, preview, {
           quoted: msg as unknown as WAMessage,
-          userJid: sock.user?.id,
+          userJid: sock.user?.id || from,
         });
+        if (!previewMessage.message) throw new Error("No se generó la vista previa.");
         await sock.relayMessage(from, previewMessage.message, {
-          messageId: previewMessage.key.id,
+          messageId: previewMessage.key.id ?? undefined,
         });
       } else {
         await reply({ text: caption });

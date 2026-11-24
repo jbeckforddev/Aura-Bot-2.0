@@ -30,9 +30,9 @@ function getMessageContext(message: Record<string, unknown>) {
     quoted: quotedMessage
       ? {
           message: quotedMessage,
-          participant: contextInfo.participant ?? null,
-          stanzaId: contextInfo.stanzaId ?? null,
-          mentionedJid: contextInfo.mentionedJid ?? [],
+          participant: contextInfo?.participant ?? null,
+          stanzaId: contextInfo?.stanzaId ?? null,
+          mentionedJid: contextInfo?.mentionedJid ?? [],
         }
       : null,
   };
@@ -75,7 +75,7 @@ export default {
       },
     };
     const names = Object.keys(context);
-    const values = names.map((name) => context[name]);
+    const values = Object.values(context);
 
     try {
       let result: unknown;

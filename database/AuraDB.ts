@@ -480,25 +480,25 @@ function makeGroupLocaleCacheKey(jid: string | null | undefined): string | null 
 }
 
 function setCachedLocaleValue(
-  cache: LRUCache<string, string | null>,
+  cache: LRUCache<string, string>,
   input: string | null | undefined,
   value: string | null,
   builder: (jid: string | null | undefined) => string | null,
 ) {
   const key = builder(input);
   if (!key) return;
-  cache.set(key, value);
+  cache.set(key, value ?? "");
 }
 
 function getCachedLocaleEntry(
-  cache: LRUCache<string, string | null>,
+  cache: LRUCache<string, string>,
   input: string | null | undefined,
   builder: (jid: string | null | undefined) => string | null,
 ): { found: boolean; value: string | null } {
   const key = builder(input);
   if (!key) return { found: false, value: null };
 
-  if (cache.has(key)) return { found: true, value: cache.get(key) ?? null };
+  if (cache.has(key)) return { found: true, value: cache.get(key) || null };
 
   const normalized = normalizeLocaleCacheKey(input);
   if (!normalized) return { found: false, value: null };
@@ -512,18 +512,18 @@ function getCachedLocaleEntry(
 
   for (const candidate of candidates) {
     if (cache.has(candidate)) {
-      return { found: true, value: cache.get(candidate) ?? null };
+      return { found: true, value: cache.get(candidate) || null };
     }
   }
 
   return { found: false, value: null };
 }
 
-const userLanguageCache = new LRUCache<string, string | null>({
+const userLanguageCache = new LRUCache<string, string>({
   max: 3000,
   ttl: 30 * 60 * 1000,
 });
-const groupLanguageCache = new LRUCache<string, string | null>({
+const groupLanguageCache = new LRUCache<string, string>({
   max: 1000,
   ttl: 60 * 60 * 1000,
 });
@@ -536,7 +536,7 @@ export function warmLanguageCaches(): { users: number; groups: number } {
       jsonData.groupLang ?? row.GroupLang ?? row.groupLang ?? row.group_lang ?? null,
     );
     const key = makeGroupLocaleCacheKey(String(row.jid ?? row.group_id ?? ""));
-    if (key) groupLanguageCache.set(key, value);
+    if (key) groupLanguageCache.set(key, value ?? "");
   }
 
   return {
@@ -1523,11 +1523,7 @@ export const db: IDatabase = {
           Array.isArray(merged.catBlocked) ? merged.catBlocked : ["nsfw"],
         ),
         JSON.stringify(mutedUsers),
-        normalizeLocale(
-          Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
-            ? dataObject.groupLang
-            : (merged.groupLang ?? row?.GroupLang ?? payload.groupLang ?? null),
-        ),
+        nextGroupLang,
         JSON.stringify(payload),
       );
       refreshGroupLanguageCache(jid, nextGroupLang);

@@ -35,7 +35,7 @@ export default {
 
     const sent = await reply({ text: renderStatus("bc_collecting") });
     if (!sent?.key) return;
-    const edit = (t) => sock.sendMessage(from, { text: t, edit: sent.key });
+    const edit = (text: string) => sock.sendMessage(from, { text, edit: sent.key });
 
     const bots = getAllSockets();
 
@@ -79,8 +79,9 @@ export default {
       }
 
       if (!emisor) { skip++; continue; }
-      if (!colas.has(emisor)) colas.set(emisor, []);
-      colas.get(emisor).push(gid);
+      const cola = colas.get(emisor) ?? [];
+      cola.push(gid);
+      colas.set(emisor, cola);
     }
 
     const total = [...colas.values()].reduce((a, q) => a + q.length, 0);

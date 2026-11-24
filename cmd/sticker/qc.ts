@@ -198,6 +198,7 @@ async function getAvatar(
 ): Promise<Image | null> {
   try {
     const url = await sock.profilePictureUrl(jid, "image");
+    if (!url) return null;
     const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!response.ok) return null;
     return await loadImage(Buffer.from(await response.arrayBuffer()));

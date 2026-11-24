@@ -94,10 +94,10 @@ export function getSocketCandidates(
     current,
     globalThis.mainSocket,
     ...getActiveBotSockets(),
-  ] as ExtendedWASocket[];
+  ];
   return candidates.filter(
-    (socket, index) =>
-      socket?.sendMessage && candidates.indexOf(socket) === index,
+    (socket, index): socket is ExtendedWASocket =>
+      typeof socket?.sendMessage === "function" && candidates.indexOf(socket) === index,
   );
 }
 

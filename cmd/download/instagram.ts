@@ -36,10 +36,12 @@ export default {
         ? data.download
         : [];
       const video = items.find(
-        (item: InstagramMediaItem) => item.type === "video" && item.url,
+        (item): item is InstagramMediaItem & { url: string } =>
+          item.type === "video" && Boolean(item.url),
       );
       const images = items.filter(
-        (item: InstagramMediaItem) => item.type === "image" && item.url,
+        (item): item is InstagramMediaItem & { url: string } =>
+          item.type === "image" && Boolean(item.url),
       );
       const mediaType = video ? "video" : "image";
       if (video) {

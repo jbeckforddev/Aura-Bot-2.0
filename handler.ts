@@ -83,7 +83,7 @@ const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
   ttl: 5 * 60 * 1000,
 });
 
-const configuredLidCache = new LRUCache<string, string | null>({
+const configuredLidCache = new LRUCache<string, string>({
   max: 150,
   ttl: 15 * 60 * 1000,
 });
@@ -340,7 +340,7 @@ const lidToPnCache = new LRUCache<string, string>({
 const groupMetaInFlight = new Map<string, Promise<GroupMetadata | null>>();
 
 async function resolveLid(
-  lidJid: string | null | undefined,
+  lidJid: string,
   groupMeta: GroupMetadata | null,
   sock: ExtendedWASocket,
 ) {
@@ -402,9 +402,9 @@ async function matchesConfiguredNumber(
           const resolved = await sock.signalRepository?.lidMapping?.getLIDForPN(
             `${normalizedNum}@s.whatsapp.net`,
           );
-          lid = resolved ? cleanJid(resolved) : null;
+          lid = resolved ? cleanJid(resolved) : "";
         } catch {
-          lid = null;
+          lid = "";
         }
         configuredLidCache.set(normalizedNum, lid);
       }
@@ -450,9 +450,10 @@ async function handleMessageInternal(
       ? config.prefix
       : [config.prefix];
 
-    const msg = rawMsg;
-    const from = msg.key?.remoteJid;
-    if (!from) return;
+    const key = rawMsg.key;
+    const from = key?.remoteJid;
+    if (!key || !from) return;
+    const msg = rawMsg as WAMessage;
     if (await handleGroupStatus(sock, msg, runtimeDb)) return;
     if (from === "status@broadcast") return;
 
@@ -593,10 +594,10 @@ async function handleMessageInternal(
     const groupPrefix = groupData?.prefix;
     const hasGroupPrefix = Boolean(groupPrefix);
     const useFactoryPrefixes = groupPrefix === "";
-    const factoryPrefixes = [...new Set(prefixes.filter(Boolean))].sort(
+    const factoryPrefixes = [...new Set(prefixes.filter((prefix) => !!prefix))].sort(
       (left, right) => right.length - left.length,
     );
-    const activePrefixes = hasGroupPrefix
+    const activePrefixes = groupPrefix
       ? [groupPrefix]
       : useFactoryPrefixes
         ? factoryPrefixes
@@ -1197,6 +1198,7 @@ async function handleMessageInternal(
               quoted: msg as unknown as WAMessage,
             },
           );
+          if (!copyMessage.message) throw new Error("No se generó el mensaje de copia.");
           return await sock.relayMessage(from, copyMessage.message, {
             messageId: copyMessage.key.id || undefined,
             additionalNodes: [createNativeFlowNode()],
@@ -1280,6 +1282,7 @@ async function handleMessageInternal(
               quoted: msg as unknown as WAMessage,
             },
           );
+          if (!interactive.message) throw new Error("No se generó el mensaje interactivo.");
           return await sock.relayMessage(from, interactive.message, {
             messageId: interactive.key.id || undefined,
             additionalNodes: [createNativeFlowNode()],

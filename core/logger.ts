@@ -156,6 +156,7 @@ export function logInfo(
     httpWarn: chalk.bgYellow.bold("[HTTP WARN]"),
     httpInfo: chalk.bgCyan.bold("[HTTP INFO]"),
     httpSuccess: chalk.bgGreen.bold("[HTTP SUCCESS]"),
+    debug: chalk.gray.bold("[DEBUG]"),
   };
   captureConsole(level, terminal.log, [
     `${prefixMap[level]} ${chalk.white(message)}`,

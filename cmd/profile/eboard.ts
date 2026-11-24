@@ -21,7 +21,7 @@ export default {
     const botId = String(ctx.sock?.subBotId || "").split("@")[0];
     const rows = db
       .getAllUsers()
-      .filter((user) => {
+      .filter((user): user is typeof user & { jid: string } => {
         const jid = String(user.jid || "").trim();
         if (!jid || jid.endsWith("@lid")) return false;
         const number = jid.split("@")[0].split(":")[0];

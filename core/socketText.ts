@@ -1,7 +1,8 @@
 import { t } from "../src/langs/index.ts";
+import type { DisabledPluginText, InsufficientCoinsText } from "../types/socket.d.ts";
 
 export const fytBold = (texto?: string) => {
-  const mapa = {
+  const mapa: Record<string, string> = {
     a: "𝐚",
     b: "𝐛",
     c: "𝐜",
@@ -118,7 +119,13 @@ export const IS_SUBBOT_ONLINE = ({ prefix }: { prefix?: string }) => {
   return t("subbotOnline", { prefix: prefix ?? "." });
 };
 
-export const NOT_HAVE_COINS = ({userBalance, typeMedia, minAmount, currencyName, requiredAmount}) => {
+export const NOT_HAVE_COINS = ({
+  userBalance,
+  typeMedia,
+  minAmount,
+  currencyName,
+  requiredAmount,
+}: InsufficientCoinsText) => {
   return t("notEnoughCoins", {
     userBalance,
     typeMedia,
@@ -127,7 +134,7 @@ export const NOT_HAVE_COINS = ({userBalance, typeMedia, minAmount, currencyName,
   });
 }
 
-export const PLUGINS_OFF = ({ pluginCategory, prefix }) => {
+export const PLUGINS_OFF = ({ pluginCategory, prefix }: DisabledPluginText) => {
   const category = String(pluginCategory);
   return t("pluginsOff", {
     pluginCategory: fytBold(category.toUpperCase()),

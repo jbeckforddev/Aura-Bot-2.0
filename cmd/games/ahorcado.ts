@@ -161,7 +161,7 @@ async function sendGame(
       quoted: ctx.msg as unknown as import("baileys").WAMessage,
     },
   );
-  if (!ended) game.lastMessageId = sentMessage?.key?.id;
+  if (!ended) game.lastMessageId = sentMessage?.key?.id ?? undefined;
   if (ended) clearGame(key);
 }
 

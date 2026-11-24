@@ -99,10 +99,8 @@ export default {
         "buffer",
         {},
         {
-          logger: console as unknown as Parameters<
-            typeof downloadMediaMessage
-          >[3]["logger"],
-          reuploadRequest: sock.updateMediaMessage,
+          logger: sock.logger,
+          reuploadRequest: (mediaMessage) => sock.updateMediaMessage(mediaMessage),
         },
       );
       if (!buffer?.length)

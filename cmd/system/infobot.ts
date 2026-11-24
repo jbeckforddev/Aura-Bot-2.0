@@ -231,8 +231,9 @@ export default {
       quoted: msg as any,
     });
 
+    if (!waMsg.message) throw new Error("No se generó la información del bot.");
     await sock.relayMessage(remoteJid, waMsg.message, {
-      messageId: waMsg.key.id,
+      messageId: waMsg.key.id ?? undefined,
     });
   },
 };

@@ -4,8 +4,9 @@ export const messageCache = new Map<string, proto.IWebMessageInfo>();
 export const deletedMessages = new Map<string, proto.IWebMessageInfo[]>();
 
 export const addMessageToCache = (msg: proto.IWebMessageInfo) => {
-  if (!msg.key.id) return;
-  messageCache.set(msg.key.id, msg);
+  const id = msg.key?.id;
+  if (!id) return;
+  messageCache.set(id, msg);
   
   if (messageCache.size > 500) {
     const firstKey = messageCache.keys().next().value;

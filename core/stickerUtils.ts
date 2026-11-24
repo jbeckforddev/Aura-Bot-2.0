@@ -1,4 +1,4 @@
-import { downloadMediaMessage, type proto } from "baileys";
+import { downloadMediaMessage, type proto, type WAMessage } from "baileys";
 import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -51,7 +51,7 @@ export function unwrapMediaMessage(
 
 export async function downloadTargetMedia(
   sock: ExtendedWASocket,
-  message: proto.IWebMessageInfo,
+  message: WAMessage,
   quotedMessage: proto.IMessage | null | undefined,
   remoteJid: string,
 ): Promise<Buffer> {
@@ -68,18 +68,12 @@ export async function downloadTargetMedia(
     : message;
   return Buffer.from(
     await downloadMediaMessage(
-      target as import("baileys").WAMessage,
+      target,
       "buffer",
       {},
       {
-        logger: console as unknown as Parameters<
-          typeof downloadMediaMessage
-        >[3]["logger"],
-        reuploadRequest: async (
-          mediaMessage: import("baileys").WAMessage,
-        ) =>
-          (sock?.updateMediaMessage?.(mediaMessage) ||
-            mediaMessage) as import("baileys").WAMessage,
+        logger: sock.logger,
+        reuploadRequest: (mediaMessage) => sock.updateMediaMessage(mediaMessage),
       },
     ),
   );
@@ -240,7 +234,7 @@ export async function applyStickerMetadata(
   buffer: Buffer,
   db: IDatabase,
   sender: string,
-  fallbackAuthor?: string,
+  fallbackAuthor?: string | null,
 ): Promise<Buffer> {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
     throw new Error("El sticker generado no es un buffer válido.");

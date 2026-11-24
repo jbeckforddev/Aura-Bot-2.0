@@ -693,8 +693,8 @@ async function connectSubBot(
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
       setActiveSubBot(sessionName, socket);
-      db.invalidateBotDbCache(botJid);
-      db.invalidateBotDbCache(sessionName);
+      db.invalidateBotDbCache?.(botJid);
+      db.invalidateBotDbCache?.(sessionName);
       logInfo(
         `Usuario ${botName ?? "sin nombre"} (${botJid}) vinculado con éxito como ${botType}. Sesión: ${sessionName}.`,
         "success",
@@ -721,7 +721,7 @@ async function connectSubBot(
     const botJid = socket.user?.id ? jidNormalizedUser(socket.user.id) : "";
     if (botJid && connected) {
       db.setBot(botJid, { status: "offline" });
-      db.invalidateBotDbCache(botJid);
+      db.invalidateBotDbCache?.(botJid);
     }
 
     if (socket.manualLogout) {

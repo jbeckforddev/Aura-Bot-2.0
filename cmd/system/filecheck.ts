@@ -243,10 +243,11 @@ function readCommandMetadata(filePath: string): CommandMetadata {
   }
   // Algunos módulos exportan un identificador: const command = {...}; export default command.
   if (ts.isIdentifier(expression)) {
+    const name = expression.text;
     const declaration = source.statements
       .filter(ts.isVariableStatement)
       .flatMap((statement) => statement.declarationList.declarations)
-      .find((item) => ts.isIdentifier(item.name) && item.name.text === expression.text);
+      .find((item) => ts.isIdentifier(item.name) && item.name.text === name);
     if (declaration?.initializer) expression = declaration.initializer;
   }
 

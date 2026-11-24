@@ -64,10 +64,11 @@ export default {
       });
       const previewMessage = generateWAMessageFromContent(from, preview, {
         quoted: msg as unknown as WAMessage,
-        userJid: sock.user?.id,
+        userJid: sock.user?.id || from,
       });
+      if (!previewMessage.message) throw new Error("No se generó la vista previa.");
       await sock.relayMessage(from, previewMessage.message, {
-        messageId: previewMessage.key.id,
+        messageId: previewMessage.key.id ?? undefined,
       });
       await react("✅");
     } catch (error: unknown) {

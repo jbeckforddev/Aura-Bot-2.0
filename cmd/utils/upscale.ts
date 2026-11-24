@@ -26,10 +26,8 @@ export default {
         "buffer",
         {},
         {
-          logger: console as unknown as Parameters<
-            typeof import("baileys").downloadMediaMessage
-          >[3]["logger"],
-          reuploadRequest: ctx.sock.updateMediaMessage,
+          logger: ctx.sock.logger,
+          reuploadRequest: (mediaMessage) => ctx.sock.updateMediaMessage(mediaMessage),
         },
       );
       const form = new FormData();

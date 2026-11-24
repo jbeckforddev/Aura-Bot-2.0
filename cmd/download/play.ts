@@ -189,11 +189,11 @@ export default {
       }
 
       const metadata = await dl(videoUrl, fallback);
-      const {cost} = await prepareDownloadChargeBySize(ctx, "audio", metadata.data?.size);
       const audioUrl = metadata.data?.dl_url;
       if (!metadata.status || !audioUrl) {
         throw new Error(metadata.message || t("cmd_error_de_descarga_3b9d228e"));
       }
+      const { cost } = await prepareDownloadChargeBySize(ctx, "audio", metadata.data?.size ?? 0);
 
       await sendYouTubePreview(buildYouTubeText(metadata), metadata);
       await reply({

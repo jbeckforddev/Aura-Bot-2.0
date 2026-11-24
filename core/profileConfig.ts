@@ -37,10 +37,15 @@ const DEFAULT_PROFILE: Profile = {
 
 export function getProfile(jid: string): Profile {
   const user = db.getUser(jid);
+  const stored = { ...user, ...user.data };
   const profile: Profile = {
     ...DEFAULT_PROFILE,
-    ...user,
-    ...((user.data as Record<string, unknown> | undefined) || {}),
+    ...stored,
+    gender: typeof stored.gender === "string" ? stored.gender : DEFAULT_PROFILE.gender,
+    name: typeof stored.name === "string" ? stored.name : DEFAULT_PROFILE.name,
+    description: typeof stored.description === "string"
+      ? stored.description
+      : DEFAULT_PROFILE.description,
   };
 
   if (profile.name === "Sin nombre" && user.username)
@@ -83,7 +88,7 @@ export async function getProfilePictureUrl(
   jid: string,
 ): Promise<string> {
   try {
-    return await socket.profilePictureUrl(jid, "image");
+    return (await socket.profilePictureUrl(jid, "image")) || DEFAULT_PFP;
   } catch {
     return DEFAULT_PFP;
   }

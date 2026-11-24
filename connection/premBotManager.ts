@@ -114,11 +114,12 @@ function withSessionPrefix(sessionName: string, prefix: "prem" | "sub"): string 
 }
 
 function createBoundedCacheStore(max: number, ttl: number) {
-  const cache = new LRUCache<string, unknown>({ max, ttl });
+  const cache = new LRUCache<string, {}>({ max, ttl });
   return {
     get: <T>(key: string): T | undefined => cache.get(key) as T | undefined,
     set: <T>(key: string, value: T): void => {
-      cache.set(key, value);
+      if (value == null) cache.delete(key);
+      else cache.set(key, value);
     },
     del: (key: string): void => {
       cache.delete(key);
@@ -592,8 +593,8 @@ async function connectPremBotNow(
       if (sessionName !== botJid) db.deleteBot(sessionName);
       ACTIVE_PREM_BOTS.set(sessionName, socket);
       registerActiveBot(sessionName, socket);
-      db.invalidateBotDbCache(botJid);
-      db.invalidateBotDbCache(sessionName);
+      db.invalidateBotDbCache?.(botJid);
+      db.invalidateBotDbCache?.(sessionName);
       await options.onConnected?.(botType);
       return;
     }
@@ -615,7 +616,7 @@ async function connectPremBotNow(
     );
     if (botJid && connected) {
       db.setBot(botJid, { status: "offline" });
-      db.invalidateBotDbCache(botJid);
+      db.invalidateBotDbCache?.(botJid);
     }
     if (socket.manualLogout) {
       await unlinkPremBot(sessionName, socket, "cierre manual");

@@ -70,8 +70,8 @@ export interface GroupWarnEntry {
 export interface DatabaseGroupData {
   selfConfigured?: boolean;
   warns?: Record<string, GroupWarnEntry[]>;
-  welcomeMessage?: string;
-  goodbyeMessage?: string;
+  welcomeMessage?: string | null;
+  goodbyeMessage?: string | null;
   byeMessage?: string;
   welcome?: boolean | number;
   goodbye?: boolean | number;
@@ -104,8 +104,8 @@ export interface DatabaseGroup {
   botOn?: number;
   privateMode?: boolean | number;
   adminMode?: boolean | number;
-  welcomeMessage?: string;
-  goodbyeMessage?: string;
+  welcomeMessage?: string | null;
+  goodbyeMessage?: string | null;
   byeMessage?: string;
   welcome?: boolean | number;
   goodbye?: boolean | number;
@@ -113,6 +113,7 @@ export interface DatabaseGroup {
   warnLimit?: number;
   warns?: Record<string, GroupWarnEntry[]>;
   data?: DatabaseGroupData;
+  activity?: Record<string, number>;
   [key: string]: unknown;
 }
 

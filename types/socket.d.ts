@@ -8,7 +8,6 @@ export type ExtendedWASocket = WASocket & {
   subBotId?: string;
   sessionName?: string;
   manualLogout?: boolean;
-  updateMediaMessage?: (mediaMessage: unknown) => Promise<unknown>;
 };
 
 export interface ConnectionOptions {
@@ -98,6 +97,19 @@ export interface HandlerLogger {
   cmdExec?: (payload: CmdExecPayload) => void;
 }
 
+export interface InsufficientCoinsText {
+  userBalance: string;
+  typeMedia: string;
+  minAmount: string;
+  currencyName: string;
+  requiredAmount?: string;
+}
+
+export interface DisabledPluginText {
+  pluginCategory: string;
+  prefix: string;
+}
+
 export interface AntilinkCheckArgs {
   sock: ExtendedWASocket;
   msg: proto.IWebMessageInfo;
@@ -132,6 +144,7 @@ export interface GroupCallEvent {
 
 declare global {
   var DEFAULT_PREFIXES: string[];
+  var CHANNEL_ID: string;
   var DEFAULT_BOT_NAME: string;
   var DEFAULT_BOT_VERSION: string;
   var DEFAULT_BOT_AUTHOR: string;
@@ -140,10 +153,11 @@ declare global {
   var DEFAULT_USER_ROLES: {
     lid?: string;
     role: string;
-    jid?: string;
+    jid?: string | null;
   }[];
   var mainBotSession: string;
   var subBotSession: string;
+  var premBotSession: string;
   var DATA_BASE_DIR: string;
   var mainSocket: ExtendedWASocket | null;
 

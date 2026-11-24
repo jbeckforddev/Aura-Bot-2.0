@@ -341,7 +341,7 @@ ${audioScript}`;
         } as any,
         {
           quoted: (fakeQuoted as any) || msg,
-          userJid: sock.user?.id,
+          userJid: sock.user?.id || from,
         },
       );
 
@@ -360,7 +360,7 @@ ${audioScript}`;
             },
           },
         } as any,
-        { userJid: sock.user?.id },
+        { userJid: sock.user?.id || from },
       );
 
       await sock.relayMessage(from, edtMsg.message!, { messageId: edtMsg.key.id! });

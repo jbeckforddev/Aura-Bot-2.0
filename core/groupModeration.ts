@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import badWordsData from "../database/badWords.json" with { type: "json" };
 import { LRUCache } from "lru-cache";
 import { fytBold } from "./socketText.ts";
 import { getActiveBotSockets } from "../connection/activeBotRegistry.ts";
@@ -16,10 +16,6 @@ import type { BadWordLevel } from "../types/media.d.ts";
 import { t } from "../src/langs/index.ts";
 
 type ToxicMatch = { word: string; reason: string };
-
-const badWordsData = JSON.parse(
-  readFileSync(new URL("../database/badWords.json", import.meta.url), "utf8"),
-);
 
 const moderationMetaCache = new LRUCache<string, GroupMetadata>({
   max: 200,
@@ -234,8 +230,10 @@ export async function handleAntilink(
   isOwner: boolean,
   isBotAdmin: boolean,
 ): Promise<boolean> {
-  const groupJid = message?.key?.remoteJid;
+  const key = message.key;
+  const groupJid = key?.remoteJid;
   if (
+    !key ||
     !groupJid?.endsWith("@g.us") ||
     !text ||
     isAdmin ||
@@ -255,7 +253,7 @@ export async function handleAntilink(
 
   try {
     await Promise.allSettled([
-      actionSock.sendMessage(groupJid, { delete: message.key }),
+      actionSock.sendMessage(groupJid, { delete: key }),
       actionSock.groupParticipantsUpdate(groupJid, [userJid], "remove"),
       actionSock.sendMessage(
         groupJid,
@@ -335,10 +333,12 @@ export async function handleGroupToxic(
   isAdmin: boolean,
   isBotAdmin: boolean,
 ): Promise<boolean> {
-  const groupJid = message?.key?.remoteJid;
-  const userJid = message?.key?.participant || message?.participant;
+  const key = message.key;
+  const groupJid = key?.remoteJid;
+  const userJid = key?.participant || message.participant;
 
   if (
+    !key ||
     !groupJid?.endsWith("@g.us") ||
     !userJid ||
     message.key?.fromMe ||
@@ -371,7 +371,7 @@ export async function handleGroupToxic(
     );
 
     const tasks: Promise<unknown>[] = [
-      actionSock.sendMessage(groupJid, { delete: message.key }),
+      actionSock.sendMessage(groupJid, { delete: key }),
       actionSock.sendMessage(groupJid, {
         text: `╭〔 ⚠️ ${fytBold(t("core_aura_reed_95dcfb15"))} 〕⬣\n┃ 🚫 ${fytBold(t("core_anti_toxic_system_384ef390"))}\n╰━━━━━━━━━━━━⬣\n\n┃ 👤 Usuario: @${localPart(userJid)}\n┃ 📊 Warns: [ ${count}/${limit} ]\n┃ 🛡️ Admin: ${fytBold(t("core_system_29d43743"))} ⚡\n┃ 📌 Acción: Llamada de atención\n┃ 📝 Razón: ${toxicMatch.reason}\n┃ ⏰ Fecha: ${today}\n\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ⚠️ Se ha añadido una\n┃ ⚠️ advertencia al usuario.\n┣━━━━━━━━━━━━━━━━⬣\n\n┃ ❗ El mensaje infractor\n┃ ❗ ha sido eliminado.\n\n╰〔 ${fytBold(t("core_system_active_e403484a"))} 〕⬣`,
         mentions: [userJid],

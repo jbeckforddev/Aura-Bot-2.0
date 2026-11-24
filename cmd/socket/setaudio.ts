@@ -49,12 +49,8 @@ export default {
         "buffer",
         {},
         {
-          logger: console as unknown as Parameters<
-            typeof downloadMediaMessage
-          >[3]["logger"],
-          reuploadRequest: ctx.sock.updateMediaMessage as (
-            msg: Parameters<typeof downloadMediaMessage>[0],
-          ) => Promise<Parameters<typeof downloadMediaMessage>[0]>,
+          logger: ctx.sock.logger,
+          reuploadRequest: (mediaMessage) => ctx.sock.updateMediaMessage(mediaMessage),
         },
       );
       if (!buffer?.length) throw new Error(t("socketSetAudioDownloadError"));

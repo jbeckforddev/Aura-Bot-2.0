@@ -636,7 +636,7 @@ async function resolverJidsReales(
   sock: any,
   idsOrigen: string[],
   knownParticipants: any[] = [],
-): Promise> {
+): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
   const lidLookup = new Map<string, string>();
 

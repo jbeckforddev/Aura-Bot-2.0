@@ -239,7 +239,7 @@ async function relayChatTheme(
       protocolMessage,
     } as any,
     {
-      userJid: sock.user?.id,
+      userJid: sock.user?.id || jid,
     },
   );
 

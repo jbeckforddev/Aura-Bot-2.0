@@ -102,7 +102,7 @@ const CHARACTERS = loadCharacters();
 
 export function getGachaCatalogStats() {
   const series = new Set(
-    CHARACTERS.map((character) => character.source.trim().toLowerCase()).filter(
+    CHARACTERS.map((character) => character.source?.trim().toLowerCase() ?? "").filter(
       Boolean,
     ),
   );

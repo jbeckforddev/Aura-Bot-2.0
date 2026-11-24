@@ -2,6 +2,7 @@ import type {
   proto,
   GroupMetadata,
   AnyMessageContent,
+  WAMessage,
 } from "baileys";
 import type { ExtendedWASocket } from "./socket.d.ts";
 import type { IDatabase } from "./database.d.ts";
@@ -18,7 +19,7 @@ export type ReplyContent =
 export interface CommandContext {
   sock: ExtendedWASocket;
   db: IDatabase;
-  msg: proto.IWebMessageInfo;
+  msg: WAMessage;
   from: string;
   sender: string;
   senderNum: string;
@@ -48,8 +49,8 @@ export interface CommandContext {
   prefix: string;
   resolveLid: (lidJid: string) => Promise<string>;
   clearGroupCache: () => boolean;
-  reply: (content: ReplyContent) => Promise<proto.WAMessage | undefined>;
-  react: (emoji: string) => Promise<proto.WAMessage | undefined>;
+  reply: (content: ReplyContent) => Promise<WAMessage | undefined>;
+  react: (emoji: string) => Promise<WAMessage | undefined>;
   copy: (
     text: string,
     copyCode: string,
@@ -74,15 +75,15 @@ export interface CommandContext {
 
 export interface ReplyContext {
   sock: ExtendedWASocket;
-  msg: proto.IWebMessageInfo;
+  msg: WAMessage;
   from: string;
   body: string;
   sender: string;
   botJid: string;
   db: IDatabase;
   usedPrefix: string;
-  reply: (content: ReplyContent) => Promise<proto.WebMessageInfo | undefined>;
-  react: (emoji: string) => Promise<proto.WebMessageInfo | undefined>;
+  reply: (content: ReplyContent) => Promise<WAMessage | undefined>;
+  react: (emoji: string) => Promise<WAMessage | undefined>;
 }
 
 export interface CommandPlugin {

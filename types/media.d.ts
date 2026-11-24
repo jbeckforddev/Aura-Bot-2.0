@@ -1,5 +1,6 @@
-import type { proto, AnyMessageContent } from "baileys";
+import type { proto, AnyMessageContent, DownloadableMessage, WAMessage } from "baileys";
 import type { ButtonItem } from "./buttons.d.ts";
+import type { CommandContext } from "./commands.d.ts";
 
 export type SendMessageContent =
   | AnyMessageContent
@@ -160,7 +161,69 @@ export interface BadWordLevel {
   reason: string;
 }
 
+export interface AudioStickerMedia extends DownloadableMessage {
+  mimetype?: string | null;
+  seconds?: number | null;
+  isAnimated?: boolean | null;
+}
+
+export interface AudioStickerMediaInfo {
+  kind: "video" | "image" | "webp" | "audio" | null;
+  mime: string;
+  seconds: number;
+  isAnimated?: boolean;
+  mediaObj: AudioStickerMedia | null;
+  dlType: "video" | "image" | "sticker" | "audio" | "document" | null;
+}
+
+export interface AudioStickerMediaNode extends Partial<WAMessage>, AudioStickerMedia {
+  chat?: string;
+  mtype?: string;
+  type?: string;
+  msg?: AudioStickerMedia;
+  fakeObj?: Partial<WAMessage>;
+  download?: () => Promise<Buffer>;
+}
+
+export interface AudioStickerCommandMessage extends AudioStickerMediaNode {
+  chat: string;
+  sender: string;
+  key: WAMessage["key"];
+  quoted?: AudioStickerMediaNode | null;
+}
+
+export interface AudioStickerSession {
+  stickerBuffer: Buffer;
+  isAnimated: boolean;
+  packname: string;
+  author: string;
+  expiresAt: number;
+  processing: boolean;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+export type AudioStickerCommandOptions = Pick<
+  CommandContext,
+  "sock" | "db" | "text" | "reply" | "react" | "usedPrefix"
+> & { command: string };
+
+export type AudioStickerSessionOptions = Pick<
+  AudioStickerSession,
+  "stickerBuffer" | "isAnimated" | "packname" | "author"
+> & {
+  m: AudioStickerCommandMessage;
+  client: CommandContext["sock"];
+  send: CommandContext["reply"];
+  usedPrefix: string;
+  command: string;
+};
+
+export interface StickerWithAudio extends proto.Message.IStickerMessage {
+  audioMessage?: proto.Message.IAudioMessage | null;
+}
+
 declare global {
+  var __audioStickerSessions: Map<string, AudioStickerSession> | undefined;
   type AlbumItemGlobal = AlbumItem;
   type StickerMetadataGlobal = StickerMetadata;
   type UnwrappedMediaMessageGlobal = UnwrappedMediaMessage;

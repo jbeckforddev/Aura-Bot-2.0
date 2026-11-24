@@ -69,7 +69,7 @@ export default {
         query,
         engine: t("cmd_api_interna_eb134630"),
         results: response.collection.slice(0, 10).map((track) => ({
-          title: track.title,
+          title: track.title || t("cmd_sin_titulo_fd8beeee"),
           artist: track.user?.username || t("cmd_desconocido_452c8a12"),
           duration: formatDuration(Math.floor(Number(track.duration || 0) / 1000)),
           url: track.permalink_url || t("cmd_no_disponible_9def5fe2"),

@@ -37,7 +37,7 @@ export default {
       );
       const song = response?.data;
       const download = typeof song?.dl === "string" ? song.dl : song?.dl?.mp3;
-      if (!response?.status || !download)
+      if (!response?.status || !song || !download)
         throw new Error("No se pudo obtener el audio.");
       const title = song.title || "Spotify";
       const originalUrl =

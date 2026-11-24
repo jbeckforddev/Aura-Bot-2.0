@@ -629,8 +629,8 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
         phone_number: botPhoneNumber,
       });
       if (sessionName !== botJid) db.deleteBot(sessionName);
-      db.invalidateBotDbCache(botJid);
-      db.invalidateBotDbCache(sessionName);
+      db.invalidateBotDbCache?.(botJid);
+      db.invalidateBotDbCache?.(sessionName);
       resetReconnectAttempts(sessionName);
       pairingRetryAttempts.delete(sessionName);
       void preloadMenuBanner(extendedSock).catch(() => {});
@@ -662,7 +662,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
       const logoutBotJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : sessionName;
       if (hasConnected) {
         db.setBot(logoutBotJid, { status: "offline" });
-        db.invalidateBotDbCache(logoutBotJid);
+        db.invalidateBotDbCache?.(logoutBotJid);
       }
       logInfo("Sesión cerrada por comando del bot. No se reconectará automáticamente.", "alert");
 
@@ -705,7 +705,7 @@ async function connectSocket(sessionName: string): Promise<ExtendedWASocket | nu
     if (disconnectedBotJid) {
       if (hasConnected) {
         db.setBot(disconnectedBotJid, { status: "offline" });
-        db.invalidateBotDbCache(disconnectedBotJid);
+        db.invalidateBotDbCache?.(disconnectedBotJid);
       }
     }
 

@@ -31,7 +31,7 @@ export default {
   }: CommandContext) {
     // Ayuda
     if (args[0] === "-list" || args[0] === "-help" || args[0] === "-ayuda") {
-      return reply({ text: generateStickerHelp(usedPrefix) });
+      return reply({ text: generateStickerHelp(usedPrefix ?? ".") });
     }
 
     const context = msg.message?.extendedTextMessage?.contextInfo;

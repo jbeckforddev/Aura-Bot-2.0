@@ -140,12 +140,13 @@ async function sendStickerPack(
     },
   };
 
-  const userJid = sock.user?.id;
+  const userJid = sock.user?.id || remoteJid;
   const m = generateWAMessageFromContent(remoteJid, content as proto.IMessage, {
     quoted: quoted as unknown as import("baileys").WAMessage,
     userJid,
   });
-  await sock.relayMessage(remoteJid, m.message, { messageId: m.key.id });
+  if (!m.message) throw new Error("No se generó el paquete de stickers.");
+  await sock.relayMessage(remoteJid, m.message, { messageId: m.key.id ?? undefined });
   return m;
 }
 
@@ -177,7 +178,8 @@ export default {
         `${api}/stickerly/search?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
       );
       const packs = (search?.resultados || search?.result || []).filter(
-        (pack: StickerPackItem) => pack?.url && !pack.isPaid,
+        (pack): pack is StickerPackItem & { url: string } =>
+          Boolean(pack?.url && !pack.isPaid),
       );
       if (!packs.length) throw new Error("No se encontraron packs gratuitos.");
 

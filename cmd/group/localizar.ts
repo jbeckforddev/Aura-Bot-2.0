@@ -59,16 +59,16 @@ export default {
     const num = target.split("@")[0];
 
     await react("📍").catch(() => undefined);
-    await reply(
-      `${fytBold("Solicitud de ubicación")}\n\n` +
+    await reply({
+      text: `${fytBold("Solicitud de ubicación")}\n\n` +
         `@${num}, si quieres compartir tu ubicación con este chat, usa la función ` +
         `nativa de WhatsApp:\n\n` +
         `📎 *Adjuntar* → *Ubicación* → *Enviar tu ubicación actual* (o *en vivo*).\n\n` +
         `Tú decides exactamente qué compartir, y todos en el chat lo ven igual que tú. ` +
         `No se recopila ni se envía nada de forma automática.\n\n` +
         `_Esta solicitud expira en 10 minutos._`,
-      { mentions: [target] },
-    ).catch(() => undefined);
+      mentions: [target],
+    }).catch(() => undefined);
   },
 };
 

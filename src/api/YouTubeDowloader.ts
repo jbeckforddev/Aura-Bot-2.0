@@ -514,7 +514,7 @@ async function savetube(
       channel:
         ytsMeta?.author || youtubeMeta?.channel || info.author || info.channel || "Desconocido",
       duration: ytsMeta?.duration || youtubeMeta?.duration || info.duration || "0s",
-      views:
+      views: String(
         ytsMeta?.views ||
         youtubeMeta?.views ||
         (typeof info.views === "number"
@@ -524,7 +524,8 @@ async function savetube(
             : typeof info.views === "string"
               ? info.views
               : "0"),
-      likes:
+      ),
+      likes: String(
         ytsMeta?.likes ||
         youtubeMeta?.likes ||
         (typeof info.likes === "number"
@@ -534,6 +535,7 @@ async function savetube(
             : typeof info.likes === "string"
               ? info.likes
               : "0"),
+      ),
       url: `https://youtu.be/${videoId}`,
       channel_url: channelUrl,
       thumbnail:

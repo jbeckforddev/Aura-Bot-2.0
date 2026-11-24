@@ -52,7 +52,7 @@ function isXnxxUrl(text: string): boolean {
 
 /** Elige la mejor URL de video disponible (high > low > HLS) */
 function pickVideoUrl(
-  videos?: XnxxDownloadResponse["resultado"]["videos"],
+  videos?: NonNullable<XnxxDownloadResponse["resultado"]>["videos"],
 ): string {
   return videos?.high || videos?.low || videos?.HLS || "";
 }

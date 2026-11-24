@@ -239,12 +239,8 @@ async function downloadAudioForStatus(
     "buffer",
     {},
     {
-      logger: console as unknown as Parameters<
-        typeof downloadMediaMessage
-      >[3]["logger"],
-      reuploadRequest: sock.updateMediaMessage as (
-        mediaMessage: WAMessage,
-      ) => Promise<WAMessage>,
+      logger: sock.logger,
+      reuploadRequest: (mediaMessage) => sock.updateMediaMessage(mediaMessage),
     },
   );
 }

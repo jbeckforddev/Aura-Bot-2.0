@@ -203,7 +203,7 @@ async function sendAlbumBatch(
     { quoted: quoted as WAMessage | undefined, userJid },
   );
 
-  await relayWithRateLimit(socket, jid, album.message, album.key.id);
+  await relayWithRateLimit(socket, jid, album.message, album.key.id ?? undefined);
 
   for (let index = 0; index < preparedItems.length; index += 1) {
     if (index > 0) await sleep(ALBUM_RELAY_DELAY);
@@ -221,7 +221,7 @@ async function sendAlbumBatch(
         socket,
         jid,
         mediaMessage.message,
-        mediaMessage.key.id,
+        mediaMessage.key.id ?? undefined,
       );
     } catch (error: unknown) {
       console.error("[album] No se pudo enviar un elemento:", error);
