@@ -31,7 +31,7 @@ export default {
       const quoted = getQuotedMessageForInspection(ctx.msg);
       if (quoted) {
         try {
-          const inspected = quotedMessageAsJson(quoted, Boolean(ctx.isGroup));
+          const inspected = quotedMessageAsJson(quoted);
           const messages = formatOwnerCodeMessages(
             inspected.type,
             Buffer.from(inspected.json, "utf8"),
@@ -65,7 +65,7 @@ export default {
         "🔎 *Archivo:* Busca el código y lo muestra dentro del chat.",
         "💬 *Mensaje citado:* Responde a un sticker, texto o medio con " + prefix + "getcode.",
         "🧩 *JSON:* Muestra solo los campos que WhatsApp haya entregado.",
-        "🔒 *Grupos:* Se ocultan claves y enlaces de descarga sensibles.",
+        "🔒 *Acceso:* Solo owners; JSON íntegro en grupos y privados.",
         "📝 *Uso:* \x60" + prefix + "getcode ping\x60",
         "📄 *Extensión opcional:* \x60" + prefix + "getcode ping.ts\x60",
         "🗂️ *Nombre parcial:* \x60" + prefix + "getcode filecheck\x60",
