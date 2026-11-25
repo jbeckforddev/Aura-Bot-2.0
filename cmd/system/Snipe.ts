@@ -5,7 +5,7 @@ import { t } from "../../src/langs/index.ts";
 
 
 export default {
-  name: ["snipe", "recuperar", "fantasmas"],
+  name: ["snipe", "recuperar"],
   category: "system",
   description: t("cmd_recupera_el_ultimo_mensaje_eli_ed1a219c"),
   async run(ctx: CommandContext) {

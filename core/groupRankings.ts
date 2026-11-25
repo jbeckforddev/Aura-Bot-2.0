@@ -1,23 +1,59 @@
 import { GROUP_RANKING_PAGE_SIZE } from "../database/groupActivity.ts";
-import { t } from "../src/langs/index.ts";
-import type { CommandPlugin, GroupRanking } from "../types/index.d.ts";
+import { t, type TranslationKey } from "../src/langs/index.ts";
+import type {
+  CommandPlugin,
+  GroupMemberRankingOrder,
+  GroupRanking,
+  GroupRankingPage,
+} from "../types/index.d.ts";
 import { formatRankingPage } from "./rankingText.ts";
 import { fytBold } from "./socketText.ts";
 
+const MEMBER_RANKINGS = {
+  activeMembers: {
+    order: "desc",
+    icon: "🔥",
+    heading: "group_active_ranking_heading",
+    description: "cmd_muestra_los_usuarios_mas_activ_5869777f",
+  },
+  ghosts: {
+    order: "asc",
+    icon: "👻",
+    heading: "group_ghost_ranking_heading",
+    description: "group_ghost_ranking_description",
+  },
+} satisfies Record<
+  string,
+  {
+    order: GroupMemberRankingOrder;
+    icon: string;
+    heading: TranslationKey;
+    description: TranslationKey;
+  }
+>;
+
 export function groupRankingCommand(
   name: string[],
-  ranking: GroupRanking,
+  ranking: GroupRanking | keyof typeof MEMBER_RANKINGS,
 ): CommandPlugin {
-  const messages = ranking === "topMsgUsers";
+  const commands = ranking === "topCmdUsers";
+  const memberRanking =
+    ranking === "activeMembers" || ranking === "ghosts"
+      ? MEMBER_RANKINGS[ranking]
+      : undefined;
+  const countIcon = commands ? "⚡" : "💬";
+  const icon = memberRanking?.icon ?? countIcon;
 
   return {
     name,
     category: "group",
     groupOnly: true,
+    adminOnly: Boolean(memberRanking),
     description: t(
-      messages
-        ? "group_message_ranking_description"
-        : "group_command_ranking_description",
+      memberRanking?.description ??
+        (commands
+          ? "group_command_ranking_description"
+          : "group_message_ranking_description"),
     ),
     async run(ctx) {
       const requestedPage = ctx.args[0] ?? "1";
@@ -34,11 +70,23 @@ export function groupRankingCommand(
         );
       }
 
-      const { entries, totalPages } = ctx.db.getGroupWeeklyRankingPage(
-        ctx.from,
-        ranking,
-        page,
-      );
+      let result: GroupRankingPage;
+      if (ranking === "activeMembers" || ranking === "ghosts") {
+        const participants = ctx.groupMeta?.participants;
+        if (!participants?.length) {
+          return ctx.reply(t("cmd_no_se_pudo_obtener_la_informac_3121a681"));
+        }
+        result = ctx.db.getGroupWeeklyMemberRankingPage(
+          ctx.from,
+          participants,
+          MEMBER_RANKINGS[ranking].order,
+          page,
+        );
+      } else {
+        result = ctx.db.getGroupWeeklyRankingPage(ctx.from, ranking, page);
+      }
+
+      const { entries, totalPages } = result;
       if (totalPages === 0) return ctx.reply(t("group_ranking_empty"));
       if (page > totalPages) {
         return ctx.reply(
@@ -50,19 +98,19 @@ export function groupRankingCommand(
       }
 
       const heading = t(
-        messages
-          ? "group_message_ranking_heading"
-          : "group_command_ranking_heading",
+        memberRanking?.heading ??
+          (commands
+            ? "group_command_ranking_heading"
+            : "group_message_ranking_heading"),
       );
       const title = t(
-        messages
-          ? "group_message_ranking_title"
-          : "group_command_ranking_title",
+        commands
+          ? "group_command_ranking_title"
+          : "group_message_ranking_title",
       );
-      const icon = messages ? "💬" : "⚡";
-      const countLabel = messages
-        ? "group_message_ranking_count"
-        : "group_command_ranking_count";
+      const countLabel = commands
+        ? "group_command_ranking_count"
+        : "group_message_ranking_count";
 
       return ctx.reply({
         text: formatRankingPage({
@@ -77,7 +125,7 @@ export function groupRankingCommand(
               (jid === ctx.sender ? ctx.msg.pushName?.trim() : "") ||
               `@${jid.split("@")[0]}`
             ).replace(/\s+/g, " "),
-            value: `${icon} ${t(countLabel, { count })}`,
+            value: `${countIcon} ${t(countLabel, { count })}`,
           })),
         }),
         mentions: entries.map(({ jid }) => jid),

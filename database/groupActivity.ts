@@ -113,6 +113,12 @@ export function createGroupActivity(database: Database) {
     topMsgUsers: rankingStatements("topMsgUsers", "messages"),
     topCmdUsers: rankingStatements("topCmdUsers", "commands"),
   };
+  const messageCounts = database.prepare<[string, number], GroupRankingEntry>(`
+    SELECT activity.jid, activity.messages AS count
+    FROM group_weekly_activity AS activity
+    JOIN groups ON groups.jid = activity.groupJid
+    WHERE activity.groupJid = ? AND groups.rankingWeek = ? AND activity.messages > 0
+  `);
 
   function importLegacyRanking(
     groupJid: string,
@@ -174,6 +180,14 @@ export function createGroupActivity(database: Database) {
     resetGroup.run(week, groupJid);
   }
   const initializeWeek = database.transaction(ensureCurrentWeek);
+
+  function refreshExistingWeek(groupJid: string): number {
+    const week = currentWeek();
+    const group = groupWeek.get(groupJid);
+    if (group && group.rankingWeek !== week)
+      initializeWeek.immediate(groupJid, week);
+    return week;
+  }
 
   const record = database.transaction(
     (groupJid: string, jid: string, ranking: GroupRanking, lid?: string) => {
@@ -246,12 +260,22 @@ export function createGroupActivity(database: Database) {
     ranking: GroupRanking,
     page: number,
   ): GroupRankingPage {
-    const week = currentWeek();
-    const group = groupWeek.get(groupJid);
-    if (group && group.rankingWeek !== week)
-      initializeWeek.immediate(groupJid, week);
-    return readRankingPage(groupJid, ranking, week, page);
+    return readRankingPage(
+      groupJid,
+      ranking,
+      refreshExistingWeek(groupJid),
+      page,
+    );
   }
 
-  return { record: record.immediate, getRanking, getRankingPage };
+  function getMessageCounts(groupJid: string): GroupRankingEntry[] {
+    return messageCounts.all(groupJid, refreshExistingWeek(groupJid));
+  }
+
+  return {
+    record: record.immediate,
+    getRanking,
+    getRankingPage,
+    getMessageCounts,
+  };
 }

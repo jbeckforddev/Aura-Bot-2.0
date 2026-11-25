@@ -1,3 +1,5 @@
+import type { GroupParticipant } from "baileys";
+
 export type UserRole = "user" | "premium" | "mod" | "coowner" | "owner";
 
 export interface DatabaseUserData {
@@ -70,6 +72,7 @@ export interface GroupWarnEntry {
 }
 
 export type GroupRanking = "topMsgUsers" | "topCmdUsers";
+export type GroupMemberRankingOrder = "asc" | "desc";
 
 export interface GroupRankingEntry {
   jid: string;
@@ -267,6 +270,12 @@ export interface IDatabase {
   recordGroupMessage(groupJid: string, jid: string, lid?: string): void;
   getGroupWeeklyRanking(groupJid: string, ranking: GroupRanking): GroupRankingEntry[];
   getGroupWeeklyRankingPage(groupJid: string, ranking: GroupRanking, page: number): GroupRankingPage;
+  getGroupWeeklyMemberRankingPage(
+    groupJid: string,
+    participants: readonly Pick<GroupParticipant, "id" | "lid" | "phoneNumber">[],
+    order: GroupMemberRankingOrder,
+    page: number,
+  ): GroupRankingPage;
   setUser(
     jid: string,
     dataObject: Partial<DatabaseUser> & Record<string, unknown>,

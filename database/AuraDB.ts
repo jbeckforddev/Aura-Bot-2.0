@@ -5,7 +5,7 @@ import "../config.ts";
 import { logInfo } from "../core/logger.ts";
 import { resolveBotType } from "../core/botType.ts";
 import { SUPPORTED_LANGUAGES } from "../src/langs/index.ts";
-import { createGroupActivity } from "./groupActivity.ts";
+import { createGroupActivity, GROUP_RANKING_PAGE_SIZE } from "./groupActivity.ts";
 import type {
   IDatabase,
   DatabaseUser,
@@ -938,6 +938,12 @@ function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
   return stmts.getUser.get(input.trim()) ?? getUserRows(input, lid)[0];
 }
 
+function rankingUsername(user: UserDbRow | undefined): string | undefined {
+  const name =
+    user?.username || safeJson<{ pushName?: string } | null>(user?.data)?.pushName;
+  return typeof name === "string" ? name : undefined;
+}
+
 function getUser(input: string, knownLid?: string | null): DatabaseUser {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
@@ -1395,12 +1401,44 @@ export const db: IDatabase = {
 
   getGroupWeeklyRankingPage(groupJid, ranking, page) {
     const result = groupActivity.getRankingPage(normalizeJid(groupJid), ranking, page);
-    const entries = result.entries.map((entry) => {
-      const user = getUserRow(entry.jid);
-      const name = user?.username || safeJson<{ pushName?: string } | null>(user?.data)?.pushName;
-      return { ...entry, username: typeof name === "string" ? name : undefined };
-    });
+    const entries = result.entries.map((entry) => ({
+      ...entry,
+      username: rankingUsername(getUserRow(entry.jid)),
+    }));
     return { ...result, entries };
+  },
+
+  getGroupWeeklyMemberRankingPage(groupJid, participants, order, page) {
+    const counts = new Map(
+      groupActivity
+        .getMessageCounts(normalizeJid(groupJid))
+        .map(({ jid, count }) => [jid, count]),
+    );
+    const entries = participants
+      .map(({ id, lid, phoneNumber }) => {
+        const user =
+          getUserRow(id, lid) ?? (phoneNumber ? getUserRow(phoneNumber) : undefined);
+        const aliases = new Set([id, lid, phoneNumber, user?.jid, user?.lid]);
+        let count = 0;
+        for (const alias of aliases) {
+          if (alias) count += counts.get(alias) ?? 0;
+        }
+        return { jid: id, count, username: rankingUsername(user) };
+      })
+      .filter(({ count }) => order === "asc" || count > 0)
+      .sort((a, b) =>
+        (order === "asc" ? a.count - b.count : b.count - a.count) ||
+        a.jid.localeCompare(b.jid),
+      );
+    const totalPages = Math.ceil(entries.length / GROUP_RANKING_PAGE_SIZE);
+    if (!Number.isSafeInteger(page) || page < 1 || page > totalPages) {
+      return { entries: [], totalPages };
+    }
+    const offset = (page - 1) * GROUP_RANKING_PAGE_SIZE;
+    return {
+      entries: entries.slice(offset, offset + GROUP_RANKING_PAGE_SIZE),
+      totalPages,
+    };
   },
 
   setUser(
