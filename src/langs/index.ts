@@ -121,10 +121,7 @@ export const LANGUAGE_METADATA = {
 } satisfies Record<Language, { label: string; flag: string }>;
 
 export function getLanguageMetadata(language: unknown) {
-  const normalized =
-    typeof language === "string" && language in LANGUAGE_METADATA
-      ? (language as Language)
-      : DEFAULT_LANGUAGE;
+  const normalized = isValidLanguage(language) ? language : DEFAULT_LANGUAGE;
   return { normalized, ...LANGUAGE_METADATA[normalized] };
 }
 
@@ -178,7 +175,7 @@ export function t(key: TranslationKey, values: TranslationValues = {}): string {
   const translated = translations[key as string];
   const template =
     translated?.trim() ? translated : fallbackTranslations[key as string];
-  if (!template) return key as string;
+  if (template === undefined) return key as string;
 
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, name: string) =>
     values[name] === undefined ? placeholder : String(values[name]),

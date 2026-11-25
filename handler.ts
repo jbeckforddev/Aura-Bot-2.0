@@ -2,7 +2,9 @@ import chalk from "chalk";
 import { LRUCache } from "lru-cache";
 import {
   generateWAMessageFromContent,
+  getContentType,
   jidNormalizedUser,
+  normalizeMessageContent,
   proto,
 } from "baileys";
 import { cmdLog } from "./core/logger.ts";
@@ -75,7 +77,7 @@ export const GROUP_METADATA_CACHE = new LRUCache<string, GroupMetadata>({
 
 const processedGroupMessages = new LRUCache<string, true>({
   max: 5_000,
-  ttl: 60 * 1000,
+  ttl: 2 * 60 * 1000,
 });
 
 const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
@@ -465,7 +467,7 @@ async function handleMessageInternal(
     }
     const groupMessageKey =
       isGroup && !msg.key?.fromMe && msg.key?.id
-        ? `${from}:${msg.key.id}:${msg.key.participant || msg.participant || ""}`
+        ? `${from}:${msg.key.id}`
         : null;
     if (groupMessageKey && !groupData?.primaryBot) {
       if (processedGroupMessages.has(groupMessageKey)) return;
@@ -474,31 +476,17 @@ async function handleMessageInternal(
     const participantRaw = isGroup
       ? msg.key?.participant || msg.participant || ""
       : "";
-    const participantReal = isGroup ? msg.key?.participant || "" : "";
-
-    let senderJid;
-    if (isGroup) {
-      senderJid =
-        participantRaw.endsWith("@lid") &&
-        participantReal &&
-        !participantReal.endsWith("@lid")
-          ? participantReal
-          : participantRaw;
-    } else {
-      const remoteAlt = msg.key?.remoteJid || "";
-      senderJid =
-        from.endsWith("@lid") && remoteAlt && !remoteAlt.endsWith("@lid")
-          ? remoteAlt
-          : from;
-    }
-
-    const senderLidJid = senderJid.endsWith("@lid")
-      ? senderJid
-      : isGroup
-        ? participantRaw
-        : from.endsWith("@lid")
-          ? from
-          : "";
+    const senderAddress = isGroup ? participantRaw : from;
+    const senderAlt = isGroup ? msg.key.participantAlt : msg.key.remoteJidAlt;
+    const senderJid =
+      senderAddress.endsWith("@lid") && senderAlt?.endsWith("@s.whatsapp.net")
+        ? senderAlt
+        : senderAddress;
+    const senderLidJid = senderAddress.endsWith("@lid")
+      ? senderAddress
+      : senderAlt?.endsWith("@lid")
+        ? senderAlt
+        : "";
 
     let sender = cleanJid(senderJid);
     const senderLid = cleanJid(senderLidJid);
@@ -689,18 +677,37 @@ async function handleMessageInternal(
       sender = await resolveLid(sender, groupMeta, sock);
     }
 
+    if (isGroup && isPrimaryGroupBot && !key.fromMe && sender && msg.message) {
+      const contentType =
+        getContentType(normalizeMessageContent(msg.message)) ??
+        getContentType(msg.message);
+      if (
+        contentType &&
+        contentType !== "protocolMessage" &&
+        contentType !== "reactionMessage" &&
+        contentType !== "pollUpdateMessage" &&
+        !msg.message.editedMessage
+      ) {
+        try {
+          runtimeDb.recordGroupMessage(from, sender, senderLid || undefined);
+        } catch (error) {
+          logger.warn?.(`No se pudo contar el mensaje del grupo: ${String(error)}`);
+        }
+      }
+    }
+
     const senderNum = sender.split("@")[0];
 
     if (msg.pushName) {
       let currentUser = USER_DB_CACHE.get(`user:${sender}`);
       if (!currentUser) {
-        currentUser = (runtimeDb.getUser?.(sender) ?? {}) as DatabaseUser;
+        currentUser = (runtimeDb.getUser?.(sender, senderLid || undefined) ?? {}) as DatabaseUser;
         USER_DB_CACHE.set(`user:${sender}`, currentUser);
       }
       const hasResolvedPhone = !sender.endsWith("@lid");
       const nextContact = {
         jid: hasResolvedPhone ? sender : null,
-        lid: senderLid || rawSenderLid || sender,
+        lid: senderLid || rawSenderLid || currentUser.lid || null,
         username: msg.pushName,
         pushName: msg.pushName,
         phone_number: hasResolvedPhone ? senderNum : null,
@@ -1210,7 +1217,7 @@ async function handleMessageInternal(
           return await sock.sendMessage(
             from,
             {
-              text: `${text}\n\n🔑 Código: *${copyCode}*`,
+              text: `${text}\n\n${t("interactionCopyCode", { code: copyCode })}`,
               footer: footer || "",
             },
             { quoted: msg as unknown as WAMessage },
@@ -1291,7 +1298,7 @@ async function handleMessageInternal(
           console.error(`[${botLabel}] options falló:`, e);
           return sock.sendMessage(
             from,
-            { text: "❌ No pude mostrar las opciones. Inténtalo de nuevo." },
+            { text: t("interactionOptionsError") },
             { quoted: msg as unknown as WAMessage },
           );
         }
@@ -1423,6 +1430,19 @@ async function handleMessageInternal(
       commandCooldowns.set(cooldownKey, now);
     }
 
+    const statsSender = key.fromMe ? botJid : sender;
+    if (statsSender) {
+      try {
+        runtimeDb.recordCommandUse(
+          statsSender,
+          key.fromMe ? undefined : senderLid || undefined,
+          isGroup ? from : undefined,
+        );
+      } catch (error) {
+        logger.warn?.(`No se pudo registrar el uso del comando: ${String(error)}`);
+      }
+    }
+
     const start = Date.now();
     try {
       await plugin.run(ctx);
@@ -1506,10 +1526,17 @@ export async function handleMessage(
     const senderJid = isGroup
       ? rawMsg.key?.participant || rawMsg.participant || ""
       : from;
+    const key = (rawMsg as WAMessage).key;
+    const senderAlt = isGroup ? key?.participantAlt : key?.remoteJidAlt;
+    const primarySender =
+      senderJid.endsWith("@lid") && senderAlt?.endsWith("@s.whatsapp.net")
+        ? senderAlt
+        : senderJid;
+    const alternateSender = primarySender === senderJid ? senderAlt : senderJid;
 
-    const userLanguage = senderJid
-      ? lookupUserLanguage(cleanJid(senderJid))
-      : undefined;
+    const userLanguage =
+      (primarySender && lookupUserLanguage(cleanJid(primarySender))) ||
+      (alternateSender ? lookupUserLanguage(cleanJid(alternateSender)) : undefined);
     const groupLanguage = isGroup
       ? lookupGroupLanguage(from)
       : undefined;

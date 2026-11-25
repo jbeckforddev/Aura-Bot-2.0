@@ -78,6 +78,8 @@ export interface Profile {
   banco: number;
   aura: number;
   auraXp: number;
+  role: string;
+  cmdsUsedCount: number;
   pfp?: string;
   [key: string]: unknown;
 }

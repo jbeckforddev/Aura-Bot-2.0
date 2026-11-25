@@ -1,10 +1,12 @@
-import { t } from "../src/langs/index.ts";
+import { t, withLocale } from "../src/langs/index.ts";
+
 export type GroupWelcomeAction = "add" | "remove";
 
 interface GroupData {
   welcomeMessage?: string | null;
   goodbyeMessage?: string | null;
   group_name?: string | null;
+  groupLang?: string | null;
 }
 
 interface GroupMetadata {
@@ -18,73 +20,65 @@ interface GroupWelcomeOptions {
   group: GroupData;
   metadata?: GroupMetadata | null;
   participants: string[];
+  compact?: boolean;
 }
-
-const DEFAULT_WELCOME = `╭〔 👋 𝐁𝐈𝐄𝐍𝐕𝐄𝐍𝐈𝐃𝐎/𝐀 〕⬣
-┃ ✨ 𝐀 𝐔𝐍 𝐍𝐔𝐄𝐕𝐎 𝐈𝐍𝐓𝐄𝐆𝐑𝐀𝐍𝐓𝐄
-╰━━━━━━━━━━━━⬣
-
-┃ 👋 𝐇𝐨𝐥𝐚 @user
-┃ ✨ 𝐁𝐢𝐞𝐧𝐯𝐞𝐧𝐢𝐝𝐨/𝐚 𝐚:
-┃ 🏰 *@group*
-
-┃ 📜 𝐍𝐨 𝐨𝐥𝐯𝐢𝐝𝐞𝐬 𝐥𝐞𝐞𝐫 𝐥𝐚𝐬 𝐫𝐞𝐠𝐥𝐚𝐬
-┃ 𝐲 𝐝𝐢𝐬𝐟𝐫𝐮𝐭𝐚𝐫 𝐭𝐮 𝐞𝐬𝐭𝐚𝐧𝐜𝐢𝐚.
-
-╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`;
-
-const DEFAULT_GOODBYE = `╭〔 😔 𝐒𝐄 𝐍𝐎𝐒 𝐅𝐔𝐄 〕⬣
-┃ ✨ 𝐇𝐀𝐒𝐓𝐀 𝐏𝐑𝐎𝐍𝐓𝐎
-╰━━━━━━━━━━━━⬣
-
-┃ 👋 𝐀𝐝𝐢ó𝐬 @user
-┃ > 𝐄𝐬 𝐮𝐧𝐚 𝐩𝐞𝐧𝐚 𝐪𝐮𝐞 𝐭𝐞 𝐯𝐚𝐲𝐚𝐬 𝐝𝐞:
-┃ > *@group*
-
-┃ > 𝐍𝐮𝐧𝐜𝐚 𝐭𝐞 𝐨𝐥𝐯𝐢𝐝𝐚𝐫𝐞𝐦𝐨𝐬
-
-╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`;
 
 export function buildGroupWelcome({
   action,
   group,
   metadata,
   participants,
+  compact = false,
 }: GroupWelcomeOptions): { text: string; mentions: string[] } | null {
-  const participantJids = participants.filter(
+  const mentions = participants.filter(
     (participant) => typeof participant === "string" && participant.length > 0,
   );
+  if (mentions.length === 0) return null;
 
-  if (participantJids.length === 0) return null;
+  return withLocale(group.groupLang, () => {
+    const groupName =
+      metadata?.subject || group.group_name || t("groupDefaultName");
+    const tags = mentions
+      .map((participant) => "@" + participant.split("@")[0])
+      .join(", ");
+    const custom =
+      action === "add" ? group.welcomeMessage : group.goodbyeMessage;
 
-  const groupName =
-    metadata?.subject || group.group_name || "Grupo";
+    if (!custom) {
+      const key =
+        action === "add"
+          ? compact
+            ? "groupWelcomeCompact"
+            : "groupWelcomeDefault"
+          : compact
+            ? "groupGoodbyeCompact"
+            : "groupGoodbyeDefault";
+      return { text: t(key, { user: tags, group: groupName }), mentions };
+    }
 
-  const template = String(
-    action === "add"
-      ? group.welcomeMessage || DEFAULT_WELCOME
-      : group.goodbyeMessage || DEFAULT_GOODBYE,
-  );
-
-  const tags = participantJids
-    .map((participant) => `@${participant.split("@")[0]}`)
-    .join(", ");
-
-  const groupDescription =
-    metadata?.desc?.toString() || "Sin descripción";
-
-  const memberCount = metadata?.participants?.length || 0;
-
-  const text = template
-    .replaceAll(t("core_group_fe6a00b1"), groupName)
-    .replaceAll(t("core_mention_d5b00d52"), tags)
-    .replaceAll(t("core_user_0f23d79d"), tags)
-    .replaceAll(t("core_group_c77112aa"), groupName)
-    .replaceAll(t("core_desc_476f541a"), groupDescription)
-    .replaceAll(t("core_count_7886d3a6"), String(memberCount));
-
-  return {
-    text,
-    mentions: participantJids,
-  };
+    const description = metadata?.desc?.toString() || t("profileNoDescription");
+    const count = String(metadata?.participants?.length ?? 0);
+    const replacements = {
+      "{group}": groupName,
+      "{mention}": tags,
+      "@user": tags,
+      "@group": groupName,
+      "@desc": description,
+      "@count": count,
+      [t("core_group_fe6a00b1")]: groupName,
+      [t("core_mention_d5b00d52")]: tags,
+      [t("core_user_0f23d79d")]: tags,
+      [t("core_group_c77112aa")]: groupName,
+      [t("core_desc_476f541a")]: description,
+      [t("core_count_7886d3a6")]: count,
+    } as Record<string, string>;
+    const tokens = Object.keys(replacements)
+      .filter(Boolean)
+      .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const text = custom.replace(
+      new RegExp(tokens.join("|"), "g"),
+      (token) => replacements[token],
+    );
+    return { text, mentions };
+  });
 }

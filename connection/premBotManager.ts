@@ -19,6 +19,7 @@ import {
   invalidateGroupCache,
 } from "../handler.ts";
 import { getPlugins } from "../core/cmdLoader.ts";
+import { buildGroupWelcome } from "../core/groupWelcome.ts";
 import {
   handleAntilink,
   handleGroupCall,
@@ -773,18 +774,19 @@ async function connectPremBotNow(
       const enabled = action === "add" ? group.welcome : group.goodbye;
       if (!enabled) return;
       const metadata = await getGroupMetadata(id, socket);
-      const groupName = metadata?.subject || group.group_name || id;
-      const mentions = participants
+      const participantJids = participants
         .map((participant: string | { id?: string }) =>
-          typeof participant === "string" ? participant : participant.id,
+          typeof participant === "string" ? participant : participant?.id,
         )
         .filter((participant): participant is string => Boolean(participant));
-      if (mentions.length === 0) return;
-      const setting = action === "add" ? group.welcomeMessage : group.goodbyeMessage;
-      const text = String(setting || (action === "add" ? "Bienvenido/a @user a @group" : "Adiós @user"))
-        .replaceAll("@group", groupName)
-        .replaceAll("@user", mentions.map((jid) => `@${jid.split("@")[0]}`).join(", "));
-      await socket.sendMessage(id, { text, mentions });
+      const result = buildGroupWelcome({
+        action,
+        group: { ...group, group_name: group.group_name || id },
+        metadata,
+        participants: participantJids,
+        compact: true,
+      });
+      if (result) await socket.sendMessage(id, result);
     } catch (error) {
       logInfo(`Error de participantes en sesión premium: ${String(error)}`, "error");
     }

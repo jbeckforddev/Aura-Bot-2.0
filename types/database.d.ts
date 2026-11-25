@@ -13,6 +13,7 @@ export interface DatabaseUserData {
   warns?: number;
   aura?: number;
   auraXp?: number;
+  cmdsUsedCount?: number;
   stickerPackName?: string;
   stickerPackAuthor?: string;
   marry?: string | null;
@@ -56,6 +57,7 @@ export interface DatabaseUser {
   self?: number;
   aura?: number;
   auraXp?: number;
+  cmdsUsedCount?: number;
   stickerPackName?: string;
   stickerPackAuthor?: string;
   data?: DatabaseUserData;
@@ -65,6 +67,18 @@ export interface DatabaseUser {
 export interface GroupWarnEntry {
   reason: string;
   date: string;
+}
+
+export type GroupRanking = "topMsgUsers" | "topCmdUsers";
+
+export interface GroupRankingEntry {
+  jid: string;
+  count: number;
+}
+
+export interface GroupRankingPage {
+  entries: (GroupRankingEntry & { username?: string })[];
+  totalPages: number;
 }
 
 export interface DatabaseGroupData {
@@ -162,6 +176,7 @@ export interface DatabaseBot {
 }
 
 export interface UserDbRow {
+  userRowId?: number;
   jid: string | null;
   lid: string | null;
   username: string | null;
@@ -178,6 +193,7 @@ export interface UserDbRow {
   description?: string | null;
   aura_points?: number | null;
   aura_level?: number | null;
+  cmdsUsedCount?: number | null;
   UserLang?: string | null;
   CmdSticker?: string | null;
   LastEconomyDaily?: number | null;
@@ -246,7 +262,11 @@ export interface BotDbRow {
 }
 
 export interface IDatabase {
-  getUser(jid: string): DatabaseUser;
+  getUser(jid: string, knownLid?: string | null): DatabaseUser;
+  recordCommandUse(jid: string, lid?: string, groupJid?: string): void;
+  recordGroupMessage(groupJid: string, jid: string, lid?: string): void;
+  getGroupWeeklyRanking(groupJid: string, ranking: GroupRanking): GroupRankingEntry[];
+  getGroupWeeklyRankingPage(groupJid: string, ranking: GroupRanking, page: number): GroupRankingPage;
   setUser(
     jid: string,
     dataObject: Partial<DatabaseUser> & Record<string, unknown>,

@@ -1,10 +1,11 @@
 import type { CommandContext } from "../../types/index.d.ts";
 import { buildGroupWelcome } from "../../core/groupWelcome.ts";
+import { t } from "../../src/langs/index.ts";
 
 export default {
   name: ["testwelcome", "testbienvenida"],
   category: "group",
-  description: "Muestra la bienvenida real guardada, sin alterar el grupo.",
+  description: t("groupWelcomePreviewDescription"),
   groupOnly: true,
   adminOnly: false,
 
@@ -25,16 +26,16 @@ export default {
 
       const participant = ctx.sender || ctx.msg?.key?.participant;
       if (!participant) {
-        return ctx.reply("✖ No se identificó al participante de la prueba.");
+        return ctx.reply(t("groupWelcomeNoParticipant"));
       }
 
       const result = buildGroupWelcome({
         action: "add",
         group: { ...group, welcomeMessage: custom },
-        metadata: ctx.groupMeta || { subject: ctx.groupName || "Grupo" },
+        metadata: ctx.groupMeta || { subject: ctx.groupName },
         participants: [participant],
       });
-      if (!result) return ctx.reply("✖ No se pudo crear la vista previa.");
+      if (!result) return ctx.reply(t("groupWelcomePreviewError"));
 
       if (ctx.args?.includes("diag")) {
         return ctx.reply({
@@ -52,10 +53,9 @@ export default {
         mentions: result.mentions,
       });
     } catch (error) {
-      return ctx.reply(
-        "✖ No se pudo previsualizar la bienvenida: " +
-        (error instanceof Error ? error.message : String(error)),
-      );
+      return ctx.reply(t("groupWelcomeRenderError", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
   },
 };

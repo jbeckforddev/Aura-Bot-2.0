@@ -33,10 +33,12 @@ const DEFAULT_PROFILE: Profile = {
   banco: 0,
   aura: 0,
   auraXp: 0,
+  role: "user",
+  cmdsUsedCount: 0,
 };
 
-export function getProfile(jid: string): Profile {
-  const user = db.getUser(jid);
+export function getProfile(jid: string, database = db): Profile {
+  const user = database.getUser(jid);
   const stored = { ...user, ...user.data };
   const profile: Profile = {
     ...DEFAULT_PROFILE,
@@ -46,6 +48,8 @@ export function getProfile(jid: string): Profile {
     description: typeof stored.description === "string"
       ? stored.description
       : DEFAULT_PROFILE.description,
+    role: user.role ?? DEFAULT_PROFILE.role,
+    cmdsUsedCount: user.cmdsUsedCount ?? DEFAULT_PROFILE.cmdsUsedCount,
   };
 
   if (profile.name === "Sin nombre" && user.username)
@@ -139,7 +143,7 @@ export function formatProfile(
   const descMentions = extractMentionJids(String(profile.description ?? ""));
   if (descMentions.length > 0) mentions.push(...descMentions);
 
-  let spouse = "Soltero/a";
+  let spouse = t("profileSingle");
   if (profile.marriedTo) {
     spouse = `@${String(profile.marriedTo).split("@")[0]}`;
     mentions.push(profile.marriedTo);
@@ -168,7 +172,11 @@ export function formatProfile(
     t("core_value0_82dc888b", {
       value0: fytBold(t("core_biografia_7ebf2ce8")),
     }),
-    t("core_value0_66aaf25a", { value0: profile.description }),
+    t("core_value0_66aaf25a", {
+      value0: profile.description === DEFAULT_PROFILE.description
+        ? t("profileNoDescription")
+        : profile.description,
+    }),
     t("core_text_35417185"),
     "",
     t("core_value0_82dc888b", {
@@ -176,7 +184,7 @@ export function formatProfile(
     }),
     t("core_value0_value1_4241df89", {
       value0: fytBold(t("core_nombre_e68491e9")),
-      value1: profile.name,
+      value1: profile.name === DEFAULT_PROFILE.name ? t("profileUnnamed") : profile.name,
     }),
     t("core_value0_value1_54888acf", {
       value0: fytBold(t("core_id_89f89c02")),
@@ -184,15 +192,15 @@ export function formatProfile(
     }),
     t("core_value0_value1_4f003440", {
       value0: fytBold(t("core_genero_71354153")),
-      value1: profile.gender,
+      value1: profile.gender === DEFAULT_PROFILE.gender ? t("profileUnspecified") : profile.gender,
     }),
     t("core_value0_value1_96bd6439", {
       value0: fytBold(t("core_cumpleanos_23dbaffa")),
-      value1: profile.birthDate ?? "No definido",
+      value1: profile.birthDate ?? t("profileUnspecified"),
     }),
     t("core_value0_value1_c3b3d195", {
       value0: fytBold(t("core_edad_0e4333ef")),
-      value1: age ?? "No definida",
+      value1: age ?? t("profileUnknownAge"),
     }),
     t("core_value0_value1_74947562", {
       value0: fytBold(t("core_pareja_b6b2b5bf")),
@@ -201,6 +209,11 @@ export function formatProfile(
     t("core_text_35417185"),
     "",
     t("core_value0_82dc888b", { value0: fytBold(t("core_rango_ff517056")) }),
+    t("profile_role", { label: fytBold(t("profile_role_label")), role: profile.role }),
+    t("profile_commands_used", {
+      label: fytBold(t("profile_commands_used_label")),
+      count: profile.cmdsUsedCount,
+    }),
     t("core_value0_value1_5042af61", {
       value0: fytBold(t("core_nivel_aura_45a06037")),
       value1: level,
@@ -253,7 +266,7 @@ async function resolvePhoneJidsToLids(
 }
 
 export async function sendProfilePreview(ctx: CommandContext, target: string) {
-  const profile = getProfile(target);
+  const profile = getProfile(target, ctx.db);
   const economy = economyUser(ctx, target);
   const { text, mentions } = formatProfile(target, {
     ...profile,

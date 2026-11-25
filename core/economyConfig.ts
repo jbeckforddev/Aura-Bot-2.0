@@ -1,4 +1,4 @@
-import { db } from "../database/AuraDB.ts";
+import { db, getAuraLevel } from "../database/AuraDB.ts";
 import {
   formatMoney as formatNumberMoney,
   formatDuration,
@@ -12,6 +12,7 @@ import type {
 } from "../types/index.d.ts";
 
 export type { EconomyUser, CooldownRows };
+export { getAuraLevel };
 
 const DEFAULT_ECONOMY_USER: EconomyUser = {
   bolsillo: 100000,
@@ -159,7 +160,7 @@ export function setEconomyUser(
     bank: finalBank,
   };
 
-  const nextData = {
+  const nextData: Record<string, unknown> = {
     ...userData,
     economy: nextEconomy,
     bolsillo: finalCoins,
@@ -167,6 +168,10 @@ export function setEconomyUser(
     banco: finalBank,
     bank: finalBank,
   };
+
+  delete nextData.aura;
+  delete nextData.auraXp;
+  delete nextData.level;
 
   db.setUser(userJid, {
     ...nextData,
@@ -213,11 +218,6 @@ export function addBolsillo(groupJid: string, userJid: string, amount: number) {
   const current = Number(user.bolsillo ?? user.coins ?? 0);
   const next = current + amount;
   setEconomyUser(groupJid, userJid, { bolsillo: next, coins: next });
-}
-
-export function getAuraLevel(points: number): number {
-  const aura = Math.max(0, Number(points) || 0);
-  return Math.max(1, Math.ceil(aura / 100));
 }
 
 export function getBolsillo(groupJid: string, userJid?: string): number {

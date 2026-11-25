@@ -4,6 +4,7 @@ import {
   formatMoney,
 } from "../../core/economyConfig.ts";
 import { db } from "../../database/AuraDB.ts";
+import { formatRankingPage } from "../../core/rankingText.ts";
 import { t } from "../../src/langs/index.ts";
 
 
@@ -91,13 +92,19 @@ export default {
     }
 
     const page = requestedPage;
-    const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
-    let text = `╭〔 💎 𝐁𝐀𝐋𝐀𝐍𝐂𝐄 𝐓𝐎𝐏 💎 〕⬣\n┃ 🏆 𝐑𝐀𝐍𝐊𝐈𝐍𝐆 𝐃𝐄 𝐌𝐎𝐍𝐄𝐃𝐀𝐒\n┃ 📄 Página ${page}/${totalPages}\n╰━━━━━━━━━━━━⬣\n\n`;
-    pageRows.forEach((row, index) => {
-      const position = (page - 1) * pageSize + index;
-      text += `┃ ${position < 3 ? ["🥇", "🥈", "🥉"][position] : "🎖️"} ${row.username}\n┃ ${formatMoney(row.total, ctx)}\n\n`;
-    });
-    text += `╰〔 ⚡ 𝐀𝐔𝐑𝐀 𝐄𝐂𝐎𝐍𝐎𝐌𝐘 ⚡ 〕⬣`;
-    return ctx.reply(text);
+    const offset = (page - 1) * pageSize;
+    return ctx.reply(
+      formatRankingPage({
+        heading: "💎 𝐁𝐀𝐋𝐀𝐍𝐂𝐄 𝐓𝐎𝐏 💎",
+        title: "𝐑𝐀𝐍𝐊𝐈𝐍𝐆 𝐃𝐄 𝐌𝐎𝐍𝐄𝐃𝐀𝐒",
+        pagination: t("group_ranking_page", { page, totalPages }),
+        footer: "𝐀𝐔𝐑𝐀 𝐄𝐂𝐎𝐍𝐎𝐌𝐘",
+        offset,
+        rows: rows.slice(offset, offset + pageSize).map((row) => ({
+          name: row.username,
+          value: formatMoney(row.total, ctx),
+        })),
+      }),
+    );
   },
 };

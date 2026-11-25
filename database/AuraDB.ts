@@ -5,6 +5,7 @@ import "../config.ts";
 import { logInfo } from "../core/logger.ts";
 import { resolveBotType } from "../core/botType.ts";
 import { SUPPORTED_LANGUAGES } from "../src/langs/index.ts";
+import { createGroupActivity } from "./groupActivity.ts";
 import type {
   IDatabase,
   DatabaseUser,
@@ -14,6 +15,7 @@ import type {
   UserDbRow,
   GroupDbRow,
   BotDbRow,
+  GroupRanking,
 } from "../types/index";
 import type { BotType } from "../core/botType.ts";
 
@@ -182,6 +184,8 @@ db_instance.exec(`
     botOnline INTEGER DEFAULT 1,
     prefix TEXT DEFAULT NULL,
     topCmdUsers TEXT DEFAULT '[]',
+    topMsgUsers TEXT DEFAULT '[]',
+    rankingWeek INTEGER,
     userWarns TEXT DEFAULT '{}',
     Muted_Users TEXT DEFAULT '[]',
     catBlocked TEXT DEFAULT '["nsfw"]',
@@ -234,6 +238,7 @@ for (const column of [
   ["description", "TEXT DEFAULT 'Sin descripcion'"],
   ["aura_points", "INTEGER DEFAULT 0"],
   ["aura_level", "INTEGER DEFAULT 1"],
+  ["cmdsUsedCount", "INTEGER DEFAULT 0"],
   ["stickerPackAuthor", "TEXT DEFAULT NULL"],
   ["stickerPackName", "TEXT DEFAULT NULL"],
   ["CmdSticker", "TEXT DEFAULT '{}'"],
@@ -259,6 +264,8 @@ for (const [table, column, definition] of [
   ["groups", "self", "INTEGER DEFAULT 0"],
   ["groups", "onlyAdmin", "INTEGER DEFAULT 0"],
   ["groups", "topCmdUsers", "TEXT DEFAULT '[]'"],
+  ["groups", "topMsgUsers", "TEXT DEFAULT '[]'"],
+  ["groups", "rankingWeek", "INTEGER"],
   ["groups", "userWarns", "TEXT DEFAULT '{}'"],
   ["groups", "catBlocked", "TEXT DEFAULT '[\"nsfw\"]'"],
   ["groups", "Muted_Users", "TEXT DEFAULT '[]'"],
@@ -341,6 +348,7 @@ db_instance.exec(`
   CREATE INDEX IF NOT EXISTS idx_bots_status_type ON bots(status, bot_type);
 `);
 
+const groupActivity = createGroupActivity(db_instance);
 const hierarchy = ["user", "premium", "mod", "coowner", "owner"] as const;
 
 function hasRoleLevel(userRole: string | null | undefined, role: string) {
@@ -355,16 +363,20 @@ function hasRoleLevel(userRole: string | null | undefined, role: string) {
 const groupColumns = db_instance
   .prepare("PRAGMA table_info('groups')")
   .all() as Array<{ name: string }>;
-const hasLegacyTopMsgUsersColumn = groupColumns.some(
-  (column) => column.name.toLowerCase() === "topmsgusers",
-);
 const groupSelectColumns = groupColumns
-  .filter((column) => column.name.toLowerCase() !== "topmsgusers")
+  .filter((column) => !["topmsgusers", "topcmdusers"].includes(column.name.toLowerCase()))
   .map((column) => `"${column.name}"`)
   .join(", ");
 
 const stmts = {
-  getUser: db_instance.prepare("SELECT * FROM users WHERE jid = ?"),
+  getUser: db_instance.prepare<[string], UserDbRow>("SELECT rowid AS userRowId, * FROM users WHERE jid = ?"),
+  recordCommandUse: db_instance.prepare(`
+    UPDATE users SET cmdsUsedCount = COALESCE(cmdsUsedCount, 0) + 1, aura_points = ?, aura_level = ?
+    WHERE rowid = ?
+  `),
+  linkCommandUser: db_instance.prepare(
+    "UPDATE users SET jid = COALESCE(jid, ?), lid = COALESCE(?, lid) WHERE rowid = ?",
+  ),
   insertUser: db_instance.prepare(
     "INSERT OR IGNORE INTO users (jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, CmdSticker, data, name, marriage_to, genre, birth_date, description, aura_points, aura_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ),
@@ -375,13 +387,13 @@ const stmts = {
     `UPDATE users SET ${Object.values(ECONOMY_LAST_COLUMNS).map((column) => `${column} = ?`).join(", ")} WHERE lid = ?`,
   ),
   updateUser: db_instance.prepare(
-    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE jid = ?",
+    "UPDATE users SET lid = ?, username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = COALESCE(?, aura_points), aura_level = COALESCE(?, aura_level) WHERE jid = ?",
   ),
   updateUserByLid: db_instance.prepare(
-    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = ?, aura_level = ? WHERE lid = ?",
+    "UPDATE users SET username = ?, phone_number = ?, role = ?, is_banned = ?, coins = ?, bank = ?, UserLang = ?, CmdSticker = ?, data = ?, name = ?, marriage_to = ?, genre = ?, birth_date = ?, description = ?, aura_points = COALESCE(?, aura_points), aura_level = COALESCE(?, aura_level) WHERE lid = ?",
   ),
   getAllUsers: db_instance.prepare(
-    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, CmdSticker, name, marriage_to, genre, birth_date, description, aura_points, aura_level, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
+    `SELECT jid, lid, username, phone_number, role, is_banned, coins, bank, UserLang, CmdSticker, name, marriage_to, genre, birth_date, description, aura_points, aura_level, cmdsUsedCount, data, ${Object.values(ECONOMY_LAST_COLUMNS).join(", ")} FROM users`,
   ),
   getUserLang: db_instance.prepare(
     "SELECT jid, lid, UserLang, data FROM users WHERE jid = ?",
@@ -667,35 +679,24 @@ function safeJson<T = Record<string, unknown>>(value: unknown): T {
   }
 }
 
-function clearLegacyTopMessageRankings(): void {
-  const rows = db_instance
-    .prepare(`SELECT jid, data FROM groups WHERE data LIKE '%"topMsgUsers"%'`)
-    .all() as Array<{ jid: string; data: string | null }>;
-  const updateData = db_instance.prepare("UPDATE groups SET data = ? WHERE jid = ?");
-
-  for (const row of rows) {
-    const data = safeJson<Record<string, unknown>>(row.data);
-    if (!Object.prototype.hasOwnProperty.call(data, "topMsgUsers")) continue;
-
-    delete data.topMsgUsers;
-    updateData.run(JSON.stringify(data), row.jid);
-  }
-
-  if (hasLegacyTopMsgUsersColumn) {
-    db_instance.exec(
-      "UPDATE groups SET topMsgUsers = '[]' WHERE topMsgUsers != '[]'",
-    );
-  }
-}
-
 // Migraciones de esquema ejecutadas una sola vez mediante user_version
 const currentDbVersion = Number(
   db_instance.pragma("user_version", { simple: true }) ?? 0,
 );
 if (currentDbVersion < 1) {
-  clearLegacyTopMessageRankings();
   migrateUserProfileColumns();
   db_instance.pragma("user_version = 1");
+}
+if (currentDbVersion < 2) {
+  db_instance.transaction(() => {
+    db_instance.exec(`
+      UPDATE users SET cmdsUsedCount = CAST(json_extract(data, '$.cmdsUsedCount') AS INTEGER)
+      WHERE CASE WHEN json_valid(data) THEN
+        CAST(json_extract(data, '$.cmdsUsedCount') AS INTEGER) > COALESCE(cmdsUsedCount, 0)
+      END
+    `);
+    db_instance.pragma("user_version = 2");
+  })();
 }
 
 function hydrateUserProfile(
@@ -709,7 +710,6 @@ function hydrateUserProfile(
     ["gender", "genre"],
     ["birthDate", "birth_date"],
     ["marriedTo", "marriage_to"],
-    ["level", "aura_level"],
   ] as const;
 
   for (const [key, column] of columns) {
@@ -722,9 +722,11 @@ function hydrateUserProfile(
 
   const auraPoints = row.aura_points;
   if (auraPoints != null) {
-    if (hydrated.aura === undefined) hydrated.aura = Number(auraPoints);
-    if (hydrated.auraXp === undefined) hydrated.auraXp = Number(auraPoints);
+    hydrated.aura = Number(auraPoints);
+    hydrated.auraXp = Number(auraPoints);
   }
+  if (row.aura_level != null) hydrated.level = Number(row.aura_level);
+  if (row.cmdsUsedCount != null) hydrated.cmdsUsedCount = Number(row.cmdsUsedCount);
 
   return hydrated;
 }
@@ -732,15 +734,12 @@ function hydrateUserProfile(
 function getUserProfileValues(
   user: Record<string, unknown>,
   row?: Record<string, unknown>,
+  progress = user,
 ): unknown[] {
   const value = (key: string, column: string, fallback: unknown) =>
     user[key] !== undefined ? user[key] : (row?.[column] ?? fallback);
-  const auraPoints =
-    user.auraXp !== undefined
-      ? user.auraXp
-      : user.aura !== undefined
-        ? user.aura
-        : (row?.aura_points ?? 0);
+  const auraPoints = progress.auraXp ?? progress.aura ?? (row ? null : 0);
+  const auraLevel = progress.level ?? (auraPoints !== null ? getAuraLevel(Number(auraPoints)) : null);
 
   return [
     value("name", "name", null),
@@ -748,9 +747,14 @@ function getUserProfileValues(
     value("gender", "genre", "Unknown"),
     value("birthDate", "birth_date", null),
     value("description", "description", "Sin descripcion"),
-    Number(auraPoints ?? 0),
-    Number(value("level", "aura_level", 1) ?? 1),
+    auraPoints === null ? null : Number(auraPoints),
+    auraLevel === null ? null : Number(auraLevel),
   ];
+}
+
+export function getAuraLevel(points: number): number {
+  const aura = Math.max(0, Number(points) || 0);
+  return Math.max(1, Math.ceil(aura / 100));
 }
 
 function migrateUserProfileColumns(): void {
@@ -921,7 +925,7 @@ function getUserRows(input: string, lid?: string | null): UserDbRow[] {
       .map((condition, index) => `WHEN ${condition} THEN ${index}`)
       .join(" ");
     stmt = db_instance.prepare(
-      `SELECT * FROM users WHERE ${queryKey} ORDER BY CASE ${orderBy} ELSE ${conditions.length} END, CASE WHEN jid IS NOT NULL THEN 0 ELSE 1 END`,
+      `SELECT rowid AS userRowId, * FROM users WHERE ${queryKey} ORDER BY CASE ${orderBy} ELSE ${conditions.length} END, CASE WHEN jid IS NOT NULL THEN 0 ELSE 1 END`,
     );
     userStmtCache.set(queryKey, stmt);
   }
@@ -931,25 +935,26 @@ function getUserRows(input: string, lid?: string | null): UserDbRow[] {
 }
 
 function getUserRow(input: string, lid?: string | null): UserDbRow | undefined {
-  return getUserRows(input, lid)[0];
+  return stmts.getUser.get(input.trim()) ?? getUserRows(input, lid)[0];
 }
 
-function getUser(input: string): DatabaseUser {
+function getUser(input: string, knownLid?: string | null): DatabaseUser {
   const rawInput = String(input || "").trim();
   const key = normalizeJid(rawInput);
   const cached = userMemoryCache.get(rawInput);
   if (cached) {
     return { ...cached, data: { ...cached.data } };
   }
-  const row = getUserRow(rawInput);
+  const row = getUserRow(rawInput, knownLid);
 
   if (!row) {
     const defaultUser: DatabaseUser = {
       jid: rawInput.endsWith("@lid") ? null : `${key}@s.whatsapp.net`,
-      lid: rawInput.endsWith("@lid") ? rawInput : null,
+      lid: rawInput.endsWith("@lid") ? rawInput : knownLid ?? null,
       username: null,
       phone_number: rawInput.endsWith("@lid") ? null : key,
       role: "user",
+      cmdsUsedCount: 0,
       is_banned: 0,
       userLang: null,
       CmdSticker: "{}",
@@ -1005,6 +1010,7 @@ function getUser(input: string): DatabaseUser {
       ? row.phone_number
       : (jsonData.phone_number ?? key)) as string | null,
     role: (row.role ?? jsonData.role ?? "user") as string,
+    cmdsUsedCount: Number(row.cmdsUsedCount ?? jsonData.cmdsUsedCount ?? 0),
     is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
     userLang,
     CmdSticker: String(row.CmdSticker ?? jsonData.CmdSticker ?? "{}"),
@@ -1019,6 +1025,27 @@ function getUser(input: string): DatabaseUser {
   if (result.lid) userMemoryCache.set(result.lid, result);
   return result;
 }
+
+const incrementCommandUse = db_instance.transaction((jid: string, lid?: string, groupJid?: string) => {
+  let user = getUserRow(jid, lid);
+  if (!user) {
+    getUser(jid, lid);
+    user = getUserRow(jid, lid);
+  }
+  if (user?.userRowId === undefined) throw new Error("No se encontró el usuario del comando.");
+
+  const phoneJid = jid.endsWith("@s.whatsapp.net") ? jid : null;
+  if ((!user.jid && phoneJid) || (lid && user.lid !== lid)) {
+    stmts.linkCommandUser.run(phoneJid, lid ?? null, user.userRowId);
+  }
+  const aura = Math.max(0, Number(user.aura_points ?? 0) + 5);
+  stmts.recordCommandUse.run(aura, getAuraLevel(aura), user.userRowId);
+  if (groupJid) {
+    const rankingJid = jid.endsWith("@lid") && user.jid?.includes("@") ? user.jid : jid;
+    groupActivity.record(normalizeJid(groupJid), rankingJid, "topCmdUsers", lid ?? jid);
+  }
+  return user;
+});
 
 function getGroup(jid: string): DatabaseGroup {
   const rawInput = String(jid || "").trim();
@@ -1083,6 +1110,7 @@ function getGroup(jid: string): DatabaseGroup {
     row.data as string | undefined,
   );
   delete jsonData.topMsgUsers;
+  delete jsonData.topCmdUsers;
   const storedMutedUsers = safeJsonArray(
       row.Muted_Users ??
       jsonData.mutedUsers ??
@@ -1339,12 +1367,48 @@ export const db: IDatabase = {
   getBot,
   invalidateBotDbCache,
 
+  recordCommandUse(jid, lid, groupJid) {
+    const user = incrementCommandUse.immediate(
+      jid,
+      lid?.endsWith("@lid") ? lid : undefined,
+      groupJid,
+    );
+    invalidateUserDbCache(jid);
+    if (user.jid) invalidateUserDbCache(user.jid);
+    if (user.lid) invalidateUserDbCache(user.lid);
+    if (lid) invalidateUserDbCache(lid);
+  },
+
+  recordGroupMessage(groupJid, jid, lid) {
+    const knownJid = jid.endsWith("@lid") ? getUserRow(jid)?.jid : null;
+    groupActivity.record(
+      normalizeJid(groupJid),
+      knownJid?.includes("@") ? knownJid : jid,
+      "topMsgUsers",
+      lid ?? jid,
+    );
+  },
+
+  getGroupWeeklyRanking(groupJid: string, ranking: GroupRanking) {
+    return groupActivity.getRanking(normalizeJid(groupJid), ranking);
+  },
+
+  getGroupWeeklyRankingPage(groupJid, ranking, page) {
+    const result = groupActivity.getRankingPage(normalizeJid(groupJid), ranking, page);
+    const entries = result.entries.map((entry) => {
+      const user = getUserRow(entry.jid);
+      const name = user?.username || safeJson<{ pushName?: string } | null>(user?.data)?.pushName;
+      return { ...entry, username: typeof name === "string" ? name : undefined };
+    });
+    return { ...result, entries };
+  },
+
   setUser(
     jid: string,
     dataObject: Partial<DatabaseUser> & Record<string, unknown>,
   ) {
     const key = normalizeJid(jid);
-    const currentData = getUser(jid);
+    const currentData = getUser(jid, dataObject.lid);
     const merged = { ...currentData, ...dataObject };
     const isLidOnly = String(jid).endsWith("@lid") && !dataObject?.jid;
     const rawJid = isLidOnly
@@ -1371,6 +1435,10 @@ export const db: IDatabase = {
     );
 
     delete payload.data;
+    delete payload.aura;
+    delete payload.auraXp;
+    delete payload.level;
+    delete payload.cmdsUsedCount;
 
     let row = getUserRow(rawJid ?? key, rawLid);
     const coins = Number(
@@ -1436,6 +1504,7 @@ export const db: IDatabase = {
         ...getUserProfileValues(
           merged,
           row as unknown as Record<string, unknown>,
+          dataObject,
         ),
         storedLid,
       );
@@ -1454,6 +1523,7 @@ export const db: IDatabase = {
         ...getUserProfileValues(
           merged,
           row as unknown as Record<string, unknown>,
+          dataObject,
         ),
         row.jid ?? key,
       );
@@ -1499,8 +1569,10 @@ export const db: IDatabase = {
 
     delete payload.data;
     delete (payload as Record<string, unknown>).topMsgUsers;
+    delete (payload as Record<string, unknown>).topCmdUsers;
 
     const row = stmts.getGroup.get(key) as Record<string, unknown> | undefined;
+    if (row?.rankingWeek === null) groupActivity.getRanking(key, "topMsgUsers");
     const nextGroupLang = normalizeLocale(
       Object.prototype.hasOwnProperty.call(dataObject, "groupLang")
         ? dataObject.groupLang
@@ -1736,6 +1808,7 @@ export const db: IDatabase = {
         phone_number: (row.phone_number ?? jsonData.phone_number ?? row.jid) as
           string | null,
         role: (row.role ?? jsonData.role ?? "user") as string,
+        cmdsUsedCount: Number(row.cmdsUsedCount ?? jsonData.cmdsUsedCount ?? 0),
         is_banned: Number(row.is_banned ?? jsonData.is_banned ?? 0),
         coins,
         bank,
@@ -1909,7 +1982,7 @@ export const db: IDatabase = {
           userLangValue,
           String(current.CmdSticker ?? "{}"),
           JSON.stringify(payload),
-          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
+          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>, {}),
           lid,
         );
       } else if (current.jid) {
@@ -1924,7 +1997,7 @@ export const db: IDatabase = {
           userLangValue,
           String(current.CmdSticker ?? "{}"),
           JSON.stringify(payload),
-          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>),
+          ...getUserProfileValues(payload, current as unknown as Record<string, unknown>, {}),
           current.jid,
         );
       }

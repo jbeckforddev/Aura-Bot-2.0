@@ -31,7 +31,7 @@ export default {
     try {
       if (!trimmed) {
         const current = savedWelcome(await ctx.db.getGroup(ctx.from)) ||
-          "Mensaje por defecto";
+          t("groupWelcomeDefaultLabel");
         return ctx.reply({
           text: t("cmd_value0_value1_value2_value3_va_4beb2be5", {
             value0: fytBold(t("cmd_setwelcome_aura_reed_938d86a1")),
@@ -49,7 +49,7 @@ export default {
       if (RESET_VALUES.has(trimmed.toLowerCase())) {
         await ctx.db.setGroup(ctx.from, { welcomeMessage: null });
         if (savedWelcome(await ctx.db.getGroup(ctx.from))) {
-          return ctx.reply("✖ No se confirmó el restablecimiento de la bienvenida.");
+          return ctx.reply(t("groupWelcomeResetError"));
         }
         return ctx.reply({
           text: t("cmd_value0_value1_se_usara_la_bien_5c63847b", {
@@ -63,7 +63,7 @@ export default {
       await ctx.db.setGroup(ctx.from, { welcomeMessage: value });
       const stored = savedWelcome(await ctx.db.getGroup(ctx.from));
       if (stored !== value) {
-        return ctx.reply("✖ La bienvenida no se pudo verificar tras guardarse.");
+        return ctx.reply(t("groupWelcomeVerifyError"));
       }
 
       return ctx.reply({
@@ -76,10 +76,9 @@ export default {
         }),
       });
     } catch (error) {
-      return ctx.reply(
-        "✖ No se pudo guardar la bienvenida: " +
-        (error instanceof Error ? error.message : String(error)),
-      );
+      return ctx.reply(t("groupWelcomeSaveError", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
   },
 };

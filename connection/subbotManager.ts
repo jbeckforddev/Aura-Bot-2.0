@@ -19,6 +19,7 @@ import {
   invalidateGroupCache,
 } from "../handler.ts";
 import { getPlugins } from "../core/cmdLoader.ts";
+import { buildGroupWelcome } from "../core/groupWelcome.ts";
 import {
   handleAntilink,
   handleGroupCall,
@@ -889,31 +890,18 @@ async function connectSubBot(
       const setting = action === "add" ? "welcome" : "goodbye";
       if (!group[setting]) return;
       const metadata = await getGroupMetadata(id, socket);
-      const groupName = metadata?.subject || group.group_name || id;
       const participantJids = participants
         .map((participant: string | { id?: string }) =>
           typeof participant === "string" ? participant : participant?.id,
         )
         .filter((participant): participant is string => Boolean(participant));
-      if (participantJids.length === 0) return;
-      const defaultTemplate = action === "add"
-        ? `╭〔 👋 𝐁𝐈𝐄𝐍𝐕𝐄𝐍𝐈𝐃𝐎/𝐀 〕⬣\n┃ ✨ 𝐀 𝐔𝐍 𝐍𝐔𝐄𝐕𝐎 𝐈𝐍𝐓𝐄𝐆𝐑𝐀𝐍𝐓𝐄\n╰━━━━━━━━━━━━⬣\n\n┃ 👋 𝐇𝐨𝐥𝐚 @user\n┃ ✨ 𝐁𝐢𝐞𝐧𝐯𝐞𝐧𝐢𝐝𝐨/𝐚 𝐚:\n┃ 🏰 *@group*\n\n┃ 📜 𝐍𝐨 𝐨𝐥𝐯𝐢𝐝𝐞𝐬 𝐥𝐞𝐞𝐫 𝐥𝐚𝐬 𝐫𝐞𝐠𝐥𝐚𝐬\n┃ 𝐲 𝐝𝐢𝐬𝐟𝐫𝐮𝐭𝐚𝐫 𝐭𝐮 𝐞𝐬𝐭𝐚𝐧𝐜𝐢𝐚.\n\n╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`
-        : `╭〔 😔 𝐒𝐄 𝐍𝐎𝐒 𝐅𝐔𝐄 〕⬣\n┃ ✨ 𝐇𝐀𝐒𝐓𝐀 𝐏𝐑𝐎𝐍𝐓𝐎\n╰━━━━━━━━━━━━⬣\n\n┃ 👋 𝐀𝐝𝐢ó𝐬 @user\n┃ > 𝐄𝐬 𝐮𝐧𝐚 𝐩𝐞𝐧𝐚 𝐪𝐮𝐞 𝐭𝐞 𝐯𝐚𝐲𝐚𝐬 𝐝𝐞:\n┃ > *@group*\n\n┃ > 𝐍𝐮𝐧𝐜𝐚 𝐭𝐞 𝐨𝐥𝐯𝐢𝐝𝐚𝐫𝐞𝐦𝐨𝐬\n\n╰━━〔 ⚡ 𝐀𝐔𝐑𝐀 𝐑𝐄𝐄𝐃 〕━━⬣`;
-      const template = String(
-        (action === "add" ? group.welcomeMessage : group.goodbyeMessage) ||
-          defaultTemplate,
-      );
-      const tags = participantJids
-        .map((participant) => `@${participant.split("@")[0]}`)
-        .join(", ");
-      const text = template
-        .replaceAll(t("core_group_fe6a00b1"), groupName)
-        .replaceAll(t("core_mention_d5b00d52"), tags)
-        .replaceAll(t("core_user_0f23d79d"), tags)
-        .replaceAll(t("core_group_c77112aa"), groupName)
-        .replaceAll(t("core_desc_476f541a"), metadata?.desc?.toString() || "Sin descripción")
-        .replaceAll(t("core_count_7886d3a6"), String(metadata?.participants?.length || 0));
-      await socket.sendMessage(id, { text, mentions: participantJids });
+      const result = buildGroupWelcome({
+        action,
+        group: { ...group, group_name: group.group_name || id },
+        metadata,
+        participants: participantJids,
+      });
+      if (result) await socket.sendMessage(id, result);
     } catch (error) {
       logInfo(`Error de participantes en ${id}: ${String(error)}`, "error");
     }
