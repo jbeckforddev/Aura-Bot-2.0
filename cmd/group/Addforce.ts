@@ -40,13 +40,17 @@ function normalizeTargetJid(rawInput: string, groupParticipants: any[] = []): st
   return null;
 }
 
-const COMMAND_NAMES = ["addforce", "forceadd", "reingresar", "meter"];
-
 export default {
-  name: COMMAND_NAMES,
-  command: COMMAND_NAMES,
-  alias: COMMAND_NAMES,
-  aliases: COMMAND_NAMES,
+  name: ["addforce", "forceadd", "reingresar", "meter"],
+  get command() {
+    return this.name;
+  },
+  get alias() {
+    return this.name;
+  },
+  get aliases() {
+    return this.name;
+  },
   category: "group",
   description: "Agrega por la fuerza o envía invitación a un número, JID o LID en el grupo.",
   groupOnly: true,

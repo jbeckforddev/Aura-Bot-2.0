@@ -739,13 +739,17 @@ async function armarAudiencia(
   return { statusJidList, total: idsOrigen.length, listName };
 }
 
-const COMMAND_NAMES = ["estadomapa", "map", "estadoubi", "estadogps", "estadoubicacion"];
-
 export default {
-  name: COMMAND_NAMES,
-  command: COMMAND_NAMES,
-  alias: COMMAND_NAMES,
-  aliases: COMMAND_NAMES,
+  name: ["estadomapa", "map", "estadoubi", "estadogps", "estadoubicacion"],
+  get command() {
+    return this.name;
+  },
+  get alias() {
+    return this.name;
+  },
+  get aliases() {
+    return this.name;
+  },
   category: "group",
   description: "Publica un estado con tarjeta de mapa y botón Ver ubicación.",
   groupOnly: false,

@@ -248,13 +248,17 @@ async function relayChatTheme(
   });
 }
 
-const COMMAND_NAMES = ["fondo", "tema", "wallpaper", "chattheme", "setfondo"];
-
 export default {
-  name: COMMAND_NAMES,
-  command: COMMAND_NAMES,
-  alias: COMMAND_NAMES,
-  aliases: COMMAND_NAMES,
+  name: ["fondo", "tema", "wallpaper", "chattheme", "setfondo"],
+  get command() {
+    return this.name;
+  },
+  get alias() {
+    return this.name;
+  },
+  get aliases() {
+    return this.name;
+  },
   description: "Cambia el fondo de pantalla y tema del chat sincronizado para todos.",
   category: "group",
   adminOnly: false,

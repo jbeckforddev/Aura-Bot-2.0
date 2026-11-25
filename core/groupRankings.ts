@@ -1,7 +1,7 @@
 import { GROUP_RANKING_PAGE_SIZE } from "../database/groupActivity.ts";
 import { t, type TranslationKey } from "../src/langs/index.ts";
 import type {
-  CommandPlugin,
+  CommandContext,
   GroupMemberRankingOrder,
   GroupRanking,
   GroupRankingPage,
@@ -32,10 +32,7 @@ const MEMBER_RANKINGS = {
   }
 >;
 
-export function groupRankingCommand(
-  name: string[],
-  ranking: GroupRanking | keyof typeof MEMBER_RANKINGS,
-): CommandPlugin {
+export function createGroupRanking(ranking: GroupRanking | keyof typeof MEMBER_RANKINGS) {
   const commands = ranking === "topCmdUsers";
   const memberRanking =
     ranking === "activeMembers" || ranking === "ghosts"
@@ -45,8 +42,6 @@ export function groupRankingCommand(
   const icon = memberRanking?.icon ?? countIcon;
 
   return {
-    name,
-    category: "group",
     groupOnly: true,
     adminOnly: Boolean(memberRanking),
     description: t(
@@ -55,7 +50,7 @@ export function groupRankingCommand(
           ? "group_command_ranking_description"
           : "group_message_ranking_description"),
     ),
-    async run(ctx) {
+    async run(ctx: CommandContext, primaryAlias: string) {
       const requestedPage = ctx.args[0] ?? "1";
       const page = Number(requestedPage);
       if (
@@ -65,7 +60,7 @@ export function groupRankingCommand(
       ) {
         return ctx.reply(
           t("group_ranking_invalid_page", {
-            example: `${ctx.usedPrefix ?? "."}${ctx.cmdName || name[0]} 1`,
+            example: `${ctx.usedPrefix ?? "."}${ctx.cmdName || primaryAlias} 1`,
           }),
         );
       }

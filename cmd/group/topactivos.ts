@@ -1,3 +1,15 @@
-import { groupRankingCommand } from "../../core/groupRankings.ts";
+import { createGroupRanking } from "../../core/groupRankings.ts";
+import type { CommandContext } from "../../types/commands.d.ts";
 
-export default groupRankingCommand(["topactivos", "activos"], "activeMembers");
+const { run, ...options } = createGroupRanking("activeMembers");
+
+const command = {
+  ...options,
+  name: ["topactivos", "activos"],
+  category: "group",
+  run(ctx: CommandContext) {
+    return run(ctx, command.name[0]);
+  },
+};
+
+export default command;
