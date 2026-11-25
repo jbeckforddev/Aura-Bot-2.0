@@ -4,20 +4,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 import { fytBold } from "../../core/socketText.ts";
-import {
-  downloadToCache,
-  formatCount,
-  pickSearchResult,
-  requestJson,
-  safeFileName,
-} from "../../core/downloadUtils.ts";
-import { DL_CONFIG } from "../../config.ts";
-import type {
-  CommandContext,
-  TikTokSearchResponse,
-  TikTokDownloadData,
-  TikTokSearchItem,
-} from "../../types/index.d.ts";
+import { formatCount, safeFileName } from "../../core/downloadUtils.ts";
+import type { CommandContext } from "../../types/index.d.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
@@ -26,10 +14,13 @@ import {
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
-
+import {
+  downloadTikTokFile,
+  fetchTikTokMedia,
+  searchTikTok,
+} from "../../src/api/TikTokDownloader.ts";
 
 const execFileAsync = promisify(execFile);
-const API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 
 export default {
   name: ["tta", "tka", "ttaudio", "tkmusic", "tiktokaudio"],
@@ -48,25 +39,18 @@ export default {
     try {
       await mkdir(dir, { recursive: true });
       const formattedUrl = tiktokUrlFormatter(query);
-      let url = formattedUrl;
-      let searchResult: TikTokSearchItem | null = null;
-      if (!isTikTokUrl(formattedUrl)) {
-        const search = await requestJson<TikTokSearchResponse>(
-          `${API}/search/tiktok?query=${encodeURIComponent(query)}&key=${DL_CONFIG.alya.API_KEY}`,
-        );
-        searchResult = pickSearchResult<TikTokSearchItem>(search?.data, query);
-        url = searchResult?.url || "";
-      }
+      const isDirectLink = isTikTokUrl(formattedUrl);
+      const searchResult = isDirectLink ? null : await searchTikTok(query);
+      const url = isDirectLink ? formattedUrl : searchResult?.url;
       if (!url)
         throw new Error("No se encontró ningún resultado para tu búsqueda.");
-      const data = await requestJson<TikTokDownloadData>(
-        `${API}/dl/tiktokv2?url=${encodeURIComponent(url)}&key=${DL_CONFIG.alya.API_KEY}`,
-        60000,
+
+      const media = await fetchTikTokMedia(url, "audio");
+      input = await downloadTikTokFile(
+        media.urls,
+        180000,
+        "No se pudo descargar el audio de TikTok.",
       );
-      const video = (data?.data || []).find((item) => item?.url)?.url;
-      if (!data?.status || !video)
-        throw new Error("No se encontró audio descargable.");
-      input = await downloadToCache(video, 180000);
       await execFileAsync(
         ffmpegPath,
         [
@@ -82,17 +66,18 @@ export default {
         ],
         { timeout: 120000 },
       );
-      const title = data.title || "Audio de TikTok";
+      const title = media.title || "Audio de TikTok";
       const author =
-        data.author?.nickname ||
-        data.author?.fullname ||
+        media.author?.nickname ||
+        media.author?.fullname ||
+        media.author?.unique_id ||
         searchResult?.author?.nickname ||
         "Desconocido";
       const { cost } = await prepareDownloadCharge(ctx, "audio", output);
-      const views = data.stats?.views ?? data.play_count ?? searchResult?.stats?.views;
-      const likes = data.stats?.likes ?? data.digg_count ?? searchResult?.stats?.likes;
-      const comments = data.stats?.comment ?? data.comment_count ?? searchResult?.stats?.comment;
-      const shares = data.stats?.share ?? data.share_count ?? searchResult?.stats?.share;
+      const views = media.views ?? searchResult?.stats?.views ?? searchResult?.views;
+      const likes = media.likes ?? searchResult?.stats?.likes ?? searchResult?.likes;
+      const comments = media.comments ?? searchResult?.stats?.comment ?? searchResult?.comments;
+      const shares = media.shares ?? searchResult?.stats?.share;
       const caption = DL_TEMPLATE({
         bold: fytBold,
         label: t("cmd_tiktok_audio_6218e8b8"),
@@ -133,7 +118,7 @@ export default {
         text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     } finally {
-      await unlink(output).catch(() => undefined);
+      await Promise.allSettled([unlink(output), ...(input ? [unlink(input)] : [])]);
     }
   },
 };

@@ -149,9 +149,11 @@ export interface TikTokMediaItem {
 
 export interface TikTokDownloadData {
   status?: boolean;
+  id?: string;
   title?: string;
   author?: TikTokAuthor;
   stats?: TikTokStats;
+  music_info?: { url?: string };
   play_count?: number | string;
   digg_count?: number | string;
   comment_count?: number | string;

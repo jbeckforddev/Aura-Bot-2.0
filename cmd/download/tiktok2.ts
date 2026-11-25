@@ -1,54 +1,26 @@
 import { rm } from "node:fs/promises";
 import {
   downloadToCache,
-  pickSearchResult,
-  requestJson,
   safeFileName,
   formatCount,
 } from "../../core/downloadUtils.ts";
-import { DL_CONFIG } from "../../config.ts";
 import {
   prepareDownloadCharge,
   confirmDownloadCharge,
   formatMoney,
 } from "../../core/economyConfig.ts";
-import type {
-  CommandContext,
-  TikTokSearchResponse,} from "../../types/index.d.ts";
+import type { CommandContext } from "../../types/index.d.ts";
 import { fytBold } from "../../core/socketText.ts";
 import { DL_TEMPLATE } from "../../utils/template.ts";
 import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
 import { isTikTokUrl, tiktokUrlFormatter } from "../../utils/formatter.ts";
 import { t } from "../../src/langs/index.ts";
-
-
-const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
-const KEY = DL_CONFIG.alya.API_KEY;
-const TIKWM_API = "https://www.tikwm.com/api";
-type TikWMVideoResponse = {
-  code?: number;
-  msg?: string;
-  data?: {
-    id?: string;
-    title?: string;
-    play?: string;
-    wmplay?: string;
-    images?: string[];
-    music_info?: {
-      play?: string;
-    };
-    author?: {
-      nickname?: string;
-      fullname?: string;
-      unique_id?: string;
-    };
-    play_count?: number | string;
-    digg_count?: number | string;
-    comment_count?: number | string;
-    share_count?: number | string;
-  };
-};
+import {
+  downloadTikTokFile,
+  fetchTikTokMedia,
+  searchTikTok,
+} from "../../src/api/TikTokDownloader.ts";
 
 export default {
   name: ["dtk", "dtt", "dttv", "doctiktok", "dtkmp4", "tt2"],
@@ -60,76 +32,61 @@ export default {
     if (!query)
       return reply(t("cmd_proporciona_una_busqueda_o_un__4bcc0240"));
     await react("⏳");
-    let convertedFile = "";
+    const tempFiles = new Set<string>();
     try {
       const formattedUrl = tiktokUrlFormatter(query);
-      let url = formattedUrl;
-      if (!isTikTokUrl(formattedUrl)) {
-        const search = await requestJson<TikTokSearchResponse>(
-          `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
-        ).catch(() => null);
-        url = pickSearchResult(search?.data, query)?.url || "";
-      }
+      const url = isTikTokUrl(formattedUrl)
+        ? formattedUrl
+        : (await searchTikTok(query).catch(() => null))?.url;
       if (!url) throw new Error("No se encontró ningún enlace válido.");
-      const data = await requestJson<TikWMVideoResponse>(
-        `${TIKWM_API}/?url=${encodeURIComponent(url)}`,
-        60000,
-      );
-      const imageUrls = Array.isArray(data?.data?.images)
-        ? data.data.images.filter(
-            (image): image is string =>
-              typeof image === "string" && /^https?:\/\//.test(image),
-          )
-        : [];
-      if (imageUrls.length > 0) {
+
+      const media = await fetchTikTokMedia(url);
+      const { id, author: account, views, likes, comments, shares } = media;
+      const postPath = media.type === "image" ? "photo" : "video";
+      const postUrl = account?.unique_id && id
+        ? `https://www.tiktok.com/@${account.unique_id}/${postPath}/${id}`
+        : url;
+      const captionDetails = {
+        bold: fytBold,
+        author: account?.nickname || account?.fullname || account?.unique_id || "Desconocido",
+        views: formatCount(views),
+        likes: formatCount(likes),
+        comments: formatCount(comments),
+        shares: formatCount(shares),
+        url: postUrl,
+        showAuthor: true,
+        showViews: views !== undefined && views !== null,
+        showLikes: likes !== undefined && likes !== null,
+        showComments: comments !== undefined && comments !== null,
+        showShares: shares !== undefined && shares !== null,
+      };
+
+      if (media.type === "image") {
+        const title = media.title || "TikTok image";
         const files: string[] = [];
         let totalCost = 0;
-        for (const imageUrl of imageUrls.slice(0, 20)) {
+        for (const imageUrl of media.urls.slice(0, 20)) {
           const file = await downloadToCache(imageUrl, 60000);
+          tempFiles.add(file);
           const charge = await prepareDownloadCharge(ctx, "image", file);
           totalCost += charge.cost;
           files.push(file);
         }
-        const author =
-          data.data?.author?.nickname ||
-          data.data?.author?.fullname ||
-          data.data?.author?.unique_id ||
-          "Desconocido";
-        const title = data.data?.title || "TikTok image";
-        const views = data.data?.play_count;
-        const likes = data.data?.digg_count;
-        const comments = data.data?.comment_count;
-        const shares = data.data?.share_count;
-        const { id, author: account, music_info: music } = data.data ?? {};
-        const pictureUrl = account?.unique_id && id
-          ? `https://www.tiktok.com/@${account.unique_id}/photo/${id}`
-          : url;
         const caption = DL_TEMPLATE({
-          bold: fytBold,
+          ...captionDetails,
           label: t("cmd_tiktok_images_c263451e"),
           icon: t("cmd_text_91a64201"),
           title,
-          author,
-          views: formatCount(views),
-          likes: formatCount(likes),
-          comments: formatCount(comments),
-          shares: formatCount(shares),
           cost: formatMoney(totalCost, ctx),
-          url: pictureUrl,
-          showAuthor: true,
-          showViews: views !== undefined && views !== null,
-          showLikes: likes !== undefined && likes !== null,
-          showComments: comments !== undefined && comments !== null,
-          showShares: shares !== undefined && shares !== null,
           loadingText: t("cmd_album_listo_458c0141"),
         });
         const album = files.map((file, index) => ({
           image: { url: file },
           caption: index === 0 ? caption : "",
         }));
-        if (music?.play) {
+        if (media.audioUrl) {
           await reply({
-            audio: { url: music.play },
+            audio: { url: media.audioUrl },
             mimetype: "audio/mpeg",
             fileName: `${safeFileName(title, "tiktok")}.mp3`,
           });
@@ -140,47 +97,22 @@ export default {
         await react("✅");
         return;
       }
-      const videoUrl = data?.data?.play || data?.data?.wmplay || "";
-      if (!data?.data || !videoUrl)
-        throw new Error("La API no devolvió un video descargable.");
-      const author =
-        data.data.author?.nickname ||
-        data.data.author?.fullname ||
-        data.data.author?.unique_id ||
-        "Desconocido";
-      const title = data.data.title || "Video de TikTok";
-      const file = await downloadToCache(videoUrl, 180000);
-      convertedFile = await CONVERT_TO_AVC(file);
-      const { cost } = await prepareDownloadCharge(
-        ctx,
-        "document",
-        convertedFile,
+      const title = media.title || "Video de TikTok";
+      const file = await downloadTikTokFile(
+        media.urls,
+        180000,
+        "No se pudo descargar el video desde el servidor de origen.",
       );
-      const views = data.data.play_count;
-      const likes = data.data.digg_count;
-      const comments = data.data.comment_count;
-      const shares = data.data.share_count;
-      const { id, author: account } = data.data;
-      const originalUrl = account?.unique_id && id
-        ? `https://www.tiktok.com/@${account.unique_id}/video/${id}`
-        : url;
+      tempFiles.add(file);
+      const convertedFile = await CONVERT_TO_AVC(file);
+      tempFiles.add(convertedFile);
+      const { cost } = await prepareDownloadCharge(ctx, "document", convertedFile);
       const caption = DL_TEMPLATE({
-        bold: fytBold,
+        ...captionDetails,
         label: t("cmd_tiktok_document_82fb2560"),
         icon: t("cmd_text_a2865ecb"),
         title,
-        author,
-        views: formatCount(views),
-        likes: formatCount(likes),
-        comments: formatCount(comments),
-        shares: formatCount(shares),
         cost: formatMoney(cost, ctx),
-        url: originalUrl,
-        showAuthor: true,
-        showViews: views !== undefined && views !== null,
-        showLikes: likes !== undefined && likes !== null,
-        showComments: comments !== undefined && comments !== null,
-        showShares: shares !== undefined && shares !== null,
         loadingText: t("cmd_descargando_video_e3c0869f"),
         loadingIcon: t("cmd_text_7a2ad7a6"),
       });
@@ -202,8 +134,7 @@ export default {
         text: t("cmd_value0_bb624cd4", { value0: message }),
       });
     } finally {
-      if (convertedFile)
-        await rm(convertedFile, { force: true }).catch(() => undefined);
+      await Promise.allSettled(Array.from(tempFiles, (file) => rm(file, { force: true })));
     }
   },
 };

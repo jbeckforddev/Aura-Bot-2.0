@@ -20,7 +20,7 @@ export function formatCount(valor: unknown): string {
     return `${(numero / 1e6).toFixed(1)}M`;
   }
   if (numero >= 1e4) {
-    return `${(numero / 1e4).toFixed(1)}K`;
+    return `${(numero / 1e3).toFixed(1)}K`;
   }
   return numero.toString();
 }
