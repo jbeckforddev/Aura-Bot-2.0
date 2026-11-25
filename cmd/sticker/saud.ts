@@ -909,7 +909,7 @@ export default {
 	],
 	category: 'sticker',
 	description: 'Crea stickers estáticos o GIF animados con sonido de hasta 25 segundos mediante un sistema de sesiones.',
-	premiumOnly: true,
+	cooldown: 120000,
 	async run(context: CommandContext) {
 		const quotedMessage = context.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
 		const quotedContext = context.msg.message?.extendedTextMessage?.contextInfo
