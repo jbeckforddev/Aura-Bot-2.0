@@ -23,28 +23,39 @@ import { CONVERT_TO_AVC } from "../../utils/converter.ts";
 import { sendAlbumMessage } from "../../core/mediaSendUtils.ts";
 import { t } from "../../src/langs/index.ts";
 
-const LEGACY_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
+const ALYA_API = DL_CONFIG.alya.BASE_URL.replace(/\/+$/, "");
 const KEY = DL_CONFIG.alya.API_KEY;
 const TIKWM_API = "https://www.tikwm.com/api";
 const CACHE_TTL = 300_000;
+const METADATA_TIMEOUT = 45_000;
+
+type TikTokPostDetails = {
+  id?: string;
+  title?: string;
+  author?: {
+    nickname?: string;
+    fullname?: string;
+    unique_id?: string;
+  };
+};
+
+type TikTokMedia = TikTokPostDetails & {
+  views?: number | string;
+  likes?: number | string;
+  comments?: number | string;
+  shares?: number | string;
+  urls: string[];
+} & ({ type: "image"; audioUrl?: string } | { type: "video" });
 
 type TikWMVideoResponse = {
   code?: number;
-  msg?: string;
-  data?: {
-    id?: string;
-    title?: string;
+  data?: TikTokPostDetails & {
     play?: string;
     wmplay?: string;
     hdplay?: string;
     images?: string[];
     music_info?: {
       play?: string;
-    };
-    author?: {
-      nickname?: string;
-      fullname?: string;
-      unique_id?: string;
     };
     play_count?: number | string;
     digg_count?: number | string;
@@ -53,8 +64,22 @@ type TikWMVideoResponse = {
   };
 };
 
+type AlyaTikTokResponse = {
+  status?: boolean;
+  data?: TikTokPostDetails & {
+    type?: string;
+    dl?: string | string[];
+    stats?: {
+      plays?: number | string;
+      likes?: number | string;
+      comments?: number | string;
+      shares?: number | string;
+    };
+  };
+};
+
 const searchCache = new Map<string, { url: string; exp: number }>();
-const metaCache = new Map<string, { data: TikWMVideoResponse; exp: number }>();
+const metaCache = new Map<string, { data: TikTokMedia; exp: number }>();
 
 function pruneCache<T>(cache: Map<string, { exp: number } & T>) {
   if (cache.size <= 150) return;
@@ -62,6 +87,106 @@ function pruneCache<T>(cache: Map<string, { exp: number } & T>) {
   for (const [key, value] of cache.entries()) {
     if (value.exp <= now) cache.delete(key);
   }
+}
+
+function isDownloadUrl(value: unknown): value is string {
+  return typeof value === "string" && /^https?:\/\//i.test(value) && URL.canParse(value);
+}
+
+async function fetchTikWM(url: string, signal: AbortSignal): Promise<TikTokMedia> {
+  const response = await requestJson<TikWMVideoResponse>(
+    `${TIKWM_API}/?url=${encodeURIComponent(url)}&hd=1`,
+    METADATA_TIMEOUT,
+    {},
+    signal,
+  );
+  const data = response?.data;
+  if (!data || (response.code !== undefined && response.code !== 0)) {
+    throw new Error("TikWM no devolvió una publicación válida.");
+  }
+
+  const details = {
+    id: data.id,
+    title: data.title,
+    author: data.author,
+    views: data.play_count,
+    likes: data.digg_count,
+    comments: data.comment_count,
+    shares: data.share_count,
+  };
+  const images = Array.isArray(data.images) ? data.images.filter(isDownloadUrl) : [];
+  const audioUrl = data.music_info?.play;
+  if (images.length > 0) {
+    return {
+      ...details,
+      type: "image",
+      urls: images,
+      audioUrl: isDownloadUrl(audioUrl) ? audioUrl : undefined,
+    };
+  }
+
+  const urls = [data.hdplay, data.play, data.wmplay].filter(isDownloadUrl);
+  if (urls.length === 0) throw new Error("TikWM no devolvió enlaces de descarga.");
+  return { ...details, type: "video", urls };
+}
+
+async function fetchAlya(url: string, signal: AbortSignal): Promise<TikTokMedia> {
+  const params = new URLSearchParams({ url, key: KEY });
+  const response = await requestJson<AlyaTikTokResponse>(
+    `${ALYA_API}/dl/tiktok?${params}`,
+    METADATA_TIMEOUT,
+    {},
+    signal,
+  );
+  const data = response?.data;
+  if (response?.status !== true || (data?.type !== "image" && data?.type !== "video")) {
+    throw new Error("Alya no devolvió una publicación válida.");
+  }
+
+  const urls = (Array.isArray(data.dl) ? data.dl : [data.dl]).filter(isDownloadUrl);
+  if (urls.length === 0) throw new Error("Alya no devolvió enlaces de descarga.");
+  return {
+    id: data.id,
+    title: data.title,
+    author: data.author,
+    views: data.stats?.plays,
+    likes: data.stats?.likes,
+    comments: data.stats?.comments,
+    shares: data.stats?.shares,
+    type: data.type,
+    urls,
+  };
+}
+
+async function fetchTikTokMedia(url: string): Promise<TikTokMedia> {
+  const cached = metaCache.get(url);
+  if (cached && cached.exp > Date.now()) return cached.data;
+
+  const controller = new AbortController();
+  try {
+    const media = await Promise.any([
+      fetchTikWM(url, controller.signal),
+      fetchAlya(url, controller.signal),
+    ]);
+    pruneCache(metaCache);
+    metaCache.set(url, { data: media, exp: Date.now() + CACHE_TTL });
+    return media;
+  } catch {
+    throw new Error("Ninguna API devolvió enlaces de descarga válidos de TikTok.");
+  } finally {
+    controller.abort();
+  }
+}
+
+async function downloadTikTokVideo(urls: string[]): Promise<string> {
+  for (const url of new Set(urls)) {
+    try {
+      return await downloadToCache(url, 150000);
+    } catch {
+      // Intenta el siguiente enlace de la misma respuesta.
+    }
+  }
+  throw new Error("No se pudo descargar el video desde el servidor de origen.");
 }
 
 export default {
@@ -92,7 +217,7 @@ export default {
           url = cachedSearch.url;
         } else {
           const search = await requestJson<TikTokSearchResponse>(
-            `${LEGACY_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
+            `${ALYA_API}/search/tiktok?query=${encodeURIComponent(query)}&key=${KEY}`,
           ).catch(() => null);
           const result = pickSearchResult(search?.data, query);
           if (!result?.url) throw new Error("No se encontró ningún video para esa búsqueda.");
@@ -102,57 +227,28 @@ export default {
         }
       }
 
-      let data: TikWMVideoResponse | undefined;
-      const cachedMeta = metaCache.get(url);
-
-      if (cachedMeta && cachedMeta.exp > now) {
-        data = cachedMeta.data;
-      } else {
-        data = await requestJson<TikWMVideoResponse>(
-          `${TIKWM_API}/?url=${encodeURIComponent(url)}&hd=1`,
-          45000,
-        );
-        if (data?.data) {
-          pruneCache(metaCache);
-          metaCache.set(url, { data, exp: now + CACHE_TTL });
-        }
-      }
-
-      if (!data?.data) throw new Error("La API no devolvió datos válidos.");
-
+      const media = await fetchTikTokMedia(url);
+      const { id, author: account, views, likes, comments, shares } = media;
       const author =
-        data.data.author?.nickname ||
-        data.data.author?.fullname ||
-        data.data.author?.unique_id ||
-        "Desconocido";
-      const handle = data.data.author?.unique_id || "tiktok";
-      const title = data.data.title || "TikTok";
-      const views = data.data.play_count;
-      const likes = data.data.digg_count;
-      const comments = data.data.comment_count;
-      const shares = data.data.share_count;
+        account?.nickname || account?.fullname || account?.unique_id || "Desconocido";
+      const title = media.title || "TikTok";
+      const postPath = media.type === "image" ? "photo" : "video";
+      const postUrl = account?.unique_id && id
+        ? `https://www.tiktok.com/@${account.unique_id}/${postPath}/${id}`
+        : url;
 
-      const imageUrls = Array.isArray(data.data.images)
-        ? data.data.images.filter(
-            (image): image is string =>
-              typeof image === "string" && /^https?:\/\//.test(image),
-          )
-        : [];
-
-      if (imageUrls.length > 0) {
-        const URL_PICTURES = `https://www.tiktok.com/@${handle}/photo/${data.data.id}`;
-        const AUDIO_URL = data.data.music_info?.play || "";
-
-        const imagePromises = imageUrls.slice(0, 20).map(async (imageUrl) => {
+      if (media.type === "image") {
+        const { audioUrl } = media;
+        const imagePromises = media.urls.slice(0, 20).map(async (imageUrl) => {
           const file = await downloadToCache(imageUrl, 45000);
           tempFiles.add(file);
           const charge = await prepareDownloadCharge(ctx, "image", file);
           return { file, cost: charge.cost };
         });
 
-        const audioPromise = AUDIO_URL
+        const audioPromise = audioUrl
           ? (async () => {
-              const file = await downloadToCache(AUDIO_URL, 90000);
+              const file = await downloadToCache(audioUrl, 90000);
               tempFiles.add(file);
               const charge = await prepareDownloadCharge(ctx, "document", file);
               return { file, cost: charge.cost };
@@ -180,7 +276,7 @@ export default {
           comments: formatCount(comments),
           shares: formatCount(shares),
           cost: formattedCost,
-          url: URL_PICTURES,
+          url: postUrl,
           showAuthor: true,
           showViews: views !== undefined && views !== null,
           showLikes: likes !== undefined && likes !== null,
@@ -218,22 +314,7 @@ export default {
         return;
       }
 
-      const primaryVideoUrl = data.data.hdplay || data.data.play || data.data.wmplay;
-      const fallbackVideoUrl = data.data.play || data.data.wmplay;
-      if (!primaryVideoUrl) throw new Error("La API no devolvió un video descargable.");
-
-      const URL_VIDEO = `https://www.tiktok.com/@${handle}/video/${data.data.id}`;
-
-      let file = "";
-      try {
-        file = await downloadToCache(primaryVideoUrl, 150000);
-      } catch {
-        if (fallbackVideoUrl && fallbackVideoUrl !== primaryVideoUrl) {
-          file = await downloadToCache(fallbackVideoUrl, 150000);
-        } else {
-          throw new Error("No se pudo descargar el video desde el servidor de origen.");
-        }
-      }
+      const file = await downloadTikTokVideo(media.urls);
       tempFiles.add(file);
 
       const [convertedFile, { cost }] = await Promise.all([
@@ -255,7 +336,7 @@ export default {
         comments: formatCount(comments),
         shares: formatCount(shares),
         cost: formattedCost,
-        url: URL_VIDEO,
+        url: postUrl,
         showAuthor: true,
         showViews: views !== undefined && views !== null,
         showLikes: likes !== undefined && likes !== null,
