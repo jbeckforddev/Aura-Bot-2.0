@@ -20,9 +20,15 @@ import {
   NOT_MOD,
   NOT_PREMIUM,
   NOT_HAVE_COINS,
-  PLUGINS_OFF
+  PLUGINS_OFF,
 } from "./core/socketText.ts";
-import { db, lookupUserLanguage, lookupGroupLanguage, setGroupUpdateListener, setBotUpdateListener } from "./database/AuraDB.ts";
+import {
+  db,
+  lookupUserLanguage,
+  lookupGroupLanguage,
+  setGroupUpdateListener,
+  setBotUpdateListener,
+} from "./database/AuraDB.ts";
 import { resolveBotType } from "./core/botType.ts";
 import { isPremiumTokenValidForAccount } from "./core/premiumTokens.ts";
 import { withLocale } from "./src/langs/index.ts";
@@ -70,29 +76,114 @@ import type {
 
 export type { ContactMetadata, HandlerConfig, HandlerLogger, HandlerOptions };
 
+const CLOCK_SKEW_TOLERANCE_SEC = 5;
+const socketStartAtSec = new WeakMap<object, number>();
+const hookedSessionSockets = new WeakSet<object>();
+
+export function markSessionStarted(
+  sock: ExtendedWASocket,
+  timestampMs = Date.now(),
+): number {
+  const tsSec = Math.floor(timestampMs / 1000);
+  if (sock && typeof sock === "object") {
+    socketStartAtSec.set(sock, tsSec);
+  }
+  return tsSec;
+}
+
+function getOrInitSessionStartSec(sock: ExtendedWASocket): number {
+  if (!sock || typeof sock !== "object") {
+    return Math.floor(Date.now() / 1000);
+  }
+
+  if (!hookedSessionSockets.has(sock)) {
+    hookedSessionSockets.add(sock);
+    sock.ev?.on?.("connection.update", (update: { connection?: string }) => {
+      if (update?.connection === "open") {
+        socketStartAtSec.set(sock, Math.floor(Date.now() / 1000));
+      }
+    });
+  }
+
+  const existing = socketStartAtSec.get(sock);
+  if (existing !== undefined) return existing;
+
+  const sockAny = sock as unknown as {
+    connectedAt?: number;
+    startedAt?: number;
+    sessionStartedAt?: number;
+  };
+  const explicitTs =
+    sockAny.sessionStartedAt ?? sockAny.connectedAt ?? sockAny.startedAt;
+  const startSec =
+    typeof explicitTs === "number" && Number.isFinite(explicitTs) && explicitTs > 0
+      ? explicitTs > 1e12
+        ? Math.floor(explicitTs / 1000)
+        : Math.floor(explicitTs)
+      : Math.floor(Date.now() / 1000);
+
+  socketStartAtSec.set(sock, startSec);
+  return startSec;
+}
+
+function extractMessageTimestampSec(ts: unknown): number | null {
+  if (ts == null) return null;
+  let num: number;
+  if (typeof ts === "number") {
+    num = ts;
+  } else if (typeof ts === "bigint") {
+    num = Number(ts);
+  } else if (typeof ts === "string") {
+    num = Number(ts);
+  } else if (typeof ts === "object") {
+    const obj = ts as { toNumber?: () => number; low?: number };
+    if (typeof obj.toNumber === "function") {
+      num = obj.toNumber();
+    } else if (typeof obj.low === "number") {
+      num = obj.low >>> 0;
+    } else {
+      return null;
+    }
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+}
+
+function isStaleMessage(
+  sock: ExtendedWASocket,
+  rawMsg: proto.IWebMessageInfo,
+): boolean {
+  const sessionStartSec = getOrInitSessionStartSec(sock);
+  const msgTsSec = extractMessageTimestampSec(rawMsg.messageTimestamp);
+  if (msgTsSec === null) return false;
+  return msgTsSec < sessionStartSec - CLOCK_SKEW_TOLERANCE_SEC;
+}
+
 export const GROUP_METADATA_CACHE = new LRUCache<string, GroupMetadata>({
-  max: 500,
+  max: 5_000,
   ttl: 60 * 60 * 1000,
 });
 
 const processedGroupMessages = new LRUCache<string, true>({
-  max: 5_000,
+  max: 50_000,
   ttl: 2 * 60 * 1000,
 });
 
 const CONTACT_METADATA_CACHE = new LRUCache<string, ContactMetadata>({
-  max: 300,
-  ttl: 5 * 60 * 1000,
+  max: 10_000,
+  ttl: 10 * 60 * 1000,
 });
 
 const configuredLidCache = new LRUCache<string, string>({
-  max: 150,
-  ttl: 15 * 60 * 1000,
+  max: 2_000,
+  ttl: 30 * 60 * 1000,
 });
 
 const USER_DB_CACHE = new LRUCache<string, DatabaseUser>({
-  max: 2000,
-  ttl: 5 * 60 * 1000,
+  max: 20_000,
+  ttl: 10 * 60 * 1000,
 });
 
 const pendingContactUpdates = new Map<string, Record<string, unknown>>();
@@ -120,18 +211,20 @@ export function flushPendingContacts(database: typeof db = db) {
 }
 
 const GROUP_DB_CACHE = new LRUCache<string, DatabaseGroup>({
-  max: 500,
-  ttl: 5 * 60 * 1000,
+  max: 5_000,
+  ttl: 10 * 60 * 1000,
 });
 
 const BOT_DB_CACHE = new LRUCache<string, DatabaseBot>({
-  max: 100,
+  max: 1_000,
+  ttl: 10 * 60 * 1000,
+});
+
+const commandCooldowns = new LRUCache<string, number>({
+  max: 20_000,
   ttl: 5 * 60 * 1000,
 });
-const commandCooldowns = new LRUCache<string, number>({
-  max: 2_000,
-  ttl: 2 * 60 * 1000,
-});
+
 const GROUP_PREFIX_COMMANDS = new Set([
   "setprefix",
   "prefix",
@@ -140,6 +233,45 @@ const GROUP_PREFIX_COMMANDS = new Set([
   "antispam",
   "antispammsg",
 ]);
+
+const GROUP_META_MUTATING_COMMANDS = new Set([
+  "promote",
+  "demote",
+  "kick",
+  "ban",
+  "remove",
+  "add",
+  "addforce",
+  "forceadd",
+  "reingresar",
+  "meter",
+  "group",
+  "grupo",
+  "open",
+  "close",
+  "abrir",
+  "cerrar",
+  "setsubject",
+  "setdesc",
+  "revoke",
+  "gban",
+  "raidban",
+  "forceban",
+  "antiraid",
+  "setprimary",
+  "delprimary",
+  "bot",
+  "self",
+  "mute",
+  "unmute",
+  "banchat",
+  "unbanchat",
+  "desbanearchat",
+  "unmutechat",
+  "disable",
+  "enable",
+]);
+
 const BOT_CONFIG_COMMANDS = new Set([
   "modprefix",
   "setmodprefix",
@@ -218,7 +350,8 @@ function normalizeContactMetadata(
   const jid = (input?.jid ?? data?.id ?? null) as string | null;
   const lid = (input?.lid ?? null) as string | null;
   const user = (input?.user ?? data?.username ?? data?.notify ?? null) as
-    string | null;
+    | string
+    | null;
 
   const resolvedJid = jid ? jidNormalizedUser(jid) : null;
   const resolvedLid = lid ? jidNormalizedUser(lid) : null;
@@ -336,7 +469,7 @@ try {
 } catch {}
 
 const lidToPnCache = new LRUCache<string, string>({
-  max: 5000,
+  max: 50_000,
   ttl: 60 * 60 * 1000,
 });
 const groupMetaInFlight = new Map<string, Promise<GroupMetadata | null>>();
@@ -368,9 +501,7 @@ async function resolveLid(
       lidToPnCache.set(lidJid, pn);
       return pn;
     }
-  } catch {
-    // Ignoramos errores de resolución de LID y devolvemos el valor original.
-  }
+  } catch {}
 
   return lidJid;
 }
@@ -394,24 +525,37 @@ async function matchesConfiguredNumber(
   }
 
   if (rawLid && rawLid.endsWith("@lid")) {
+    const unresolved: string[] = [];
     for (const num of numberList) {
       const normalizedNum = String(num ?? "").trim();
       if (!normalizedNum) continue;
 
-      let lid = configuredLidCache.get(normalizedNum);
-      if (lid === undefined) {
-        try {
-          const resolved = await sock.signalRepository?.lidMapping?.getLIDForPN(
-            `${normalizedNum}@s.whatsapp.net`,
-          );
-          lid = resolved ? cleanJid(resolved) : "";
-        } catch {
-          lid = "";
-        }
-        configuredLidCache.set(normalizedNum, lid);
+      const cached = configuredLidCache.get(normalizedNum);
+      if (cached !== undefined) {
+        if (cached && cached === rawLid) return true;
+      } else {
+        unresolved.push(normalizedNum);
       }
+    }
 
-      if (lid && lid === rawLid) return true;
+    if (unresolved.length > 0) {
+      const results = await Promise.all(
+        unresolved.map(async (normalizedNum) => {
+          let lid = "";
+          try {
+            const resolved =
+              await sock.signalRepository?.lidMapping?.getLIDForPN(
+                `${normalizedNum}@s.whatsapp.net`,
+              );
+            lid = resolved ? cleanJid(resolved) : "";
+          } catch {
+            lid = "";
+          }
+          configuredLidCache.set(normalizedNum, lid);
+          return lid;
+        }),
+      );
+      if (results.some((lid) => lid && lid === rawLid)) return true;
     }
   }
 
@@ -496,7 +640,11 @@ async function handleMessageInternal(
       botRecord = (runtimeDb.getBot?.(botJid) ?? {}) as DatabaseBot;
       BOT_DB_CACHE.set(`bot:${botJid}`, botRecord);
     }
-    if (botRecord.status !== "active" && sock.user?.id && !(sock as any).isClosed) {
+    if (
+      botRecord.status !== "active" &&
+      sock.user?.id &&
+      !(sock as any).isClosed
+    ) {
       const freshRecord = runtimeDb.getBot?.(botJid);
       if (freshRecord) {
         botRecord = freshRecord as DatabaseBot;
@@ -582,9 +730,9 @@ async function handleMessageInternal(
     const groupPrefix = groupData?.prefix;
     const hasGroupPrefix = Boolean(groupPrefix);
     const useFactoryPrefixes = groupPrefix === "";
-    const factoryPrefixes = [...new Set(prefixes.filter((prefix) => !!prefix))].sort(
-      (left, right) => right.length - left.length,
-    );
+    const factoryPrefixes = [
+      ...new Set(prefixes.filter((prefix) => !!prefix)),
+    ].sort((left, right) => right.length - left.length);
     const activePrefixes = groupPrefix
       ? [groupPrefix]
       : useFactoryPrefixes
@@ -667,7 +815,13 @@ async function handleMessageInternal(
       const primaryBot = groupData?.primaryBot;
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         if (!isPrimaryGroupBot && isCmd) return;
-        if (botRecord.status && botRecord.status !== "active" && (sock as any).isClosed) return;
+        if (
+          botRecord.status &&
+          botRecord.status !== "active" &&
+          (sock as any).isClosed
+        ) {
+          return;
+        }
       }
     }
 
@@ -691,7 +845,9 @@ async function handleMessageInternal(
         try {
           runtimeDb.recordGroupMessage(from, sender, senderLid || undefined);
         } catch (error) {
-          logger.warn?.(`No se pudo contar el mensaje del grupo: ${String(error)}`);
+          logger.warn?.(
+            `No se pudo contar el mensaje del grupo: ${String(error)}`,
+          );
         }
       }
     }
@@ -701,7 +857,8 @@ async function handleMessageInternal(
     if (msg.pushName) {
       let currentUser = USER_DB_CACHE.get(`user:${sender}`);
       if (!currentUser) {
-        currentUser = (runtimeDb.getUser?.(sender, senderLid || undefined) ?? {}) as DatabaseUser;
+        currentUser = (runtimeDb.getUser?.(sender, senderLid || undefined) ??
+          {}) as DatabaseUser;
         USER_DB_CACHE.set(`user:${sender}`, currentUser);
       }
       const hasResolvedPhone = !sender.endsWith("@lid");
@@ -745,18 +902,21 @@ async function handleMessageInternal(
       botIdentities.includes(sender) ||
       botIdentities.includes(senderLid);
 
-    const configuredOwner = await matchesConfiguredNumber(
-      config.ownerNumber ?? [],
-      senderNum,
-      rawSenderLid,
-      sock,
-    );
-    const configuredCoOwner = await matchesConfiguredNumber(
-      config.coOwners ?? [],
-      senderNum,
-      rawSenderLid,
-      sock,
-    );
+    const [configuredOwner, configuredCoOwner] = await Promise.all([
+      matchesConfiguredNumber(
+        config.ownerNumber ?? [],
+        senderNum,
+        rawSenderLid,
+        sock,
+      ),
+      matchesConfiguredNumber(
+        config.coOwners ?? [],
+        senderNum,
+        rawSenderLid,
+        sock,
+      ),
+    ]);
+
     const senderRoles = runtimeDb.hasRoles(
       sender,
       ["owner", "coowner", "mod", "premium"],
@@ -768,14 +928,22 @@ async function handleMessageInternal(
     const isPremium = isMod || senderRoles.premium;
 
     const storedBotType = resolveBotType(storedBot?.bot_type, sock.isSubBot);
-    const premiumToken = String(storedBot?.data?.premiumToken || (sock as any).premiumToken || "");
-    const botLidCleanForToken = String((sock.user as any)?.lid || storedBot?.lid || "").trim().replace(/@lid$/, "");
+    const premiumToken = String(
+      storedBot?.data?.premiumToken || (sock as any).premiumToken || "",
+    );
+    const botLidCleanForToken = String(
+      (sock.user as any)?.lid || storedBot?.lid || "",
+    )
+      .trim()
+      .replace(/@lid$/, "");
     const tokenIdentities = [
       botJid,
       sock.user?.id ? cleanJid(sock.user.id) : "",
       storedBot?.phone_number,
       botLidCleanForToken ? `${botLidCleanForToken}@lid` : "",
-      sock.sessionName ? cleanJid(sock.sessionName).replace(/^(?:prem|sub)-/i, "") : "",
+      sock.sessionName
+        ? cleanJid(sock.sessionName).replace(/^(?:prem|sub)-/i, "")
+        : "",
     ].filter(Boolean) as string[];
     const hasValidPremiumToken =
       storedBotType === "Prem-Bot" &&
@@ -808,9 +976,7 @@ async function handleMessageInternal(
             botLidClean = cleanJid(resolvedBotLid);
             (sock as any)._cachedBotLid = botLidClean;
           }
-        } catch {
-          // Sin LID resoluble, se mantiene sin botLidClean.
-        }
+        } catch {}
       }
 
       const senderJidClean = cleanJid(sender);
@@ -848,9 +1014,6 @@ async function handleMessageInternal(
     }
 
     if (isGroup) {
-      // ── Protecciones de seguridad: se evalúan SIEMPRE antes de cualquier
-      //    restricción de acceso (self, modSelf, chatBanned, etc.) para que
-      //    funcionen incluso cuando el grupo está en modo self o modself. ──
       if (
         isPrimaryGroupBot &&
         groupData?.antilink &&
@@ -890,7 +1053,6 @@ async function handleMessageInternal(
         return;
       }
 
-      // ── Restricciones de acceso ──
       const modSelfEnabled = Number(botRecord.modSelf ?? 0) === 1;
       const groupSelfDisabled =
         groupData?.data?.selfConfigured === true && groupData.self === 0;
@@ -923,10 +1085,8 @@ async function handleMessageInternal(
       if (!isCmd && body) {
         runtimeOptions.handleChatXp?.(sender);
       }
-      
-      // Verificar si el usuario está silenciado y eliminar su mensaje
+
       if (
-        isGroup &&
         isPrimaryGroupBot &&
         !isCmd &&
         !isBotUser &&
@@ -937,7 +1097,7 @@ async function handleMessageInternal(
 
         if (Array.isArray(mutedUsers) && mutedUsers.length > 0) {
           const senderVariants = new Set<string>();
-          const rawParticipantCandidates = [
+          for (const candidate of [
             msg.key?.participant,
             msg.participant,
             sender,
@@ -945,9 +1105,7 @@ async function handleMessageInternal(
             senderNum,
             sender.split("@")[0],
             senderLid.split("@")[0],
-          ];
-
-          for (const candidate of rawParticipantCandidates) {
+          ]) {
             const normalized = cleanJid(String(candidate || ""));
             if (normalized) {
               senderVariants.add(normalized);
@@ -956,19 +1114,16 @@ async function handleMessageInternal(
           }
 
           const isMuted = mutedUsers.some((mutedJid: string) => {
-            const mutedVariants = new Set<string>();
-            for (const candidate of [String(mutedJid || ""), cleanJid(String(mutedJid || "")), String(mutedJid || "").split("@")[0], String(mutedJid || "").split(":")[0]]) {
-              if (!candidate) continue;
-              const normalized = cleanJid(candidate);
-              mutedVariants.add(candidate);
-              if (normalized) {
-                mutedVariants.add(normalized);
-                mutedVariants.add(normalized.split("@")[0]);
-              }
-            }
-
-            const directHit = Array.from(mutedVariants).some((value) => senderVariants.has(value));
-            return directHit;
+            const raw = String(mutedJid || "");
+            if (!raw) return false;
+            const norm = cleanJid(raw);
+            return (
+              senderVariants.has(raw) ||
+              senderVariants.has(norm) ||
+              senderVariants.has(norm.split("@")[0]) ||
+              senderVariants.has(raw.split("@")[0]) ||
+              senderVariants.has(raw.split(":")[0])
+            );
           });
 
           if (isMuted) {
@@ -979,7 +1134,9 @@ async function handleMessageInternal(
               }
               return;
             } catch (deleteError) {
-              logger.warn?.(`Error al eliminar mensaje de usuario silenciado: ${String(deleteError)}`);
+              logger.warn?.(
+                `Error al eliminar mensaje de usuario silenciado: ${String(deleteError)}`,
+              );
             }
           }
         }
@@ -1029,28 +1186,37 @@ async function handleMessageInternal(
     const pluginMap = resolvePlugins();
 
     if (!isCmd) {
-      const hangman = pluginMap.get("ahorcado");
-      if (hangman?.handleReply) {
-        const reply = async (content: ReplyContent) => {
+      const seenReplyPlugins = new Set<CommandPlugin>();
+      const replyContext = {
+        sock,
+        msg,
+        from,
+        body,
+        sender,
+        botJid,
+        db: runtimeDb,
+        usedPrefix: prefixes[0] ?? ".",
+        reply: async (content: ReplyContent) => {
           const msg2send =
             typeof content === "string" ? { text: content } : content;
           return sock.sendMessage(from, msg2send, {
             quoted: msg as unknown as WAMessage,
           });
-        };
-        const handled = await hangman.handleReply({
-          sock,
-          msg,
-          from,
-          body,
-          sender,
-          botJid,
-          db: runtimeDb,
-          usedPrefix: prefixes[0] ?? ".",
-          reply,
-          react: async (emoji: string) =>
-            sock.sendMessage(from, { react: { text: emoji, key: msg.key } }),
-        });
+        },
+        react: async (emoji: string) =>
+          sock.sendMessage(from, { react: { text: emoji, key: msg.key } }),
+      };
+
+      for (const candidate of pluginMap.values()) {
+        if (
+          !candidate ||
+          typeof candidate.handleReply !== "function" ||
+          seenReplyPlugins.has(candidate)
+        ) {
+          continue;
+        }
+        seenReplyPlugins.add(candidate);
+        const handled = await candidate.handleReply(replyContext);
         if (handled) return;
       }
 
@@ -1064,8 +1230,9 @@ async function handleMessageInternal(
           isAdmin,
           isBotAdmin,
         ))
-      )
+      ) {
         return;
+      }
       return;
     }
 
@@ -1082,19 +1249,21 @@ async function handleMessageInternal(
     const stickerContextInfo = stickerCommand
       ? getStickerContextInfo(msg.message)
       : undefined;
-    const commandMsg = stickerContextInfo && msg.message
-      ? {
-          ...msg,
-          message: {
-            ...msg.message,
-            extendedTextMessage: {
-              ...msg.message.extendedTextMessage,
-              text: body,
-              contextInfo: stickerContextInfo,
+    const commandMsg =
+      stickerContextInfo && msg.message
+        ? {
+            ...msg,
+            message: {
+              ...msg.message,
+              extendedTextMessage: {
+                ...msg.message.extendedTextMessage,
+                text: body,
+                contextInfo: stickerContextInfo,
+              },
             },
-          },
-        }
-      : msg;
+          }
+        : msg;
+
     const ctx = {
       sock,
       db: runtimeDb,
@@ -1136,26 +1305,22 @@ async function handleMessageInternal(
             ...new Set([sender, ...extra]),
           ];
         }
-        const sendReply = async () => {
+        try {
+          return await sock.sendMessage(from, sendable, {
+            quoted: msg as unknown as WAMessage,
+          });
+        } catch (e1: unknown) {
+          logger.warn?.(
+            `[${botLabel}] reply con quoted falló (${e1 instanceof Error ? e1.message : String(e1)}), reintentando sin quoted...`,
+          );
           try {
-            return await sock.sendMessage(from, sendable, {
-              quoted: msg as unknown as WAMessage,
-            });
-          } catch (e1: unknown) {
-            logger.warn?.(
-              `[${botLabel}] reply con quoted falló (${e1 instanceof Error ? e1.message : String(e1)}), reintentando sin quoted...`,
+            return await sock.sendMessage(from, sendable);
+          } catch (e2: unknown) {
+            logger.error?.(
+              `[${botLabel}] reply sin quoted también falló: ${e2 instanceof Error ? e2.message : String(e2)} | from: ${from}`,
             );
-            try {
-              return await sock.sendMessage(from, sendable);
-            } catch (e2: unknown) {
-              logger.error?.(
-                `[${botLabel}] reply sin quoted también falló: ${e2 instanceof Error ? e2.message : String(e2)} | from: ${from}`,
-              );
-            }
           }
-        };
-
-        return sendReply();
+        }
       },
       react: async (emoji: string) => {
         try {
@@ -1205,7 +1370,9 @@ async function handleMessageInternal(
               quoted: msg as unknown as WAMessage,
             },
           );
-          if (!copyMessage.message) throw new Error("No se generó el mensaje de copia.");
+          if (!copyMessage.message) {
+            throw new Error("No se generó el mensaje de copia.");
+          }
           return await sock.relayMessage(from, copyMessage.message, {
             messageId: copyMessage.key.id || undefined,
             additionalNodes: [createNativeFlowNode()],
@@ -1289,7 +1456,9 @@ async function handleMessageInternal(
               quoted: msg as unknown as WAMessage,
             },
           );
-          if (!interactive.message) throw new Error("No se generó el mensaje interactivo.");
+          if (!interactive.message) {
+            throw new Error("No se generó el mensaje interactivo.");
+          }
           return await sock.relayMessage(from, interactive.message, {
             messageId: interactive.key.id || undefined,
             additionalNodes: [createNativeFlowNode()],
@@ -1376,9 +1545,15 @@ async function handleMessageInternal(
       } else if (["play", "spotify", "soundcloud", "ttaudio"].includes(name)) {
         mediaType = "audio";
       } else if (
-        ["play2", "video", "tiktok", "tiktok2", "facebook", "instagram", "x"].includes(
-          name,
-        )
+        [
+          "play2",
+          "video",
+          "tiktok",
+          "tiktok2",
+          "facebook",
+          "instagram",
+          "x",
+        ].includes(name)
       ) {
         mediaType = "video";
       }
@@ -1395,17 +1570,19 @@ async function handleMessageInternal(
         };
         const requiredAmount = formatMoney(coinCheck.minCost, currency);
         const userBalance = formatMoney(coinCheck.currentBalance, currency);
-        const typeMedia = labels[mediaType]
-        const minAmount = formatMoney(coinCheck.minCost, currency)
-        const currencyName = currency.name
+        const typeMedia = labels[mediaType];
+        const minAmount = formatMoney(coinCheck.minCost, currency);
+        const currencyName = currency.name;
 
-        return ctx.reply({text: NOT_HAVE_COINS({
-          typeMedia,
-          requiredAmount,
-          userBalance,
-          minAmount,
-          currencyName
-        })});
+        return ctx.reply({
+          text: NOT_HAVE_COINS({
+            typeMedia,
+            requiredAmount,
+            userBalance,
+            minAmount,
+            currencyName,
+          }),
+        });
       }
     }
 
@@ -1439,7 +1616,9 @@ async function handleMessageInternal(
           isGroup ? from : undefined,
         );
       } catch (error) {
-        logger.warn?.(`No se pudo registrar el uso del comando: ${String(error)}`);
+        logger.warn?.(
+          `No se pudo registrar el uso del comando: ${String(error)}`,
+        );
       }
     }
 
@@ -1454,8 +1633,7 @@ async function handleMessageInternal(
       ) {
         chargeDownloadCost(
           sender,
-          (downloadState._downloadMediaType as DownloadMediaType) ||
-            "document",
+          (downloadState._downloadMediaType as DownloadMediaType) || "document",
           Number(downloadState._downloadSize) || undefined,
         );
         downloadState.downloadCharged = true;
@@ -1493,7 +1671,11 @@ async function handleMessageInternal(
         await ctx.reply({ text: ERROR_CMD({ cmdName, errorDetails }) });
       }
     } finally {
-      if (isGroup) {
+      if (
+        isGroup &&
+        (GROUP_PREFIX_COMMANDS.has(cmdName) ||
+          GROUP_META_MUTATING_COMMANDS.has(cmdName))
+      ) {
         invalidateGroupCache(from);
       }
       if (BOT_CONFIG_COMMANDS.has(cmdName)) {
@@ -1517,8 +1699,9 @@ export async function handleMessage(
   activeBotsLive: ExtendedWASocket[] = [],
   runtimeOptions: HandlerOptions = {},
 ) {
+  if (isStaleMessage(sock, rawMsg)) return;
+
   const from = rawMsg.key?.remoteJid;
-  const runtimeDb = runtimeOptions.db ?? db;
   let language = "es";
 
   if (from && from !== "status@broadcast") {
@@ -1536,10 +1719,10 @@ export async function handleMessage(
 
     const userLanguage =
       (primarySender && lookupUserLanguage(cleanJid(primarySender))) ||
-      (alternateSender ? lookupUserLanguage(cleanJid(alternateSender)) : undefined);
-    const groupLanguage = isGroup
-      ? lookupGroupLanguage(from)
-      : undefined;
+      (alternateSender
+        ? lookupUserLanguage(cleanJid(alternateSender))
+        : undefined);
+    const groupLanguage = isGroup ? lookupGroupLanguage(from) : undefined;
 
     if (isGroup) {
       language = userLanguage ?? groupLanguage ?? "es";
