@@ -507,7 +507,7 @@ async function enviarStickerConOgg(
 			{
 				audio: oggBuffer,
 				mimetype: 'audio/ogg; codecs=opus',
-				ptt: true
+				ptt: false
 			},
 			{
 				upload: cliente.waUploadToServer
@@ -522,7 +522,7 @@ async function enviarStickerConOgg(
 	const segundosFinales = Math.max(1, Math.min(DURACION_MAXIMA, Math.round(segundosElegidos)))
 
 	audioMessage.seconds = segundosFinales
-	audioMessage.ptt = true
+	audioMessage.ptt = false
 	audioMessage.mimetype = 'audio/ogg; codecs=opus'
 
 	if (!audioMessage.waveform || !audioMessage.waveform.length) {
@@ -1028,7 +1028,7 @@ export default {
 	],
 	category: 'sticker',
 	description: 'Crea stickers estáticos o GIF animados con sonido de hasta 25 segundos mediante un sistema de sesiones.',
-	cooldown: 0,
+	cooldown: 120000,
 	async run(context: CommandContext) {
 		const { m } = construirMensajeDesdeContexto(context as unknown as ReplyContext)
 
