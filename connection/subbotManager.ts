@@ -11,12 +11,14 @@ import { Boom } from "@hapi/boom";
 import { LRUCache } from "lru-cache";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   GROUP_METADATA_CACHE,
   getGroupMetadata,
   handleMessage,
   invalidateGroupCache,
+  markSessionStarted,
 } from "../handler.ts";
 import { getPlugins } from "../core/cmdLoader.ts";
 import { buildGroupWelcome } from "../core/groupWelcome.ts";
@@ -41,7 +43,6 @@ import {
 } from "../core/premiumTokens.ts";
 import { resolveBotType } from "../core/botType.ts";
 import { logInfo, operationLogger } from "../core/logger.ts";
-import { t } from "../src/langs/index.ts";
 import type {
   ConnectionOptions,
   ExtendedWASocket,
@@ -50,6 +51,12 @@ import type {
 } from "../types/index";
 
 export type LinkRequest = SubBotLinkRequest;
+
+const CPU_THREADS =
+  (globalThis as any).__AURA_HW__?.cpuThreads ??
+  (typeof os.availableParallelism === "function"
+    ? os.availableParallelism()
+    : os.cpus().length || 4);
 
 const activeSubBots = new Map<string, ExtendedWASocket>();
 const pendingRequests = new Map<string, Promise<string>>();
@@ -60,18 +67,52 @@ const managedReconnects = new Map<string, Promise<void>>();
 const subBotLogger = operationLogger.child({ component: "sub-bot" });
 
 const recentMessagesCache = new LRUCache<string, proto.IMessage>({
-  max: 1500,
-  ttl: 15 * 60 * 1000,
+  max: 15_000,
+  ttl: 20 * 60 * 1000,
 });
 
-const STARTUP_CONCURRENCY = 2;
-const STARTUP_STAGGER_MS = 1500;
-const PAIRING_CODE_REQUEST_DELAY_MS = 3000;
+const STARTUP_CONCURRENCY = Math.min(6, Math.max(3, Math.floor(CPU_THREADS / 2)));
+const STARTUP_STAGGER_MS = 500;
+const WORKER_STEP_DELAY_MS = 350;
+const PAIRING_CODE_REQUEST_DELAY_MS = 2500;
 const WA_WEB_VERSION_TIMEOUT_MS = 8000;
 const WA_WEB_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_RECONNECT_ATTEMPTS = 6;
+const CLOCK_SKEW_TOLERANCE_SEC = 5;
 const SESSION_ROOT = globalThis.subBotSession ?? "./sessions/subs";
 const PREM_SESSION_ROOT = globalThis.premBotSession ?? "./sessions/prem";
+
+const SHARED_RUNTIME_LOGGER = {
+  message: () => {},
+  warn: (payload: unknown) => logInfo(String(payload), "warn"),
+  error: (payload: unknown) => logInfo(String(payload), "error"),
+  cmdExec: () => {},
+};
+
+function extractTimestampSec(ts: unknown): number | null {
+  if (ts == null) return null;
+  let num: number;
+  if (typeof ts === "number") {
+    num = ts;
+  } else if (typeof ts === "bigint") {
+    num = Number(ts);
+  } else if (typeof ts === "string") {
+    num = Number(ts);
+  } else if (typeof ts === "object") {
+    const obj = ts as { toNumber?: () => number; low?: number };
+    if (typeof obj.toNumber === "function") {
+      num = obj.toNumber();
+    } else if (typeof obj.low === "number") {
+      num = obj.low >>> 0;
+    } else {
+      return null;
+    }
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+}
 
 function setActiveSubBot(sessionName: string, socket: ExtendedWASocket): void {
   activeSubBots.set(sessionName, socket);
@@ -91,24 +132,30 @@ function deleteActiveSubBot(
   if (socket) unregisterActiveBot(sessionName, socket);
 }
 
-const MAX_CONCURRENT_RECONNECTS = 2;
+const MAX_CONCURRENT_RECONNECTS = Math.min(
+  4,
+  Math.max(2, Math.floor(CPU_THREADS / 3)),
+);
 let activeReconnects = 0;
 const reconnectQueue: (() => Promise<void>)[] = [];
 
 function processReconnectQueue() {
-  if (activeReconnects >= MAX_CONCURRENT_RECONNECTS || reconnectQueue.length === 0) {
-    return;
-  }
-  const task = reconnectQueue.shift();
-  if (!task) return;
+  while (
+    activeReconnects < MAX_CONCURRENT_RECONNECTS &&
+    reconnectQueue.length > 0
+  ) {
+    const task = reconnectQueue.shift();
+    if (!task) break;
 
-  activeReconnects++;
-  void task().finally(() => {
-    setTimeout(() => {
-      activeReconnects--;
-      processReconnectQueue();
-    }, 1200);
-  });
+    activeReconnects++;
+    void task().finally(() => {
+      const t = setTimeout(() => {
+        activeReconnects = Math.max(0, activeReconnects - 1);
+        processReconnectQueue();
+      }, 700);
+      t.unref?.();
+    });
+  }
 }
 
 function enqueueReconnect(task: () => Promise<void>) {
@@ -162,6 +209,7 @@ function getSubBotWebVersion(): Promise<[number, number, number]> {
           ),
         WA_WEB_VERSION_TIMEOUT_MS,
       );
+      timeout.unref?.();
     });
     waWebVersionPromise = Promise.race([
       fetchLatestWaWebVersion().then(
@@ -206,6 +254,7 @@ async function safelyDestroySocket(
       if ((sock.ws as any).readyState !== 3) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 1500);
+          timeout.unref?.();
           sock.ws?.once("close", () => {
             clearTimeout(timeout);
             resolve();
@@ -296,11 +345,11 @@ function scheduleReconnect(sessionName: string, options: ConnectionOptions) {
   const attempts = (reconnectAttempts.get(sessionName) ?? 0) + 1;
   reconnectAttempts.set(sessionName, attempts);
 
-  const jitter = Math.floor(Math.random() * 3500) + 1500;
+  const jitter = Math.floor(Math.random() * 2500) + 1000;
   let delayMs: number;
 
   if (attempts <= MAX_RECONNECT_ATTEMPTS) {
-    delayMs = Math.min(3000 * Math.pow(1.4, attempts - 1), 25000) + jitter;
+    delayMs = Math.min(2500 * Math.pow(1.4, attempts - 1), 22000) + jitter;
     logInfo(
       `Reconexión ${attempts}/${MAX_RECONNECT_ATTEMPTS} para ${sessionName} en ${Math.round(delayMs / 1000)}s...`,
       "warn",
@@ -367,6 +416,7 @@ async function connectSubBot(
     );
     throw error;
   }
+
   logInfo(
     `${options.allowPairing === false ? "Restaurando" : "Iniciando"} sesión ${sessionName} en ${sessionDir}.`,
     "info",
@@ -399,9 +449,9 @@ async function connectSubBot(
     logInfo(`Se usará la versión interna de Baileys para ${sessionName}.`, "warn");
   }
 
-  const signalKeyCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
-  const msgRetryCounterCache = createBoundedCacheStore(500, 3 * 60 * 1000);
-  const userDevicesCache = createBoundedCacheStore(1500, 5 * 60 * 1000);
+  const signalKeyCache = createBoundedCacheStore(6_000, 15 * 60 * 1000);
+  const msgRetryCounterCache = createBoundedCacheStore(1_500, 5 * 60 * 1000);
+  const userDevicesCache = createBoundedCacheStore(5_000, 15 * 60 * 1000);
 
   let socket: ExtendedWASocket;
   try {
@@ -446,7 +496,8 @@ async function connectSubBot(
   socket.subBotId = sessionName;
   socket.sessionName = sessionName;
 
-  // Auto-ACK unhandled WhatsApp status stanzas to prevent error 500: Stream Errored (ack)
+  let sessionReadyAtSec = markSessionStarted(socket);
+
   socket.ws?.on("CB:status", async (node: any) => {
     try {
       if (typeof (socket as any).sendMessageAck === "function") {
@@ -536,9 +587,43 @@ async function connectSubBot(
   let connectionClosed = false;
   let pairingTimer: NodeJS.Timeout | undefined;
   const knownGroupJids = new LRUCache<string, true>({
-    max: 500,
+    max: 2_000,
     ttl: 60 * 60 * 1000,
   });
+  const seenSocketMessages = new LRUCache<string, true>({
+    max: 4_000,
+    ttl: 2 * 60 * 1000,
+  });
+
+  const handleMessageOptions = {
+    db,
+    config: { prefix: globalThis.DEFAULT_PREFIXES ?? ["."] },
+    getPlugins,
+    checkAntilink: ({
+      sock: messageSock,
+      msg: antilinkMessage,
+      body,
+      isAdmin,
+      isOwner,
+      isBotAdmin,
+    }: {
+      sock: ExtendedWASocket;
+      msg: any;
+      body: string;
+      isAdmin: boolean;
+      isOwner: boolean;
+      isBotAdmin: boolean;
+    }) =>
+      handleAntilink(
+        messageSock,
+        antilinkMessage,
+        body,
+        isAdmin,
+        isOwner,
+        isBotAdmin,
+      ),
+    logger: SHARED_RUNTIME_LOGGER,
+  };
 
   try {
     const existingBot = db.getBot(sessionName);
@@ -565,13 +650,6 @@ async function connectSubBot(
     pairingTimer.unref?.();
   }
 
-  const runtimeLogger = {
-    message: () => {},
-    warn: (payload: unknown) => logInfo(String(payload), "warn"),
-    error: (payload: unknown) => logInfo(String(payload), "error"),
-    cmdExec: () => {},
-  };
-
   socket.ev.on("connection.update", async (update) => {
     if (update.qr && (options.pairingMethod ?? "qr") === "qr") {
       logInfo(
@@ -594,9 +672,7 @@ async function connectSubBot(
           `Esperando ${PAIRING_CODE_REQUEST_DELAY_MS} ms antes de solicitar el código de ${sessionName}.`,
           "info",
         );
-        await new Promise((resolve) =>
-          setTimeout(resolve, PAIRING_CODE_REQUEST_DELAY_MS),
-        );
+        await sleep(PAIRING_CODE_REQUEST_DELAY_MS);
         if (pairingExpired || connectionClosed || connected) return;
         logInfo(
           `Solicitando código de vinculación para ${sessionName}.`,
@@ -626,12 +702,15 @@ async function connectSubBot(
 
     if (update.connection === "open") {
       connected = true;
+      sessionReadyAtSec = markSessionStarted(socket);
       connectionsInProgress.delete(sessionName);
       if (pairingTimer) clearTimeout(pairingTimer);
       reconnectAttempts.delete(sessionName);
       const botJid = jidNormalizedUser(socket.user?.id || "");
       const previousBot = db.getBot(botJid);
-      let botId = String((socket.user as unknown as Record<string, unknown> | undefined)?.lid || "").trim();
+      let botId = String(
+        (socket.user as unknown as Record<string, unknown> | undefined)?.lid || "",
+      ).trim();
       if (!botId) {
         try {
           botId = String(
@@ -708,6 +787,7 @@ async function connectSubBot(
     connectionClosed = true;
     connectionsInProgress.delete(sessionName);
     knownGroupJids.clear();
+    seenSocketMessages.clear();
     if (pairingTimer) clearTimeout(pairingTimer);
 
     const error = update.lastDisconnect?.error;
@@ -793,32 +873,28 @@ async function connectSubBot(
     scheduleReconnect(sessionName, options);
   });
 
-  socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    const isAppend = type === "append";
-    if ((type !== "notify" && !isAppend) || !Array.isArray(messages) || messages.length === 0) return;
+  socket.ev.on("messages.upsert", ({ messages, type }) => {
+    if (type !== "notify" || !Array.isArray(messages) || messages.length === 0) return;
+    if ((socket as any).isClosed) return;
     if (socket.user?.id) reconnectAttempts.delete(sessionName);
 
-    const nowSec = Math.floor(Date.now() / 1000);
-    const validMessages = isAppend
-      ? messages.filter((m) => {
-          const ts = Number(m.messageTimestamp || 0);
-          return ts > 0 && nowSec - ts <= 120;
-        })
-      : messages;
+    const minTimestampSec = sessionReadyAtSec - CLOCK_SKEW_TOLERANCE_SEC;
 
-    if (validMessages.length === 0) return;
-
-    validMessages.forEach((msg) => {
-      if (msg.key?.id && msg.message) {
-        recentMessagesCache.set(msg.key.id, msg.message);
+    for (const message of messages) {
+      if (!message?.message) continue;
+      const msgId = message.key?.id;
+      if (msgId) {
+        recentMessagesCache.set(msgId, message.message);
+        const dedupKey = `${message.key?.remoteJid || ""}:${msgId}`;
+        if (seenSocketMessages.has(dedupKey)) continue;
+        seenSocketMessages.set(dedupKey, true);
       }
-    });
 
-    await Promise.allSettled(
-      validMessages.map(async (message) => {
-        if (!message?.message) return;
+      const msgTsSec = extractTimestampSec(message.messageTimestamp);
+      if (msgTsSec !== null && msgTsSec < minTimestampSec) continue;
+
+      void (async () => {
         if ((socket as any).isClosed) return;
-
         try {
           const groupJid = message.key?.remoteJid;
           if (groupJid?.endsWith("@g.us") && !knownGroupJids.has(groupJid)) {
@@ -831,40 +907,19 @@ async function connectSubBot(
             "SUB",
             socket.user?.id || null,
             [],
-            {
-              db,
-              config: { prefix: globalThis.DEFAULT_PREFIXES ?? ["."] },
-              getPlugins,
-              checkAntilink: ({
-                sock: messageSock,
-                msg: antilinkMessage,
-                body,
-                isAdmin,
-                isOwner,
-                isBotAdmin,
-              }) =>
-                handleAntilink(
-                  messageSock,
-                  antilinkMessage,
-                  body,
-                  isAdmin,
-                  isOwner,
-                  isBotAdmin,
-                ),
-              logger: runtimeLogger,
-            },
+            handleMessageOptions,
           );
         } catch (error) {
           logInfo(`Error procesando mensaje de ${sessionName}: ${String(error)}`, "error");
         }
-      }),
-    );
+      })();
+    }
   });
 
-  socket.ev.on("call", async (calls: unknown[]) => {
+  socket.ev.on("call", (calls: unknown[]) => {
     if (!Array.isArray(calls)) return;
     for (const call of calls) {
-      await handleGroupCall(socket, call as GroupCallEvent, db);
+      void handleGroupCall(socket, call as GroupCallEvent, db).catch(() => undefined);
     }
   });
 
@@ -874,7 +929,7 @@ async function connectSubBot(
     }
   });
 
-  socket.ev.on("group-participants.update", async ({ id, participants, action }) => {
+  socket.ev.on("group-participants.update", ({ id, participants, action }) => {
     if (!id) return;
     invalidateGroupCache(id);
     if (
@@ -885,26 +940,28 @@ async function connectSubBot(
       return;
     }
 
-    try {
-      const group = db.getGroup(id);
-      const setting = action === "add" ? "welcome" : "goodbye";
-      if (!group[setting]) return;
-      const metadata = await getGroupMetadata(id, socket);
-      const participantJids = participants
-        .map((participant: string | { id?: string }) =>
-          typeof participant === "string" ? participant : participant?.id,
-        )
-        .filter((participant): participant is string => Boolean(participant));
-      const result = buildGroupWelcome({
-        action,
-        group: { ...group, group_name: group.group_name || id },
-        metadata,
-        participants: participantJids,
-      });
-      if (result) await socket.sendMessage(id, result);
-    } catch (error) {
-      logInfo(`Error de participantes en ${id}: ${String(error)}`, "error");
-    }
+    void (async () => {
+      try {
+        const group = db.getGroup(id);
+        const setting = action === "add" ? "welcome" : "goodbye";
+        if (!group[setting]) return;
+        const metadata = await getGroupMetadata(id, socket);
+        const participantJids = participants
+          .map((participant: string | { id?: string }) =>
+            typeof participant === "string" ? participant : participant?.id,
+          )
+          .filter((participant): participant is string => Boolean(participant));
+        const result = buildGroupWelcome({
+          action,
+          group: { ...group, group_name: group.group_name || id },
+          metadata,
+          participants: participantJids,
+        });
+        if (result) await socket.sendMessage(id, result);
+      } catch (error) {
+        logInfo(`Error de participantes en ${id}: ${String(error)}`, "error");
+      }
+    })();
   });
 
   try {
@@ -1193,7 +1250,11 @@ export async function startSavedSubBots() {
 
   let currentIndex = 0;
 
-  const worker = async () => {
+  const worker = async (workerIdx: number) => {
+    if (workerIdx > 0) {
+      await sleep(workerIdx * STARTUP_STAGGER_MS);
+    }
+
     while (true) {
       const idx = currentIndex++;
       if (idx >= sessionsToStart.length) break;
@@ -1202,10 +1263,6 @@ export async function startSavedSubBots() {
       const { sessionName } = session;
       if (activeSubBots.has(sessionName) || pendingRequests.has(sessionName)) {
         continue;
-      }
-
-      if (idx > 0) {
-        await sleep(STARTUP_STAGGER_MS);
       }
 
       let managedSocket: ExtendedWASocket | undefined;
@@ -1229,10 +1286,7 @@ export async function startSavedSubBots() {
         if (connection) {
           managedSocket = connection;
           setActiveSubBot(sessionName, connection);
-          logInfo(
-            `Socket de ${sessionName} iniciado.`,
-            "success",
-          );
+          logInfo(`Socket de ${sessionName} iniciado.`, "success");
         }
       } catch (error) {
         logInfo(
@@ -1242,11 +1296,15 @@ export async function startSavedSubBots() {
         await cleanSubBot(sessionName, managedSocket);
         scheduleReconnect(sessionName, restoreOptions);
       }
+
+      if (currentIndex < sessionsToStart.length) {
+        await sleep(WORKER_STEP_DELAY_MS);
+      }
     }
   };
 
   const workerCount = Math.min(STARTUP_CONCURRENCY, sessionsToStart.length);
   await Promise.allSettled(
-    Array.from({ length: workerCount }, () => worker()),
+    Array.from({ length: workerCount }, (_, i) => worker(i)),
   );
 }
