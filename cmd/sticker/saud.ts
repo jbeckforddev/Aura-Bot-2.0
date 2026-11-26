@@ -7,11 +7,7 @@ import {
 	downloadContentFromMessage
 } from 'baileys'
 
-import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { readFile, unlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { WAMessage } from 'baileys'
 import type { CommandContext, ExtendedWASocket, ReplyContext } from '../../types/index.d.ts'
 import type {
@@ -36,124 +32,18 @@ const DURACION_MAXIMA = 25
 const SEGUNDOS_SESION = 60
 const MAX_CACHE_ENTRIES = 512
 const CACHE_TTL_MS = 15 * 60 * 1000
-const CUDA_MIN_BYTES = 3 * 1024 * 1024
-const MAX_CUDA_JOBS = 3
-const MAX_WEBP_BYTES = 950 * 1024
 
 interface CacheEntry<T> {
 	value: T
 	expiresAt: number
 }
 
-interface OggResult {
-	buffer: Buffer
-	seconds: number
-}
-
-const g = globalThis as typeof globalThis & {
-	__audioStickerSessions?: Map<string, AudioStickerSession>
-	__audioStickerBufferCache?: Map<string, CacheEntry<Buffer>>
-	__audioStickerOggCache?: Map<string, CacheEntry<OggResult>>
-	__audioStickerWebpCache?: Map<string, CacheEntry<Buffer>>
-	__audioStickerUserCache?: Map<string, CacheEntry<{ packname: string; author: string }>>
-	__audioStickerCudaSupport?: boolean
-}
-
-const sesiones = (g.__audioStickerSessions ??= new Map<string, AudioStickerSession>())
-const bufferCache = (g.__audioStickerBufferCache ??= new Map<string, CacheEntry<Buffer>>())
-const oggCache = (g.__audioStickerOggCache ??= new Map<string, CacheEntry<OggResult>>())
-const webpCache = (g.__audioStickerWebpCache ??= new Map<string, CacheEntry<Buffer>>())
-const userMetaCache = (g.__audioStickerUserCache ??= new Map<string, CacheEntry<{ packname: string; author: string }>>())
-
-let activeCudaJobs = 0
-const cudaWaiters: Array<() => void> = []
-
-function acquireCudaSlot(): Promise<void> {
-	if (activeCudaJobs < MAX_CUDA_JOBS) {
-		activeCudaJobs++
-		return Promise.resolve()
-	}
-	return new Promise((resolve) => {
-		cudaWaiters.push(() => {
-			activeCudaJobs++
-			resolve()
-		})
-	})
-}
-
-function releaseCudaSlot(): void {
-	activeCudaJobs = Math.max(0, activeCudaJobs - 1)
-	const next = cudaWaiters.shift()
-	if (next) next()
-}
-
-function execFfmpeg(args: string[], timeoutMs = 45_000): Promise<{ stdout: string; stderr: string }> {
-	return new Promise((resolve, reject) => {
-		const proc = spawn('ffmpeg', args, { windowsHide: true })
-		let stdout = ''
-		let stderr = ''
-		let settled = false
-
-		const timer = setTimeout(() => {
-			if (settled) return
-			settled = true
-			proc.kill('SIGKILL')
-			reject(new Error('Tiempo agotado en ffmpeg'))
-		}, timeoutMs)
-		timer.unref?.()
-
-		proc.stdout.on('data', (chunk: Buffer) => {
-			if (stdout.length < 32_768) stdout += chunk.toString('utf8')
-		})
-
-		proc.stderr.on('data', (chunk: Buffer) => {
-			const s = chunk.toString('utf8')
-			stderr = stderr.length > 65_536 ? stderr.slice(-32_768) + s : stderr + s
-		})
-
-		proc.on('error', (err) => {
-			if (settled) return
-			settled = true
-			clearTimeout(timer)
-			reject(err)
-		})
-
-		proc.on('close', (code) => {
-			if (settled) return
-			settled = true
-			clearTimeout(timer)
-			if (code === 0) {
-				resolve({ stdout, stderr })
-			} else {
-				reject(new Error(stderr.slice(-400) || `ffmpeg terminó con código ${code}`))
-			}
-		})
-	})
-}
-
-let cudaDetectPromise: Promise<boolean> | null = null
-
-function detectCudaSupport(): Promise<boolean> {
-	if (typeof g.__audioStickerCudaSupport === 'boolean') {
-		return Promise.resolve(g.__audioStickerCudaSupport)
-	}
-	if (cudaDetectPromise) return cudaDetectPromise
-
-	cudaDetectPromise = execFfmpeg(['-hide_banner', '-hwaccels'], 5000)
-		.then(({ stdout }) => {
-			const ok = /\bcuda\b/i.test(stdout)
-			g.__audioStickerCudaSupport = ok
-			return ok
-		})
-		.catch(() => {
-			g.__audioStickerCudaSupport = false
-			return false
-		})
-
-	return cudaDetectPromise
-}
-
-void detectCudaSupport()
+const g = globalThis as any
+const sesiones: Map<string, AudioStickerSession> = (globalThis.__audioStickerSessions ??= new Map<string, AudioStickerSession>())
+const bufferCache: Map<string, CacheEntry<Buffer>> = (g.__audioStickerBufferCache ??= new Map())
+const webpCache: Map<string, CacheEntry<Buffer>> = (g.__audioStickerWebpCache ??= new Map())
+const oggCache: Map<string, CacheEntry<Buffer>> = (g.__audioStickerOggCache ??= new Map())
+const userMetaCache: Map<string, CacheEntry<{ packname: string; author: string }>> = (g.__audioStickerUserCache ??= new Map())
 
 function cacheGet<T>(map: Map<string, CacheEntry<T>>, key: string): T | null {
 	const entry = map.get(key)
@@ -179,7 +69,7 @@ function hashBuffer(buf: Buffer): string {
 	return createHash('sha256').update(buf).digest('hex')
 }
 
-function isValidOggOpus(buf: Buffer | null | undefined): buf is Buffer {
+function isValidOgg(buf: Buffer | null | undefined): buf is Buffer {
 	return Boolean(
 		buf &&
 		buf.length >= 64 &&
@@ -188,26 +78,6 @@ function isValidOggOpus(buf: Buffer | null | undefined): buf is Buffer {
 		buf[2] === 0x67 &&
 		buf[3] === 0x53
 	)
-}
-
-function parseDurationFromStderr(stderr: string): number {
-	let lastSeconds = 0
-	const regex = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/g
-	let match: RegExpExecArray | null
-	while ((match = regex.exec(stderr)) !== null) {
-		lastSeconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
-	}
-	return lastSeconds
-}
-
-function uniqueTmpPath(ext: string): string {
-	return join(tmpdir(), `aura_as_${process.pid}_${randomBytes(10).toString('hex')}.${ext}`)
-}
-
-async function safeUnlink(filePath: string): Promise<void> {
-	try {
-		await unlink(filePath)
-	} catch {}
 }
 
 function getMediaCacheKey(nodo: AudioStickerMediaNode | null | undefined, info: AudioStickerMediaInfo): string | null {
@@ -350,9 +220,11 @@ function obtenerClaveSesion(m: AudioStickerCommandMessage) {
 
 function eliminarSesion(clave: string) {
 	const existente = sesiones.get(clave)
+
 	if (existente?.timer) {
 		clearTimeout(existente.timer)
 	}
+
 	sesiones.delete(clave)
 }
 
@@ -422,12 +294,14 @@ function detectarMedia(nodo: AudioStickerMediaNode | null | undefined): AudioSti
 	const segundos = Number(mediaObj?.seconds || nodo.seconds || nodo.msg?.seconds || 0)
 
 	if (/video/i.test(mime) || /videoMessage/i.test(tipo)) {
+		const dlType = /documentMessage/i.test(tipo) ? 'document' : 'video'
+
 		return {
 			kind: 'video',
 			mime: mime || 'video/mp4',
 			seconds: segundos,
 			mediaObj,
-			dlType: /documentMessage/i.test(tipo) ? 'document' : 'video'
+			dlType
 		}
 	}
 
@@ -443,22 +317,26 @@ function detectarMedia(nodo: AudioStickerMediaNode | null | undefined): AudioSti
 	}
 
 	if (/image/i.test(mime) || /imageMessage/i.test(tipo)) {
+		const dlType = /documentMessage/i.test(tipo) ? 'document' : 'image'
+
 		return {
 			kind: 'image',
 			mime: mime || 'image/jpeg',
 			seconds: 0,
 			mediaObj,
-			dlType: /documentMessage/i.test(tipo) ? 'document' : 'image'
+			dlType
 		}
 	}
 
 	if (/audio|ogg|opus|mpeg|mp3|wav|m4a|aac/i.test(mime) || /audioMessage/i.test(tipo)) {
+		const dlType = /documentMessage/i.test(tipo) ? 'document' : 'audio'
+
 		return {
 			kind: 'audio',
 			mime: mime || 'audio/mpeg',
 			seconds: segundos,
 			mediaObj,
-			dlType: /documentMessage/i.test(tipo) ? 'document' : 'audio'
+			dlType
 		}
 	}
 
@@ -494,10 +372,13 @@ async function descargarBuffer(
 		try {
 			const flujo = await downloadContentFromMessage(info.mediaObj, info.dlType)
 			const fragmentos: Buffer[] = []
+
 			for await (const fragmento of flujo) {
 				fragmentos.push(fragmento)
 			}
+
 			const buffer = Buffer.concat(fragmentos)
+
 			if (buffer.length) result = buffer
 		} catch {}
 	}
@@ -509,6 +390,7 @@ async function descargarBuffer(
 				...origen,
 				key: origen.key ?? nodo.key ?? { remoteJid: nodo.chat, id: '0' }
 			}
+
 			const buffer = await downloadMediaMessage(
 				objetoMensaje,
 				'buffer',
@@ -518,6 +400,7 @@ async function descargarBuffer(
 					reuploadRequest: (message) => cliente.updateMediaMessage(message)
 				}
 			)
+
 			if (buffer?.length) result = buffer
 		} catch {}
 	}
@@ -533,6 +416,7 @@ async function descargarBuffer(
 					[`${info.dlType}Message`]: info.mediaObj
 				}
 			}
+
 			const buffer = await downloadMediaMessage(
 				sintetico,
 				'buffer',
@@ -542,6 +426,7 @@ async function descargarBuffer(
 					reuploadRequest: (message) => cliente.updateMediaMessage(message)
 				}
 			)
+
 			if (buffer?.length) result = buffer
 		} catch {}
 	}
@@ -549,6 +434,7 @@ async function descargarBuffer(
 	if (!result && typeof nodo.download === 'function') {
 		try {
 			const buffer = await nodo.download()
+
 			if (buffer?.length) result = buffer
 		} catch {}
 	}
@@ -558,147 +444,6 @@ async function descargarBuffer(
 	}
 
 	return result
-}
-
-async function convertirAudioOggNativo(
-	inputPathOrBuffer: string | Buffer,
-	maxDuracion: number,
-	segundosHint = 0
-): Promise<OggResult> {
-	const limitSec = Math.max(1, Math.min(DURACION_MAXIMA, maxDuracion || DURACION_MAXIMA))
-	const isPath = typeof inputPathOrBuffer === 'string'
-	const cacheKey = !isPath ? `${hashBuffer(inputPathOrBuffer)}:${limitSec}` : null
-
-	if (cacheKey) {
-		const cached = cacheGet(oggCache, cacheKey)
-		if (cached && isValidOggOpus(cached.buffer)) return cached
-	}
-
-	const tmpIn = isPath ? inputPathOrBuffer : uniqueTmpPath('media')
-	const tmpOut = uniqueTmpPath('ogg')
-
-	try {
-		if (!isPath) {
-			await writeFile(tmpIn, inputPathOrBuffer)
-		}
-
-		const { stderr } = await execFfmpeg([
-			'-y',
-			'-hide_banner',
-			'-threads', '0',
-			'-i', tmpIn,
-			'-vn',
-			'-sn',
-			'-dn',
-			'-map', '0:a:0',
-			'-t', String(limitSec),
-			'-c:a', 'libopus',
-			'-ar', '48000',
-			'-ac', '1',
-			'-b:a', '32k',
-			'-vbr', 'on',
-			'-compression_level', '5',
-			'-application', 'voip',
-			'-f', 'ogg',
-			tmpOut
-		])
-
-		const oggBuffer = await readFile(tmpOut)
-		if (!isValidOggOpus(oggBuffer)) {
-			throw new Error('El contenedor OGG/Opus generado no es válido.')
-		}
-
-		const parsedSec = parseDurationFromStderr(stderr)
-		const finalSec = Math.max(
-			1,
-			Math.min(
-				DURACION_MAXIMA,
-				Math.round(parsedSec > 0 ? parsedSec : segundosHint > 0 ? segundosHint : 5)
-			)
-		)
-
-		const res: OggResult = { buffer: oggBuffer, seconds: finalSec }
-		if (cacheKey) cacheSet(oggCache, cacheKey, res)
-		return res
-	} catch (err) {
-		if (!isPath) {
-			try {
-				const fallbackDur = segundosHint > 0 ? Math.max(1, Math.min(DURACION_MAXIMA, segundosHint)) : 5
-				const fallbackBuf = await CONVERT_AUDIO_TO_OGG(inputPathOrBuffer, fallbackDur)
-				if (isValidOggOpus(fallbackBuf)) {
-					const res: OggResult = { buffer: fallbackBuf, seconds: Math.round(fallbackDur) }
-					if (cacheKey) cacheSet(oggCache, cacheKey, res)
-					return res
-				}
-			} catch {}
-		}
-		throw err
-	} finally {
-		if (!isPath) await safeUnlink(tmpIn)
-		await safeUnlink(tmpOut)
-	}
-}
-
-async function convertirVideoAWebpRapido(
-	inputPath: string,
-	rawSizeBytes: number,
-	maxDuracion: number
-): Promise<Buffer> {
-	const limitSec = Math.max(1, Math.min(DURACION_MAXIMA, maxDuracion || DURACION_MAXIMA))
-	const cudaAvailable = rawSizeBytes >= CUDA_MIN_BYTES && (await detectCudaSupport())
-	const tmpOut = uniqueTmpPath('webp')
-
-	const buildArgs = (useCuda: boolean, fps: number, quality: number) => {
-		const args = ['-y', '-hide_banner', '-threads', '0']
-		if (useCuda) {
-			args.push('-hwaccel', 'cuda')
-		}
-		args.push(
-			'-i', inputPath,
-			'-an',
-			'-sn',
-			'-dn',
-			'-t', String(limitSec),
-			'-vf', `fps=${fps},scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000`,
-			'-c:v', 'libwebp',
-			'-lossless', '0',
-			'-compression_level', '2',
-			'-q:v', String(quality),
-			'-preset', 'default',
-			'-loop', '0',
-			'-vsync', '0',
-			tmpOut
-		)
-		return args
-	}
-
-	const runEncode = async (fps: number, quality: number): Promise<Buffer> => {
-		if (cudaAvailable) {
-			await acquireCudaSlot()
-			try {
-				await execFfmpeg(buildArgs(true, fps, quality))
-				return await readFile(tmpOut)
-			} catch {
-			} finally {
-				releaseCudaSlot()
-			}
-		}
-		await execFfmpeg(buildArgs(false, fps, quality))
-		return await readFile(tmpOut)
-	}
-
-	try {
-		let webp = await runEncode(15, 58)
-		if (webp.length > MAX_WEBP_BYTES) {
-			webp = await runEncode(10, 34)
-		}
-		if (!isWebp(webp)) {
-			throw new Error('El WebP animado generado no es válido.')
-		}
-		return webp
-	} finally {
-		await safeUnlink(tmpOut)
-	}
 }
 
 function generarFormaDeOnda(bufferBase: Buffer, longitud = 64) {
@@ -713,41 +458,42 @@ function generarFormaDeOnda(bufferBase: Buffer, longitud = 64) {
 	return forma
 }
 
-async function subirMensajeAudio(cliente: ExtendedWASocket, ogg: OggResult) {
-	const { audioMessage } = await prepareWAMessageMedia(
-		{
-			audio: ogg.buffer,
-			mimetype: 'audio/ogg; codecs=opus',
-			ptt: true
-		},
-		{
-			upload: cliente.waUploadToServer
-		}
-	)
+async function convertirOggConCache(buffer: Buffer, segundosAlternativos = 0) {
+	const duracionComun =
+		segundosAlternativos > 0
+			? Math.max(1, Math.min(DURACION_MAXIMA, segundosAlternativos))
+			: 5
 
-	if (!audioMessage) throw new Error('No se generó el mensaje de audio.')
-
-	audioMessage.seconds = ogg.seconds
-	audioMessage.ptt = true
-	audioMessage.mimetype = 'audio/ogg; codecs=opus'
-
-	if (!audioMessage.waveform?.length) {
-		audioMessage.waveform = generarFormaDeOnda(ogg.buffer)
+	const key = `${hashBuffer(buffer)}:${duracionComun}`
+	const cached = cacheGet(oggCache, key)
+	if (cached) {
+		return { oggBuffer: cached, duracionComun }
 	}
 
-	return audioMessage
+	const oggBuffer = await CONVERT_AUDIO_TO_OGG(buffer, duracionComun)
+	if (!oggBuffer || !oggBuffer.length) {
+		throw new Error('CONVERT_AUDIO_TO_OGG devolvió un buffer vacío.')
+	}
+
+	if (isValidOgg(oggBuffer)) {
+		cacheSet(oggCache, key, oggBuffer)
+	}
+
+	return { oggBuffer, duracionComun }
 }
 
-async function enviarStickerConAudio(
+async function enviarStickerConOgg(
 	cliente: ExtendedWASocket,
 	chat: string,
 	bufferSticker: Buffer,
 	animado: boolean,
-	ogg: OggResult,
+	oggBuffer: Buffer,
+	segundosAlternativos: number,
 	quoted: WAMessage
 ) {
-	const [, preparado, mensajeAudio] = await Promise.all([
-		asegurarModificado(),
+	await asegurarModificado()
+
+	const [preparado, audioPreparado] = await Promise.all([
 		prepareWAMessageMedia(
 			{
 				sticker: bufferSticker,
@@ -757,13 +503,36 @@ async function enviarStickerConAudio(
 				upload: cliente.waUploadToServer
 			}
 		),
-		subirMensajeAudio(cliente, ogg)
+		prepareWAMessageMedia(
+			{
+				audio: oggBuffer,
+				mimetype: 'audio/ogg; codecs=opus',
+				ptt: true
+			},
+			{
+				upload: cliente.waUploadToServer
+			}
+		)
 	])
+
+	const audioMessage = audioPreparado.audioMessage
+	if (!audioMessage) throw new Error('No se generó el mensaje de audio.')
+
+	const segundosElegidos = segundosAlternativos > 0 ? segundosAlternativos : 5
+	const segundosFinales = Math.max(1, Math.min(DURACION_MAXIMA, Math.round(segundosElegidos)))
+
+	audioMessage.seconds = segundosFinales
+	audioMessage.ptt = true
+	audioMessage.mimetype = 'audio/ogg; codecs=opus'
+
+	if (!audioMessage.waveform || !audioMessage.waveform.length) {
+		audioMessage.waveform = generarFormaDeOnda(oggBuffer)
+	}
 
 	const sticker: StickerWithAudio | null | undefined = preparado.stickerMessage
 	if (!sticker) throw new Error('No se generó el sticker.')
 	sticker.isAnimated = animado
-	sticker.audioMessage = mensajeAudio
+	sticker.audioMessage = audioMessage
 
 	const carga = {
 		__proto__: preparado,
@@ -819,27 +588,29 @@ function iniciarSesionSticker({
 	command
 }: AudioStickerSessionOptions) {
 	const clave = obtenerClaveSesion(m)
+
 	eliminarSesion(clave)
 
 	const timer = setTimeout(() => {
-		if (!sesiones.has(clave)) return
-		sesiones.delete(clave)
+		if (sesiones.has(clave)) {
+			sesiones.delete(clave)
 
-		if (client?.sendMessage) {
-			void client.sendMessage(
-				m.chat,
-				{
-					text:
-						`╭〔 ⏰ *AUDIO STICKER* 〕⬣\n` +
-						`┃ *Sesión finalizada*\n` +
-						`┃ El tiempo de espera de ${SEGUNDOS_SESION} segundos terminó.\n` +
-						`┃ Envía nuevamente la imagen o usa ${usedPrefix}${command} --add.\n` +
-						`╰━━〔 ⚡ *AURA REED* 〕━━⬣`
-				},
-				{
-					quoted: m
-				}
-			).catch(() => {})
+			if (client?.sendMessage) {
+				client.sendMessage(
+					m.chat,
+					{
+						text:
+							`╭〔 ⏰ *AUDIO STICKER* 〕⬣\n` +
+							`┃ *Sesión finalizada*\n` +
+							`┃ El tiempo de espera de ${SEGUNDOS_SESION} segundos terminó.\n` +
+							`┃ Envía nuevamente la imagen o usa ${usedPrefix}${command} --add.\n` +
+							`╰━━〔 ⚡ *AURA REED* 〕━━⬣`
+					},
+					{
+						quoted: m
+					}
+				).catch(() => {})
+			}
 		}
 	}, SEGUNDOS_SESION * 1000)
 
@@ -883,24 +654,26 @@ async function consumirSesionConAudio(
 	audioInfo: AudioStickerMediaInfo
 ) {
 	const clave = obtenerClaveSesion(m)
-	session.processing = true
 
+	session.processing = true
 	void react('⏳').catch(() => {})
 
 	try {
 		const audioBuffer = await descargarBuffer(audioNode, audioInfo, client)
+
 		if (!audioBuffer || !audioBuffer.length) {
 			throw new Error('No se pudo descargar el archivo de audio o video.')
 		}
 
-		const ogg = await convertirAudioOggNativo(audioBuffer, DURACION_MAXIMA, audioInfo.seconds)
+		const { oggBuffer } = await convertirOggConCache(audioBuffer, audioInfo.seconds)
 
-		await enviarStickerConAudio(
+		await enviarStickerConOgg(
 			client,
 			m.chat,
 			session.stickerBuffer,
 			session.isAnimated,
-			ogg,
+			oggBuffer,
+			audioInfo.seconds,
 			m
 		)
 
@@ -909,6 +682,7 @@ async function consumirSesionConAudio(
 	} catch (error) {
 		session.processing = false
 		void react('❌').catch(() => {})
+
 		await send(
 			`❌ No se pudo combinar el audio con el sticker: ${error instanceof Error ? error.message : String(error)}`
 		)
@@ -1054,6 +828,7 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 
 		if (esVideo && duracionVideo > DURACION_MAXIMA) {
 			void react('❌').catch(() => {})
+
 			return send(
 				`╭〔 ⚠️ *AUDIO STICKER* 〕⬣\n` +
 				`┃ La duración máxima es de ${DURACION_MAXIMA} segundos.\n` +
@@ -1061,9 +836,12 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 			)
 		}
 
-		const [, datosVisuales] = await Promise.all([
+		const [, datosVisuales, audioCitadoPreDescargado] = await Promise.all([
 			asegurarModificado(),
-			descargarBuffer(nodoVisual, infoVisual, client)
+			descargarBuffer(nodoVisual, infoVisual, client),
+			modoAgregarAudio && tieneAudioCitado
+				? descargarBuffer(citado, infoCitada, client)
+				: Promise.resolve(null)
 		])
 
 		if (!datosVisuales || !datosVisuales.length) {
@@ -1072,105 +850,36 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 
 		const { packname, author } = obtenerMetadataUsuario(db, m.sender, m.pushName)
 
-		if (esVideo && !modoAgregarAudio) {
-			const vidHash = hashBuffer(datosVisuales)
-			const limitSec = duracionVideo > 0 ? Math.max(1, Math.min(DURACION_MAXIMA, duracionVideo)) : DURACION_MAXIMA
-			const webpKey = `${vidHash}:${limitSec}`
-			const oggKey = `${vidHash}:${limitSec}`
+		const visualKey = `${hashBuffer(datosVisuales)}:${esVideo ? duracionVideo : 0}`
+		let stickerSinMetadata = cacheGet(webpCache, visualKey)
 
-			const cachedWebp = cacheGet(webpCache, webpKey)
-			const cachedOgg = cacheGet(oggCache, oggKey)
-
-			let stickerSinMetadata: Buffer
-			let oggRes: OggResult | null = null
-
-			if (cachedWebp && cachedOgg && isValidOggOpus(cachedOgg.buffer)) {
-				stickerSinMetadata = cachedWebp
-				oggRes = cachedOgg
-			} else {
-				const sharedIn = uniqueTmpPath('mp4')
-				await writeFile(sharedIn, datosVisuales)
-				try {
-					const [webpSettled, oggSettled] = await Promise.allSettled([
-						cachedWebp
-							? Promise.resolve(cachedWebp)
-							: convertirVideoAWebpRapido(sharedIn, datosVisuales.length, limitSec).catch(() =>
-								toSticker(datosVisuales, true, DURACION_MAXIMA, limitSec)
-							),
-						cachedOgg && isValidOggOpus(cachedOgg.buffer)
-							? Promise.resolve(cachedOgg)
-							: convertirAudioOggNativo(sharedIn, limitSec, duracionVideo)
-					])
-
-					if (webpSettled.status !== 'fulfilled') {
-						throw webpSettled.reason
-					}
-					stickerSinMetadata = webpSettled.value
-					cacheSet(webpCache, webpKey, stickerSinMetadata)
-
-					if (oggSettled.status === 'fulfilled' && isValidOggOpus(oggSettled.value.buffer)) {
-						oggRes = oggSettled.value
-						cacheSet(oggCache, oggKey, oggRes)
-					}
-				} finally {
-					await safeUnlink(sharedIn)
-				}
+		if (!stickerSinMetadata) {
+			stickerSinMetadata =
+				infoVisual.kind === 'webp' && isWebp(datosVisuales) && !esVideo
+					? datosVisuales
+					: await toSticker(
+						datosVisuales,
+						esVideo,
+						DURACION_MAXIMA,
+						esVideo
+							? Math.max(1, Math.min(DURACION_MAXIMA, duracionVideo))
+							: undefined
+					)
+			if (isWebp(stickerSinMetadata)) {
+				cacheSet(webpCache, visualKey, stickerSinMetadata)
 			}
-
-			const stickerBuffer = await applyStickerMetadata(
-				stickerSinMetadata,
-				db,
-				m.sender,
-				m.pushName || 'Aura Reed'
-			)
-
-			if (oggRes) {
-				await enviarStickerConAudio(client, m.chat, stickerBuffer, true, oggRes, m)
-				eliminarSesion(clave)
-				void react('✅').catch(() => {})
-				return
-			}
-
-			eliminarSesion(clave)
-			void react('✅').catch(() => {})
-			return send({
-				sticker: stickerBuffer,
-				mimetype: 'image/webp'
-			})
 		}
 
-		const buildStickerPromise = (async () => {
-			let stickerSinMetadata: Buffer
-			if (infoVisual.kind === 'webp' && isWebp(datosVisuales) && !esVideo) {
-				stickerSinMetadata = datosVisuales
-			} else if (esVideo) {
-				const limitSec = duracionVideo > 0 ? Math.max(1, Math.min(DURACION_MAXIMA, duracionVideo)) : DURACION_MAXIMA
-				const sharedIn = uniqueTmpPath('mp4')
-				await writeFile(sharedIn, datosVisuales)
-				try {
-					stickerSinMetadata = await convertirVideoAWebpRapido(sharedIn, datosVisuales.length, limitSec).catch(() =>
-						toSticker(datosVisuales, true, DURACION_MAXIMA, limitSec)
-					)
-				} finally {
-					await safeUnlink(sharedIn)
-				}
-			} else {
-				stickerSinMetadata = await toSticker(datosVisuales, false, DURACION_MAXIMA)
-			}
+		const stickerBuffer = await applyStickerMetadata(
+			stickerSinMetadata,
+			db,
+			m.sender,
+			m.pushName || 'Aura Reed'
+		)
 
-			const stickerBuffer = await applyStickerMetadata(
-				stickerSinMetadata,
-				db,
-				m.sender,
-				m.pushName || 'Aura Reed'
-			)
-
-			const esAnimado = esVideo || isAnimatedWebp(stickerBuffer)
-			return { stickerBuffer, esAnimado }
-		})()
+		const esAnimado = esVideo || isAnimatedWebp(stickerBuffer)
 
 		if (!modoAgregarAudio && !esVideo) {
-			const { stickerBuffer } = await buildStickerPromise
 			eliminarSesion(clave)
 			void react('✅').catch(() => {})
 			return send({
@@ -1180,9 +889,8 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 		}
 
 		if (modoAgregarAudio && !tieneAudioCitado) {
-			const { stickerBuffer, esAnimado } = await buildStickerPromise
 			void react('✅').catch(() => {})
-			return iniciarSesionSticker({
+			return await iniciarSesionSticker({
 				m,
 				client,
 				send,
@@ -1196,23 +904,21 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 		}
 
 		if (modoAgregarAudio && tieneAudioCitado) {
-			const [{ stickerBuffer, esAnimado }, audioBuffer] = await Promise.all([
-				buildStickerPromise,
-				descargarBuffer(citado, infoCitada, client)
-			])
+			const audioBuffer = audioCitadoPreDescargado || await descargarBuffer(citado, infoCitada, client)
 
 			if (!audioBuffer || !audioBuffer.length) {
 				throw new Error('No se pudo descargar el audio citado.')
 			}
 
-			const ogg = await convertirAudioOggNativo(audioBuffer, DURACION_MAXIMA, infoCitada.seconds)
+			const { oggBuffer } = await convertirOggConCache(audioBuffer, infoCitada.seconds)
 
-			await enviarStickerConAudio(
+			await enviarStickerConOgg(
 				client,
 				m.chat,
 				stickerBuffer,
 				esAnimado,
-				ogg,
+				oggBuffer,
+				infoCitada.seconds,
 				m
 			)
 
@@ -1221,8 +927,35 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 			return
 		}
 
-		const { stickerBuffer, esAnimado } = await buildStickerPromise
-		return iniciarSesionSticker({
+		if (esVideo) {
+			try {
+				const { oggBuffer } = await convertirOggConCache(datosVisuales, duracionVideo)
+
+				await enviarStickerConOgg(
+					client,
+					m.chat,
+					stickerBuffer,
+					true,
+					oggBuffer,
+					duracionVideo,
+					m
+				)
+
+				eliminarSesion(clave)
+				void react('✅').catch(() => {})
+				return
+			} catch (error) {
+				void react('❌').catch(() => {})
+				eliminarSesion(clave)
+
+				return send({
+					sticker: stickerBuffer,
+					mimetype: 'image/webp'
+				})
+			}
+		}
+
+		return await iniciarSesionSticker({
 			m,
 			client,
 			send,
@@ -1235,6 +968,7 @@ const handler = async (m: AudioStickerCommandMessage, options: AudioStickerComma
 		})
 	} catch (error) {
 		void react('❌').catch(() => {})
+
 		await send(
 			`╭〔 ❌ *AUDIO STICKER* 〕⬣\n` +
 			`┃ No se pudo procesar el archivo.\n` +
@@ -1298,7 +1032,7 @@ export default {
 	async run(context: CommandContext) {
 		const { m } = construirMensajeDesdeContexto(context as unknown as ReplyContext)
 
-		return handler(m, {
+		return await handler(m, {
 			sock: context.sock,
 			db: context.db,
 			text: context.text,
