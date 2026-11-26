@@ -3,6 +3,7 @@ import ffmpegPath from "ffmpeg-static";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import sharp from "sharp";
@@ -15,12 +16,114 @@ import type {
 } from "../types/index.d.ts";
 import { t } from "../src/langs/index.ts";
 
+interface AuraHardwareProfile {
+  cpuThreads: number;
+  cuda: boolean;
+  h264Nvenc: boolean;
+  hevcNvenc: boolean;
+  maxGpuJobs: number;
+  maxCpuJobs: number;
+  runWithGpuSlot: <T>(task: () => Promise<T>) => Promise<T>;
+  runWithCpuSlot: <T>(task: () => Promise<T>) => Promise<T>;
+}
 
 const execFileAsync = promisify(execFile);
 const STICKER_MAX_SIZE = 1_000_000;
 const STICKER_TARGET_SIZE = 950_000;
+const CUDA_DECODE_MIN_BYTES = 3 * 1024 * 1024;
+const FFMPEG_MAX_BUFFER = 64 * 1024 * 1024;
+const CPU_FFMPEG_BIN = ffmpegPath || "ffmpeg";
+const GPU_FFMPEG_BIN = "ffmpeg";
 
-// ============ UTILIDADES EXISTENTES ============
+const CACHE_DIR =
+  process.env.GLOBAL_CUSTOM_TMP || process.env.TMPDIR || path.resolve("./cache");
+let cacheDirReady: Promise<string | undefined> | null = null;
+
+function ensureCacheDir() {
+  if (!cacheDirReady) {
+    cacheDirReady = mkdir(CACHE_DIR, { recursive: true }).catch((err) => {
+      cacheDirReady = null;
+      throw err;
+    });
+  }
+  return cacheDirReady;
+}
+
+function createLocalSemaphore(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const cap = Math.max(1, limit);
+
+  return async function <T>(task: () => Promise<T>): Promise<T> {
+    if (active >= cap) {
+      await new Promise<void>((resolve) => queue.push(resolve));
+    }
+    active++;
+    try {
+      return await task();
+    } finally {
+      active--;
+      const next = queue.shift();
+      if (next) next();
+    }
+  };
+}
+
+const detectedThreads =
+  (globalThis as any).__AURA_HW__?.cpuThreads ??
+  (typeof os.availableParallelism === "function"
+    ? os.availableParallelism()
+    : os.cpus().length || 4);
+
+sharp.concurrency(Math.max(2, Math.min(8, Math.floor(detectedThreads / 2))));
+sharp.cache({ memory: 256, files: 40, items: 500 });
+
+const fallbackCpuSlot = createLocalSemaphore(Math.max(2, detectedThreads - 2));
+const fallbackGpuSlot = createLocalSemaphore(3);
+
+function getHwProfile(): AuraHardwareProfile {
+  const hw = (globalThis as any).__AURA_HW__ as Partial<AuraHardwareProfile> | undefined;
+  return {
+    cpuThreads: hw?.cpuThreads ?? detectedThreads,
+    cuda: Boolean(hw?.cuda),
+    h264Nvenc: Boolean(hw?.h264Nvenc),
+    hevcNvenc: Boolean(hw?.hevcNvenc),
+    maxGpuJobs: hw?.maxGpuJobs ?? 3,
+    maxCpuJobs: hw?.maxCpuJobs ?? Math.max(2, detectedThreads - 2),
+    runWithGpuSlot: hw?.runWithGpuSlot ?? fallbackGpuSlot,
+    runWithCpuSlot: hw?.runWithCpuSlot ?? fallbackCpuSlot,
+  };
+}
+
+async function runFfmpegStickerJob(
+  argsBuilder: (useCuda: boolean) => string[],
+  allowCuda: boolean,
+  hw: AuraHardwareProfile,
+): Promise<void> {
+  if (allowCuda && hw.cuda) {
+    const gpuOk = await hw.runWithGpuSlot(async () => {
+      try {
+        await execFileAsync(GPU_FFMPEG_BIN, argsBuilder(true), {
+          timeout: 120000,
+          maxBuffer: FFMPEG_MAX_BUFFER,
+          windowsHide: true,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (gpuOk) return;
+  }
+
+  await hw.runWithCpuSlot(() =>
+    execFileAsync(CPU_FFMPEG_BIN, argsBuilder(false), {
+      timeout: 120000,
+      maxBuffer: FFMPEG_MAX_BUFFER,
+      windowsHide: true,
+    }),
+  );
+}
 
 export function unwrapMediaMessage(
   message: proto.IMessage | UnwrappedMediaMessage | null | undefined,
@@ -32,20 +135,24 @@ export function unwrapMediaMessage(
     msg.videoMessage ||
     msg.documentMessage ||
     msg.stickerMessage
-  )
+  ) {
     return msg;
-  if (msg.viewOnceMessageV2?.message)
+  }
+  if (msg.viewOnceMessageV2?.message) {
     return unwrapMediaMessage(
       msg.viewOnceMessageV2.message as UnwrappedMediaMessage,
     );
-  if (msg.viewOnceMessage?.message)
+  }
+  if (msg.viewOnceMessage?.message) {
     return unwrapMediaMessage(
       msg.viewOnceMessage.message as UnwrappedMediaMessage,
     );
-  if (msg.documentWithCaptionMessage?.message)
+  }
+  if (msg.documentWithCaptionMessage?.message) {
     return unwrapMediaMessage(
       msg.documentWithCaptionMessage.message as UnwrappedMediaMessage,
     );
+  }
   return null;
 }
 
@@ -87,10 +194,6 @@ export function isWebp(buffer: Buffer): boolean {
   );
 }
 
-/**
- * Detecta si un buffer WebP es animado, revisando el bit de animación del
- * chunk VP8X y/o la presencia de los chunks ANIM/ANMF.
- */
 export function isAnimatedWebp(buffer: Buffer): boolean {
   if (!isWebp(buffer)) return false;
   let offset = 12;
@@ -104,33 +207,54 @@ export function isAnimatedWebp(buffer: Buffer): boolean {
   return false;
 }
 
+async function encodeStaticWithSharp(input: Buffer): Promise<Buffer | null> {
+  try {
+    const qualities = [80, 60, 40, 20];
+    for (const quality of qualities) {
+      const out = await sharp(input, { limitInputPixels: 25_000_000 })
+        .rotate()
+        .resize(512, 512, {
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .webp({ quality, effort: 3, lossless: false, alphaQuality: 100 })
+        .toBuffer();
+      if (out.length <= STICKER_TARGET_SIZE && isWebp(out)) {
+        return out;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export async function toSticker(
   input: Buffer,
   animated: boolean,
   maxDuration = 20,
   exactDuration?: number,
 ): Promise<Buffer> {
-  if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
-  const directory = process.env.TMPDIR || path.resolve("./cache");
-  await mkdir(directory, { recursive: true });
+  if (!animated) {
+    const sharpOut = await encodeStaticWithSharp(input);
+    if (sharpOut) return sharpOut;
+  }
+
+  await ensureCacheDir();
+  const hw = getHwProfile();
   const id = randomUUID();
-  const inputPath = path.join(directory, `aura-sticker-${id}.input`);
-  const outputPath = path.join(directory, `aura-sticker-${id}.webp`);
+  const inputPath = path.join(CACHE_DIR, `aura-sticker-${id}.input`);
+  const outputPath = path.join(CACHE_DIR, `aura-sticker-${id}.webp`);
+  const allowCuda = animated && input.length >= CUDA_DECODE_MIN_BYTES;
 
   try {
     await writeFile(inputPath, input);
 
     const attempts = animated
       ? [
-          { fps: 30, quality: 60, duration: Math.min(maxDuration, 20) },
-          { fps: 25, quality: 30, duration: Math.min(maxDuration, 15) },
-          { fps: 25, quality: 25, duration: Math.min(maxDuration, 15) },
-          { fps: 20, quality: 20, duration: Math.min(maxDuration, 10) },
-          { fps: 15, quality: 10, duration: Math.min(maxDuration, 8) },
-          { fps: 12, quality: 8, duration: Math.min(maxDuration, 6) },
-          { fps: 10, quality: 6, duration: Math.min(maxDuration, 5) },
-          { fps: 8, quality: 4, duration: Math.min(maxDuration, 4) },
-          { fps: 6, quality: 3, duration: Math.min(maxDuration, 3) },
+          { fps: 25, quality: 55, duration: Math.min(maxDuration, 20) },
+          { fps: 20, quality: 35, duration: Math.min(maxDuration, 15) },
+          { fps: 15, quality: 20, duration: Math.min(maxDuration, 10) },
+          { fps: 12, quality: 10, duration: Math.min(maxDuration, 7) },
+          { fps: 8, quality: 5, duration: Math.min(maxDuration, 4) },
           { fps: 5, quality: 2, duration: Math.min(maxDuration, 3) },
         ]
       : [
@@ -142,37 +266,49 @@ export async function toSticker(
 
     for (const attempt of attempts) {
       const filter = animated
-        ? `format=rgba,scale=512:512:force_original_aspect_ratio=decrease,fps=${attempt.fps},pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x000000@0`
-        : "format=rgba,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x000000@0";
-      const args = [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        inputPath,
-        "-vf",
-        filter,
-        "-c:v",
-        "libwebp",
-        "-an",
-        "-q:v",
-        String(attempt.quality),
-      ];
-      if (animated) {
-        const duration = exactDuration && exactDuration > 0
-          ? exactDuration
-          : attempt.duration;
-        args.push("-loop", "0", "-t", String(duration));
-        if (exactDuration && exactDuration > 0) {
-          args.push("-fps_mode", "passthrough");
-        } else {
-          args.push("-vsync", "0");
-        }
-      }
-      args.push(outputPath);
+        ? `fps=${attempt.fps},scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x000000@0`
+        : "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x000000@0";
 
-      await execFileAsync(ffmpegPath, args, { timeout: 120000 });
+      const buildArgs = (useCuda: boolean) => {
+        const args = [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          ...(useCuda ? ["-hwaccel", "cuda"] : ["-threads", "0"]),
+          "-i",
+          inputPath,
+          "-vf",
+          filter,
+          "-c:v",
+          "libwebp",
+          "-compression_level",
+          "2",
+          "-preset",
+          "default",
+          "-an",
+          "-sn",
+          "-dn",
+          "-q:v",
+          String(attempt.quality),
+        ];
+        if (animated) {
+          const duration =
+            exactDuration && exactDuration > 0
+              ? exactDuration
+              : attempt.duration;
+          args.push("-loop", "0", "-t", String(duration));
+          if (exactDuration && exactDuration > 0) {
+            args.push("-fps_mode", "passthrough");
+          } else {
+            args.push("-vsync", "0");
+          }
+        }
+        args.push(outputPath);
+        return args;
+      };
+
+      await runFfmpegStickerJob(buildArgs, allowCuda, hw);
       const result = await readFile(outputPath);
       if (result.length <= STICKER_TARGET_SIZE) return result;
       await unlink(outputPath).catch(() => undefined);
@@ -201,7 +337,7 @@ export async function imageToWebp(
           fit: "contain",
           background: { r: 0, g: 0, b: 0, alpha: 0 },
         })
-        .webp({ quality: 80, lossless: false, alphaQuality: 100, loop: 0 })
+        .webp({ quality: 80, effort: 3, lossless: false, alphaQuality: 100, loop: 0 })
         .toBuffer();
     }
     return await sharp(
@@ -210,17 +346,19 @@ export async function imageToWebp(
         ? { animated: true, limitInputPixels: maxPixels }
         : { limitInputPixels: maxPixels },
     )
-        .resize(512, 512, {
-          fit: "contain",
-          background: { r: 0, g: 0, b: 0, alpha: 0 },
-        })
-        .webp({
-          quality: 80,
-          lossless: false,
-          alphaQuality: 100,
-          loop: animated ? 0 : undefined,
-        })
-        .toBuffer();
+      .rotate()
+      .resize(512, 512, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .webp({
+        quality: 80,
+        effort: 3,
+        lossless: false,
+        alphaQuality: 100,
+        loop: animated ? 0 : undefined,
+      })
+      .toBuffer();
   } catch {
     return await toSticker(buffer, animated);
   }
@@ -289,8 +427,6 @@ export async function applyStickerMetadata(
   return result;
 }
 
-// ============ EFECTOS Y FORMAS (NUEVO) ============
-
 const SHAPE_ARGS: Record<string, string> = {
   "-c": "circle",
   "-t": "triangle",
@@ -348,16 +484,20 @@ export function parseStickerArguments(args: string[]): StickerEffect[] {
 function buildFFmpegFilters(
   effects: StickerEffect[],
   animated: boolean,
+  fps?: number,
 ): string {
-  const W = 512,
-    H = 512;
+  const W = 512;
+  const H = 512;
   const filters: string[] = [];
   const shape = effects.find((e) => e.type === "shape")?.value;
   const effectList = effects
     .filter((e) => e.type === "effect")
     .map((e) => e.value);
 
-  // Escalado base según la forma
+  if (animated && fps && fps > 0) {
+    filters.push(`fps=${fps}`);
+  }
+
   if (shape === "cover") {
     filters.push(
       `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`,
@@ -369,7 +509,6 @@ function buildFFmpegFilters(
 
   filters.push("format=rgba");
 
-  // Aplicar efectos visuales
   for (const effect of effectList) {
     switch (effect) {
       case "blur":
@@ -419,14 +558,13 @@ function buildFFmpegFilters(
 
   if (shape === "mirror") filters.push("hflip");
 
-  // Aplicar máscaras alfa para las formas
   if (
     shape &&
     !["cover", "contain", "mirror", "border", "frame"].includes(shape)
   ) {
-    const cx = W / 2,
-      cy = H / 2,
-      r = Math.min(W, H) / 2;
+    const cx = W / 2;
+    const cy = H / 2;
+    const r = Math.min(W, H) / 2;
     let alphaExpr = "";
 
     switch (shape) {
@@ -470,25 +608,24 @@ function buildFFmpegFilters(
         break;
     }
 
-    if (alphaExpr)
+    if (alphaExpr) {
       filters.push(`geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alphaExpr}'`);
+    }
   }
 
-  if (shape === "border")
+  if (shape === "border") {
     filters.push(`drawbox=x=0:y=0:w=${W}:h=${H}:color=white@0.9:t=10`);
-  if (shape === "frame")
+  }
+  if (shape === "frame") {
     filters.push(
       `drawbox=x=15:y=15:w=${W - 30}:h=${H - 30}:color=white@0.7:t=8`,
     );
+  }
 
   filters.push("format=yuva420p");
   return filters.join(",");
 }
 
-/**
- * Versión de toSticker que acepta efectos y formas.
- * Si no hay efectos, usa el comportamiento original optimizado.
- */
 export async function toStickerWithEffects(
   input: Buffer,
   animated: boolean,
@@ -496,29 +633,26 @@ export async function toStickerWithEffects(
   maxDuration = 20,
   exactDuration?: number,
 ): Promise<Buffer> {
-  // Si no hay efectos, usar comportamiento original
   if (effects.length === 0) {
     return await toSticker(input, animated, maxDuration, exactDuration);
   }
 
-  if (!ffmpegPath) throw new Error("FFmpeg no está disponible.");
-  const directory = process.env.TMPDIR || path.resolve("./cache");
-  await mkdir(directory, { recursive: true });
+  await ensureCacheDir();
+  const hw = getHwProfile();
   const id = randomUUID();
-  const inputPath = path.join(directory, `aura-sticker-${id}.input`);
-  const outputPath = path.join(directory, `aura-sticker-${id}.webp`);
+  const inputPath = path.join(CACHE_DIR, `aura-sticker-${id}.input`);
+  const outputPath = path.join(CACHE_DIR, `aura-sticker-${id}.webp`);
+  const allowCuda = animated && input.length >= CUDA_DECODE_MIN_BYTES;
 
   try {
     await writeFile(inputPath, input);
 
-    const filter = buildFFmpegFilters(effects, animated);
-
     const attempts = animated
       ? [
-          { fps: 30, quality: 60, duration: Math.min(maxDuration, 20) },
-          { fps: 25, quality: 40, duration: Math.min(maxDuration, 15) },
-          { fps: 20, quality: 30, duration: Math.min(maxDuration, 10) },
-          { fps: 15, quality: 20, duration: Math.min(maxDuration, 8) },
+          { fps: 25, quality: 55, duration: Math.min(maxDuration, 20) },
+          { fps: 20, quality: 35, duration: Math.min(maxDuration, 15) },
+          { fps: 15, quality: 20, duration: Math.min(maxDuration, 10) },
+          { fps: 12, quality: 10, duration: Math.min(maxDuration, 7) },
         ]
       : [
           { fps: 0, quality: 80, duration: 0 },
@@ -527,27 +661,47 @@ export async function toStickerWithEffects(
         ];
 
     for (const attempt of attempts) {
-      const args = [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        inputPath,
-        "-vf",
-        filter,
-        "-c:v",
-        animated ? "libwebp_anim" : "libwebp",
-        "-an",
-        "-q:v",
-        String(attempt.quality),
-      ];
-      if (animated) {
-        args.push("-loop", "0", "-t", String(attempt.duration), "-vsync", "0");
-      }
-      args.push(outputPath);
+      const filter = buildFFmpegFilters(effects, animated, attempt.fps);
+      const buildArgs = (useCuda: boolean) => {
+        const args = [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          ...(useCuda ? ["-hwaccel", "cuda"] : ["-threads", "0"]),
+          "-i",
+          inputPath,
+          "-vf",
+          filter,
+          "-c:v",
+          animated ? "libwebp_anim" : "libwebp",
+          "-compression_level",
+          "2",
+          "-preset",
+          "default",
+          "-an",
+          "-sn",
+          "-dn",
+          "-q:v",
+          String(attempt.quality),
+        ];
+        if (animated) {
+          const duration =
+            exactDuration && exactDuration > 0
+              ? exactDuration
+              : attempt.duration;
+          args.push("-loop", "0", "-t", String(duration));
+          if (exactDuration && exactDuration > 0) {
+            args.push("-fps_mode", "passthrough");
+          } else {
+            args.push("-vsync", "0");
+          }
+        }
+        args.push(outputPath);
+        return args;
+      };
 
-      await execFileAsync(ffmpegPath, args, { timeout: 120000 });
+      await runFfmpegStickerJob(buildArgs, allowCuda, hw);
       const result = await readFile(outputPath);
       if (result.length <= STICKER_TARGET_SIZE) return result;
       await unlink(outputPath).catch(() => undefined);
