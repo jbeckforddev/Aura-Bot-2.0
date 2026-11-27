@@ -5,6 +5,7 @@ import {
   prepareWAMessageMedia,
   proto,
 } from "baileys";
+import { LRUCache } from "lru-cache";
 import { createHash, randomBytes } from "node:crypto";
 import type { WAMessage } from "baileys";
 import type { CommandContext, ExtendedWASocket } from "../../types/index.d.ts";
@@ -44,6 +45,30 @@ interface RawUploadedMedia {
   fileLength: number;
 }
 
+interface CachedStickerEntry {
+  key: proto.IMessageKey;
+  message: proto.IMessage;
+  stickerObj: StickerWithAudio;
+  audioObj: proto.Message.IAudioMessage | null;
+}
+
+const gStk = globalThis as unknown as {
+  __auraSendStkCache?: LRUCache<string, CachedStickerEntry>;
+  __auraSendStkHookedSockets?: WeakSet<object>;
+  __auraSendStkInterval?: NodeJS.Timeout;
+};
+
+const stickerStanzaCache = (gStk.__auraSendStkCache ??= new LRUCache<
+  string,
+  CachedStickerEntry
+>({
+  max: 2_000,
+  ttl: 30 * 60 * 1000,
+}));
+
+const hookedSockets = (gStk.__auraSendStkHookedSockets ??=
+  new WeakSet<object>());
+
 function readVarint(buf: Uint8Array, pos: number, end: number): [number, number] {
   let val = 0;
   let shift = 0;
@@ -53,17 +78,17 @@ function readVarint(buf: Uint8Array, pos: number, end: number): [number, number]
     val += (b & 0x7f) * 2 ** shift;
     if ((b & 0x80) === 0) return [val, p];
     shift += 7;
-    if (shift > 56) break;
+    if (shift >= 70) break;
   }
   return [val, p];
 }
 
-function extractUnknownLengthDelimitedField(
+function scanLengthDelimitedFields(
   buf: Uint8Array,
   start: number,
   end: number,
-  targetField: number,
-): Uint8Array | null {
+): Map<number, Buffer> {
+  const found = new Map<number, Buffer>();
   let p = start;
   while (p < end) {
     const prev = p;
@@ -82,9 +107,10 @@ function extractUnknownLengthDelimitedField(
     } else if (wireType === 2) {
       const [len, dataStart] = readVarint(buf, p, end);
       if (dataStart < p || len < 0 || dataStart + len > end) break;
-      if (fieldNumber === targetField) {
-        return buf.subarray(dataStart, dataStart + len);
-      }
+      found.set(
+        fieldNumber,
+        Buffer.from(buf.buffer, buf.byteOffset + dataStart, len),
+      );
       p = dataStart + len;
     } else if (wireType === 5) {
       p += 4;
@@ -92,7 +118,7 @@ function extractUnknownLengthDelimitedField(
       break;
     }
   }
-  return null;
+  return found;
 }
 
 function snapshotReaderBounds(
@@ -100,10 +126,15 @@ function snapshotReaderBounds(
   length?: number,
 ): { buf: Uint8Array; start: number; end: number } | null {
   if (reader instanceof Uint8Array) {
-    const end = length !== undefined ? Math.min(reader.length, length) : reader.length;
+    const end =
+      length !== undefined ? Math.min(reader.length, length) : reader.length;
     return { buf: reader, start: 0, end };
   }
-  if (reader && reader.buf instanceof Uint8Array && typeof reader.pos === "number") {
+  if (
+    reader &&
+    reader.buf instanceof Uint8Array &&
+    typeof reader.pos === "number"
+  ) {
     const start = reader.pos;
     const end =
       length !== undefined
@@ -117,7 +148,7 @@ function snapshotReaderBounds(
 function modificarProto(p: typeof proto) {
   const M: typeof proto.Message & {
     __audioStickerPatchedV3?: boolean;
-    __audioStickerDecodePatchedV1?: boolean;
+    __audioStickerDecodePatchedV2?: boolean;
   } = p.Message;
   if (!M) return;
 
@@ -129,7 +160,10 @@ function modificarProto(p: typeof proto) {
         const sticker: StickerWithAudio = mensaje;
         const audio = sticker.audioMessage;
 
-        if (audio && Object.prototype.hasOwnProperty.call(mensaje, "audioMessage")) {
+        if (
+          audio &&
+          Object.prototype.hasOwnProperty.call(mensaje, "audioMessage")
+        ) {
           delete sticker.audioMessage;
         }
 
@@ -170,7 +204,9 @@ function modificarProto(p: typeof proto) {
         if (Object.prototype.hasOwnProperty.call(mensaje, "stickerMessage")) {
           delete mensaje.stickerMessage;
         }
-        if (Object.prototype.hasOwnProperty.call(mensaje, "audioStickerMessage")) {
+        if (
+          Object.prototype.hasOwnProperty.call(mensaje, "audioStickerMessage")
+        ) {
           delete mensaje.audioStickerMessage;
         }
       }
@@ -179,7 +215,10 @@ function modificarProto(p: typeof proto) {
 
       if (audioSticker && M.FutureProofMessage) {
         mensaje.audioStickerMessage = audioSticker;
-        M.FutureProofMessage.encode(audioSticker, w.uint32(1074).fork()).ldelim();
+        M.FutureProofMessage.encode(
+          audioSticker,
+          w.uint32(1074).fork(),
+        ).ldelim();
       }
 
       return w;
@@ -218,25 +257,29 @@ function modificarProto(p: typeof proto) {
     M.__audioStickerPatchedV3 = true;
   }
 
-  if (!M.__audioStickerDecodePatchedV1) {
+  if (!M.__audioStickerDecodePatchedV2) {
     if (M.StickerMessage && typeof M.StickerMessage.decode === "function") {
       const decodificarStickerAnterior = M.StickerMessage.decode;
 
       M.StickerMessage.decode = function (reader: any, length?: number) {
         const snap = snapshotReaderBounds(reader, length);
-        const decoded: StickerWithAudio & proto.Message.StickerMessage =
+        const decoded: StickerWithAudio &
+          proto.Message.StickerMessage & { __rawFieldIds?: number[] } =
           decodificarStickerAnterior.call(this, reader, length);
 
-        if (!decoded.audioMessage && snap && M.AudioMessage?.decode) {
+        if (snap) {
           try {
-            const audioBytes = extractUnknownLengthDelimitedField(
+            const fields = scanLengthDelimitedFields(
               snap.buf,
               snap.start,
               snap.end,
-              26,
             );
-            if (audioBytes && audioBytes.length > 0) {
+            const audioBytes = fields.get(26);
+            if (!decoded.audioMessage && audioBytes && M.AudioMessage?.decode) {
               decoded.audioMessage = M.AudioMessage.decode(audioBytes);
+            }
+            if (fields.size > 0) {
+              decoded.__rawFieldIds = Array.from(fields.keys());
             }
           } catch {}
         }
@@ -250,19 +293,30 @@ function modificarProto(p: typeof proto) {
 
       M.decode = function (reader: any, length?: number) {
         const snap = snapshotReaderBounds(reader, length);
-        const decoded: any = decodificarMensajeAnterior.call(this, reader, length);
+        const decoded: any = decodificarMensajeAnterior.call(
+          this,
+          reader,
+          length,
+        );
 
-        if (!decoded.audioStickerMessage && snap && M.FutureProofMessage?.decode) {
+        if (snap) {
           try {
-            const audioStickerBytes = extractUnknownLengthDelimitedField(
+            const fields = scanLengthDelimitedFields(
               snap.buf,
               snap.start,
               snap.end,
-              134,
             );
-            if (audioStickerBytes && audioStickerBytes.length > 0) {
+            const audioStickerBytes = fields.get(134);
+            if (
+              !decoded.audioStickerMessage &&
+              audioStickerBytes &&
+              M.FutureProofMessage?.decode
+            ) {
               decoded.audioStickerMessage =
                 M.FutureProofMessage.decode(audioStickerBytes);
+            }
+            if (fields.has(134) || fields.size > 0) {
+              decoded.__rawFieldIds = Array.from(fields.keys());
             }
           } catch {}
         }
@@ -271,7 +325,7 @@ function modificarProto(p: typeof proto) {
       };
     }
 
-    M.__audioStickerDecodePatchedV1 = true;
+    M.__audioStickerDecodePatchedV2 = true;
   }
 }
 
@@ -283,13 +337,15 @@ function asegurarModificado(): Promise<void> {
   protoReadyPromise = (async () => {
     modificarProto(proto);
     await Promise.all(
-      ["kage-baileys", "@whiskeysockets/baileys", "baileys"].map(async (pkg) => {
-        try {
-          const mod = await import(pkg);
-          if (mod?.proto) modificarProto(mod.proto);
-          if (mod?.default?.proto) modificarProto(mod.default.proto);
-        } catch {}
-      }),
+      ["kage-baileys", "@whiskeysockets/baileys", "baileys"].map(
+        async (pkg) => {
+          try {
+            const mod = await import(pkg);
+            if (mod?.proto) modificarProto(mod.proto);
+            if (mod?.default?.proto) modificarProto(mod.default.proto);
+          } catch {}
+        },
+      ),
     );
   })();
 
@@ -297,6 +353,147 @@ function asegurarModificado(): Promise<void> {
 }
 
 void asegurarModificado();
+
+function unwrapMessage(raw: proto.IMessage | null | undefined): proto.IMessage {
+  if (!raw) return {};
+  let current: proto.IMessage = raw;
+
+  for (let i = 0; i < 8 && current; i++) {
+    const next =
+      current.deviceSentMessage?.message ||
+      current.ephemeralMessage?.message ||
+      current.viewOnceMessageV2?.message ||
+      current.viewOnceMessageV2Extension?.message ||
+      current.viewOnceMessage?.message ||
+      current.documentWithCaptionMessage?.message ||
+      current.editedMessage?.message;
+
+    if (!next) break;
+    current = next;
+  }
+
+  if (typeof extractMessageContent === "function") {
+    const extracted = extractMessageContent(current);
+    if (
+      extracted &&
+      (extracted.stickerMessage ||
+        (extracted as any).audioStickerMessage ||
+        extracted.audioMessage)
+    ) {
+      return extracted;
+    }
+  }
+
+  return current || {};
+}
+
+function extractStickerAndAudio(rawMsg: proto.IMessage | null | undefined) {
+  const unwrapped = unwrapMessage(rawMsg);
+  const rawAudioSticker =
+    (unwrapped as any).audioStickerMessage ||
+    (rawMsg as any)?.audioStickerMessage ||
+    (rawMsg as any)?.deviceSentMessage?.message?.audioStickerMessage;
+
+  const audioStickerInner = rawAudioSticker
+    ? unwrapMessage(rawAudioSticker.message || rawAudioSticker)
+    : undefined;
+
+  const stickerObj =
+    (audioStickerInner?.stickerMessage as StickerWithAudio | undefined) ||
+    (unwrapped.stickerMessage as StickerWithAudio | undefined) ||
+    ((rawMsg as any)?.stickerMessage as StickerWithAudio | undefined) ||
+    null;
+
+  const audioObj =
+    (stickerObj?.audioMessage as proto.Message.IAudioMessage | undefined) ||
+    (audioStickerInner?.audioMessage as
+      | proto.Message.IAudioMessage
+      | undefined) ||
+    (unwrapped.audioMessage as proto.Message.IAudioMessage | undefined) ||
+    ((rawMsg as any)?.audioMessage as proto.Message.IAudioMessage | undefined) ||
+    null;
+
+  return { stickerObj, audioObj, unwrapped };
+}
+
+function collectCandidateSockets(
+  currentSock?: ExtendedWASocket,
+): ExtendedWASocket[] {
+  const gAny = globalThis as Record<string, any>;
+  const rawList: any[] = [
+    currentSock,
+    gAny.mainSocket,
+    gAny.mainSock,
+    gAny.sock,
+    gAny.__auraWebPanel?.mainSock,
+  ];
+
+  try {
+    rawList.push(...(getActivePremBots?.() || []));
+  } catch {}
+  try {
+    rawList.push(...(getActiveSubBots?.() || []));
+  } catch {}
+
+  const unique: ExtendedWASocket[] = [];
+  const seen = new Set<string>();
+
+  for (const item of rawList) {
+    const s = (item?.sock ?? item) as ExtendedWASocket | undefined;
+    if (!s || (s as any).isClosed || !s.user?.id) continue;
+    const key = String(s.user.id).split(":")[0];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(s);
+  }
+
+  return unique;
+}
+
+function cacheStickerFromIncoming(msg: WAMessage) {
+  const id = msg?.key?.id;
+  if (!id || !msg?.message) return;
+
+  const { stickerObj, audioObj } = extractStickerAndAudio(msg.message);
+  if (!stickerObj) return;
+
+  const prev = stickerStanzaCache.get(id);
+  if (prev?.audioObj && !audioObj) return;
+
+  stickerStanzaCache.set(id, {
+    key: msg.key,
+    message: msg.message,
+    stickerObj,
+    audioObj,
+  });
+}
+
+function attachStickerSniffers(currentSock?: ExtendedWASocket) {
+  const sockets = collectCandidateSockets(currentSock);
+  for (const s of sockets) {
+    if (!s || typeof s !== "object" || hookedSockets.has(s)) continue;
+    hookedSockets.add(s);
+
+    s.ev?.on?.("messages.upsert", ({ messages }: { messages?: WAMessage[] }) => {
+      if (!Array.isArray(messages)) return;
+      for (const m of messages) {
+        try {
+          cacheStickerFromIncoming(m);
+        } catch {}
+      }
+    });
+  }
+}
+
+attachStickerSniffers();
+if (!gStk.__auraSendStkInterval) {
+  gStk.__auraSendStkInterval = setInterval(() => {
+    try {
+      attachStickerSniffers();
+    } catch {}
+  }, 4000);
+  gStk.__auraSendStkInterval.unref?.();
+}
 
 function extractChannelTarget(text: string): ChannelTarget | null {
   const jidMatch = text.match(/\b(\d+@newsletter)\b/i);
@@ -316,61 +513,17 @@ function extractChannelTarget(text: string): ChannelTarget | null {
 
 function extractContextInfo(message: proto.IMessage | null | undefined) {
   if (!message) return undefined;
+  const unwrapped = unwrapMessage(message);
   return (
+    unwrapped.extendedTextMessage?.contextInfo ||
+    unwrapped.imageMessage?.contextInfo ||
+    unwrapped.videoMessage?.contextInfo ||
+    unwrapped.stickerMessage?.contextInfo ||
+    unwrapped.audioMessage?.contextInfo ||
+    unwrapped.documentMessage?.contextInfo ||
     message.extendedTextMessage?.contextInfo ||
-    message.imageMessage?.contextInfo ||
-    message.videoMessage?.contextInfo ||
-    message.stickerMessage?.contextInfo ||
-    message.audioMessage?.contextInfo ||
-    message.documentMessage?.contextInfo ||
     undefined
   );
-}
-
-function unwrapMessage(raw: proto.IMessage | null | undefined): proto.IMessage {
-  if (!raw) return {};
-  let current =
-    typeof extractMessageContent === "function"
-      ? extractMessageContent(raw) || raw
-      : raw;
-
-  for (let i = 0; i < 6 && current; i++) {
-    const next =
-      current.ephemeralMessage?.message ||
-      current.viewOnceMessageV2?.message ||
-      current.viewOnceMessageV2Extension?.message ||
-      current.viewOnceMessage?.message ||
-      current.documentWithCaptionMessage?.message ||
-      current.editedMessage?.message;
-
-    if (!next) break;
-    current = next;
-  }
-
-  return current || {};
-}
-
-function extractStickerAndAudio(quotedRaw: proto.IMessage | null | undefined) {
-  const unwrapped = unwrapMessage(quotedRaw);
-  const rawAudioSticker = (unwrapped as any).audioStickerMessage || (quotedRaw as any)?.audioStickerMessage;
-  const audioStickerInner = rawAudioSticker
-    ? unwrapMessage(rawAudioSticker.message || rawAudioSticker)
-    : undefined;
-
-  const stickerObj =
-    (audioStickerInner?.stickerMessage as StickerWithAudio | undefined) ||
-    (unwrapped.stickerMessage as StickerWithAudio | undefined) ||
-    ((quotedRaw as any)?.stickerMessage as StickerWithAudio | undefined) ||
-    null;
-
-  const audioObj =
-    (stickerObj?.audioMessage as proto.Message.IAudioMessage | undefined) ||
-    (audioStickerInner?.audioMessage as proto.Message.IAudioMessage | undefined) ||
-    (unwrapped.audioMessage as proto.Message.IAudioMessage | undefined) ||
-    ((quotedRaw as any)?.audioMessage as proto.Message.IAudioMessage | undefined) ||
-    null;
-
-  return { stickerObj, audioObj };
 }
 
 function isValidOgg(buf: Buffer | null | undefined): buf is Buffer {
@@ -436,38 +589,6 @@ async function downloadMediaObject(
   return Buffer.from(buf);
 }
 
-function collectCandidateSockets(currentSock: ExtendedWASocket): ExtendedWASocket[] {
-  const gAny = globalThis as Record<string, any>;
-  const rawList: any[] = [
-    currentSock,
-    gAny.mainSocket,
-    gAny.mainSock,
-    gAny.sock,
-    gAny.__auraWebPanel?.mainSock,
-  ];
-
-  try {
-    rawList.push(...(getActivePremBots?.() || []));
-  } catch {}
-  try {
-    rawList.push(...(getActiveSubBots?.() || []));
-  } catch {}
-
-  const unique: ExtendedWASocket[] = [];
-  const seen = new Set<string>();
-
-  for (const item of rawList) {
-    const s = (item?.sock ?? item) as ExtendedWASocket | undefined;
-    if (!s || (s as any).isClosed || !s.user?.id) continue;
-    const key = String(s.user.id).split(":")[0];
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(s);
-  }
-
-  return unique;
-}
-
 async function queryChannelMeta(
   sock: ExtendedWASocket,
   target: ChannelTarget,
@@ -503,7 +624,9 @@ async function queryChannelMeta(
       } catch {}
     }
 
-    const name = String(meta.name || meta.thread_metadata?.name?.text || jid).trim();
+    const name = String(
+      meta.name || meta.thread_metadata?.name?.text || jid,
+    ).trim();
     return { jid, name, role };
   } catch {
     return null;
@@ -677,7 +800,9 @@ async function sendNewsletterPlaintextMedia(
   protoPayload: Record<string, any>,
 ): Promise<AckCheckResult> {
   await asegurarModificado();
-  const encoded = proto.Message.encode(proto.Message.fromObject(protoPayload)).finish();
+  const encoded = proto.Message.encode(
+    proto.Message.fromObject(protoPayload),
+  ).finish();
   const messageId = `3EB0${randomBytes(9).toString("hex").toUpperCase()}`;
   const ackPromise = waitForStanzaAck(sock, messageId, 7000);
 
@@ -773,7 +898,11 @@ async function publishForcedAudioStickerToChannel(
       audioMessage.waveform = waveform;
     }
   } else {
-    const uploadedAudio = await uploadNewsletterRawMedia(sock, oggBuffer, "audio");
+    const uploadedAudio = await uploadNewsletterRawMedia(
+      sock,
+      oggBuffer,
+      "audio",
+    );
     audioMessage = {
       url: uploadedAudio.url,
       directPath: uploadedAudio.directPath,
@@ -863,6 +992,7 @@ export default {
       isBotUser,
     } = ctx;
 
+    attachStickerSniffers(sock);
     const prefix = usedPrefix || ".";
 
     if (!isOwner && !isCoOwner && !isMod && !isBotUser) {
@@ -873,6 +1003,7 @@ export default {
     }
 
     const fullInput = String(text || args.join(" ") || "").trim();
+    const isDebug = /(?:^|\s)--debug(?:\s|$)/i.test(fullInput);
     const allowSplitFallback = /(?:^|\s)(?:--split|--fallback)(?:\s|$)/i.test(
       fullInput,
     );
@@ -881,6 +1012,32 @@ export default {
 
     const quotedCtx = extractContextInfo(msg.message);
     const quotedRaw = quotedCtx?.quotedMessage;
+    const quotedStanzaId = quotedCtx?.stanzaId || "";
+
+    if (isDebug && quotedRaw) {
+      const cached = quotedStanzaId
+        ? stickerStanzaCache.get(quotedStanzaId)
+        : undefined;
+      const fromQuote = extractStickerAndAudio(quotedRaw);
+      const dump = {
+        stanzaId: quotedStanzaId || null,
+        cacheHit: Boolean(cached),
+        cacheSize: stickerStanzaCache.size,
+        cachedHasAudio: Boolean(cached?.audioObj),
+        cachedMsgKeys: cached ? Object.keys(cached.message || {}) : [],
+        cachedMsgRawFields: (cached?.message as any)?.__rawFieldIds || [],
+        cachedStickerRawFields: (cached?.stickerObj as any)?.__rawFieldIds || [],
+        quotedKeys: Object.keys(quotedRaw || {}),
+        quotedMsgRawFields: (quotedRaw as any)?.__rawFieldIds || [],
+        quotedHasAudio: Boolean(fromQuote.audioObj),
+        quotedStickerKeys: fromQuote.stickerObj
+          ? Object.keys(fromQuote.stickerObj)
+          : [],
+        quotedStickerRawFields:
+          (fromQuote.stickerObj as any)?.__rawFieldIds || [],
+      };
+      return reply(`\`\`\`${JSON.stringify(dump, null, 2)}\`\`\``);
+    }
 
     if (!quotedRaw || !channelTarget) {
       return reply(
@@ -889,13 +1046,21 @@ export default {
           `┃\n` +
           `┃ • *Uso:* \`${prefix}sendsticker https://whatsapp.com/channel/0029Va...\`\n` +
           `┃ • *Alias:* \`${prefix}sendstk <enlace o @newsletter>\`\n` +
-          `┃ • *Audio cifrado (opcional):* agrega \`--encaudio\` si el audio aparece mudo al reproducir.\n` +
+          `┃ • *Audio cifrado (opcional):* agrega \`--encaudio\` si el audio sale mudo.\n` +
           `┃ • *Respaldo separado:* agrega \`--split\` para publicar sticker + nota de voz aparte.\n` +
+          `┃ • *Diagnóstico:* agrega \`--debug\` al responder al sticker.\n` +
           `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
       );
     }
 
-    const { stickerObj, audioObj } = extractStickerAndAudio(quotedRaw);
+    const cachedOriginal = quotedStanzaId
+      ? stickerStanzaCache.get(quotedStanzaId)
+      : undefined;
+    const quotedExtracted = extractStickerAndAudio(quotedRaw);
+
+    const stickerObj = cachedOriginal?.stickerObj || quotedExtracted.stickerObj;
+    const audioObj = cachedOriginal?.audioObj || quotedExtracted.audioObj;
+
     if (!stickerObj) {
       void react("❌").catch(() => undefined);
       return reply(
@@ -921,9 +1086,9 @@ export default {
         );
       }
 
-      const quotedKey: proto.IMessageKey = {
+      const quotedKey: proto.IMessageKey = cachedOriginal?.key || {
         remoteJid: quotedCtx?.remoteJid || from,
-        id: quotedCtx?.stanzaId || msg.key.id || "0",
+        id: quotedStanzaId || msg.key.id || "0",
         participant: quotedCtx?.participant || undefined,
       };
 
@@ -960,13 +1125,17 @@ export default {
           );
         }
 
+        const cacheHint = !cachedOriginal
+          ? `\n┃ ℹ️ *Tip:* WhatsApp recorta el audio al citar stickers viejos. Si tenía sonido, reenvía el sticker una vez ahora y cita ese nuevo mensaje.`
+          : "";
+
         void react("✅").catch(() => undefined);
         return reply(
           `╭〔 ✅ ${fytBold("STICKER PUBLICADO")} 〕⬣\n` +
             `┃ • *Canal:* ${admin.name}\n` +
             `┃ • *Tipo:* ${isAnimated ? "Animado" : "Estático"} (sin audio detectado)\n` +
             `┃ • *Post ID:* \`${ack.serverId || "OK"}\`\n` +
-            `┃ • *Rol:* ${admin.role}\n` +
+            `┃ • *Rol:* ${admin.role}${cacheHint}\n` +
             `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
         );
       }
