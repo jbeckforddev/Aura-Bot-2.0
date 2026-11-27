@@ -2,11 +2,10 @@ import {
   downloadContentFromMessage,
   downloadMediaMessage,
   extractMessageContent,
-  generateWAMessageFromContent,
   prepareWAMessageMedia,
   proto,
 } from "baileys";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { WAMessage } from "baileys";
 import type { CommandContext, ExtendedWASocket } from "../../types/index.d.ts";
 import type { StickerWithAudio } from "../../types/media.d.ts";
@@ -33,108 +32,247 @@ interface ResolvedChannelAdmin {
 
 interface AckCheckResult {
   accepted: boolean;
+  serverId?: string;
   error?: string;
   raw?: Record<string, unknown>;
 }
 
+interface RawUploadedMedia {
+  url: string;
+  directPath: string;
+  fileSha256: Buffer;
+  fileLength: number;
+}
+
+function readVarint(buf: Uint8Array, pos: number, end: number): [number, number] {
+  let val = 0;
+  let shift = 0;
+  let p = pos;
+  while (p < end) {
+    const b = buf[p++];
+    val += (b & 0x7f) * 2 ** shift;
+    if ((b & 0x80) === 0) return [val, p];
+    shift += 7;
+    if (shift > 56) break;
+  }
+  return [val, p];
+}
+
+function extractUnknownLengthDelimitedField(
+  buf: Uint8Array,
+  start: number,
+  end: number,
+  targetField: number,
+): Uint8Array | null {
+  let p = start;
+  while (p < end) {
+    const prev = p;
+    const [tag, nextPos] = readVarint(buf, p, end);
+    if (nextPos <= prev) break;
+    p = nextPos;
+    const fieldNumber = Math.floor(tag / 8);
+    const wireType = tag & 7;
+
+    if (wireType === 0) {
+      const [, afterVarint] = readVarint(buf, p, end);
+      if (afterVarint <= p) break;
+      p = afterVarint;
+    } else if (wireType === 1) {
+      p += 8;
+    } else if (wireType === 2) {
+      const [len, dataStart] = readVarint(buf, p, end);
+      if (dataStart < p || len < 0 || dataStart + len > end) break;
+      if (fieldNumber === targetField) {
+        return buf.subarray(dataStart, dataStart + len);
+      }
+      p = dataStart + len;
+    } else if (wireType === 5) {
+      p += 4;
+    } else {
+      break;
+    }
+  }
+  return null;
+}
+
+function snapshotReaderBounds(
+  reader: any,
+  length?: number,
+): { buf: Uint8Array; start: number; end: number } | null {
+  if (reader instanceof Uint8Array) {
+    const end = length !== undefined ? Math.min(reader.length, length) : reader.length;
+    return { buf: reader, start: 0, end };
+  }
+  if (reader && reader.buf instanceof Uint8Array && typeof reader.pos === "number") {
+    const start = reader.pos;
+    const end =
+      length !== undefined
+        ? Math.min(reader.len ?? reader.buf.length, start + length)
+        : (reader.len ?? reader.buf.length);
+    return { buf: reader.buf, start, end };
+  }
+  return null;
+}
+
 function modificarProto(p: typeof proto) {
-  const M: typeof proto.Message & { __audioStickerPatchedV3?: boolean } = p.Message;
-  if (!M || M.__audioStickerPatchedV3) return;
+  const M: typeof proto.Message & {
+    __audioStickerPatchedV3?: boolean;
+    __audioStickerDecodePatchedV1?: boolean;
+  } = p.Message;
+  if (!M) return;
 
-  if (M.StickerMessage) {
-    const codificarStickerAnterior = M.StickerMessage.encode;
+  if (!M.__audioStickerPatchedV3) {
+    if (M.StickerMessage) {
+      const codificarStickerAnterior = M.StickerMessage.encode;
 
-    M.StickerMessage.encode = function (mensaje, writer) {
-      const sticker: StickerWithAudio = mensaje;
-      const audio = sticker.audioMessage;
+      M.StickerMessage.encode = function (mensaje, writer) {
+        const sticker: StickerWithAudio = mensaje;
+        const audio = sticker.audioMessage;
 
-      if (audio && Object.prototype.hasOwnProperty.call(mensaje, "audioMessage")) {
-        delete sticker.audioMessage;
+        if (audio && Object.prototype.hasOwnProperty.call(mensaje, "audioMessage")) {
+          delete sticker.audioMessage;
+        }
+
+        const w = codificarStickerAnterior.call(this, mensaje, writer);
+
+        if (audio && M.AudioMessage) {
+          sticker.audioMessage = audio;
+          M.AudioMessage.encode(audio, w.uint32(210).fork()).ldelim();
+        }
+
+        return w;
+      };
+
+      if (typeof M.StickerMessage.fromObject === "function") {
+        const convertirStickerAnterior = M.StickerMessage.fromObject;
+
+        M.StickerMessage.fromObject = function (objeto) {
+          const mensaje: StickerWithAudio & proto.Message.StickerMessage =
+            convertirStickerAnterior.call(this, objeto);
+
+          if (objeto?.audioMessage) {
+            mensaje.audioMessage = M.AudioMessage?.fromObject
+              ? M.AudioMessage.fromObject(objeto.audioMessage)
+              : objeto.audioMessage;
+          }
+
+          return mensaje;
+        };
+      }
+    }
+
+    const codificarMensajeAnterior = M.encode;
+
+    M.encode = function (mensaje, writer) {
+      const audioSticker = mensaje?.audioStickerMessage;
+
+      if (audioSticker) {
+        if (Object.prototype.hasOwnProperty.call(mensaje, "stickerMessage")) {
+          delete mensaje.stickerMessage;
+        }
+        if (Object.prototype.hasOwnProperty.call(mensaje, "audioStickerMessage")) {
+          delete mensaje.audioStickerMessage;
+        }
       }
 
-      const w = codificarStickerAnterior.call(this, mensaje, writer);
+      const w = codificarMensajeAnterior.call(this, mensaje, writer);
 
-      if (audio && M.AudioMessage) {
-        sticker.audioMessage = audio;
-        M.AudioMessage.encode(audio, w.uint32(210).fork()).ldelim();
+      if (audioSticker && M.FutureProofMessage) {
+        mensaje.audioStickerMessage = audioSticker;
+        M.FutureProofMessage.encode(audioSticker, w.uint32(1074).fork()).ldelim();
       }
 
       return w;
     };
 
-    if (typeof M.StickerMessage.fromObject === "function") {
-      const convertirStickerAnterior = M.StickerMessage.fromObject;
+    if (typeof M.fromObject === "function") {
+      const convertirMensajeAnterior = M.fromObject;
 
-      M.StickerMessage.fromObject = function (objeto) {
-        const mensaje: StickerWithAudio & proto.Message.StickerMessage =
-          convertirStickerAnterior.call(this, objeto);
+      M.fromObject = function (objeto) {
+        const mensaje = convertirMensajeAnterior.call(this, objeto);
 
-        if (objeto?.audioMessage) {
-          mensaje.audioMessage = M.AudioMessage?.fromObject
-            ? M.AudioMessage.fromObject(objeto.audioMessage)
-            : objeto.audioMessage;
+        if (objeto?.audioStickerMessage) {
+          const interno =
+            objeto.audioStickerMessage.message || objeto.audioStickerMessage;
+
+          if (
+            interno?.stickerMessage &&
+            objeto.audioStickerMessage.message?.stickerMessage?.audioMessage
+          ) {
+            interno.stickerMessage.audioMessage =
+              objeto.audioStickerMessage.message.stickerMessage.audioMessage;
+          }
+
+          mensaje.audioStickerMessage = { message: interno };
+          delete mensaje.stickerMessage;
+
+          if (interno) {
+            Object.setPrototypeOf(mensaje, interno);
+          }
         }
 
         return mensaje;
       };
     }
+
+    M.__audioStickerPatchedV3 = true;
   }
 
-  const codificarMensajeAnterior = M.encode;
+  if (!M.__audioStickerDecodePatchedV1) {
+    if (M.StickerMessage && typeof M.StickerMessage.decode === "function") {
+      const decodificarStickerAnterior = M.StickerMessage.decode;
 
-  M.encode = function (mensaje, writer) {
-    const audioSticker = mensaje?.audioStickerMessage;
+      M.StickerMessage.decode = function (reader: any, length?: number) {
+        const snap = snapshotReaderBounds(reader, length);
+        const decoded: StickerWithAudio & proto.Message.StickerMessage =
+          decodificarStickerAnterior.call(this, reader, length);
 
-    if (audioSticker) {
-      if (Object.prototype.hasOwnProperty.call(mensaje, "stickerMessage")) {
-        delete mensaje.stickerMessage;
-      }
-      if (Object.prototype.hasOwnProperty.call(mensaje, "audioStickerMessage")) {
-        delete mensaje.audioStickerMessage;
-      }
-    }
-
-    const w = codificarMensajeAnterior.call(this, mensaje, writer);
-
-    if (audioSticker && M.FutureProofMessage) {
-      mensaje.audioStickerMessage = audioSticker;
-      M.FutureProofMessage.encode(audioSticker, w.uint32(1074).fork()).ldelim();
-    }
-
-    return w;
-  };
-
-  if (typeof M.fromObject === "function") {
-    const convertirMensajeAnterior = M.fromObject;
-
-    M.fromObject = function (objeto) {
-      const mensaje = convertirMensajeAnterior.call(this, objeto);
-
-      if (objeto?.audioStickerMessage) {
-        const interno =
-          objeto.audioStickerMessage.message || objeto.audioStickerMessage;
-
-        if (
-          interno?.stickerMessage &&
-          objeto.audioStickerMessage.message?.stickerMessage?.audioMessage
-        ) {
-          interno.stickerMessage.audioMessage =
-            objeto.audioStickerMessage.message.stickerMessage.audioMessage;
+        if (!decoded.audioMessage && snap && M.AudioMessage?.decode) {
+          try {
+            const audioBytes = extractUnknownLengthDelimitedField(
+              snap.buf,
+              snap.start,
+              snap.end,
+              26,
+            );
+            if (audioBytes && audioBytes.length > 0) {
+              decoded.audioMessage = M.AudioMessage.decode(audioBytes);
+            }
+          } catch {}
         }
 
-        mensaje.audioStickerMessage = { message: interno };
-        delete mensaje.stickerMessage;
+        return decoded;
+      };
+    }
 
-        if (interno) {
-          Object.setPrototypeOf(mensaje, interno);
+    if (typeof M.decode === "function") {
+      const decodificarMensajeAnterior = M.decode;
+
+      M.decode = function (reader: any, length?: number) {
+        const snap = snapshotReaderBounds(reader, length);
+        const decoded: any = decodificarMensajeAnterior.call(this, reader, length);
+
+        if (!decoded.audioStickerMessage && snap && M.FutureProofMessage?.decode) {
+          try {
+            const audioStickerBytes = extractUnknownLengthDelimitedField(
+              snap.buf,
+              snap.start,
+              snap.end,
+              134,
+            );
+            if (audioStickerBytes && audioStickerBytes.length > 0) {
+              decoded.audioStickerMessage =
+                M.FutureProofMessage.decode(audioStickerBytes);
+            }
+          } catch {}
         }
-      }
 
-      return mensaje;
-    };
+        return decoded;
+      };
+    }
+
+    M.__audioStickerDecodePatchedV1 = true;
   }
-
-  M.__audioStickerPatchedV3 = true;
 }
 
 let protoReadyPromise: Promise<void> | null = null;
@@ -214,26 +352,22 @@ function unwrapMessage(raw: proto.IMessage | null | undefined): proto.IMessage {
 
 function extractStickerAndAudio(quotedRaw: proto.IMessage | null | undefined) {
   const unwrapped = unwrapMessage(quotedRaw);
-  const rawAudioSticker = unwrapped.audioStickerMessage as
-    | { message?: proto.IMessage }
-    | proto.IMessage
-    | undefined;
+  const rawAudioSticker = (unwrapped as any).audioStickerMessage || (quotedRaw as any)?.audioStickerMessage;
   const audioStickerInner = rawAudioSticker
-    ? unwrapMessage(
-        (rawAudioSticker as { message?: proto.IMessage }).message ||
-          (rawAudioSticker as proto.IMessage),
-      )
+    ? unwrapMessage(rawAudioSticker.message || rawAudioSticker)
     : undefined;
 
   const stickerObj =
     (audioStickerInner?.stickerMessage as StickerWithAudio | undefined) ||
     (unwrapped.stickerMessage as StickerWithAudio | undefined) ||
+    ((quotedRaw as any)?.stickerMessage as StickerWithAudio | undefined) ||
     null;
 
   const audioObj =
     (stickerObj?.audioMessage as proto.Message.IAudioMessage | undefined) ||
     (audioStickerInner?.audioMessage as proto.Message.IAudioMessage | undefined) ||
     (unwrapped.audioMessage as proto.Message.IAudioMessage | undefined) ||
+    ((quotedRaw as any)?.audioMessage as proto.Message.IAudioMessage | undefined) ||
     null;
 
   return { stickerObj, audioObj };
@@ -345,7 +479,9 @@ async function queryChannelMeta(
     const meta = await sAny.newsletterMetadata(target.type, target.value);
     if (!meta) return null;
 
-    const jid = String(meta.id || meta.jid || (target.type === "jid" ? target.value : "")).trim();
+    const jid = String(
+      meta.id || meta.jid || (target.type === "jid" ? target.value : ""),
+    ).trim();
     if (!jid) return null;
 
     let role = String(
@@ -367,10 +503,7 @@ async function queryChannelMeta(
       } catch {}
     }
 
-    const name = String(
-      meta.name || meta.thread_metadata?.name?.text || jid,
-    ).trim();
-
+    const name = String(meta.name || meta.thread_metadata?.name?.text || jid).trim();
     return { jid, name, role };
   } catch {
     return null;
@@ -412,15 +545,102 @@ async function resolveAdminChannelSocket(
   return { admin: null, channelName, detectedRole };
 }
 
+async function fetchMediaConn(
+  sock: ExtendedWASocket,
+): Promise<{ auth: string; hosts: string[] }> {
+  const res = await sock.query({
+    tag: "iq",
+    attrs: {
+      to: "s.whatsapp.net",
+      type: "set",
+      xmlns: "w:m",
+    },
+    content: [{ tag: "media_conn", attrs: {} }],
+  });
+
+  const children = Array.isArray(res?.content) ? res.content : [];
+  const mediaConn = children.find((c: any) => c?.tag === "media_conn");
+  const auth = String(mediaConn?.attrs?.auth || "");
+  const hostNodes = Array.isArray(mediaConn?.content) ? mediaConn.content : [];
+  const hosts = hostNodes
+    .filter((n: any) => n?.tag === "host" && n?.attrs?.hostname)
+    .map((n: any) => String(n.attrs.hostname));
+
+  if (!auth || hosts.length === 0) {
+    throw new Error("No se pudo obtener media_conn desde WhatsApp.");
+  }
+
+  return { auth, hosts };
+}
+
+async function uploadNewsletterRawMedia(
+  sock: ExtendedWASocket,
+  buffer: Buffer,
+  kind: "sticker" | "audio",
+): Promise<RawUploadedMedia> {
+  const fileSha256 = createHash("sha256").update(buffer).digest();
+  const token = fileSha256.toString("base64url");
+  const mediaPath =
+    kind === "sticker"
+      ? "/newsletter/newsletter-image"
+      : "/newsletter/newsletter-audio";
+  const { auth, hosts } = await fetchMediaConn(sock);
+
+  let lastErr = "Sin respuesta del CDN de canales";
+
+  for (const hostname of hosts) {
+    const uploadUrl = `https://${hostname}${mediaPath}/${token}?auth=${encodeURIComponent(auth)}&token=${token}`;
+    try {
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          Origin: "https://web.whatsapp.com",
+        },
+        body: new Uint8Array(buffer),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      if (!response.ok) {
+        lastErr = `CDN HTTP ${response.status}`;
+        continue;
+      }
+
+      const data = (await response.json()) as {
+        url?: string;
+        direct_path?: string;
+      };
+      const directPath = String(data.direct_path || "").trim();
+      const url = String(
+        data.url || (directPath ? `https://mmg.whatsapp.net${directPath}` : ""),
+      ).trim();
+
+      if (directPath && url) {
+        return {
+          url,
+          directPath,
+          fileSha256,
+          fileLength: buffer.length,
+        };
+      }
+      lastErr = "El CDN no devolvió direct_path";
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  throw new Error(`Fallo subiendo ${kind} al canal: ${lastErr}`);
+}
+
 function waitForStanzaAck(
   sock: ExtendedWASocket,
   messageId: string,
-  timeoutMs = 5000,
+  timeoutMs = 7000,
 ): Promise<AckCheckResult> {
   return new Promise((resolve) => {
     const wsAny = (sock as any).ws;
     if (!wsAny || typeof wsAny.on !== "function") {
-      resolve({ accepted: true });
+      resolve({ accepted: false, error: "socket ws sin listener de ACK" });
       return;
     }
 
@@ -432,13 +652,17 @@ function waitForStanzaAck(
       if (attrs.error) {
         resolve({ accepted: false, error: String(attrs.error), raw: attrs });
       } else {
-        resolve({ accepted: true, raw: attrs });
+        resolve({
+          accepted: true,
+          serverId: attrs.server_id ? String(attrs.server_id) : undefined,
+          raw: attrs,
+        });
       }
     };
 
     const timer = setTimeout(() => {
       wsAny.off("CB:ack", onAck);
-      resolve({ accepted: true });
+      resolve({ accepted: false, error: "timeout esperando ACK del canal" });
     }, timeoutMs);
     timer.unref?.();
 
@@ -446,114 +670,169 @@ function waitForStanzaAck(
   });
 }
 
-async function sendForcedAudioStickerToChannel(
+async function sendNewsletterPlaintextMedia(
+  sock: ExtendedWASocket,
+  channelJid: string,
+  mediaType: "sticker" | "ptt" | "audio",
+  protoPayload: Record<string, any>,
+): Promise<AckCheckResult> {
+  await asegurarModificado();
+  const encoded = proto.Message.encode(proto.Message.fromObject(protoPayload)).finish();
+  const messageId = `3EB0${randomBytes(9).toString("hex").toUpperCase()}`;
+  const ackPromise = waitForStanzaAck(sock, messageId, 7000);
+
+  await (sock as any).sendNode({
+    tag: "message",
+    attrs: {
+      id: messageId,
+      to: channelJid,
+      type: "media",
+    },
+    content: [
+      {
+        tag: "plaintext",
+        attrs: { mediatype: mediaType },
+        content: Buffer.from(encoded),
+      },
+    ],
+  });
+
+  return ackPromise;
+}
+
+async function publishStickerToChannel(
+  sock: ExtendedWASocket,
+  channelJid: string,
+  stickerBuffer: Buffer,
+  isAnimated: boolean,
+): Promise<AckCheckResult> {
+  const uploadedSticker = await uploadNewsletterRawMedia(
+    sock,
+    stickerBuffer,
+    "sticker",
+  );
+
+  const stickerMessage: proto.Message.IStickerMessage = {
+    url: uploadedSticker.url,
+    directPath: uploadedSticker.directPath,
+    fileSha256: uploadedSticker.fileSha256,
+    fileLength: uploadedSticker.fileLength,
+    mimetype: "image/webp",
+    isAnimated,
+    width: 512,
+    height: 512,
+  };
+
+  return sendNewsletterPlaintextMedia(sock, channelJid, "sticker", {
+    stickerMessage,
+  });
+}
+
+async function publishForcedAudioStickerToChannel(
   sock: ExtendedWASocket,
   channelJid: string,
   stickerBuffer: Buffer,
   isAnimated: boolean,
   oggBuffer: Buffer,
   audioSeconds: number,
-): Promise<{ ok: boolean; mode?: string; error?: string }> {
+  useEncryptedAudio: boolean,
+): Promise<{ ok: boolean; mode?: string; serverId?: string; error?: string }> {
   await asegurarModificado();
 
-  const [stickerPrep, audioPrep] = await Promise.all([
-    prepareWAMessageMedia(
-      {
-        sticker: stickerBuffer,
-        isAnimated,
-      },
-      {
-        upload: sock.waUploadToServer,
-      },
-    ),
-    prepareWAMessageMedia(
+  const secondsFinal = Math.max(
+    1,
+    Math.min(DURACION_MAXIMA, Math.round(audioSeconds > 0 ? audioSeconds : 5)),
+  );
+  const waveform = generarFormaDeOnda(oggBuffer);
+
+  const uploadedSticker = await uploadNewsletterRawMedia(
+    sock,
+    stickerBuffer,
+    "sticker",
+  );
+
+  let audioMessage: proto.Message.IAudioMessage;
+
+  if (useEncryptedAudio) {
+    const audioPrep = await prepareWAMessageMedia(
       {
         audio: oggBuffer,
         mimetype: "audio/ogg; codecs=opus",
         ptt: true,
       },
-      {
-        upload: sock.waUploadToServer,
-      },
-    ),
-  ]);
-
-  const audioMessage = audioPrep.audioMessage;
-  const stickerMessage = stickerPrep.stickerMessage as StickerWithAudio | undefined;
-  if (!stickerMessage || !audioMessage) {
-    throw new Error("No se pudieron preparar los medios del sticker con audio.");
-  }
-
-  audioMessage.seconds = Math.max(
-    1,
-    Math.min(DURACION_MAXIMA, Math.round(audioSeconds > 0 ? audioSeconds : 5)),
-  );
-  audioMessage.ptt = true;
-  audioMessage.mimetype = "audio/ogg; codecs=opus";
-  if (!audioMessage.waveform?.length) {
-    audioMessage.waveform = generarFormaDeOnda(oggBuffer);
-  }
-
-  stickerMessage.isAnimated = isAnimated;
-  stickerMessage.audioMessage = audioMessage;
-
-  let lastError = "El servidor rechazó el paquete";
-
-  try {
-    const wrappedPayload = {
-      __proto__: stickerPrep,
-      audioStickerMessage: {
-        message: stickerPrep,
-      },
-      messageContextInfo: {
-        messageSecret: randomBytes(32),
-      },
+      { upload: sock.waUploadToServer },
+    );
+    if (!audioPrep.audioMessage) {
+      throw new Error("No se pudo preparar el audio cifrado.");
+    }
+    audioMessage = audioPrep.audioMessage;
+    audioMessage.seconds = secondsFinal;
+    audioMessage.ptt = true;
+    audioMessage.mimetype = "audio/ogg; codecs=opus";
+    if (!audioMessage.waveform?.length) {
+      audioMessage.waveform = waveform;
+    }
+  } else {
+    const uploadedAudio = await uploadNewsletterRawMedia(sock, oggBuffer, "audio");
+    audioMessage = {
+      url: uploadedAudio.url,
+      directPath: uploadedAudio.directPath,
+      fileSha256: uploadedAudio.fileSha256,
+      fileLength: uploadedAudio.fileLength,
+      mimetype: "audio/ogg; codecs=opus",
+      ptt: true,
+      seconds: secondsFinal,
+      waveform,
     };
-
-    const waMsg1 = generateWAMessageFromContent(
-      channelJid,
-      wrappedPayload as any,
-      { userJid: sock.user?.id || channelJid },
-    );
-
-    if (waMsg1.message && waMsg1.key.id) {
-      const ackPromise = waitForStanzaAck(sock, waMsg1.key.id, 5000);
-      await sock.relayMessage(channelJid, waMsg1.message, {
-        messageId: waMsg1.key.id,
-      });
-      const ack = await ackPromise;
-      if (ack.accepted) {
-        return { ok: true, mode: "audioStickerMessage (1074+210)" };
-      }
-      lastError = `ACK error ${ack.error || "desconocido"}`;
-    }
-  } catch (err) {
-    lastError = err instanceof Error ? err.message : String(err);
   }
 
-  try {
-    const waMsg2 = generateWAMessageFromContent(
-      channelJid,
-      {
+  const stickerMessage: StickerWithAudio = {
+    url: uploadedSticker.url,
+    directPath: uploadedSticker.directPath,
+    fileSha256: uploadedSticker.fileSha256,
+    fileLength: uploadedSticker.fileLength,
+    mimetype: "image/webp",
+    isAnimated,
+    width: 512,
+    height: 512,
+    audioMessage,
+  };
+
+  let lastError = "Rechazado por el servidor del canal";
+
+  const ack1 = await sendNewsletterPlaintextMedia(sock, channelJid, "sticker", {
+    audioStickerMessage: {
+      message: {
         stickerMessage,
-      } as any,
-      { userJid: sock.user?.id || channelJid },
-    );
+      },
+    },
+  });
 
-    if (waMsg2.message && waMsg2.key.id) {
-      const ackPromise = waitForStanzaAck(sock, waMsg2.key.id, 5000);
-      await sock.relayMessage(channelJid, waMsg2.message, {
-        messageId: waMsg2.key.id,
-      });
-      const ack = await ackPromise;
-      if (ack.accepted) {
-        return { ok: true, mode: "stickerMessage + audio embebido (210)" };
-      }
-      lastError = `ACK error ${ack.error || "desconocido"}`;
-    }
-  } catch (err) {
-    lastError = err instanceof Error ? err.message : String(err);
+  if (ack1.accepted) {
+    return {
+      ok: true,
+      mode: useEncryptedAudio
+        ? "plaintext 1074+210 (audio cifrado)"
+        : "plaintext 1074+210 (canal raw)",
+      serverId: ack1.serverId,
+    };
   }
+  lastError = `1074+210 -> ${ack1.error || "rechazado"}`;
+
+  const ack2 = await sendNewsletterPlaintextMedia(sock, channelJid, "sticker", {
+    stickerMessage,
+  });
+
+  if (ack2.accepted) {
+    return {
+      ok: true,
+      mode: useEncryptedAudio
+        ? "plaintext 210 directo (audio cifrado)"
+        : "plaintext 210 directo (canal raw)",
+      serverId: ack2.serverId,
+    };
+  }
+  lastError = `${lastError} | 210 -> ${ack2.error || "rechazado"}`;
 
   return { ok: false, error: lastError };
 }
@@ -597,6 +876,7 @@ export default {
     const allowSplitFallback = /(?:^|\s)(?:--split|--fallback)(?:\s|$)/i.test(
       fullInput,
     );
+    const useEncryptedAudio = /(?:^|\s)--encaudio(?:\s|$)/i.test(fullInput);
     const channelTarget = extractChannelTarget(fullInput);
 
     const quotedCtx = extractContextInfo(msg.message);
@@ -609,7 +889,8 @@ export default {
           `┃\n` +
           `┃ • *Uso:* \`${prefix}sendsticker https://whatsapp.com/channel/0029Va...\`\n` +
           `┃ • *Alias:* \`${prefix}sendstk <enlace o @newsletter>\`\n` +
-          `┃ • *Respaldo separado:* agrega \`--split\` si deseas enviar sticker + nota de voz aparte en caso de bloqueo del canal.\n` +
+          `┃ • *Audio cifrado (opcional):* agrega \`--encaudio\` si el audio aparece mudo al reproducir.\n` +
+          `┃ • *Respaldo separado:* agrega \`--split\` para publicar sticker + nota de voz aparte.\n` +
           `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
       );
     }
@@ -662,15 +943,29 @@ export default {
       );
 
       if (!audioObj) {
-        await admin.sock.sendMessage(admin.jid, {
-          sticker: stickerBuffer,
-        });
+        const ack = await publishStickerToChannel(
+          admin.sock,
+          admin.jid,
+          stickerBuffer,
+          isAnimated,
+        );
+
+        if (!ack.accepted) {
+          void react("❌").catch(() => undefined);
+          return reply(
+            `╭〔 ❌ ${fytBold("EL CANAL RECHAZÓ EL STICKER")} 〕⬣\n` +
+              `┃ • *Canal:* ${admin.name}\n` +
+              `┃ • *Error ACK:* \`${ack.error || "desconocido"}\`\n` +
+              `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
+          );
+        }
 
         void react("✅").catch(() => undefined);
         return reply(
           `╭〔 ✅ ${fytBold("STICKER PUBLICADO")} 〕⬣\n` +
             `┃ • *Canal:* ${admin.name}\n` +
-            `┃ • *Tipo:* ${isAnimated ? "Animado" : "Estático"}\n` +
+            `┃ • *Tipo:* ${isAnimated ? "Animado" : "Estático"} (sin audio detectado)\n` +
+            `┃ • *Post ID:* \`${ack.serverId || "OK"}\`\n` +
             `┃ • *Rol:* ${admin.role}\n` +
             `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
         );
@@ -693,13 +988,14 @@ export default {
               : DURACION_MAXIMA,
           );
 
-      const forcedResult = await sendForcedAudioStickerToChannel(
+      const forcedResult = await publishForcedAudioStickerToChannel(
         admin.sock,
         admin.jid,
         stickerBuffer,
         isAnimated,
         oggBuffer,
         audioSeconds,
+        useEncryptedAudio,
       );
 
       if (forcedResult.ok) {
@@ -709,27 +1005,49 @@ export default {
             `┃ • *Canal:* ${admin.name}\n` +
             `┃ • *Modo:* \`${forcedResult.mode}\`\n` +
             `┃ • *Tipo:* ${isAnimated ? "Animado + Audio" : "Estático + Audio"}\n` +
+            `┃ • *Post ID:* \`${forcedResult.serverId || "OK"}\`\n` +
             `┃ • *Rol:* ${admin.role}\n` +
             `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
         );
       }
 
       if (allowSplitFallback) {
-        await admin.sock.sendMessage(admin.jid, {
-          sticker: stickerBuffer,
-        });
-        await admin.sock.sendMessage(admin.jid, {
-          audio: oggBuffer,
-          mimetype: "audio/ogg; codecs=opus",
-          ptt: true,
+        const stkAck = await publishStickerToChannel(
+          admin.sock,
+          admin.jid,
+          stickerBuffer,
+          isAnimated,
+        );
+        const uploadedAudio = await uploadNewsletterRawMedia(
+          admin.sock,
+          oggBuffer,
+          "audio",
+        );
+        await sendNewsletterPlaintextMedia(admin.sock, admin.jid, "ptt", {
+          audioMessage: {
+            url: uploadedAudio.url,
+            directPath: uploadedAudio.directPath,
+            fileSha256: uploadedAudio.fileSha256,
+            fileLength: uploadedAudio.fileLength,
+            mimetype: "audio/ogg; codecs=opus",
+            ptt: true,
+            seconds: Math.max(
+              1,
+              Math.min(
+                DURACION_MAXIMA,
+                Math.round(audioSeconds > 0 ? audioSeconds : 5),
+              ),
+            ),
+            waveform: generarFormaDeOnda(oggBuffer),
+          },
         });
 
         void react("⚠️").catch(() => undefined);
         return reply(
           `╭〔 ⚠️ ${fytBold("PUBLICADO EN MODO SEPARADO")} 〕⬣\n` +
             `┃ • *Canal:* ${admin.name}\n` +
-            `┃ • *Motivo:* El servidor del canal rechazó el formato forzado (\`${forcedResult.error}\`).\n` +
-            `┃ • Se envió el sticker y la nota de voz por separado.\n` +
+            `┃ • *Post ID Sticker:* \`${stkAck.serverId || "OK"}\`\n` +
+            `┃ • *Motivo:* \`${forcedResult.error}\`\n` +
             `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
         );
       }
@@ -740,8 +1058,7 @@ export default {
           `┃ • *Canal:* ${admin.name}\n` +
           `┃ • *Respuesta del servidor:* \`${forcedResult.error}\`\n` +
           `┃\n` +
-          `┃ WhatsApp valida los canales en texto plano y puede bloquear stickers con audio embebido.\n` +
-          `┃ Si quieres publicarlo dividido (sticker + audio aparte), vuelve a ejecutarlo añadiendo \`--split\`.\n` +
+          `┃ Prueba añadiendo \`--encaudio\` o \`--split\` al final del comando.\n` +
           `╰━━〔 ⚡ ${fytBold("AURA REED")} 〕━━⬣`,
       );
     } catch (error: unknown) {
